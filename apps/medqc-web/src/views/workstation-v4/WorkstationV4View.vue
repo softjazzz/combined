@@ -42,16 +42,17 @@
         @update:search-text="searchText = $event"
         @update:date-range="dateRange = $event"
         @update:date-field="dateField = $event"
-        @update:selected-row-keys="selectedWorkbenchKeys = $event"
+        @update:selected-row-keys="handleSelectedWorkbenchKeysChange"
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
-        @select-dept="selectDept"
-        @select-doctor="selectDoctor"
+        @select-dept="handleSelectDept"
+        @select-doctor="handleSelectDoctor"
         @select-hosp-filter="handleHospFilter"
-        @select-inpatient-sort="selectInpatientSort"
+        @select-inpatient-sort="handleSelectInpatientSort"
         @toggle-today-inpatient="toggleTodaySyncedInpatient"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
+        @preview-run-qc="handlePreviewRecordQc"
         @filter-qc="handleFilterQc"
         @dismiss-qc-task="recordPoolQcTask = null"
         @back-to-analytics="backToAnalytics"
@@ -410,7 +411,11 @@ import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
-import { usePatientRecords } from './composables/usePatientRecords'
+import {
+  usePatientRecords,
+  type HospitalStatusScope,
+  type InpatientSort,
+} from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
 import { useLocalAssistantRegistration } from './composables/useAssistantRegistry'
 import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
@@ -486,6 +491,8 @@ const {
   activeDoctor,
   searchText,
   dateRange,
+  committedSearchText,
+  committedDateRange,
   dateField,
   hospFilter,
   syncScope,
@@ -670,8 +677,8 @@ const DEMO_HOME_RECORD_ORDER = ['V-ZS-001', 'V-LM-001']
 const DEMO_HOME_RECORD_ORDER_MAP = new Map(DEMO_HOME_RECORD_ORDER.map((id, index) => [id, index]))
 const DEMO_HOME_RECORD_ID_SET = new Set(DEMO_HOME_RECORD_ORDER)
 const DEMO_HOME_NAME_MAP: Record<string, string> = {
-  'V-ZS-001': '寮犱笁',
-  'V-LM-001': '鏉庢槑',
+  'V-ZS-001': '张三',
+  'V-LM-001': '李明',
 }
 
 const stageListRecords = computed<PatientRecord[]>(() =>
@@ -768,6 +775,47 @@ async function handleStageRecordAction(record: PatientRecord) {
 
 const activePriorityGroup = ref('all')
 const selectedWorkbenchKeys = ref<string[]>([])
+const selectedRecordMap = new Map<string, PatientRecord>()
+
+function currentSelectableRecords(): PatientRecord[] {
+  return isAggregatedStageMode.value ? stageListRecords.value : allRecords.value
+}
+
+function handleSelectedWorkbenchKeysChange(nextKeys: string[]) {
+  const normalizedKeys = Array.from(
+    new Set(nextKeys.map((key) => String(key || '').trim()).filter(Boolean)),
+  )
+  const records = currentSelectableRecords()
+  const keepSet = new Set(normalizedKeys)
+  for (const existingKey of Array.from(selectedRecordMap.keys())) {
+    if (!keepSet.has(existingKey)) {
+      selectedRecordMap.delete(existingKey)
+    }
+  }
+  for (const key of normalizedKeys) {
+    const matched = findRecordById(records, key)
+    if (matched) {
+      selectedRecordMap.set(key, matched)
+    }
+  }
+  selectedWorkbenchKeys.value = normalizedKeys
+}
+
+function clearSelectedRecords() {
+  selectedWorkbenchKeys.value = []
+  selectedRecordMap.clear()
+}
+
+watch([allRecords, stageListRecords], () => {
+  if (!selectedWorkbenchKeys.value.length) return
+  const records = currentSelectableRecords()
+  for (const key of selectedWorkbenchKeys.value) {
+    const matched = findRecordById(records, key)
+    if (matched) {
+      selectedRecordMap.set(key, matched)
+    }
+  }
+})
 
 function priorityScore(record: PatientRecord) {
   let score = 0
@@ -1153,7 +1201,7 @@ const concatSections = computed(() => {
   if (!concatText.value) return []
   const sections: { title: string; content: string }[] = []
   const pattern =
-    /={40}\s*\r?\n(?:馃搵\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
+    /={40}\s*\r?\n(?:📋\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
 
   for (const match of concatText.value.matchAll(pattern)) {
     const [, rawTitle = '', rawContent = ''] = match
@@ -2099,6 +2147,7 @@ watch(
   () => analyticsDrilldownSignature(route.query),
   (signature, previous) => {
     if (signature === previous) return
+    clearSelectedRecords()
     currentPage.value = 1
     void fetchData(1)
   },
@@ -2303,8 +2352,8 @@ function handleRowOpen(recordId: string) {
 }
 
 function findBatchRecordByKey(recordKey: string): PatientRecord | null {
-  const records = isAggregatedStageMode.value ? stageListRecords.value : allRecords.value
-  return findRecordById(records, recordKey) ?? null
+  const records = currentSelectableRecords()
+  return findRecordById(records, recordKey) ?? selectedRecordMap.get(recordKey) ?? null
 }
 
 async function handleBatchExtract(keys: string[]) {
@@ -2316,9 +2365,7 @@ async function handleBatchExtract(keys: string[]) {
         batchExtracting.value = value
       },
       findBatchRecordByKey,
-      setSelectedWorkbenchKeys: (nextKeys) => {
-        selectedWorkbenchKeys.value = nextKeys
-      },
+      setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
       onTaskCreated: (job) => {
         recordPoolQcTask.value = job
       },
@@ -2337,15 +2384,30 @@ async function handleBatchExtract(keys: string[]) {
     findBatchRecordByKey,
     setBatchRuntimeStatus,
     setSingleBatchRuntimeStatus,
-    setSelectedWorkbenchKeys: (nextKeys) => {
-      selectedWorkbenchKeys.value = nextKeys
-    },
+    setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
     fetchAssistNotifications,
     refreshActiveWorklist,
     refreshData: async () => {
       await Promise.resolve(refreshData())
     },
     refreshSelectedSnapshots,
+  })
+}
+
+async function handlePreviewRecordQc(recordKey: string) {
+  if (!recordKey) return
+  await runRecordPoolQc({
+    keys: [recordKey],
+    preserveSelection: true,
+    getBatchExtracting: () => batchExtracting.value,
+    setBatchExtracting: (value) => {
+      batchExtracting.value = value
+    },
+    findBatchRecordByKey,
+    setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
+    onTaskCreated: (job) => {
+      recordPoolQcTask.value = job
+    },
   })
 }
 
@@ -2356,9 +2418,10 @@ async function handleFilterQc() {
     syncScope: syncScope.value,
     department: activeDept.value,
     doctor: activeDoctor.value,
-    keyword: searchText.value,
+    keyword: committedSearchText.value,
     dateField: dateField.value,
-    dateRange: dateRange.value,
+    dateRange: committedDateRange.value,
+    hasAnalyticsDrilldown: Boolean(analyticsDrilldown.value),
     getBatchExtracting: () => batchExtracting.value,
     setBatchExtracting: (value) => {
       batchExtracting.value = value
@@ -2389,13 +2452,19 @@ function handlePageChange(page: number, nextPageSize?: number) {
     pageSize.value = resolvedPageSize
     currentPage.value = pageSizeChanged ? 1 : page
     void fetchStageWorklist(currentStageFilter.value)
-    document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
+    const scrollContainer = document.querySelector('.custom-scrollbar')
+    if (scrollContainer && typeof scrollContainer.scrollTo === 'function') {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
     return
   }
   handleBasePageChange(page, resolvedPageSize)
 }
 
 function handleSearch() {
+  clearSelectedRecords()
   const pageChanged = currentPage.value !== 1
   currentPage.value = 1
   if (isAggregatedStageMode.value) {
@@ -2408,6 +2477,12 @@ function handleSearch() {
 }
 
 function handleRefresh() {
+  if (selectedWorkbenchKeys.value.length > 0) {
+    const validKeys = selectedWorkbenchKeys.value.filter((key) => Boolean(findBatchRecordByKey(key)))
+    if (validKeys.length !== selectedWorkbenchKeys.value.length) {
+      handleSelectedWorkbenchKeysChange(validKeys)
+    }
+  }
   if (isAggregatedStageMode.value) {
     void fetchStageWorklist(currentStageFilter.value)
     return
@@ -2417,7 +2492,7 @@ function handleRefresh() {
 
 function handleClearFilters() {
   resetFilters()
-  selectedWorkbenchKeys.value = []
+  clearSelectedRecords()
   if (isAggregatedStageMode.value) {
     void fetchStageWorklist(currentStageFilter.value)
     return
@@ -2425,9 +2500,35 @@ function handleClearFilters() {
   void fetchData(1)
 }
 
-function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {
+function handleSelectDept(deptName: string) {
+  clearSelectedRecords()
+  selectDept(deptName)
+}
+
+function handleSelectDoctor(doctorName: string) {
+  clearSelectedRecords()
+  selectDoctor(doctorName)
+}
+
+function handleSelectInpatientSort(value: InpatientSort) {
+  clearSelectedRecords()
+  selectInpatientSort(value)
+}
+
+function handleHospFilter(value: HospitalStatusScope) {
+  const wasTodayInpatient = syncScope.value === 'today_inpatient'
+  const prevHospFilter = hospFilter.value
   syncScope.value = 'all'
   dateField.value = 'visit'
+  if (value !== 'inpatient') {
+    inpatientSort.value = 'default'
+  }
+  clearSelectedRecords()
+  if (wasTodayInpatient && prevHospFilter === value) {
+    currentPage.value = 1
+    void fetchData(1)
+    return
+  }
   selectHospFilter(value)
 }
 
@@ -2439,7 +2540,8 @@ async function toggleTodaySyncedInpatient() {
     syncScope.value = 'all'
     hospFilter.value = 'all'
     dateField.value = 'visit'
-    selectedWorkbenchKeys.value = []
+    inpatientSort.value = 'default'
+    clearSelectedRecords()
     currentPage.value = 1
     await fetchData(1)
     return
@@ -2465,7 +2567,7 @@ async function toggleTodaySyncedInpatient() {
   } finally {
     hospitalizationStatusVerifying.value = false
   }
-  selectedWorkbenchKeys.value = []
+  clearSelectedRecords()
   currentPage.value = 1
   await fetchData(1)
 }

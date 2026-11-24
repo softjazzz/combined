@@ -1,6 +1,6 @@
 /** 全病历质控首页的权威聚合范围。三坐标只在下钻时使用，首页不以单一 visit_id 识别病历。 */
 export interface ClinicalQcHomeScope {
-  hospital_scope: 'all' | string
+  hospital_scope: 'all' | 'institute' | 'doctor' | string
   department: string | null
   scene: string
   rule_set_key: string
@@ -24,6 +24,7 @@ export interface ClinicalQcHomeDepartmentItem {
   department: string
   records_total: number
   completed_record_total: number
+  partial_failed_record_total?: number
   high_risk_review_total: number
   data_gap_record_total: number
   uncertain_record_total: number
@@ -35,6 +36,7 @@ export interface ClinicalQcHomePhysicianItem {
   physician: string
   records_total: number
   completed_record_total: number
+  partial_failed_record_total?: number
   high_risk_review_total: number
   data_gap_record_total: number
   uncertain_record_total: number

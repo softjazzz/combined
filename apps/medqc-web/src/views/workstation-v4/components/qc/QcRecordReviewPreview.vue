@@ -12,7 +12,7 @@
         class="preview-heading-actions"
       >
         <QcDiagnosticExport
-          v-if="loadedResult"
+          v-if="loadedResult && !confirmedResultsOnly"
           :items="loadedResult.items"
           :context="diagnosticContext"
         />
@@ -137,7 +137,7 @@
             v-if="!filteredItems.length"
             class="preview-state"
           >
-            该状态暂无质控项
+            {{ confirmedResultsOnly ? '当前没有可展示的确定问题' : '该状态暂无质控项' }}
           </p>
           <article
             v-for="item in filteredItems.slice(0, 3)"
@@ -249,6 +249,7 @@
 import { ArrowRight, ArrowUpRight, ClipboardCheck, FileText, RotateCcw } from 'lucide-vue-next'
 import { Select } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspace-service'
@@ -279,13 +280,16 @@ const props = withDefaults(
   },
 )
 const emit = defineEmits<{ 'open-full': [recordKey: string, previous?: PreviousResultRequest] }>()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const items = ref<SingleRecordQcResultItem[]>([])
 const loadedResult = ref<SingleRecordQcResultPayload | null>(null)
 const loading = ref(false)
 const ready = ref(false)
 const loadError = ref('')
 const previousRequest = ref<PreviousResultRequest>()
-const activeTab = ref<SingleRecordQcResultTabKey>('all')
+const activeTab = ref<SingleRecordQcResultTabKey>(
+  confirmedResultsOnly.value ? 'non_compliant' : 'all',
+)
 const expandedItems = ref<string[]>([])
 function toggleExplanation(key: string) {
   expandedItems.value = expandedItems.value.includes(key)
@@ -293,13 +297,38 @@ function toggleExplanation(key: string) {
     : [...expandedItems.value, key]
 }
 let requestSequence = 0
-const viewItems = computed(() => buildSingleRecordQcResultItems(items.value))
-const tabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
-const filteredItems = computed(() =>
-  viewItems.value.filter(
-    (item) => activeTab.value === 'all' || resolveSingleRecordQcResultTab(item) === activeTab.value,
+let activeAbortController: AbortController | null = null
+const allViewItems = computed(() => buildSingleRecordQcResultItems(items.value))
+const viewItems = computed(() =>
+  confirmedResultsOnly.value
+    ? allViewItems.value.filter((item) => item.status === 'non_compliant')
+    : allViewItems.value,
+)
+const tabs = computed(() =>
+  buildSingleRecordQcStatusTabs(viewItems.value).filter(
+    (tab) => !confirmedResultsOnly.value || tab.key === 'non_compliant',
   ),
 )
+const filteredItems = computed(() =>
+  confirmedResultsOnly.value
+    ? viewItems.value
+    : viewItems.value.filter(
+        (item) => activeTab.value === 'all' || resolveSingleRecordQcResultTab(item) === activeTab.value,
+      ),
+)
+function resolveDefaultTab(): SingleRecordQcResultTabKey {
+  if (confirmedResultsOnly.value) return 'non_compliant'
+  return (
+    tabs.value.find((tab) => tab.key === 'non_compliant' && tab.count)?.key ||
+    tabs.value.find((tab) => tab.key === 'pending' && tab.count)?.key ||
+    'all'
+  )
+}
+watch(confirmedResultsOnly, (onlyConfirmed) => {
+  if (onlyConfirmed) {
+    activeTab.value = 'non_compliant'
+  }
+})
 const diagnosticContext = computed(() => {
   const result = loadedResult.value
   const row = props.row
@@ -352,6 +381,8 @@ function openFull() {
 
 async function loadResult() {
   const sequence = ++requestSequence
+  activeAbortController?.abort()
+  activeAbortController = null
   const row = props.row
   items.value = []
   loadedResult.value = null
@@ -360,20 +391,26 @@ async function loadResult() {
   loading.value = false
   loadError.value = ''
   previousRequest.value = undefined
-  activeTab.value = 'all'
+  activeTab.value = confirmedResultsOnly.value ? 'non_compliant' : 'all'
   if (!row || row.resultStatus === 'not-run' || row.resultStatus === 'unknown') return
   if (!row.instituteId || !row.patientId || !row.visitId) {
     loadError.value = '当前病历身份信息不完整，已停止读取'
     return
   }
+  const controller = new AbortController()
+  activeAbortController = controller
   loading.value = true
   try {
-    const result = await getLatestLuxian0609RecordResult({
-      instituteId: row.instituteId,
-      patientId: row.patientId,
-      visitId: row.visitId,
-    })
-    if (sequence !== requestSequence) return
+    const result = await getLatestLuxian0609RecordResult(
+      {
+        instituteId: row.instituteId,
+        patientId: row.patientId,
+        visitId: row.visitId,
+      },
+      undefined,
+      { signal: controller.signal },
+    )
+    if (sequence !== requestSequence || controller.signal.aborted) return
     previousRequest.value = previousResultRequest(result)
     if (!result.success || !result.data) {
       loadError.value = result.message || '质控结果读取失败，请稍后重试'
@@ -392,13 +429,13 @@ async function loadResult() {
     items.value = result.data.items
     loadedResult.value = result.data
     ready.value = true
-    activeTab.value =
-      tabs.value.find((tab) => tab.key === 'non_compliant' && tab.count)?.key ||
-      tabs.value.find((tab) => tab.key === 'pending' && tab.count)?.key ||
-      'all'
+    activeTab.value = resolveDefaultTab()
   } catch {
-    if (sequence === requestSequence) loadError.value = '质控结果读取失败，请稍后重试'
+    if (sequence === requestSequence && !controller.signal.aborted) {
+      loadError.value = '质控结果读取失败，请稍后重试'
+    }
   } finally {
+    if (activeAbortController === controller) activeAbortController = null
     if (sequence === requestSequence) loading.value = false
   }
 }
@@ -417,6 +454,8 @@ watch(
 )
 onBeforeUnmount(() => {
   requestSequence += 1
+  activeAbortController?.abort()
+  activeAbortController = null
 })
 </script>
 

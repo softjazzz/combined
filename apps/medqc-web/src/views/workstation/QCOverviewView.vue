@@ -13,7 +13,7 @@
           </h1>
         </div>
         <div
-          v-if="clinicalQc"
+          v-if="clinicalQc || loadError || departmentFilter !== 'all' || keyword.trim()"
           class="qc-home-toolbar"
         >
           <template v-if="keyword.trim()">
@@ -56,11 +56,15 @@
               aria-hidden="true"
             ><path d="m6 9 6 6 6-6" /></svg>
           </label>
-          <span class="qc-home-toolbar__time">生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
+          <span
+            v-if="clinicalQc"
+            class="qc-home-toolbar__time"
+          >生成于 {{ formatDateTime(clinicalQc.scope.generated_at) }}</span>
           <button
             type="button"
             class="qc-home-icon-button"
             aria-label="刷新首页数据"
+            :disabled="loading"
             @click="void fetchHome()"
           >
             <MqIcon
@@ -153,18 +157,20 @@
               >
                 选择病历质控
               </button>
-              <button
-                type="button"
-                @click="router.push('/workstation-v5/records/running')"
-              >
-                运行病历质控
-              </button>
-              <button
-                type="button"
-                @click="router.push('/workstation-v5/records/final')"
-              >
-                终末病历质控
-              </button>
+              <template v-if="canAccessStageRecordLists">
+                <button
+                  type="button"
+                  @click="openStageRecordList('running')"
+                >
+                  运行病历质控
+                </button>
+                <button
+                  type="button"
+                  @click="openStageRecordList('final')"
+                >
+                  终末病历质控
+                </button>
+              </template>
             </nav>
           </div>
 
@@ -310,7 +316,7 @@
                 >
                   质控缺陷分析
                 </h2>
-                <p>缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。</p>
+                <p>{{ confirmedResultsOnly ? '缺陷仅统计确定问题。' : '缺陷仅统计确定问题，资料待核实与待判断不计入缺陷数。' }}</p>
               </div>
               <!-- 一个分段控件切统计对象；指标与排序收进下拉 -->
               <div class="qc-home-defect-analysis__toolbar">
@@ -370,7 +376,12 @@
                   >
                     <option value="metric">当前指标</option>
                     <option value="risk">高风险病历</option>
-                    <option value="gap">资料待核实</option>
+                    <option
+                      v-if="!confirmedResultsOnly"
+                      value="gap"
+                    >
+                      资料待核实
+                    </option>
                   </select>
                   <svg
                     class="qc-home-pulldown__caret"
@@ -424,7 +435,10 @@
                 </div>
                 <div class="qc-home-defect-analysis__counts">
                   <strong :class="{ 'is-zero': !item.highRiskReviewTotal }">高风险 {{ item.highRiskReviewTotal }}</strong>
-                  <span :class="{ 'is-zero': !item.dataGapRecordTotal }">待核实 {{ item.dataGapRecordTotal }}</span>
+                  <span
+                    v-if="!confirmedResultsOnly"
+                    :class="{ 'is-zero': !item.dataGapRecordTotal }"
+                  >待核实 {{ item.dataGapRecordTotal }}</span>
                 </div>
                 <svg
                   v-if="analysisObject === 'department'"
@@ -470,7 +484,7 @@
                   >
                     结论结构
                   </h2>
-                  <p>{{ clinicalQc.kpis.qc_partial_failed_total ? '已回写的有效规则结论，含未全部完成病历。' : '已完成病历中的规则结论。' }}</p>
+                  <p>{{ !confirmedResultsOnly && clinicalQc.kpis.qc_partial_failed_total ? '已回写的有效规则结论，含未全部完成病历。' : '已完成病历中的规则结论。' }}</p>
                 </div>
               </header>
               <div
@@ -490,7 +504,7 @@
                 </div>
                 <ul
                   class="qc-home-conclusion__legend"
-                  :aria-label="clinicalQc.kpis.qc_partial_failed_total ? '已回写有效规则结论图例' : '已完成病历中的规则结论图例'"
+                  :aria-label="!confirmedResultsOnly && clinicalQc.kpis.qc_partial_failed_total ? '已回写有效规则结论图例' : '已完成病历中的规则结论图例'"
                 >
                   <li
                     v-for="segment in conclusionSegments"
@@ -544,7 +558,7 @@
                   <dd>{{ runningTaskText }}</dd>
                 </div>
                 <div
-                  v-if="!isDemoPresentation"
+                  v-if="!confirmedResultsOnly"
                   data-testid="health-status-item"
                 >
                   <MqIconTile
@@ -567,7 +581,7 @@
                   <dd>{{ formatDateTime(clinicalQc.data_health.last_successful_qc_at) }}</dd>
                 </div>
                 <div
-                  v-if="clinicalQc.kpis.qc_partial_failed_total || clinicalQc.kpis.qc_failed_total"
+                  v-if="!confirmedResultsOnly && (clinicalQc.kpis.qc_partial_failed_total || clinicalQc.kpis.qc_failed_total)"
                   data-testid="qc-execution-failures"
                 >
                   <MqIconTile
@@ -613,9 +627,11 @@ import dayjs from 'dayjs'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { MQ_ICON_TONES, type MqIconName, type MqIconTone } from '@/components/icons/mqIcons'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import { QC_RESULT_STATUS_LABELS } from '../workstation-v4/utils/qcResultStatusLabels'
+import { parseQcTaskTime, shanghaiQcTaskTimeParts } from '../workstation-v4/utils/qcTaskTime'
 import type {
   ClinicalQcHomeDepartmentItem,
   ClinicalQcHomePhysicianItem,
@@ -669,9 +685,23 @@ const CONCLUSION_STATUS_META = [
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ] as const
 
+const QC_STAGE_RECORD_LIST_ROLES = new Set(['admin', 'qc_manager', 'sync_admin'])
+const CONFIRMED_CONCLUSION_STATUSES = new Set(['non_compliant', 'compliant'])
+const SOURCE_SYNC_STATUS_LABELS: Record<string, string> = {
+  synced: '已同步',
+  healthy: '正常',
+  ok: '正常',
+  degraded: '部分异常',
+  failed: '同步失败',
+  error: '同步失败',
+  syncing: '同步中',
+  running: '同步中',
+}
+
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
 // 首次进入即处于加载态，避免请求尚未发起时短暂展示无内容的页面框架。
 const loading = ref(true)
 const loadError = ref(false)
@@ -682,18 +712,77 @@ const analysisMetric = ref<AnalysisMetric>('total')
 const analysisSort = ref<AnalysisSort>('metric')
 const syncingFromRoute = ref(false)
 const homeData = ref<ClinicalQcHomePayload | null>(null)
+const cachedDepartmentOptions = ref<string[]>([])
 
 const clinicalQc = computed(() => homeData.value?.clinical_qc ?? null)
-const isDemoPresentation = computed(() => authStore.user?.is_demo_account === true && !authStore.userRoles?.includes('sync_admin'))
-const departmentOptions = computed(() => homeData.value?.department_options ?? [])
-const scopeHospitalText = computed(() =>
-  clinicalQc.value?.scope.hospital_scope === 'all' ? '全院' : '当前范围',
+const currentUserRoles = computed<string[]>(() => {
+  if (Array.isArray(authStore.userRoles)) {
+    return authStore.userRoles.map((role) => String(role).trim().toLowerCase()).filter(Boolean)
+  }
+  const user = authStore.user
+  if (Array.isArray(user?.roles)) {
+    return user.roles.map((role) => String(role).trim().toLowerCase()).filter(Boolean)
+  }
+  if (typeof user?.role === 'string' && user.role.trim()) {
+    return [user.role.trim().toLowerCase()]
+  }
+  return []
+})
+const canAccessStageRecordLists = computed(() =>
+  currentUserRoles.value.some((role) => QC_STAGE_RECORD_LIST_ROLES.has(role)),
 )
-const scopeDepartmentText = computed(() => clinicalQc.value?.scope.department || '全部科室')
+const departmentOptions = computed(() => {
+  const merged = new Set<string>()
+  for (const dept of cachedDepartmentOptions.value) {
+    const normalized = dept.trim()
+    if (normalized) merged.add(normalized)
+  }
+  for (const dept of homeData.value?.department_options ?? []) {
+    const normalized = dept.trim()
+    if (normalized) merged.add(normalized)
+  }
+  const active = departmentFilter.value.trim()
+  if (active && active !== 'all') {
+    merged.add(active)
+  }
+  return Array.from(merged)
+})
+const scopeHospitalText = computed(() => {
+  const scope = String(clinicalQc.value?.scope.hospital_scope || '').trim().toLowerCase()
+  if (scope === 'doctor') return '本人负责病历'
+  if (scope === 'institute') return '本院区'
+  if (scope === 'all') return '全院'
+  return '当前范围'
+})
+const activeDepartmentLabel = computed(() => {
+  const active = departmentFilter.value.trim()
+  if (active && active !== 'all') return active
+  return clinicalQc.value?.scope.department?.trim() || ''
+})
+const scopeDepartmentText = computed(() => activeDepartmentLabel.value || '全部科室')
 const scopeSceneText = computed(() =>
   clinicalQc.value?.scope.scene === 'final'
     ? '最终结果'
     : clinicalQc.value?.scope.scene || '场景待确认',
+)
+
+function formatRuleSetLabel(ruleSetKey?: string | null, ruleSetVersion?: string | null): string {
+  const key = String(ruleSetKey || '').trim()
+  const version = String(ruleSetVersion || '').trim()
+  if (!key || key.toLowerCase().startsWith('luxian_0609')) {
+    return '泸县0609质控点'
+  }
+  if (version && !key.toLowerCase().includes(version.toLowerCase())) {
+    return `${key} ${version}`
+  }
+  return key
+}
+
+const scopeRuleSetText = computed(() =>
+  formatRuleSetLabel(
+    clinicalQc.value?.scope.rule_set_key,
+    clinicalQc.value?.scope.rule_set_version,
+  ),
 )
 
 const kpiCards = computed<KpiCard[]>(() => {
@@ -766,7 +855,13 @@ const metricCards = computed<MetricCard[]>(() => [
     rate: rates.value.completion,
     rateLabel: `完成率 ${formatRate(rates.value.completion)}%`,
   },
-  { ...kpiByKey.value.records, rate: recordsTotal.value > 0 ? 100 : 0, rateLabel: scopeHospitalText.value },
+  {
+    ...kpiByKey.value.records,
+    rate: recordsTotal.value > 0 ? 100 : 0,
+    rateLabel: activeDepartmentLabel.value
+      ? `${scopeHospitalText.value} · ${activeDepartmentLabel.value}`
+      : scopeHospitalText.value,
+  },
 ])
 
 const ringDefs = computed(() => [
@@ -828,17 +923,28 @@ const todayLabel = computed(() => dayjs().format('M月D日 dddd'))
 // 眉标：日期与范围合成一行纯文字（原先拆成多个胶囊）
 const scopeLine = computed(() => {
   const parts = [todayLabel.value]
-  if (clinicalQc.value) parts.push(scopeHospitalText.value, scopeSceneText.value)
-  parts.push('泸县0609质控点')
+  if (clinicalQc.value) {
+    parts.push(scopeHospitalText.value)
+    if (activeDepartmentLabel.value) parts.push(activeDepartmentLabel.value)
+    parts.push(scopeSceneText.value)
+  } else if (activeDepartmentLabel.value) {
+    parts.push(activeDepartmentLabel.value)
+  }
+  parts.push(scopeRuleSetText.value)
   return parts.join(' · ')
 })
 
 const conclusionSegments = computed<ConclusionSegment[]>(() => {
   const counts = clinicalQc.value?.canonical_status_counts || {}
-  const values = CONCLUSION_STATUS_META.map((meta) => ({
-    ...meta,
-    value: Math.max(0, Number(counts[meta.status] || 0)),
-  })).filter((segment) => segment.value > 0)
+  const visibleMeta = confirmedResultsOnly.value
+    ? CONCLUSION_STATUS_META.filter((meta) => CONFIRMED_CONCLUSION_STATUSES.has(meta.status))
+    : CONCLUSION_STATUS_META
+  const values = visibleMeta
+    .map((meta) => ({
+      ...meta,
+      value: Math.max(0, Number(counts[meta.status] || 0)),
+    }))
+    .filter((segment) => segment.value > 0)
   const total = values.reduce((sum, segment) => sum + segment.value, 0)
   return values.map((segment) => ({
     ...segment,
@@ -859,12 +965,36 @@ const conclusionRingBackground = computed(() => {
   return `conic-gradient(${stops.join(', ')})`
 })
 
-const sourceStateText = computed(() =>
-  clinicalQc.value?.data_health.source_sync_status === 'unknown' ? '待核实' : '待核实',
-)
-const runningTaskText = computed(() =>
-  clinicalQc.value?.data_health.running_task_state === 'unknown' ? '待接入' : '待接入',
-)
+const sourceStateText = computed(() => {
+  const rawStatus = String(clinicalQc.value?.data_health?.source_sync_status || '').trim()
+  const normalized = rawStatus.toLowerCase()
+  if (!normalized || normalized === 'unknown') return '待核实'
+  return SOURCE_SYNC_STATUS_LABELS[normalized] || rawStatus
+})
+const runningTaskText = computed(() => {
+  const health = clinicalQc.value?.data_health
+  const rawState = String(health?.running_task_state || '').trim()
+  const normalized = rawState.toLowerCase()
+  const total =
+    typeof health?.running_task_total === 'number' && Number.isFinite(health.running_task_total)
+      ? Math.max(0, health.running_task_total)
+      : null
+
+  if (!normalized || normalized === 'unknown') {
+    if (total !== null) return total > 0 ? `运行中（${total} 个）` : '空闲'
+    return '待接入'
+  }
+  if (normalized === 'running') {
+    return total !== null && total > 0 ? `运行中（${total} 个）` : '运行中'
+  }
+  if (normalized === 'idle') {
+    return total !== null && total > 0 ? `运行中（${total} 个）` : '空闲'
+  }
+  if (normalized === 'failed' || normalized === 'error') {
+    return '任务异常'
+  }
+  return total !== null && total > 0 ? `${rawState}（${total} 个）` : rawState
+})
 const analysisObjectLabel = computed(() =>
   analysisObject.value === 'department' ? '科室' : '主治医师',
 )
@@ -894,13 +1024,15 @@ const allDefectAnalysisItems = computed<DefectAnalysisItem[]>(() => {
     }),
   )
 })
-const defectAnalysisItems = computed(() =>
-  [...allDefectAnalysisItems.value]
+const defectAnalysisItems = computed(() => {
+  const effectiveSort =
+    confirmedResultsOnly.value && analysisSort.value === 'gap' ? 'metric' : analysisSort.value
+  return [...allDefectAnalysisItems.value]
     .sort((left, right) => {
       const primary =
-        analysisSort.value === 'risk'
+        effectiveSort === 'risk'
           ? right.highRiskReviewTotal - left.highRiskReviewTotal
-          : analysisSort.value === 'gap'
+          : effectiveSort === 'gap'
             ? right.dataGapRecordTotal - left.dataGapRecordTotal
             : analysisMetric.value === 'average'
               ? right.averageDefectCount - left.averageDefectCount
@@ -912,8 +1044,8 @@ const defectAnalysisItems = computed(() =>
         left.name.localeCompare(right.name, 'zh-CN')
       )
     })
-    .slice(0, 8),
-)
+    .slice(0, 8)
+})
 const hiddenDefectAnalysisCount = computed(() =>
   Math.max(0, allDefectAnalysisItems.value.length - defectAnalysisItems.value.length),
 )
@@ -942,9 +1074,10 @@ function selectDepartment(department: string) {
 }
 
 function formatDateTime(value?: string | null): string {
-  if (!value) return '暂未返回'
-  const parsed = dayjs(value)
-  return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
+  const date = parseQcTaskTime(value)
+  if (!date) return '暂未返回'
+  const { year, month, day, hour, minute } = shanghaiQcTaskTimeParts(date)
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 function applyRouteFilters() {
@@ -967,6 +1100,16 @@ function openRecordPool() {
   })
 }
 
+function openStageRecordList(stage: 'running' | 'final') {
+  void router.push({
+    path: `/workstation-v5/records/${stage}`,
+    query: {
+      department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
+      keyword: keyword.value.trim() || undefined,
+    },
+  })
+}
+
 function clearKeyword() {
   const query = { ...route.query }
   delete query.keyword
@@ -977,6 +1120,7 @@ function clearKeyword() {
 
 const KEYWORD_DEBOUNCE_MS = 280
 let fetchSeq = 0
+let activeFetchController: AbortController | null = null
 let keywordDebounceTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearKeywordDebounceTimer() {
@@ -986,30 +1130,69 @@ function clearKeywordDebounceTimer() {
   }
 }
 
+function abortActiveFetch() {
+  if (activeFetchController) {
+    activeFetchController.abort()
+    activeFetchController = null
+  }
+}
+
 async function fetchHome() {
+  abortActiveFetch()
+  const controller = new AbortController()
+  activeFetchController = controller
   const seq = ++fetchSeq
+  const requestDepartment = departmentFilter.value !== 'all' ? departmentFilter.value : undefined
+  const requestKeyword = keyword.value.trim() || undefined
   loading.value = true
   loadError.value = false
   try {
-    const res = await ApiService.get<ClinicalQcHomePayload>('/api/v1/workstation/qc-home', {
-      department: departmentFilter.value !== 'all' ? departmentFilter.value : undefined,
-      keyword: keyword.value.trim() || undefined,
-      priority_limit: 20,
-    })
-    if (seq !== fetchSeq) return
+    const res = await ApiService.get<ClinicalQcHomePayload>(
+      '/api/v1/workstation/qc-home',
+      {
+        department: requestDepartment,
+        keyword: requestKeyword,
+        priority_limit: 20,
+      },
+      { signal: controller.signal },
+    )
+    if (seq !== fetchSeq || controller.signal.aborted) return
     if (!res.success || !res.data?.clinical_qc)
       throw new Error(String(res.error || '首页聚合未返回'))
     homeData.value = res.data
+    const incomingDepartments = (res.data.department_options ?? [])
+      .map((dept) => dept.trim())
+      .filter(Boolean)
+    if (!requestDepartment && !requestKeyword) {
+      cachedDepartmentOptions.value = incomingDepartments
+    } else if (incomingDepartments.length) {
+      const merged = new Set(cachedDepartmentOptions.value)
+      for (const dept of incomingDepartments) merged.add(dept)
+      cachedDepartmentOptions.value = Array.from(merged)
+    }
   } catch {
-    if (seq !== fetchSeq) return
+    if (seq !== fetchSeq || controller.signal.aborted) return
     homeData.value = null
     loadError.value = true
   } finally {
+    if (activeFetchController === controller) {
+      activeFetchController = null
+    }
     if (seq === fetchSeq) {
       loading.value = false
     }
   }
 }
+
+watch(
+  confirmedResultsOnly,
+  (restricted) => {
+    if (restricted && analysisSort.value === 'gap') {
+      analysisSort.value = 'metric'
+    }
+  },
+  { immediate: true },
+)
 
 watch(
   () => route.fullPath,
@@ -1047,6 +1230,7 @@ watch(
 
 onBeforeUnmount(() => {
   clearKeywordDebounceTimer()
+  abortActiveFetch()
   fetchSeq += 1
 })
 </script>

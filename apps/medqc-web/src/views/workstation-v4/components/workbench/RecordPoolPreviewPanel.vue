@@ -91,6 +91,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { WorkbenchRow } from './BatchTablePanel.vue'
 import { patientAvatarSrc } from '../qc/patient-avatar'
 import { resolveResultPresentation } from '../qc/latestQcSummaryPresentation'
@@ -127,7 +128,12 @@ const hospitalizationTone = computed(() => {
 })
 
 // 质控结果文案与运行/终末病历质控列表共用同一口径
-const qc = computed(() => resolveResultPresentation(props.row?.latestQcSummary, props.qcSummaryState))
+const { confirmedResultsOnly } = useQcResultVisibility()
+const qc = computed(() =>
+  resolveResultPresentation(props.row?.latestQcSummary, props.qcSummaryState, {
+    confirmedOnly: confirmedResultsOnly.value,
+  }),
+)
 
 const qcTone = computed(() => {
   switch (qc.value.resultStatus) {

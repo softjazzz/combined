@@ -4,7 +4,7 @@
       class="qc-run-selected-control__trigger"
       type="button"
       data-testid="run-selected-qc-trigger"
-      :disabled="isBusy || normalizedRecordRefs.length === 0"
+      :disabled="isBusy || isSourcePending || normalizedRecordRefs.length === 0"
       @click="startSelectedQc"
     >
       <Play
@@ -86,7 +86,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LoaderCircle, Play, TriangleAlert } from 'lucide-vue-next'
 
 import {
@@ -136,10 +136,12 @@ const taskJob = ref<SichuanBatchJob | null>(null)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let pollFailures = 0
 let disposed = false
+let sessionGeneration = 0
 
 const scene = computed<'running' | 'final'>(() =>
   props.carePhase === 'inpatient' ? 'running' : 'final',
 )
+const isSourcePending = computed(() => props.sourceId === '')
 const isBusy = computed(() => state.value === 'creating' || state.value === 'running')
 const normalizedRecordRefs = computed(() => normalizeRecordRefs(props.recordRefs))
 const statusTarget = computed(() => String(props.statusTarget || '').trim())
@@ -170,19 +172,19 @@ function storageKey(): string {
   return `medqc:selected-qc:${scene.value}${suffix}`
 }
 
-function persistJob(jobId: string) {
+function persistJob(jobId: string, key = storageKey()) {
   const owner = workflowOwner()
   if (!owner) return
   try {
-    window.sessionStorage.setItem(storageKey(), JSON.stringify({ jobId, owner }))
+    window.sessionStorage.setItem(key, JSON.stringify({ jobId, owner }))
   } catch {
     // 浏览器禁用存储时仍可在当前页面继续轮询。
   }
 }
 
-function clearPersistedJob() {
+function clearPersistedJob(key = storageKey()) {
   try {
-    window.sessionStorage.removeItem(storageKey())
+    window.sessionStorage.removeItem(key)
   } catch {
     // 浏览器禁用存储时无需处理。
   }
@@ -194,14 +196,14 @@ function clearPollTimer() {
   pollTimer = null
 }
 
-function schedulePoll(jobId: string) {
+function schedulePoll(jobId: string, generation: number, key: string) {
   clearPollTimer()
-  pollTimer = setTimeout(() => void pollJob(jobId), POLL_INTERVAL_MS)
+  pollTimer = setTimeout(() => void pollJob(jobId, generation, key), POLL_INTERVAL_MS)
 }
 
-function fail(message: string) {
+function fail(message: string, key = storageKey()) {
   clearPollTimer()
-  clearPersistedJob()
+  clearPersistedJob(key)
   state.value = 'failed'
   progressMessage.value = message
 }
@@ -214,17 +216,17 @@ function localDataFailureMessage(message: string): string {
   return `${detail}。请先到系统设置同步对应病历资料，再返回本页执行质控。`
 }
 
-async function pollJob(jobId: string) {
+async function pollJob(jobId: string, generation = sessionGeneration, key = storageKey()) {
   try {
     const response = await getSichuanWorkspaceBatchJob(jobId)
-    if (disposed) return
+    if (disposed || generation !== sessionGeneration) return
     if (!response.success || !response.data) {
       pollFailures += 1
       if (pollFailures >= MAX_POLL_FAILURES) {
-        fail(response.message || '连续获取质控任务状态失败，请稍后刷新结果页查看。')
+        fail(response.message || '连续获取质控任务状态失败，请稍后刷新结果页查看。', key)
         return
       }
-      schedulePoll(jobId)
+      schedulePoll(jobId, generation, key)
       return
     }
     taskJob.value = response.data as SichuanBatchJob
@@ -238,13 +240,13 @@ async function pollJob(jobId: string) {
       progressMessage.value =
         getBatchJobRetryMessage(response.data) ||
         '正在使用本地已同步资料执行质控，完成后会自动刷新结果页。'
-      schedulePoll(jobId)
+      schedulePoll(jobId, generation, key)
       return
     }
     if (isBatchJobFinished(response.data)) emit('results-updated')
     if (status === 'completed') {
       clearPollTimer()
-      clearPersistedJob()
+      clearPersistedJob(key)
       state.value = 'completed'
       progressMessage.value = '所选病历质控已完成，当前结果页已刷新。'
       emit('completed')
@@ -257,25 +259,28 @@ async function pollJob(jobId: string) {
             response.data.error_message ||
             '质控任务已停止，已保存的结果仍可查看。',
         ),
+        key,
       )
       return
     }
     state.value = 'running'
     progressMessage.value = '正在使用本地已同步资料执行质控，完成后会自动刷新结果页。'
-    schedulePoll(jobId)
+    schedulePoll(jobId, generation, key)
   } catch {
-    if (disposed) return
+    if (disposed || generation !== sessionGeneration) return
     pollFailures += 1
     if (pollFailures >= MAX_POLL_FAILURES) {
-      fail('连续获取质控任务状态失败，请稍后刷新结果页查看。')
+      fail('连续获取质控任务状态失败，请稍后刷新结果页查看。', key)
       return
     }
-    schedulePoll(jobId)
+    schedulePoll(jobId, generation, key)
   }
 }
 
 async function startSelectedQc() {
-  if (isBusy.value || normalizedRecordRefs.value.length === 0) return
+  if (isBusy.value || isSourcePending.value || normalizedRecordRefs.value.length === 0) return
+  const generation = sessionGeneration
+  const key = storageKey()
   frozenRecordRefs.value = normalizedRecordRefs.value.map((item) => ({ ...item }))
   taskJob.value = null
   state.value = 'creating'
@@ -287,8 +292,9 @@ async function startSelectedQc() {
       date_field: scene.value === 'running' ? 'admission' : 'discharge',
       record_refs: frozenRecordRefs.value,
     })
+    if (disposed || generation !== sessionGeneration) return
     if (!response.success || !response.data?.id) {
-      fail(localDataFailureMessage(response.message || '质控任务创建失败，请稍后重试。'))
+      fail(localDataFailureMessage(response.message || '质控任务创建失败，请稍后重试。'), key)
       return
     }
     taskJob.value = response.data as SichuanBatchJob
@@ -296,33 +302,60 @@ async function startSelectedQc() {
     progressMessage.value = response.data.idempotency_reused
       ? '相同质控任务正在执行，已继续跟踪任务进度。'
       : '质控任务已创建，正在使用本地已同步资料执行质控。'
-    persistJob(response.data.id)
-    await pollJob(response.data.id)
+    persistJob(response.data.id, key)
+    await pollJob(response.data.id, generation, key)
   } catch {
-    fail('质控任务创建失败，请稍后重试。')
+    if (disposed || generation !== sessionGeneration) return
+    fail('质控任务创建失败，请稍后重试。', key)
   }
 }
 
-onMounted(() => {
+function resetForScopeChange() {
+  sessionGeneration += 1
+  clearPollTimer()
+  pollFailures = 0
+  state.value = 'idle'
+  progressMessage.value = ''
+  frozenRecordRefs.value = []
+  taskJob.value = null
+}
+
+function restorePersistedJob() {
+  if (isSourcePending.value) return
+  const generation = sessionGeneration
+  const key = storageKey()
   try {
-    const raw = window.sessionStorage.getItem(storageKey())
+    const raw = window.sessionStorage.getItem(key)
     if (!raw) return
     const persisted = JSON.parse(raw) as { jobId?: unknown; owner?: unknown }
     const jobId = String(persisted.jobId || '').trim()
     if (!jobId || String(persisted.owner || '').trim() !== workflowOwner()) {
-      clearPersistedJob()
+      clearPersistedJob(key)
       return
     }
     state.value = 'running'
     progressMessage.value = '正在恢复此前的质控任务进度。'
-    void pollJob(jobId)
+    void pollJob(jobId, generation, key)
   } catch {
-    clearPersistedJob()
+    clearPersistedJob(key)
   }
+}
+
+watch(
+  () => [props.carePhase, props.sourceId] as const,
+  () => {
+    resetForScopeChange()
+    restorePersistedJob()
+  },
+)
+
+onMounted(() => {
+  restorePersistedJob()
 })
 
 onUnmounted(() => {
   disposed = true
+  sessionGeneration += 1
   clearPollTimer()
 })
 </script>

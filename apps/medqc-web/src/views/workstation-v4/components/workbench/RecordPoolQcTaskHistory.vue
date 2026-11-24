@@ -31,7 +31,11 @@
     </template>
 
     <div class="record-pool-task-history__toolbar">
-      <span>可查看执行统计、调试快照并下载诊断包</span>
+      <span>{{
+        confirmedResultsOnly
+          ? '可查看最近质控任务的执行状态与结果汇总'
+          : '可查看执行统计、调试快照并下载诊断包'
+      }}</span>
       <a-button
         size="small"
         :loading="loading"
@@ -69,7 +73,10 @@
               <span>{{ recordCount(job) }} 份病历</span>
               <span>{{ formatPaddedQcTaskDateTime(job.created_at) }}</span>
             </span>
-            <span class="record-pool-task-history__item-metrics">
+            <span
+              v-if="!confirmedResultsOnly"
+              class="record-pool-task-history__item-metrics"
+            >
               <span>墙钟耗时 {{ durationLabel(job) }}</span>
               <span>LLM {{ job.summary?.executor_breakdown?.llm || 0 }}</span>
               <span>缓存命中 {{ job.summary?.cache_breakdown?.hit || 0 }}</span>
@@ -103,6 +110,7 @@
 import { message } from 'ant-design-vue'
 import { ChevronRight, History, RefreshCw } from 'lucide-vue-next'
 import { ref } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
@@ -122,6 +130,7 @@ import {
 } from '../../customer-sample-validation/batchExport'
 
 const RECORD_POOL_RULE_SET_KEY = 'luxian_0609_qc_v1'
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const historyOpen = ref(false)
 const detailOpen = ref(false)
@@ -168,7 +177,9 @@ async function openJob(jobId: string) {
       throw new Error(response.message || '获取任务详情失败')
     }
     batchJobDetail.value = response.data
-    await fetchDebugSnapshot(jobId)
+    if (!confirmedResultsOnly.value) {
+      await fetchDebugSnapshot(jobId)
+    }
   } catch (error) {
     batchJobDetail.value = null
     message.error(error instanceof Error ? error.message : '获取任务详情失败')
@@ -181,6 +192,7 @@ async function fetchDebugSnapshot(
   jobId: string,
   options?: { ruleJobId?: string; itemLimit?: number },
 ): Promise<SichuanBatchJobDebugSnapshot | null> {
+  if (confirmedResultsOnly.value) return null
   debugLoading.value = true
   try {
     const response = await getSichuanWorkspaceBatchJobDebugSnapshot(jobId, {

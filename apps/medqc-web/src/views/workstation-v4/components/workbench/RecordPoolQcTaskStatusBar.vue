@@ -127,14 +127,15 @@
     </div>
 
     <div v-if="!isActive" class="record-pool-qc-status__actions">
-      <a
-        :href="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
+      <RouterLink
+        :to="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
         class="record-pool-qc-status__detail-link"
         data-testid="qc-task-detail-link"
-        >查看本次结果与失败原因</a
       >
+        {{ confirmedResultsOnly ? '查看本次质控结果' : '查看本次结果与失败原因' }}
+      </RouterLink>
       <button
-        v-if="currentJob.status === 'completed'"
+        v-if="currentJob.status === 'completed' && !confirmedResultsOnly"
         type="button"
         class="record-pool-qc-status__export"
         :disabled="exporting"
@@ -158,6 +159,7 @@
 import { message } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { CircleAlert, CircleCheckBig, X } from 'lucide-vue-next'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
@@ -195,6 +197,7 @@ const emit = defineEmits<{
   'results-updated': []
 }>()
 
+const { confirmedResultsOnly } = useQcResultVisibility()
 const currentJob = ref<SichuanBatchJob | null>(null)
 const pollError = ref(false)
 const resultReadError = ref('')
@@ -633,6 +636,8 @@ onBeforeUnmount(() => {
 
 .record-pool-qc-status__detail-link,
 .record-pool-qc-status__export {
+  display: inline-flex;
+  align-items: center;
   min-height: 34px;
   padding: 0 13px;
   border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
@@ -641,6 +646,7 @@ onBeforeUnmount(() => {
   color: var(--mq-neutral-text);
   font-size: 13px;
   font-weight: 500;
+  text-decoration: none;
   cursor: pointer;
 }
 .record-pool-qc-status__detail-link:hover,

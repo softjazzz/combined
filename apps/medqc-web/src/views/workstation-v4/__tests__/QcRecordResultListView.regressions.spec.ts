@@ -74,6 +74,7 @@ vi.mock('../customer-sample-validation/batchExport', () => ({
 
 const analysisMounts = vi.fn()
 const previewLoads = vi.fn()
+const runSelectedMounts = vi.fn()
 
 import QcRecordResultListView from '../QcRecordResultListView.vue'
 
@@ -146,7 +147,11 @@ const QcRecordResultAnalysisPanelStub = {
 
 const QcRunSelectedControlStub = {
   name: 'QcRunSelectedControl',
+  props: ['sourceId', 'carePhase'],
   emits: ['results-updated'],
+  mounted() {
+    runSelectedMounts(`${(this as any).sourceId || 'pending'}:${(this as any).carePhase}`)
+  },
   template: '<button data-testid="trigger-results-updated" @click="$emit(\'results-updated\')">done</button>',
 }
 
@@ -306,6 +311,62 @@ describe('QcRecordResultListView P2-G2 回归测试', () => {
 
     expect(mockRecordsState.refreshData).toHaveBeenCalledTimes(1)
     expect(analysisMounts).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+  })
+
+  it('carePhase 切换时清理导出提示、导出菜单、预览焦点与详情提示，并按 sourceId:carePhase 重建质控控件', async () => {
+    mockRecordsState.allRecords.value = [
+      makeRecord('1', { status: 'ready', completedAt: '2026-10-01T08:00:00+08:00', statusCounts: { non_compliant: 1 } }),
+    ]
+    mockRecordsState.serverTotal.value = 1
+    mockRecordsState.qcSummaryState.value = 'ready'
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+    expect(runSelectedMounts).toHaveBeenCalledWith('independent_cdm:inpatient')
+
+    const setupState = (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState
+    setupState.exportNotice = '导出失败提示'
+    setupState.detailNotice = '身份异常提示'
+    setupState.exportMenuOpen = true
+    setupState.activePreviewKey = 'H1|P-1|V-1'
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="qc-result-notice"]').exists()).toBe(true)
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true)
+
+    // 切换 carePhase 时同时模拟列表清空，验证 activePreviewKey 被重置
+    mockRecordsState.allRecords.value = []
+    mockRecordsState.serverTotal.value = 0
+    await wrapper.setProps({ carePhase: 'discharged' })
+    await flushPromises()
+
+    expect(setupState.exportNotice).toBe('')
+    expect(setupState.detailNotice).toBe('')
+    expect(setupState.exportMenuOpen).toBe(false)
+    expect(setupState.activePreviewKey).toBe('')
+    expect(wrapper.find('[data-testid="qc-result-notice"]').exists()).toBe(false)
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+    expect(runSelectedMounts).toHaveBeenCalledWith('independent_cdm:discharged')
+    wrapper.unmount()
+  })
+
+  it('sourceId 未解析时禁用结果分析按钮，解析为 independent_cdm 时自动回退到病历结果视图', async () => {
+    mockRecordsState.sourceId.value = ''
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(wrapper.get('[data-testid="qc-result-view-analysis"]').attributes('disabled')).toBeDefined()
+
+    const setupState = (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState
+    setupState.activeView = 'analysis'
+    await flushPromises()
+    expect(wrapper.find('[data-testid="analysis-stub"]').exists()).toBe(true)
+
+    mockRecordsState.sourceId.value = 'independent_cdm'
+    await flushPromises()
+    expect(setupState.activeView).toBe('records')
+    expect(wrapper.find('[data-testid="analysis-stub"]').exists()).toBe(false)
     wrapper.unmount()
   })
 })

@@ -305,6 +305,13 @@
           message="质控摘要暂不可用"
           show-icon
         />
+        <Alert
+          v-if="filterQcBlockedReason"
+          type="warning"
+          :message="filterQcBlockedReason"
+          show-icon
+          data-testid="filter-qc-blocked-warning"
+        />
 
         <div
           v-if="isFrontpageGenerateStage"
@@ -344,7 +351,7 @@
                     : `质控所选（${selectedWorkbenchKeys.length}）`
                 "
                 :primary-action-loading="batchActionLoading"
-                :show-filter-qc-action="!isStageQueueMode"
+                :show-filter-qc-action="!isStageQueueMode && !filterQcBlockedReason"
                 :filter-qc-count="qcScopeTotal"
                 :filter-qc-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
@@ -377,6 +384,8 @@
                   <RecordPoolQcTaskStatusBar
                     :job="recordPoolQcTask"
                     @dismiss="emit('dismiss-qc-task')"
+                    @results-updated="handleQcTaskRefresh"
+                    @completed="handleQcTaskRefresh"
                   />
                 </template>
               </BatchTablePanel>
@@ -387,7 +396,7 @@
               :qc-loading="batchActionLoading"
               :qc-summary-state="qcSummaryState"
               @open-record="emit('open-record', $event)"
-              @run-qc="emit('batch-extract', [$event])"
+              @run-qc="emit('preview-run-qc', $event)"
             />
           </div>
         </div>
@@ -505,6 +514,7 @@ const emit = defineEmits<{
   toggleTodayInpatient: []
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
+  'preview-run-qc': [recordKey: string]
   'filter-qc': []
   'dismiss-qc-task': []
   'back-to-analytics': []
@@ -570,6 +580,30 @@ const showInpatientSort = computed(
 )
 
 const isAnalyticsDrilldown = computed(() => Boolean(props.analyticsDrilldown) && !props.isStageQueueMode)
+const filterQcBlockedReason = computed(() => {
+  if (props.isStageQueueMode) return ''
+  if (isAnalyticsDrilldown.value) {
+    return '统计分析下钻结果暂不支持「质控当前筛选」，请勾选病历后使用「质控所选」。'
+  }
+  if (props.hospFilter === 'unknown') {
+    return '「状态未知」筛选暂不支持「质控当前筛选」，请勾选病历后使用「质控所选」。'
+  }
+  return ''
+})
+
+let lastRefreshedTaskId = ''
+watch(
+  () => props.recordPoolQcTask?.id,
+  () => {
+    lastRefreshedTaskId = ''
+  },
+)
+function handleQcTaskRefresh() {
+  const jobId = String(props.recordPoolQcTask?.id || '')
+  if (jobId && lastRefreshedTaskId === jobId) return
+  lastRefreshedTaskId = jobId
+  emit('refresh')
+}
 
 const overviewEyebrow = computed(() => {
   if (props.isStageQueueMode) return '首页与结算清单 · 批量工作台'

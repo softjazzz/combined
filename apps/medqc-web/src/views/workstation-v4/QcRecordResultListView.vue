@@ -35,8 +35,8 @@
             data-testid="qc-result-view-analysis"
             :class="{ 'is-active': activeView === 'analysis' }"
             :aria-pressed="activeView === 'analysis'"
-            :disabled="sourceId === 'independent_cdm'"
-            :title="sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
+            :disabled="!sourceId || sourceId === 'independent_cdm'"
+            :title="!sourceId ? '正在加载数据源…' : sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
             @click="activeView = 'analysis'"
           >
             结果分析
@@ -44,7 +44,7 @@
         </nav>
         <div class="review-workbench-primary">
           <QcRunSelectedControl
-            :key="sourceId"
+            :key="`${sourceId || 'pending'}:${carePhase}`"
             :source-id="sourceId"
             :care-phase="carePhase"
             :record-refs="selectedQcRecordRefs"
@@ -84,7 +84,17 @@
       type="warning"
       :message="qcTotalsReady ? '本页质控摘要暂不可用' : '质控摘要暂不可用'"
       show-icon
-    />
+    >
+      <template #action>
+        <Button
+          size="small"
+          data-testid="qc-result-retry-summary"
+          @click="handleRefreshData"
+        >
+          重试摘要
+        </Button>
+      </template>
+    </Alert>
 
     <div
       :id="`qc-record-result-task-status-${carePhase}`"
@@ -231,6 +241,16 @@
         </div>
       </div>
 
+      <p
+        v-if="detailNotice || exportNotice"
+        class="qc-record-result-list-view__notice"
+        :class="{ 'qc-record-result-list-view__notice--error': noticeTone === 'error' }"
+        data-testid="qc-result-notice"
+        role="status"
+      >
+        {{ detailNotice || exportNotice }}
+      </p>
+
       <div class="review-workbench-split">
         <div
           class="review-workbench-list"
@@ -319,21 +339,13 @@
           </footer>
         </div>
         <QcRecordReviewPreview
-          :key="sourceId"
+          :key="`${sourceId || 'pending'}:${carePhase}`"
           :care-phase="carePhase"
           :row="previewRow"
           :refresh-key="previewRefreshKey"
           @open-full="handleOpenResult"
         />
       </div>
-
-      <p
-        v-if="detailNotice || exportNotice"
-        class="qc-record-result-list-view__notice"
-        role="status"
-      >
-        {{ detailNotice || exportNotice }}
-      </p>
     </section>
 
     <QcRecordResultAnalysisPanel
@@ -365,6 +377,7 @@ import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import type { MqIconName, MqIconTone } from '@/components/icons/mqIcons'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
@@ -405,8 +418,13 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const detailNotice = ref('')
 const exportNotice = ref('')
+const exportNoticeTone = ref<'info' | 'error'>('info')
+const noticeTone = computed<'info' | 'error'>(() =>
+  detailNotice.value ? 'error' : exportNoticeTone.value,
+)
 const exporting = ref(false)
 const exportMenuOpen = ref(false)
 const drawerOpen = ref(false)
@@ -480,7 +498,7 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
 const metricItems = computed<QcRecordMetricItem[]>(() => [
   { key: 'records', label: '纳入病历', value: qcTotalsReady.value ? qcSummary.value.totalRecords : serverTotal.value },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
-  ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
+  ...(!confirmedResultsOnly.value && (qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords)
     ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]
     : []),
   {
@@ -488,11 +506,13 @@ const metricItems = computed<QcRecordMetricItem[]>(() => [
     label: '需优先复核',
     value: statusCount(qcSummary.value.statusCounts, 'non_compliant'),
   },
-  {
-    key: 'dataGap',
-    label: '资料待核实',
-    value: statusCount(qcSummary.value.statusCounts, 'data_gap'),
-  },
+  ...(!confirmedResultsOnly.value
+    ? [{
+        key: 'dataGap' as const,
+        label: '资料待核实',
+        value: statusCount(qcSummary.value.statusCounts, 'data_gap'),
+      }]
+    : []),
 ])
 
 // 保持后端分页顺序，避免 deferred 摘要回填后客户端重排造成列表跳动
@@ -564,8 +584,33 @@ function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
 }
 
+interface CommittedListFilters {
+  department: string
+  doctor: string
+  keyword: string
+  dateRange: [string, string] | null
+}
+
+const committedFilters = ref<CommittedListFilters>({
+  department: ALL_DEPARTMENTS,
+  doctor: '全部主管医师',
+  keyword: '',
+  dateRange: null,
+})
+
+function commitCurrentFilters() {
+  committedFilters.value = {
+    department: String(activeDept.value || '').trim() || ALL_DEPARTMENTS,
+    doctor: String(activeDoctor.value || '').trim() || '全部主管医师',
+    keyword: String(searchText.value || '').trim(),
+    dateRange: dateRange.value ? [dateRange.value[0], dateRange.value[1]] : null,
+  }
+}
+
 function toResultRow(record: PatientRecord): QcRecordResultRow {
-  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value)
+  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value, {
+    confirmedOnly: confirmedResultsOnly.value,
+  })
   return {
     recordKey: record.recordKey as string,
     instituteId: record.instituteId as string,
@@ -579,7 +624,9 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
     admissionTime: formatMedicalRecordTimestamp(record.admissionDate),
     dischargeTime: formatMedicalRecordTimestamp(record.dischargeDate),
     sourceLabel:
-      record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
+      !confirmedResultsOnly.value && record.sourceState && record.sourceState.status !== 'unknown'
+        ? '资料同步待核实'
+        : undefined,
     ...result,
   }
 }
@@ -595,6 +642,7 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
 function applyFilters() {
   cancelPendingDeepLink()
   clearSelection()
+  commitCurrentFilters()
   currentPage.value = 1
   fetchData(1)
 }
@@ -617,6 +665,7 @@ function handleSearchChange(event: Event) {
 function resetVisibleFilters() {
   searchText.value = ''
   activeDept.value = ALL_DEPARTMENTS
+  activeDoctor.value = '全部主管医师'
   dateRange.value = null
   applyFilters()
 }
@@ -653,6 +702,7 @@ function clearSelection() {
 
 function refreshAfterSelectedQc() {
   clearSelection()
+  previewRefreshKey.value += 1
   analysisRefreshKey.value += 1
   refreshData()
 }
@@ -688,6 +738,7 @@ async function exportSelectedRecords() {
       Boolean(value),
     )
   if (recordRefs.length !== selectedCount.value) {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '所选病历身份已变化，请重新勾选后导出'
     clearSelection()
     return
@@ -695,6 +746,7 @@ async function exportSelectedRecords() {
 
   exporting.value = true
   exportNotice.value = ''
+  exportNoticeTone.value = 'info'
   try {
     const response = await exportFilteredLuxian0609RecordResults({
       scope: isInpatient.value ? 'running' : 'final',
@@ -702,6 +754,7 @@ async function exportSelectedRecords() {
       record_refs: recordRefs,
     })
     if (!response.success || !response.data) {
+      exportNoticeTone.value = 'error'
       exportNotice.value = response.message || '导出所选质控结果失败'
       return
     }
@@ -709,8 +762,10 @@ async function exportSelectedRecords() {
       response.data,
       `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-所选${recordRefs.length}份.xlsx`,
     )
+    exportNoticeTone.value = 'info'
     exportNotice.value = `已开始下载所选 ${recordRefs.length} 份病历的质控结果`
   } catch {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '导出所选质控结果失败，请稍后重试'
   } finally {
     exporting.value = false
@@ -721,10 +776,11 @@ async function exportCurrentFilter() {
   if (exporting.value) return
   exporting.value = true
   exportNotice.value = ''
-  const [rangeStart, rangeEnd] = dateRange.value || []
-  const department = String(activeDept.value || '').trim()
-  const doctor = String(activeDoctor.value || '').trim()
-  const keyword = String(searchText.value || '').trim()
+  exportNoticeTone.value = 'info'
+  const [rangeStart, rangeEnd] = committedFilters.value.dateRange || []
+  const department = committedFilters.value.department
+  const doctor = committedFilters.value.doctor
+  const keyword = committedFilters.value.keyword
   try {
     const response = await exportFilteredLuxian0609RecordResults({
       scope: isInpatient.value ? 'running' : 'final',
@@ -736,6 +792,7 @@ async function exportCurrentFilter() {
       ...(keyword ? { keyword } : {}),
     })
     if (!response.success || !response.data) {
+      exportNoticeTone.value = 'error'
       exportNotice.value = response.message || '导出当前筛选质控结果失败'
       return
     }
@@ -743,8 +800,10 @@ async function exportCurrentFilter() {
       response.data,
       `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-当前筛选.xlsx`,
     )
+    exportNoticeTone.value = 'info'
     exportNotice.value = '当前筛选质控结果已开始下载'
   } catch {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '导出当前筛选质控结果失败，请稍后重试'
   } finally {
     exporting.value = false
@@ -756,6 +815,12 @@ function updateDateRange(value: unknown) {
   applyFilters()
 }
 
+watch(sourceId, (nextSourceId) => {
+  if (nextSourceId === 'independent_cdm') {
+    activeView.value = 'records'
+  }
+})
+
 watch(
   () => props.carePhase,
   (carePhase) => {
@@ -763,10 +828,16 @@ watch(
     medicalRecordFocus.value = null
     closeResultDrawer()
     clearSelection()
+    exportNotice.value = ''
+    exportNoticeTone.value = 'info'
+    exportMenuOpen.value = false
+    activePreviewKey.value = ''
+    detailNotice.value = ''
     activeDept.value = ALL_DEPARTMENTS
     activeDoctor.value = '全部主管医师'
     searchText.value = ''
     dateRange.value = null
+    commitCurrentFilters()
     currentPage.value = 1
     activeView.value = 'records'
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
@@ -797,6 +868,7 @@ onMounted(async () => {
     pendingDeepLinkKey.value = requestedRecordKey
     if (requestedVisitId) searchText.value = requestedVisitId
   }
+  commitCurrentFilters()
   const generation = ++deepLinkGeneration
   await fetchData(1)
   if (generation !== deepLinkGeneration || !pendingDeepLinkKey.value) return
@@ -857,6 +929,8 @@ function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequ
     patientName: record.name,
     patientSex: record.sex,
     patientAge: record.age,
+    admissionTime: record.admissionDate,
+    dischargeTime: record.dischargeDate,
     listQcTime: row.latestQcTime && row.latestQcTime !== '—' ? `质控结束 ${row.latestQcTime}` : undefined,
     previousResult,
     label: labelParts.join(' · '),
@@ -1175,10 +1249,16 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__notice {
   padding: 12px 20px;
-  border-top: 1px solid rgba(10, 108, 255, 0.1);
+  border-bottom: 1px solid rgba(10, 108, 255, 0.12);
   background: rgba(10, 108, 255, 0.045);
   color: #0a6cff !important;
   font-weight: 600;
+}
+
+.qc-record-result-list-view__notice--error {
+  border-bottom-color: rgba(239, 68, 68, 0.18);
+  background: #fff4f2;
+  color: #b42318 !important;
 }
 
 @media (max-width: 1100px) {

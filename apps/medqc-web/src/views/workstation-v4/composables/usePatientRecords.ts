@@ -190,6 +190,7 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   const initialRouteQuery = new URLSearchParams(window.location.search)
   const initialDepartment = initialRouteQuery.get('department')?.trim()
   const initialDoctor = initialRouteQuery.get('doctor')?.trim()
+  const initialKeyword = initialRouteQuery.get('keyword')?.trim() || ''
   const sourceId = ref<ClinicalSourceId | ''>('')
   const sourceOptions = ref<ClinicalSourceOption[]>([])
   let sourceLoading: Promise<void> | undefined
@@ -223,8 +224,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   const activeDept = ref(initialDepartment || ALL_DEPARTMENTS)
   const activeDoctor = ref(initialDoctor || ALL_DOCTORS)
-  const searchText = ref('')
+  const searchText = ref(initialKeyword)
   const dateRange = ref<WorkstationDateRange>(null)
+  const committedSearchText = ref(initialKeyword)
+  const committedDateRange = ref<WorkstationDateRange>(null)
   const dateField = ref<WorkstationDateField>('visit')
   const hospFilter = ref<HospitalStatusScope>(initialHospitalStatus)
   const syncScope = ref<RecordPoolSyncScope>('all')
@@ -276,9 +279,18 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       const data = workstationPayload(response.data)
       if (!Array.isArray(data.records) || (includeTotals && !data.qc_summary)) throw new Error('质控摘要响应格式无效')
       const summaries = new Map<string, ReturnType<typeof normalizeRecordLatestQcSummary>>()
-      for (const record of data.records) {
-        if (record && typeof record.recordKey === 'string' && record.latest_qc_summary) {
-          summaries.set(record.recordKey, normalizeRecordLatestQcSummary(record.latest_qc_summary))
+      for (const rawRecord of data.records) {
+        if (!rawRecord || typeof rawRecord !== 'object') continue
+        const record = rawRecord as Record<string, unknown>
+        const key =
+          typeof record.recordKey === 'string'
+            ? record.recordKey
+            : typeof record.record_key === 'string'
+              ? record.record_key
+              : ''
+        const rawSummary = record.latest_qc_summary ?? record.latestQcSummary
+        if (key && rawSummary) {
+          summaries.set(key, normalizeRecordLatestQcSummary(rawSummary))
         }
       }
       allRecords.value = allRecords.value.map((record) => ({
@@ -328,6 +340,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         params.doctor = activeDoctor.value
       }
       const keyword = searchText.value.trim()
+      const nextDateRange: WorkstationDateRange =
+        startDate || endDate ? [startDate || '', endDate || ''] : null
       if (keyword) {
         params.keyword = keyword
       }
@@ -343,7 +357,10 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       if (syncScope.value !== 'all') {
         params.sync_scope = syncScope.value
       }
-      if (inpatientSort.value !== 'default') {
+      if (
+        inpatientSort.value !== 'default' &&
+        (hospFilter.value === 'inpatient' || syncScope.value === 'today_inpatient')
+      ) {
         params.inpatient_sort = inpatientSort.value
       }
       const analyticsKeys = [
@@ -379,6 +396,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       // 过期请求不得覆盖较新的筛选、分页或住院状态响应。
       if (requestSequence !== activeRequestSequence) return
 
+      committedSearchText.value = keyword
+      committedDateRange.value = nextDateRange
       allRecords.value = normalizedRecords.map((record) => ({
         ...record,
         sourceId: sourceId.value || undefined,
@@ -458,7 +477,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     const nextPage = pageSizeChanged ? 1 : page
     currentPage.value = nextPage
     void fetchData(nextPage, normalizedPageSize, true)
-    document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
+    const scrollContainer = document.querySelector('.custom-scrollbar')
+    if (scrollContainer && typeof scrollContainer.scrollTo === 'function') {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
   }
 
   function refreshData() {
@@ -480,6 +504,9 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
 
   function selectHospFilter(value: HospitalStatusScope) {
     const nextValue = hospOptions.value.some((option) => option.value === value) ? value : 'all'
+    if (nextValue !== 'inpatient') {
+      inpatientSort.value = 'default'
+    }
     if (hospFilter.value === nextValue) return
     hospFilter.value = nextValue
     currentPage.value = 1
@@ -527,6 +554,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     activeDoctor,
     searchText,
     dateRange,
+    committedSearchText,
+    committedDateRange,
     dateField,
     hospFilter,
     syncScope,

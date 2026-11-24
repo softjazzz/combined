@@ -1,5 +1,6 @@
 import { Select } from 'ant-design-vue'
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
@@ -7,7 +8,15 @@ import QcRecordReviewPreview from '@/views/workstation-v4/components/qc/QcRecord
 import type { QcRecordResultRow } from '@/views/workstation-v4/components/qc/QcRecordResultTable.vue'
 import type { SingleRecordQcResultPayload } from '@/views/workstation-v4/customer-sample-validation/single-record-result-model'
 
-const { getLatestResult } = vi.hoisted(() => ({ getLatestResult: vi.fn() }))
+const { getLatestResult } = vi.hoisted(() => ({
+  getLatestResult: vi.fn(),
+}))
+const confirmedOnlyState = ref(false)
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({
+    confirmedResultsOnly: confirmedOnlyState,
+  }),
+}))
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getLatestLuxian0609RecordResult: getLatestResult,
 }))
@@ -127,6 +136,7 @@ describe('QcRecordReviewPreview', () => {
         dispatchEvent: vi.fn(),
       })),
     )
+    confirmedOnlyState.value = false
     getLatestResult.mockReset()
     getLatestResult.mockResolvedValue({ success: true, data: payload() })
   })
@@ -162,11 +172,15 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.get('[role="status"]').text()).toContain('正在读取')
     request.resolve({ success: true, data: payload() })
     await flushPromises()
-    expect(getLatestResult).toHaveBeenCalledWith({
-      instituteId: 'H-1',
-      patientId: 'P-1',
-      visitId: 'V-1',
-    })
+    expect(getLatestResult).toHaveBeenCalledWith(
+      {
+        instituteId: 'H-1',
+        patientId: 'P-1',
+        visitId: 'V-1',
+      },
+      undefined,
+      { signal: expect.any(AbortSignal) },
+    )
     expect(wrapper.getComponent(Select).props('value')).toBe('non_compliant')
     expect(wrapper.text()).toContain('后端已保存的结论')
     expect(wrapper.text()).toContain('入院记录')
@@ -320,17 +334,139 @@ describe('QcRecordReviewPreview', () => {
     expect(wrapper.text()).toContain('共 7 项')
   })
 
-  it('身份缺失不请求，卸载后在途请求不恢复结果', async () => {
+  it('身份缺失不请求，卸载后在途请求不恢复结果并中止 AbortSignal', async () => {
     const missing = mount(QcRecordReviewPreview, { props: { row: { ...row, visitId: undefined } } })
     expect(missing.text()).toContain('身份信息不完整')
     expect(getLatestResult).not.toHaveBeenCalled()
     missing.unmount()
     const request = deferred()
-    getLatestResult.mockReturnValueOnce(request.promise)
+    let capturedSignal: AbortSignal | undefined
+    getLatestResult.mockImplementationOnce((_record, _previous, options?: { signal?: AbortSignal }) => {
+      capturedSignal = options?.signal
+      return request.promise
+    })
     const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    expect(capturedSignal?.aborted).toBe(false)
     wrapper.unmount()
+    expect(capturedSignal?.aborted).toBe(true)
     request.resolve({ success: true, data: payload() })
     await flushPromises()
     expect(wrapper.emitted('open-full')).toBeUndefined()
+  })
+
+  it('行切换时通过 AbortController 中止旧在途请求', async () => {
+    const first = deferred()
+    const second = deferred()
+    const signals: Array<AbortSignal | undefined> = []
+    getLatestResult
+      .mockImplementationOnce((_record, _previous, options?: { signal?: AbortSignal }) => {
+        signals.push(options?.signal)
+        return first.promise
+      })
+      .mockImplementationOnce((_record, _previous, options?: { signal?: AbortSignal }) => {
+        signals.push(options?.signal)
+        return second.promise
+      })
+
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    expect(signals[0]?.aborted).toBe(false)
+
+    await wrapper.setProps({
+      row: {
+        ...row,
+        patientId: 'P-2',
+        recordKey: '["H-1","P-2","V-1"]',
+      },
+    })
+    expect(signals[0]?.aborted).toBe(true)
+    expect(signals[1]?.aborted).toBe(false)
+
+    second.resolve({ success: true, data: payload() })
+    await flushPromises()
+    expect(wrapper.find('[data-testid="preview-item"]').exists()).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('演示模式（confirmedResultsOnly）隐藏诊断包导出，且仅展示确定问题、不回退到待处理或全部', async () => {
+    confirmedOnlyState.value = true
+    getLatestResult.mockResolvedValue({
+      success: true,
+      data: payload({
+        items: [
+          {
+            rule_id: 'LX0609-01-01-01',
+            rule_name: '确定问题规则',
+            status: 'non_compliant',
+            conclusion: '确定问题结论',
+            source_document: '入院记录',
+          },
+          {
+            rule_id: 'LX0609-01-01-02',
+            rule_name: '资料缺口规则',
+            status: 'data_gap',
+            conclusion: '内部待核实结论',
+            source_document: '病程记录',
+          },
+          {
+            rule_id: 'LX0609-01-01-03',
+            rule_name: '技术异常规则',
+            status: 'technical_error',
+            conclusion: '内部技术异常结论',
+          },
+          {
+            rule_id: 'LX0609-01-01-04',
+            rule_name: '待判断规则',
+            status: 'uncertain',
+            conclusion: '内部待判断结论',
+          },
+        ],
+      }),
+    })
+
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+
+    expect(wrapper.findComponent(QcDiagnosticExport).exists()).toBe(false)
+    expect(wrapper.getComponent(Select).props('value')).toBe('non_compliant')
+    expect(wrapper.getComponent(Select).props('options')).toEqual([
+      { value: 'non_compliant', label: '确定问题 · 1' },
+    ])
+    expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(1)
+    expect(wrapper.text()).toContain('确定问题结论')
+    expect(wrapper.text()).not.toContain('内部待核实结论')
+    expect(wrapper.text()).not.toContain('内部技术异常结论')
+    expect(wrapper.text()).not.toContain('内部待判断结论')
+    expect(wrapper.text()).toContain('共 1 项')
+
+    // 当病历没有任何 non_compliant 项时，不回退到 pending/all，不泄露非确定问题
+    getLatestResult.mockResolvedValue({
+      success: true,
+      data: payload({
+        items: [
+          {
+            rule_id: 'LX0609-01-01-02',
+            rule_name: '资料缺口规则',
+            status: 'data_gap',
+            conclusion: '仅待核实结论',
+          },
+          {
+            rule_id: 'LX0609-01-01-03',
+            rule_name: '技术异常规则',
+            status: 'technical_error',
+            conclusion: '仅技术异常结论',
+          },
+        ],
+      }),
+    })
+    await wrapper.setProps({ refreshKey: 1 })
+    await flushPromises()
+
+    expect(wrapper.findComponent(QcDiagnosticExport).exists()).toBe(false)
+    expect(wrapper.getComponent(Select).props('value')).toBe('non_compliant')
+    expect(wrapper.findAll('[data-testid="preview-item"]')).toHaveLength(0)
+    expect(wrapper.text()).toContain('当前没有可展示的确定问题')
+    expect(wrapper.text()).not.toContain('仅待核实结论')
+    expect(wrapper.text()).not.toContain('仅技术异常结论')
+    wrapper.unmount()
   })
 })

@@ -47,6 +47,7 @@ interface RunBatchExtractParams {
 
 interface RunRecordPoolQcParams {
   keys: string[]
+  preserveSelection?: boolean
   getBatchExtracting: () => boolean
   setBatchExtracting: (value: boolean) => void
   findBatchRecordByKey: (recordKey: string) => PatientRecord | null
@@ -63,6 +64,7 @@ interface RunRecordPoolFilterQcParams {
   keyword: string
   dateField: string
   dateRange: [string, string] | null
+  hasAnalyticsDrilldown?: boolean
   getBatchExtracting: () => boolean
   setBatchExtracting: (value: boolean) => void
   onTaskCreated?: (job: SichuanBatchJob) => void
@@ -74,8 +76,11 @@ function recordPoolQcError(
   content: string,
   selectedRecordKeys: string[],
   setSelectedWorkbenchKeys: (keys: string[]) => void,
+  preserveSelection = false,
 ) {
-  setSelectedWorkbenchKeys(selectedRecordKeys)
+  if (!preserveSelection) {
+    setSelectedWorkbenchKeys(selectedRecordKeys)
+  }
   message.error({
     key: RECORD_POOL_QC_MESSAGE_KEY,
     content,
@@ -85,6 +90,7 @@ function recordPoolQcError(
 export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<void> {
   const {
     keys,
+    preserveSelection = false,
     getBatchExtracting,
     setBatchExtracting,
     findBatchRecordByKey,
@@ -107,6 +113,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
         '选中病历身份已失效，请刷新列表后重新选择。',
         selectedRecordKeys,
         setSelectedWorkbenchKeys,
+        preserveSelection,
       )
       return
     }
@@ -120,6 +127,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
         '选中病历缺少完整病例标识，暂不能启动质控。',
         selectedRecordKeys,
         setSelectedWorkbenchKeys,
+        preserveSelection,
       )
       return
     }
@@ -130,6 +138,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
         '选中病历存在身份冲突，暂不能启动批量质控。',
         selectedRecordKeys,
         setSelectedWorkbenchKeys,
+        preserveSelection,
       )
       return
     }
@@ -159,12 +168,15 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
         response.message || '质控任务创建失败，请稍后重试。',
         selectedRecordKeys,
         setSelectedWorkbenchKeys,
+        preserveSelection,
       )
       return
     }
 
     onTaskCreated?.(response.data)
-    setSelectedWorkbenchKeys([])
+    if (!preserveSelection) {
+      setSelectedWorkbenchKeys([])
+    }
     if (response.data.idempotency_reused) {
       message.info({
         key: RECORD_POOL_QC_MESSAGE_KEY,
@@ -181,19 +193,21 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       extractApiErrorMessageFromError(error, '质控任务创建失败，请稍后重试。'),
       selectedRecordKeys,
       setSelectedWorkbenchKeys,
+      preserveSelection,
     )
   } finally {
     setBatchExtracting(false)
   }
 }
 
-function recordPoolScopeFromHospitalStatus(status: string): 'all' | 'running' | 'final' {
+function recordPoolScopeFromHospitalStatus(status: string): 'all' | 'running' | 'final' | null {
   const normalized = String(status || '')
     .trim()
     .toLowerCase()
+  if (normalized === 'all') return 'all'
   if (normalized === 'inpatient') return 'running'
   if (normalized === 'discharged') return 'final'
-  return 'all'
+  return null
 }
 
 function recordPoolDateField(value: string): 'visit' | 'admission' | 'discharge' | null {
@@ -210,6 +224,21 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
   const { getBatchExtracting, setBatchExtracting } = params
   const total = Math.max(0, Math.trunc(Number(params.total) || 0))
   if (!total || getBatchExtracting()) return
+  if (params.hasAnalyticsDrilldown) {
+    message.warning({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: '统计分析下钻结果暂不支持按筛选批量质控，请直接勾选病历后点击「质控所选」。',
+    })
+    return
+  }
+  const scope = recordPoolScopeFromHospitalStatus(params.hospitalStatus)
+  if (!scope) {
+    message.warning({
+      key: RECORD_POOL_QC_MESSAGE_KEY,
+      content: '「状态未知」筛选暂不支持按筛选批量质控，请直接勾选病历后点击「质控所选」。',
+    })
+    return
+  }
   const dateField = recordPoolDateField(params.dateField)
   if (!dateField) {
     message.error({
@@ -226,7 +255,7 @@ export async function runRecordPoolFilterQc(params: RunRecordPoolFilterQcParams)
   const endDate = String(params.dateRange?.[1] || '').trim()
   const payload = {
     rule_set_key: 'luxian_0609_qc_v1',
-    scope: recordPoolScopeFromHospitalStatus(params.hospitalStatus),
+    scope,
     ...(params.syncScope === 'today_inpatient' ? { sync_scope: 'today_inpatient' as const } : {}),
     ...(department && department !== '全部科室' ? { department } : {}),
     ...(doctor && doctor !== '全部主管医师' ? { doctor } : {}),

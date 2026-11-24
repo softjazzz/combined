@@ -1,8 +1,16 @@
 import { defineComponent, h } from 'vue'
 import { shallowMount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import { message } from 'ant-design-vue'
+import * as sichuanService from '@/services/sichuan-rule-workspace-service'
 import WorkstationV4ListView from '@/views/workstation-v4/components/WorkstationV4ListView.vue'
+import { resolveResultPresentation } from '@/views/workstation-v4/components/qc/latestQcSummaryPresentation'
+import {
+  runRecordPoolFilterQc,
+  runRecordPoolQc,
+} from '@/views/workstation-v4/workstationBatchController'
+import type { PatientRecord } from '@/views/workstation-v4/types'
 
 const SelectStub = defineComponent({
   name: 'ASelect',
@@ -387,7 +395,7 @@ describe('WorkstationV4ListView filters', () => {
     expect(error.text()).toContain('病历列表加载失败')
     expect(error.text()).not.toContain('质控摘要暂不可用')
     await error.get('button').trigger('click')
-    expect(wrapper.emitted('page-change')).toEqual([[2]])
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
 
     await wrapper.setProps({ loadError: false })
     expect(wrapper.get('[role="alert"]').text()).toContain('质控摘要暂不可用')
@@ -541,11 +549,259 @@ describe('WorkstationV4ListView filters', () => {
     preview.vm.$emit('open-record', 'key-b')
     preview.vm.$emit('run-qc', 'key-b')
     expect(wrapper.emitted('open-record')?.at(-1)).toEqual(['key-b'])
-    expect(wrapper.emitted('batch-extract')?.at(-1)).toEqual([['key-b']])
+    expect(wrapper.emitted('preview-run-qc')?.at(-1)).toEqual(['key-b'])
+    expect(wrapper.emitted('batch-extract')).toBeUndefined()
   })
 
   it('首页与结算清单阶段队列不显示病历预览', () => {
     const wrapper = mountListView({ isStageQueueMode: true })
     expect(wrapper.findComponent({ name: 'RecordPoolPreviewPanel' }).exists()).toBe(false)
+  })
+
+  it('P0-1: blocks filter-QC with a warning when hospFilter is unknown or analytics drilldown is active', async () => {
+    const unknownWrapper = mountListView({ hospFilter: 'unknown' })
+    expect(unknownWrapper.findComponent({ name: 'BatchTablePanel' }).props('showFilterQcAction')).toBe(
+      false,
+    )
+    expect(unknownWrapper.get('[data-testid="filter-qc-blocked-warning"]').text()).toContain(
+      '状态未知',
+    )
+    expect(unknownWrapper.get('[data-testid="filter-qc-blocked-warning"]').text()).toContain(
+      '质控所选',
+    )
+
+    const drilldownWrapper = mountListView({
+      analyticsDrilldown: {
+        ruleId: 'LX0609-01-01',
+        scope: 'final',
+        resultStatus: 'non_compliant',
+      },
+    })
+    expect(
+      drilldownWrapper.findComponent({ name: 'BatchTablePanel' }).props('showFilterQcAction'),
+    ).toBe(false)
+    expect(drilldownWrapper.get('[data-testid="filter-qc-blocked-warning"]').text()).toContain(
+      '统计分析下钻',
+    )
+    expect(drilldownWrapper.get('[data-testid="filter-qc-blocked-warning"]').text()).toContain(
+      '质控所选',
+    )
+  })
+
+  it('wires RecordPoolQcTaskStatusBar results-updated/completed to refresh once per finished task', async () => {
+    const task = {
+      id: 'job-finish-1',
+      rule_code: 'LX0609',
+      rule_name: '泸县0609质控',
+      scope: 'all' as const,
+      status: 'running' as const,
+      total_records: 2,
+    }
+    const wrapper = mountListView({ recordPoolQcTask: task })
+    const statusBar = wrapper.findComponent({ name: 'RecordPoolQcTaskStatusBar' })
+    expect(statusBar.exists()).toBe(true)
+
+    statusBar.vm.$emit('results-updated')
+    statusBar.vm.$emit('completed')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('refresh')).toHaveLength(1)
+
+    await wrapper.setProps({ recordPoolQcTask: { ...task, id: 'job-finish-2' } })
+    statusBar.vm.$emit('completed')
+    await wrapper.vm.$nextTick()
+    expect(wrapper.emitted('refresh')).toHaveLength(2)
+  })
+})
+
+describe('P0-1, P0-3, P0-4 & confirmedOnly contract regressions', () => {
+  it('P0-4: returns 未质控 when summary is absent and summaryState is ready, only returning 暂不可用 when unavailable', () => {
+    expect(resolveResultPresentation(undefined, 'ready')).toEqual({
+      resultStatus: 'not-run',
+      resultLabel: '未质控',
+      issueSummary: '暂无结果',
+      latestQcTime: '—',
+    })
+    expect(resolveResultPresentation(undefined, 'pending')).toEqual({
+      resultStatus: 'unknown',
+      resultLabel: '质控摘要加载中',
+      issueSummary: '质控摘要加载中',
+      latestQcTime: '—',
+    })
+    expect(resolveResultPresentation(undefined, 'unavailable')).toEqual({
+      resultStatus: 'unknown',
+      resultLabel: '质控摘要暂不可用',
+      issueSummary: '质控摘要暂不可用',
+      latestQcTime: '—',
+    })
+  })
+
+  it('confirmedOnly hides non-confirmed and internal failure labels and shows only confirmed issues or neutral copy', () => {
+    const withConfirmed = resolveResultPresentation(
+      {
+        status: 'ready',
+        executionStatus: 'partial_failed',
+        failedRuleCount: 2,
+        totalRuleCount: 10,
+        completedAt: '2026-08-08T01:20:00Z',
+        statusCounts: { non_compliant: 3, data_gap: 2, uncertain: 1 },
+      },
+      'ready',
+      { confirmedOnly: true },
+    )
+    expect(withConfirmed.resultStatus).toBe('priority')
+    expect(withConfirmed.resultLabel).toBe('需优先复核')
+    expect(withConfirmed.issueSummary).toBe('有 3 项确定问题')
+    expect(withConfirmed.issueSummary).not.toContain('待核实')
+    expect(withConfirmed.issueSummary).not.toContain('待判断')
+    expect(withConfirmed.issueSummary).not.toContain('部分执行失败')
+
+    const onlyDataGap = resolveResultPresentation(
+      {
+        status: 'ready',
+        completedAt: '2026-08-08T01:20:00Z',
+        statusCounts: { data_gap: 2, uncertain: 1 },
+      },
+      'ready',
+      { confirmedOnly: true },
+    )
+    expect(onlyDataGap.resultStatus).toBe('completed')
+    expect(onlyDataGap.resultLabel).toBe('已完成')
+    expect(onlyDataGap.issueSummary).toBe('未发现确定问题')
+
+    const failedNoConfirmed = resolveResultPresentation(
+      {
+        status: 'technical_error',
+        failureStage: 'material_capture',
+        completedAt: '2026-08-08T01:20:00Z',
+      },
+      'ready',
+      { confirmedOnly: true },
+    )
+    expect(failedNoConfirmed.resultStatus).toBe('not-run')
+    expect(failedNoConfirmed.resultLabel).toBe('未质控')
+    expect(failedNoConfirmed.issueSummary).not.toContain('资料准备失败')
+    expect(failedNoConfirmed.issueSummary).not.toContain('结果校验异常')
+  })
+
+  it('P0-1: runRecordPoolFilterQc refuses unknown hospital status and active analytics drilldown instead of falling back to all', async () => {
+    const createSpy = vi
+      .spyOn(sichuanService, 'createSichuanWorkspaceBatchJob')
+      .mockResolvedValue({ success: true, data: { id: 'job-x', status: 'queued' } as never })
+    const warnSpy = vi.spyOn(message, 'warning').mockImplementation(() => (() => undefined) as never)
+    try {
+      await runRecordPoolFilterQc({
+        total: 12,
+        hospitalStatus: 'unknown',
+        syncScope: 'all',
+        department: '全部科室',
+        doctor: '全部主管医师',
+        keyword: '',
+        dateField: 'visit',
+        dateRange: null,
+        getBatchExtracting: () => false,
+        setBatchExtracting: vi.fn(),
+      })
+      expect(createSpy).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ content: expect.stringContaining('状态未知') }),
+      )
+
+      warnSpy.mockClear()
+      await runRecordPoolFilterQc({
+        total: 12,
+        hospitalStatus: 'discharged',
+        syncScope: 'all',
+        department: '全部科室',
+        doctor: '全部主管医师',
+        keyword: '',
+        dateField: 'visit',
+        dateRange: null,
+        hasAnalyticsDrilldown: true,
+        getBatchExtracting: () => false,
+        setBatchExtracting: vi.fn(),
+      })
+      expect(createSpy).not.toHaveBeenCalled()
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ content: expect.stringContaining('统计分析下钻') }),
+      )
+    } finally {
+      createSpy.mockRestore()
+      warnSpy.mockRestore()
+    }
+  })
+
+  it('P0-3: runRecordPoolQc with preserveSelection never clears or overwrites table checkboxes on success or error', async () => {
+    const recordKey = '["H-1","P-1","V-1"]'
+    const sampleRecord: PatientRecord = {
+      id: 'V-1',
+      recordKey,
+      visitId: 'V-1',
+      instituteId: 'H-1',
+      patientId: 'P-1',
+      bedNo: '',
+      name: '患者甲',
+      sex: '女',
+      age: 40,
+      insurance: '',
+      department: '内科',
+      admissionDate: '',
+      dischargeDate: '',
+      days: 0,
+      diagnosis: '',
+      diagnosisCode: '',
+      doctor: '',
+      status: 'pending',
+    }
+    const setSelectedWorkbenchKeys = vi.fn()
+    const createSpy = vi
+      .spyOn(sichuanService, 'createSichuanWorkspaceBatchJob')
+      .mockResolvedValueOnce({
+        success: true,
+        data: { id: 'job-preview-1', status: 'queued' } as never,
+      })
+      .mockResolvedValueOnce({
+        success: false,
+        message: '服务繁忙',
+      })
+    const loadingSpy = vi.spyOn(message, 'loading').mockImplementation(() => (() => undefined) as never)
+    const successSpy = vi.spyOn(message, 'success').mockImplementation(() => (() => undefined) as never)
+    const errorSpy = vi.spyOn(message, 'error').mockImplementation(() => (() => undefined) as never)
+
+    try {
+      await runRecordPoolQc({
+        keys: [recordKey],
+        preserveSelection: true,
+        getBatchExtracting: () => false,
+        setBatchExtracting: vi.fn(),
+        findBatchRecordByKey: () => sampleRecord,
+        setSelectedWorkbenchKeys,
+      })
+      expect(setSelectedWorkbenchKeys).not.toHaveBeenCalled()
+
+      await runRecordPoolQc({
+        keys: [recordKey],
+        preserveSelection: true,
+        getBatchExtracting: () => false,
+        setBatchExtracting: vi.fn(),
+        findBatchRecordByKey: () => sampleRecord,
+        setSelectedWorkbenchKeys,
+      })
+      expect(setSelectedWorkbenchKeys).not.toHaveBeenCalled()
+
+      await runRecordPoolQc({
+        keys: ['missing-key'],
+        preserveSelection: true,
+        getBatchExtracting: () => false,
+        setBatchExtracting: vi.fn(),
+        findBatchRecordByKey: () => null,
+        setSelectedWorkbenchKeys,
+      })
+      expect(setSelectedWorkbenchKeys).not.toHaveBeenCalled()
+    } finally {
+      createSpy.mockRestore()
+      loadingSpy.mockRestore()
+      successSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
   })
 })

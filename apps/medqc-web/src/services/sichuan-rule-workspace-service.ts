@@ -161,11 +161,15 @@ export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string)
 }
 
 /** 单病历结果页唯一允许使用的三坐标结果读取接口。 */
-export async function getLatestLuxian0609RecordResult(record: {
-  instituteId: string
-  patientId: string
-  visitId: string
-}, previous?: PreviousResultRequest) {
+export async function getLatestLuxian0609RecordResult(
+  record: {
+    instituteId: string
+    patientId: string
+    visitId: string
+  },
+  previous?: PreviousResultRequest,
+  options?: { signal?: AbortSignal },
+) {
   return requestEnvelope<SingleRecordQcResultPayload>(
     {
       method: 'GET',
@@ -176,6 +180,7 @@ export async function getLatestLuxian0609RecordResult(record: {
         ...(previous && { result_view: previous.resultView, anchor_job_id: previous.anchorJobId }),
       },
       timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
+      ...(options?.signal ? { signal: options.signal } : {}),
     },
     '获取该病历最近一次质控结果失败',
   )

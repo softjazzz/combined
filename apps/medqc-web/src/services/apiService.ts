@@ -218,6 +218,7 @@ apiClient.interceptors.response.use(
       (workstationList && qcSummaryMode === 'deferred')
       || requestUrl === '/api/v1/frontpage-qc/records'
       || requestUrl === '/api/v1/frontpage-qc/analytics'
+      || requestUrl === '/api/v1/workstation/qc-home'
     )
     const pageOwnedRequestFailed = pageOwnedGet && (responseStatus === undefined
         ? error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
