@@ -186,8 +186,12 @@
               <span
                 class="rule-conclusion"
                 data-testid="single-record-result-conclusion"
-                >{{ resultHeadline(item) }}</span
               >
+                <template
+                  v-for="(segment, segIdx) in conclusionSegments(resultHeadline(item))"
+                  :key="segIdx"
+                ><strong v-if="segment.isDate" class="rule-conclusion-date">{{ segment.text }}</strong><template v-else>{{ segment.text }}</template></template>
+              </span>
             </span>
             <span
               v-if="copyMatchHeadline(item)"
@@ -795,6 +799,32 @@ function examLabEventPresentation(item: SingleRecordQcResultItem) {
 
 function consultationRecommendationPresentation(item: SingleRecordQcResultItem) {
   return buildConsultationRecommendationPresentation(item)
+}
+
+interface ConclusionSegment {
+  text: string
+  isDate: boolean
+}
+
+const CONCLUSION_DATE_PATTERN =
+  /(\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b|\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/g
+
+function conclusionSegments(text: string): ConclusionSegment[] {
+  if (!text) return []
+  const segments: ConclusionSegment[] = []
+  let lastIndex = 0
+  for (const match of text.matchAll(CONCLUSION_DATE_PATTERN)) {
+    const index = match.index ?? 0
+    if (index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, index), isDate: false })
+    }
+    segments.push({ text: match[0], isDate: true })
+    lastIndex = index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), isDate: false })
+  }
+  return segments
 }
 
 function resultHeadline(item: SingleRecordQcResultViewItem) {

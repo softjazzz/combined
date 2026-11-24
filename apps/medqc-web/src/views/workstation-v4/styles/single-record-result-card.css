@@ -268,8 +268,20 @@
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-13);
   font-weight: 400;
-  line-height: 20px;
+  line-height: 22px;
   white-space: pre-wrap;
+}
+
+.rule-conclusion-date {
+  display: inline;
+  padding: 1px 5px;
+  margin: 0 1px;
+  border-radius: 5px;
+  background: rgba(37, 99, 235, 0.09);
+  color: #1e40af;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .result-row:not(.is-expanded) .rule-conclusion {

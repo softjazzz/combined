@@ -90,6 +90,9 @@ describe('SingleRecordQcResultPanel clinician UX refinements', () => {
     expect(titles[0].text()).toBe('病危（下了病危医嘱）患者未每天记录查房病程，或病情变化时未记录病程')
     // Review progress shows 0/2 initially
     expect(wrapper.find('[data-testid="single-record-review-progress"]').text()).toBe('已看 0/2')
+    // Dates in conclusion text are highlighted and bolded without altering surrounding prose
+    const dateTokens = wrapper.findAll('.rule-conclusion-date').map((node) => node.text())
+    expect(dateTokens).toEqual(['2026-05-31', '2026-06-21', '2026-06-08', '2026-06-10'])
     // Structured 2-line copy match renders 篇1 / 篇2
     expect(wrapper.find('[data-testid="copy-match-headline-documents"]').text()).toContain('篇1')
     expect(wrapper.find('[data-testid="copy-match-headline-documents"]').text()).toContain('篇2')
