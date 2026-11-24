@@ -1594,19 +1594,21 @@ onBeforeUnmount(() => {
   margin: 0 -14px;
   padding-right: 14px;
   padding-left: 14px;
+  border: 1px solid rgba(225, 29, 72, 0.18);
   border-radius: 10px;
-  background: rgba(37, 99, 235, 0.045);
-  box-shadow: inset 3px 0 0 rgba(37, 99, 235, 0.72);
+  background: linear-gradient(90deg, rgba(255, 228, 230, 0.5) 0%, rgba(255, 241, 242, 0.65) 100%);
+  box-shadow: inset 4px 0 0 #e11d48;
 }
 .record-content-section.is-evidence-target.has-block-highlight {
   margin: 0;
   padding-right: 0;
   padding-left: 0;
+  border: 0;
   background: transparent;
   box-shadow: none;
 }
 .record-content-section.is-evidence-target .record-content-section-title {
-  color: #1d4ed8;
+  color: #be123c;
 }
 .record-content-section:first-child {
   padding-top: 2px;
@@ -1644,11 +1646,12 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 .record-evidence-highlight {
-  padding: 1px 3px;
+  padding: 2px 4px;
   border-radius: 4px;
-  background: rgba(37, 99, 235, 0.1);
+  background: rgba(225, 29, 72, 0.12);
   color: #0f172a;
-  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.36);
+  font-weight: 500;
+  box-shadow: inset 0 -2px 0 rgba(225, 29, 72, 0.55);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   cursor: pointer;
@@ -1658,24 +1661,42 @@ onBeforeUnmount(() => {
 }
 .record-evidence-highlight:hover,
 .record-evidence-highlight:focus-visible {
-  background: rgba(37, 99, 235, 0.16);
-  box-shadow: inset 0 -2px 0 rgba(37, 99, 235, 0.65);
+  background: rgba(225, 29, 72, 0.19);
+  box-shadow: inset 0 -2px 0 #e11d48;
   outline: none;
 }
 .record-evidence-highlight.is-block-highlight {
   display: block;
-  margin: 4px 0;
-  padding: 10px 14px;
-  border-radius: 8px;
-  background: #f0f6ff;
+  margin: 6px 0;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid rgba(225, 29, 72, 0.24);
+  border-left: 4px solid #e11d48;
+  border-radius: 10px;
+  background: linear-gradient(90deg, rgba(255, 228, 230, 0.72) 0%, rgba(255, 241, 242, 0.88) 100%);
   color: #0f172a;
-  border-left: 3px solid #2563eb;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.14);
+  font-weight: 400;
+  box-shadow: 0 2px 8px rgba(225, 29, 72, 0.08);
+}
+.record-evidence-highlight.is-block-highlight::before {
+  content: '质控命中原文';
+  display: block;
+  width: fit-content;
+  margin-bottom: 6px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: rgba(225, 29, 72, 0.12);
+  color: #be123c;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0.02em;
 }
 .record-evidence-highlight.is-block-highlight:hover,
 .record-evidence-highlight.is-block-highlight:focus-visible {
-  background: #e8f1ff;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.26);
+  background: linear-gradient(90deg, rgba(255, 228, 230, 0.9) 0%, rgba(255, 241, 242, 0.96) 100%);
+  border-color: rgba(225, 29, 72, 0.36);
+  border-left-color: #be123c;
+  box-shadow: 0 4px 12px rgba(225, 29, 72, 0.12);
   outline: none;
 }
 .record-result-column {
