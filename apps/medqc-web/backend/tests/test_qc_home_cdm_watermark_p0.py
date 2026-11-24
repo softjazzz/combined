@@ -85,6 +85,28 @@ def cdm_profile(monkeypatch, tmp_path):
         "/api/v1/workstation/qc-result-analysis/luxian-0609",
     ],
 )
+def test_prepare_request_workstation_falls_back_to_legacy_when_cdm_disabled(
+    monkeypatch, path
+):
+    disabled_settings = sources.SourceSettings()
+    disabled_settings.cdm.enabled = False
+    monkeypatch.setattr(sources, "configuration", lambda: disabled_settings)
+    monkeypatch.setattr(sources, "fixed_cdm", lambda: True)
+
+    req = _http_request(path)
+    sources.prepare_request(req)
+    assert req.state.clinical_source["id"] == "legacy_pg"
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/workstation/qc-home",
+        "/api/v1/workstation/home",
+        "/api/v1/workstation/analytics/luxian-0609",
+        "/api/v1/workstation/qc-result-analysis/luxian-0609",
+    ],
+)
 def test_prepare_request_binds_workstation_routes_to_independent_cdm(
     cdm_profile, monkeypatch, path
 ):

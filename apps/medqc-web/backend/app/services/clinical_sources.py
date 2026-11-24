@@ -281,6 +281,13 @@ def prepare_request(request: Request) -> None:
             if fixed_cdm():
                 if (header or query) not in (None, INDEPENDENT_CDM):
                     raise PipelineError("ordinary_source_fixed_donghua_cdm",409)
+                if (
+                    path.startswith("/api/v1/workstation")
+                    and not (header or query)
+                    and not settings.cdm.enabled
+                ):
+                    request.state.clinical_source = legacy_snapshot()
+                    return
                 default = INDEPENDENT_CDM
             else:
                 default = (
