@@ -431,6 +431,7 @@ const exportMenuOpen = ref(false)
 const exportTriggerRef = ref<HTMLButtonElement | null>(null)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
+const activeFocusRuleId = ref('')
 const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
   Record<string, { institute_id: string; patient_id: string; visit_id: string }>
@@ -573,8 +574,15 @@ function tryResolvePendingDeepLink() {
   if (loadError.value) return
   if (rows.value.some((row) => row.recordKey === targetKey)) {
     activePreviewKey.value = targetKey
+    handleOpenResult(targetKey)
+    return
   }
-  handleOpenResult(targetKey)
+  if (allRecords.value.some((candidate) => candidate.recordKey === targetKey)) {
+    handleOpenResult(targetKey)
+    return
+  }
+  closeResultDrawer()
+  detailNotice.value = '未在当前筛选页找到目标病历，请调整筛选条件或翻页查看'
 }
 
 function handleSelectPreview(recordKey: string) {
@@ -641,7 +649,24 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
 }
 
+let manualRefreshSequence = 0
+
+function pruneStaleSelectedRecordKeys() {
+  if (selectedRecordKeys.value.length === 0) return
+  const currentKeys = new Set(rows.value.map((row) => row.recordKey))
+  const retainedKeys = selectedRecordKeys.value.filter((key) => currentKeys.has(key))
+  if (retainedKeys.length === selectedRecordKeys.value.length) return
+  const nextRefs: Record<string, { institute_id: string; patient_id: string; visit_id: string }> = {}
+  for (const key of retainedKeys) {
+    const refItem = selectedRecordRefs.value[key]
+    if (refItem) nextRefs[key] = refItem
+  }
+  selectedRecordRefs.value = nextRefs
+  selectedRecordKeys.value = retainedKeys
+}
+
 function applyFilters() {
+  ++manualRefreshSequence
   cancelPendingDeepLink()
   clearSelection()
   commitCurrentFilters()
@@ -649,12 +674,16 @@ function applyFilters() {
   fetchData(1)
 }
 
-function handleRefreshData() {
+async function handleRefreshData() {
+  const sequence = ++manualRefreshSequence
   cancelPendingDeepLink()
-  refreshData()
+  await refreshData()
+  if (sequence !== manualRefreshSequence || loading.value || loadError.value) return
+  pruneStaleSelectedRecordKeys()
 }
 
 function onPageChange(page: number, nextPageSize?: number) {
+  ++manualRefreshSequence
   cancelPendingDeepLink()
   handlePageChange(page, nextPageSize)
 }
@@ -832,6 +861,7 @@ watch(sourceId, (nextSourceId) => {
 watch(
   () => props.carePhase,
   (carePhase) => {
+    ++manualRefreshSequence
     cancelPendingDeepLink()
     medicalRecordFocus.value = null
     closeResultDrawer()
@@ -865,6 +895,7 @@ watch(
 )
 
 onBeforeUnmount(() => {
+  ++manualRefreshSequence
   cancelPendingDeepLink()
 })
 
@@ -904,7 +935,11 @@ function handleOpenMedicalRecord(recordKey: string) {
   medicalRecordFocus.value = record
 }
 
-function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequest) {
+function handleOpenResult(
+  recordKey: string,
+  previousResult?: PreviousResultRequest,
+  focusRuleId?: string,
+) {
   if (pendingDeepLinkKey.value && pendingDeepLinkKey.value !== recordKey) {
     cancelPendingDeepLink()
   }
@@ -924,6 +959,7 @@ function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequ
     return
   }
   detailNotice.value = ''
+  activeFocusRuleId.value = typeof focusRuleId === 'string' ? focusRuleId.trim() : ''
   const labelParts = [
     record.name || '患者信息待核实',
     record.department || '未分科室',
@@ -977,6 +1013,7 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
 function closeResultDrawer() {
   drawerOpen.value = false
   selectedFocus.value = null
+  activeFocusRuleId.value = ''
   detailNotice.value = ''
 }
 </script>

@@ -1,4 +1,5 @@
 import type { LocationQuery, LocationQueryRaw } from 'vue-router'
+import { QC_RESULT_STATUS_LABELS } from './qcResultStatusLabels'
 
 /** 统计分析下钻到病历池时携带的查询参数，与后端 /api/medical-records/workstation 的同名参数一致。 */
 export const ANALYTICS_DRILLDOWN_KEYS = [
@@ -25,14 +26,16 @@ export interface AnalyticsDrilldown {
   department: string
 }
 
-function queryText(query: LocationQuery, key: string): string {
+type QueryLike = LocationQuery | Record<string, unknown>
+
+function queryText(query: QueryLike, key: string): string {
   const value = query[key]
   const raw = Array.isArray(value) ? value[0] : value
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
 /** 只有 source=analytics 且至少带一个统计参数时才视为统计下钻。 */
-export function readAnalyticsDrilldown(query: LocationQuery): AnalyticsDrilldown | null {
+export function readAnalyticsDrilldown(query: QueryLike): AnalyticsDrilldown | null {
   if (queryText(query, 'source') !== 'analytics') return null
   if (!ANALYTICS_DRILLDOWN_KEYS.some((key) => queryText(query, key))) return null
   return {
@@ -48,14 +51,15 @@ export function readAnalyticsDrilldown(query: LocationQuery): AnalyticsDrilldown
 }
 
 /** 下钻参数的稳定签名：用于在同一页面内（返回/前进）检测下钻条件变化并重新加载。 */
-export function analyticsDrilldownSignature(query: LocationQuery): string {
+export function analyticsDrilldownSignature(query: QueryLike): string {
   return ANALYTICS_DRILLDOWN_KEYS.map((key) => queryText(query, key)).join('|')
 }
 
-/** 清除下钻后保留的查询：去掉 source 与全部统计参数，其余筛选保持不变。 */
+/** 清除下钻后保留的查询：去掉 source、department 与全部统计参数，其余筛选保持不变。 */
 export function withoutAnalyticsDrilldown(query: LocationQuery): LocationQueryRaw {
   const next: LocationQueryRaw = { ...query }
   delete next.source
+  delete next.department
   delete next.analytics_rule_name
   for (const key of ANALYTICS_DRILLDOWN_KEYS) delete next[key]
   return next
@@ -63,7 +67,9 @@ export function withoutAnalyticsDrilldown(query: LocationQuery): LocationQueryRa
 
 /** 返回统计页时还原统计页自己的筛选参数名。 */
 export function analyticsStatsQuery(drilldown: AnalyticsDrilldown): LocationQueryRaw {
+  const department = drilldown.department.trim()
   return {
+    ...(department ? { view: 'department', department } : {}),
     completed_from: drilldown.completedFrom || undefined,
     completed_to: drilldown.completedTo || undefined,
     job_id: drilldown.jobId || undefined,
@@ -74,4 +80,17 @@ export function analyticsScopeLabel(scope: string): string {
   if (scope === 'final') return '终末质控'
   if (scope === 'running') return '运行质控'
   return scope || '全部范围'
+}
+
+const ANALYTICS_RESULT_STATUS_LABELS: Record<string, string> = {
+  ...QC_RESULT_STATUS_LABELS,
+  compliant: '合规',
+  not_applicable: '不适用',
+  not_executed: '未执行',
+}
+
+export function analyticsResultStatusLabel(status: string): string {
+  const normalized = status.trim()
+  if (!normalized) return ''
+  return ANALYTICS_RESULT_STATUS_LABELS[normalized] || normalized
 }

@@ -153,8 +153,8 @@ const routes: RouteRecordRaw[] = [
         path: 'workstation/qc-overview',
         redirect: '/workstation-v5/qc-overview',
         meta: {
-          title: '问题集中点',
-          permission: ['admin', 'qc_manager'],
+          title: '质控首页概览',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
         },
       },
       {
@@ -1034,7 +1034,10 @@ const routes: RouteRecordRaw[] = [
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),
-        meta: { title: '问题集中点', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '质控首页概览',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'system-config',

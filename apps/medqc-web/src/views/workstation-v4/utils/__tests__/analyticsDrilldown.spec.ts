@@ -39,8 +39,8 @@ describe('analyticsDrilldown', () => {
     expect(readAnalyticsDrilldown({ source: 'dashboard', record_id: 'C01' })).toBeNull()
   })
 
-  it('清除下钻只移除统计参数，保留其它筛选', () => {
-    expect(withoutAnalyticsDrilldown(DRILLDOWN_QUERY)).toEqual({ department: 'ICU', keyword: 'C01' })
+  it('清除下钻移除 source、department 与全部统计参数，保留其它筛选', () => {
+    expect(withoutAnalyticsDrilldown(DRILLDOWN_QUERY)).toEqual({ keyword: 'C01' })
   })
 
   it('签名只随统计参数变化，用于返回/前进时重新查询', () => {
@@ -51,12 +51,25 @@ describe('analyticsDrilldown', () => {
     ).not.toBe(base)
   })
 
-  it('返回统计时换回统计页自己的参数名', () => {
+  it('返回统计时换回统计页自己的参数名并保留科室视图上下文', () => {
     const drilldown = readAnalyticsDrilldown({ ...DRILLDOWN_QUERY, analytics_job_id: 'job-1' })!
     expect(analyticsStatsQuery(drilldown)).toEqual({
+      view: 'department',
+      department: 'ICU',
       completed_from: '2026-10-01T00:00:00',
       completed_to: '2026-10-08T23:59:59',
       job_id: 'job-1',
+    })
+
+    const hospitalDrilldown = readAnalyticsDrilldown({
+      source: 'analytics',
+      analytics_scope: 'final',
+      analytics_completed_from: '2026-10-01T00:00:00',
+    })!
+    expect(analyticsStatsQuery(hospitalDrilldown)).toEqual({
+      completed_from: '2026-10-01T00:00:00',
+      completed_to: undefined,
+      job_id: undefined,
     })
   })
 })
@@ -73,6 +86,7 @@ describe('AnalyticsDrilldownBar', () => {
     expect(wrapper.text()).toContain('日常病程：上级医师查房分析内容')
     expect(wrapper.get('[data-testid="analytics-drilldown-desc"]').text()).toContain('共 29 份')
     expect(wrapper.text()).toContain('终末质控')
+    expect(wrapper.find('[data-testid="analytics-drilldown-result-status"]').exists()).toBe(false)
 
     const [back, clear] = wrapper.findAll('button')
     expect(back.text()).toContain('返回统计分析')
@@ -81,6 +95,23 @@ describe('AnalyticsDrilldownBar', () => {
     await clear.trigger('click')
     expect(wrapper.emitted('back')).toHaveLength(1)
     expect(wrapper.emitted('clear')).toHaveLength(1)
+  })
+
+  it('存在 analytics_result_status 时展示结论状态筛选胶囊', () => {
+    const wrapper = mount(AnalyticsDrilldownBar, {
+      props: {
+        drilldown: readAnalyticsDrilldown({
+          ...DRILLDOWN_QUERY,
+          analytics_result_status: 'non_compliant',
+        })!,
+        total: 12,
+      },
+      global: { stubs: { 'a-button': { template: '<button><slot /></button>' } } },
+    })
+
+    expect(wrapper.get('[data-testid="analytics-drilldown-result-status"]').text()).toBe(
+      '结论状态 确定问题',
+    )
   })
 
   it('列表加载中不显示命中数量', () => {

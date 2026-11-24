@@ -398,7 +398,7 @@ async def get_luxian_0609_home(
     request: Request,
     department: Optional[str] = Query(None, description="科室筛选"),
     keyword: Optional[str] = Query(None, description="患者姓名/病案号/住院号/visit 搜索"),
-    priority_limit: int = Query(20, ge=1, le=200),
+    priority_limit: int = Query(20, ge=0, le=200),
     current_user: dict = Depends(require_roles(*_WORKSTATION_HOME_ROLES)),
 ):
     """当前全病历质控首页的轻量读取入口。"""

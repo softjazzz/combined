@@ -188,7 +188,7 @@
     </template>
 
     <WorkstationV4AssistView
-      v-if="viewMode === 'detail' || assistTab === 'message'"
+      v-if="viewMode === 'detail' || (listAssistExplicitOpen && assistPanelVisible && assistTab === 'message')"
       ref="assistViewRef"
       :visible="assistPanelVisible"
       :assist-tab="assistTab"
@@ -234,7 +234,7 @@
       :is-other-target="isOtherTarget"
       :icd-apply-index="icdApplyIndex"
       :icd-apply-label="icdApplyLabel"
-      @update:visible="assistPanelVisible = $event"
+      @update:visible="handleAssistVisibleChange"
       @tab-change="handleAssistTabChange"
       @refresh-tab="handleAssistTabRefresh"
       @content-issues-change="contentQCCount = $event"
@@ -347,8 +347,8 @@
 
 <script setup lang="ts">
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
-import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { defineAsyncComponent, ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute, useRouter, type LocationQuery, type LocationQueryRaw } from 'vue-router'
 import { notificationLocation } from '@/views/workstation/notificationNavigation'
 import { apiClient } from '@/services/apiService'
 import { message } from 'ant-design-vue'
@@ -578,14 +578,17 @@ const displayServerTotalPages = computed(() =>
 const isStageQueueMode = computed(() => Boolean(currentStageFilter.value))
 
 const stageMeta = computed(() => getStageMeta(currentStageFilter.value))
+let stageWorklistRequestSequence = 0
 
 async function fetchStageWorklist(stage: WorkflowStageKey | '') {
+  const requestSequence = ++stageWorklistRequestSequence
   const endpoint = stageWorklistEndpoint(stage)
   if (!endpoint) {
     stageWorklistItems.value = []
     stageDepartments.value = []
     stageServerTotal.value = 0
     stageServerTotalPages.value = 1
+    stageLoading.value = false
     return
   }
 
@@ -599,6 +602,7 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
         keyword: searchText.value.trim() || undefined,
       },
     })
+    if (requestSequence !== stageWorklistRequestSequence) return
     const payload = data?.data || {}
     const items = Array.isArray(payload.items) ? payload.items : []
     stageWorklistItems.value = items.map((item) => normalizeWorklistItem(item))
@@ -614,13 +618,16 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
     )
     stageDepartments.value = normalizeStageDepartments(payload.departments, stageServerTotal.value)
   } catch (error) {
+    if (requestSequence !== stageWorklistRequestSequence) return
     console.error('加载聚合工作台数据失败:', error)
     stageWorklistItems.value = []
     stageDepartments.value = [{ name: '全部科室', total: 0, warningCount: 0 }]
     stageServerTotal.value = 0
     stageServerTotalPages.value = 1
   } finally {
-    stageLoading.value = false
+    if (requestSequence === stageWorklistRequestSequence) {
+      stageLoading.value = false
+    }
   }
 }
 
@@ -1136,10 +1143,20 @@ const {
   (target) => router.push(notificationLocation(target)),
 )
 
+const listAssistExplicitOpen = ref(false)
+
+function handleAssistVisibleChange(visible: boolean) {
+  assistPanelVisible.value = visible
+  if (!visible && viewMode.value === 'list') {
+    listAssistExplicitOpen.value = false
+  }
+}
+
 watch(
   () => route.query.assist,
   (value) => {
     if (value === 'message') {
+      listAssistExplicitOpen.value = true
       assistPanelVisible.value = true
       assistTab.value = 'message'
       void fetchAssistNotifications()
@@ -2171,7 +2188,11 @@ function clearAnalyticsDrilldown() {
 
 onMounted(() => {
   fetchData()
-  void refreshActiveWorklist()
+})
+
+onBeforeUnmount(() => {
+  ++stageWorklistRequestSequence
+  ++todayInpatientSequence
 })
 
 // 鍒囨崲鐥呭巻鏃舵竻闄や笂娆＄敓鎴愮粨鏋滐紝骞跺姞杞芥枃涔﹀垪琛ㄤ笌缁撶畻娓呭崟
@@ -2452,9 +2473,13 @@ function handlePageChange(page: number, nextPageSize?: number) {
       : pageSize.value
   if (isAggregatedStageMode.value) {
     const pageSizeChanged = resolvedPageSize !== pageSize.value
+    const nextPage = pageSizeChanged ? 1 : page
+    const queryChanged = pageSizeChanged || currentPage.value !== nextPage
     pageSize.value = resolvedPageSize
-    currentPage.value = pageSizeChanged ? 1 : page
-    void fetchStageWorklist(currentStageFilter.value)
+    currentPage.value = nextPage
+    if (!queryChanged) {
+      void fetchStageWorklist(currentStageFilter.value)
+    }
     const scrollContainer = document.querySelector('.custom-scrollbar')
     if (scrollContainer && typeof scrollContainer.scrollTo === 'function') {
       scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
@@ -2493,11 +2518,45 @@ function handleRefresh() {
   void refreshData()
 }
 
-function handleClearFilters() {
+const hospitalizationStatusVerifying = ref(false)
+let todayInpatientSequence = 0
+
+function stripWorklistFilterQuery(query: LocationQuery): {
+  nextQuery: LocationQueryRaw
+  changed: boolean
+} {
+  const nextQuery: LocationQueryRaw = withoutAnalyticsDrilldown(query)
+  let changed = Object.keys(nextQuery).length !== Object.keys(query).length
+  for (const key of Object.keys(nextQuery)) {
+    if (
+      key === 'department' ||
+      key === 'doctor' ||
+      key === 'keyword' ||
+      key === 'source' ||
+      key.startsWith('analytics_')
+    ) {
+      delete nextQuery[key]
+      changed = true
+    }
+  }
+  return { nextQuery, changed }
+}
+
+async function handleClearFilters() {
+  ++todayInpatientSequence
+  hospitalizationStatusVerifying.value = false
   resetFilters()
   clearSelectedRecords()
+  const prevDrilldownSig = analyticsDrilldownSignature(route.query)
+  const { nextQuery, changed } = stripWorklistFilterQuery(route.query)
+  if (changed) {
+    await router.replace({ path: route.path, query: nextQuery })
+  }
   if (isAggregatedStageMode.value) {
     void fetchStageWorklist(currentStageFilter.value)
+    return
+  }
+  if (analyticsDrilldownSignature(route.query) !== prevDrilldownSig) {
     return
   }
   void fetchData(1)
@@ -2519,6 +2578,8 @@ function handleSelectInpatientSort(value: InpatientSort) {
 }
 
 function handleHospFilter(value: HospitalStatusScope) {
+  ++todayInpatientSequence
+  hospitalizationStatusVerifying.value = false
   const wasTodayInpatient = syncScope.value === 'today_inpatient'
   const prevHospFilter = hospFilter.value
   syncScope.value = 'all'
@@ -2535,11 +2596,11 @@ function handleHospFilter(value: HospitalStatusScope) {
   selectHospFilter(value)
 }
 
-const hospitalizationStatusVerifying = ref(false)
-
 async function toggleTodaySyncedInpatient() {
+  const requestSequence = ++todayInpatientSequence
   const enabled = syncScope.value !== 'today_inpatient'
   if (!enabled) {
+    hospitalizationStatusVerifying.value = false
     syncScope.value = 'all'
     hospFilter.value = 'all'
     dateField.value = 'visit'
@@ -2557,6 +2618,7 @@ async function toggleTodaySyncedInpatient() {
       discharged: number
       unknown: number
     }>('/api/medical-records/workstation/hospitalization-status/verify')
+    if (requestSequence !== todayInpatientSequence) return
     syncScope.value = 'today_inpatient'
     hospFilter.value = 'inpatient'
     dateField.value = 'admission'
@@ -2564,12 +2626,16 @@ async function toggleTodaySyncedInpatient() {
       `已核验 ${data.total} 份：在院 ${data.inpatient}，已出院 ${data.discharged}，待确认 ${data.unknown}`,
     )
   } catch (error) {
+    if (requestSequence !== todayInpatientSequence) return
     console.error('核验病历住院状态失败:', error)
     message.error('住院状态核验失败，已保留原筛选和上次核验结果')
     return
   } finally {
-    hospitalizationStatusVerifying.value = false
+    if (requestSequence === todayInpatientSequence) {
+      hospitalizationStatusVerifying.value = false
+    }
   }
+  if (requestSequence !== todayInpatientSequence) return
   clearSelectedRecords()
   currentPage.value = 1
   await fetchData(1)
@@ -2591,6 +2657,7 @@ const { currentRecordIndex, recordCount, goToPrevRecord, goToNextRecord, goBackT
     backToList,
     clearPanels: () => {
       assistPanelVisible.value = false
+      listAssistExplicitOpen.value = false
       icdDrawerVisible.value = false
       suggestionDrawerVisible.value = false
     },

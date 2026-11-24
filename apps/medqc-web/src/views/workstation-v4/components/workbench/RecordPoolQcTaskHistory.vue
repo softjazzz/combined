@@ -18,7 +18,7 @@
     :width="560"
     class="record-pool-task-history"
     root-class-name="record-pool-task-history-root"
-    @close="historyOpen = false"
+    @close="closeHistory"
   >
     <template #title>
       <div class="record-pool-task-history__title">
@@ -109,7 +109,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import { ChevronRight, History, RefreshCw } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { onBeforeUnmount, ref } from 'vue'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   exportSichuanWorkspaceBatchJob,
@@ -140,6 +140,9 @@ const debugLoading = ref(false)
 const jobs = ref<SichuanBatchJob[]>([])
 const batchJobDetail = ref<SichuanBatchJob | null>(null)
 const debugSnapshot = ref<SichuanBatchJobDebugSnapshot | null>(null)
+let loadJobsSequence = 0
+let openJobSequence = 0
+let debugSnapshotSequence = 0
 
 function isRecordPoolJob(job: SichuanBatchJob): boolean {
   const ruleSetKey = String(job.rule_set_key || job.summary?.rule_set_key || '').trim()
@@ -147,18 +150,23 @@ function isRecordPoolJob(job: SichuanBatchJob): boolean {
 }
 
 async function loadJobs() {
+  const requestSequence = ++loadJobsSequence
   loading.value = true
   try {
     const response = await listSichuanWorkspaceBatchJobs({ page: 1, page_size: 30 })
+    if (requestSequence !== loadJobsSequence) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取最近质控任务失败')
     }
     jobs.value = response.data.items.filter(isRecordPoolJob).slice(0, 10)
   } catch (error) {
+    if (requestSequence !== loadJobsSequence) return
     jobs.value = []
     message.error(error instanceof Error ? error.message : '获取最近质控任务失败')
   } finally {
-    loading.value = false
+    if (requestSequence === loadJobsSequence) {
+      loading.value = false
+    }
   }
 }
 
@@ -167,12 +175,23 @@ function openHistory() {
   void loadJobs()
 }
 
+function closeHistory() {
+  ++loadJobsSequence
+  historyOpen.value = false
+  loading.value = false
+}
+
 async function openJob(jobId: string) {
+  const requestSequence = ++openJobSequence
+  ++debugSnapshotSequence
   detailOpen.value = true
   detailLoading.value = true
+  debugLoading.value = false
+  batchJobDetail.value = null
   debugSnapshot.value = null
   try {
     const response = await getSichuanWorkspaceBatchJob(jobId)
+    if (requestSequence !== openJobSequence || !detailOpen.value) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取任务详情失败')
     }
@@ -181,10 +200,13 @@ async function openJob(jobId: string) {
       await fetchDebugSnapshot(jobId)
     }
   } catch (error) {
+    if (requestSequence !== openJobSequence || !detailOpen.value) return
     batchJobDetail.value = null
     message.error(error instanceof Error ? error.message : '获取任务详情失败')
   } finally {
-    detailLoading.value = false
+    if (requestSequence === openJobSequence) {
+      detailLoading.value = false
+    }
   }
 }
 
@@ -193,25 +215,39 @@ async function fetchDebugSnapshot(
   options?: { ruleJobId?: string; itemLimit?: number },
 ): Promise<SichuanBatchJobDebugSnapshot | null> {
   if (confirmedResultsOnly.value) return null
+  const requestSequence = ++debugSnapshotSequence
   debugLoading.value = true
   try {
     const response = await getSichuanWorkspaceBatchJobDebugSnapshot(jobId, {
       rule_job_id: options?.ruleJobId,
       item_limit: options?.itemLimit,
     })
+    if (requestSequence !== debugSnapshotSequence || !detailOpen.value) return null
     if (!response.success || !response.data) return null
     debugSnapshot.value = response.data
     return response.data
   } finally {
-    debugLoading.value = false
+    if (requestSequence === debugSnapshotSequence) {
+      debugLoading.value = false
+    }
   }
 }
 
 function closeDetail() {
+  ++openJobSequence
+  ++debugSnapshotSequence
   detailOpen.value = false
+  detailLoading.value = false
+  debugLoading.value = false
   batchJobDetail.value = null
   debugSnapshot.value = null
 }
+
+onBeforeUnmount(() => {
+  ++loadJobsSequence
+  ++openJobSequence
+  ++debugSnapshotSequence
+})
 
 async function exportReport(format: 'xlsx' | 'csv' | 'html' = 'html') {
   const job = batchJobDetail.value

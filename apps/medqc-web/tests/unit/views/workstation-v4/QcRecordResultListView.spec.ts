@@ -978,4 +978,68 @@ describe('QcRecordResultListView', () => {
     await filteredOption.trigger('keydown.esc')
     expect(wrapper.find('[role="menu"]').exists()).toBe(false)
   })
+
+  it('仅携带 ?record_key= 深链且目标不在当前页时展示准确提示而非身份错误', async () => {
+    routeState.query = {
+      record_key: '["H","P","V-on-page-2"]',
+    }
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(false)
+    const notice = wrapper.get('[data-testid="qc-result-notice"]')
+    expect(notice.text()).toBe('未在当前筛选页找到目标病历，请调整筛选条件或翻页查看')
+    expect(notice.text()).not.toContain('无法确认当前病历身份')
+  })
+
+  it('手动刷新后自动清理已不在当前页范围的过期勾选 selectedRecordKeys', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    await wrapper.get('input[aria-label="选择患者乙"]').setValue(true)
+    expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 2 份')
+
+    // 刷新后患者甲（V-priority）离开当前页，仅保留患者乙（V-data-gap）
+    const payload = response()
+    payload.data.records = payload.data.records.filter((record) => record.visit_id === 'V-data-gap')
+    mockWorkstationResponse(payload)
+
+    await wrapper.get('.qc-record-result-list-view__refresh-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 1 份')
+    expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([
+      {
+        institute_id: 'H',
+        patient_id: 'P',
+        visit_id: 'V-data-gap',
+      },
+    ])
+  })
+
+  it('预览组件「原文核对」携带 ruleId 发射 open-full 时正常打开抽屉并记录规则焦点', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const preview = wrapper.getComponent(QcRecordReviewPreview)
+    preview.vm.$emit('open-full', '["H","P","V-priority"]', undefined, 'LX0609-01-01-01')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H',
+      patientId: 'P',
+      visitId: 'V-priority',
+    })
+    const setupState = (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState
+    expect(setupState.activeFocusRuleId).toBe('LX0609-01-01-01')
+
+    drawer.vm.$emit('close')
+    await flushPromises()
+    expect(setupState.activeFocusRuleId).toBe('')
+  })
 })

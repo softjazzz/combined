@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import uuid
+import weakref
 
 from ..core.execution_timing import project_stage_timing, timed
 from ..core.settings import get_settings
@@ -2517,6 +2518,45 @@ _ENVELOPE_SUMMARY_CACHE_MAX = 4096
 _PARTIAL_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
 _PARTIAL_SUMMARY_CACHE_MAX = 2048
 _RECORD_ID_ILIKE_SQL_THRESHOLD = 50
+_TRACKED_CACHE_SCOPE_KEYS: set[str] = set()
+_SCOPE_EVICTION_CALLBACKS: list[Callable[[str], None]] = []
+
+
+def register_summary_cache_scope_eviction_callback(callback: Callable[[str], None]) -> None:
+    """注册随数据库作用域（bind GC）同步失效的下游缓存回调。"""
+    with _SUMMARY_CACHE_LOCK:
+        if callback not in _SCOPE_EVICTION_CALLBACKS:
+            _SCOPE_EVICTION_CALLBACKS.append(callback)
+
+
+def _evict_summary_caches_for_scope(scope_key: str) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        for cache in (
+            _WATERMARK_SUMMARY_CACHE,
+            _ENVELOPE_SUMMARY_CACHE,
+            _PARTIAL_SUMMARY_CACHE,
+        ):
+            stale_keys = [key for key in cache if key and key[0] == scope_key]
+            for key in stale_keys:
+                cache.pop(key, None)
+        _TRACKED_CACHE_SCOPE_KEYS.discard(scope_key)
+        callbacks = tuple(_SCOPE_EVICTION_CALLBACKS)
+    for callback in callbacks:
+        try:
+            callback(scope_key)
+        except Exception:
+            pass
+
+
+def _register_scope_key_finalizer(bind_obj: Any, scope_key: str) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        if scope_key in _TRACKED_CACHE_SCOPE_KEYS:
+            return
+        try:
+            weakref.finalize(bind_obj, _evict_summary_caches_for_scope, scope_key)
+            _TRACKED_CACHE_SCOPE_KEYS.add(scope_key)
+        except TypeError:
+            pass
 
 
 def clear_luxian_0609_summary_caches() -> None:
@@ -2569,13 +2609,18 @@ def _session_cache_scope_key(session: Session) -> Optional[str]:
     bind = session.get_bind() if hasattr(session, "get_bind") else None
     if bind is None:
         return None
-    dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+    bind_obj = getattr(bind, "engine", bind)
+    dialect_name = getattr(getattr(bind_obj, "dialect", None), "name", "")
     if dialect_name == "sqlite":
-        return f"sqlite:{id(bind)}"
-    url = getattr(bind, "url", None)
+        scope_key = f"sqlite:{id(bind_obj)}"
+        _register_scope_key_finalizer(bind_obj, scope_key)
+        return scope_key
+    url = getattr(bind_obj, "url", None)
     if url is not None and hasattr(url, "render_as_string"):
         return f"{dialect_name}:{url.render_as_string(hide_password=True)}"
-    return f"{dialect_name}:{id(bind)}"
+    scope_key = f"{dialect_name}:{id(bind_obj)}"
+    _register_scope_key_finalizer(bind_obj, scope_key)
+    return scope_key
 
 
 def _lru_cache_get(
@@ -4915,19 +4960,27 @@ class CustomQCWorkspaceService:
                 envelope_columns.patient_id, envelope_columns.visit_id, envelope_columns.rule_set_key,
                 envelope_columns.rule_set_version, envelope_columns.updated_at,
             )
+            job_ids = list(jobs_by_id)
+            envelope_batch_size = 500
+            envelope_rows: list[Any] = []
             query_started = monotonic()
-            envelope_rows = (
-                session.execute(
-                    select(*envelope_selection_columns).where(
-                        and_(
-                            envelope_columns.root_job_id.in_(list(jobs_by_id)),
-                            envelope_columns.visit_id.in_(visit_ids),
+            for job_offset in range(0, len(job_ids), envelope_batch_size):
+                job_chunk = job_ids[job_offset : job_offset + envelope_batch_size]
+                visit_batch_size = min(envelope_batch_size, max(1, 999 - len(job_chunk)))
+                for visit_offset in range(0, len(visit_ids), visit_batch_size):
+                    visit_chunk = visit_ids[visit_offset : visit_offset + visit_batch_size]
+                    envelope_rows.extend(
+                        session.execute(
+                            select(*envelope_selection_columns).where(
+                                and_(
+                                    envelope_columns.root_job_id.in_(job_chunk),
+                                    envelope_columns.visit_id.in_(visit_chunk),
+                                )
+                            )
                         )
+                        .mappings()
+                        .all()
                     )
-                )
-                .mappings()
-                .all()
-            )
             query_seconds += monotonic() - query_started
             envelopes_by_identity: Dict[tuple[str, str, str], Dict[str, list[Dict[str, Any]]]] = {}
             current_envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}

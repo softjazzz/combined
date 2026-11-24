@@ -1,14 +1,21 @@
 import { defineComponent, h } from 'vue'
 import { flushPromises, mount, shallowMount } from '@vue/test-utils'
+import { createPinia } from 'pinia'
+import { createMemoryHistory, createRouter } from 'vue-router'
 import { describe, expect, it, vi } from 'vitest'
 
 import { message } from 'ant-design-vue'
+import { clinicalSourcesApi } from '@/api/clinicalSources'
+import { ApiService, apiClient } from '@/services/apiService'
 import * as currentMedicalRecordService from '@/services/current-medical-record'
 import * as sichuanService from '@/services/sichuan-rule-workspace-service'
 import CurrentMedicalRecordDrawer from '@/views/workstation-v4/components/CurrentMedicalRecordDrawer.vue'
 import WorkstationV4ListView from '@/views/workstation-v4/components/WorkstationV4ListView.vue'
+import WorkstationV4View from '@/views/workstation-v4/WorkstationV4View.vue'
 import BatchTablePanel from '@/views/workstation-v4/components/workbench/BatchTablePanel.vue'
 import RecordPoolPreviewPanel from '@/views/workstation-v4/components/workbench/RecordPoolPreviewPanel.vue'
+import RecordPoolQcTaskHistory from '@/views/workstation-v4/components/workbench/RecordPoolQcTaskHistory.vue'
+import { resetClinicalSourceOptionsCache } from '@/views/workstation-v4/composables/usePatientRecords'
 import { resolveResultPresentation } from '@/views/workstation-v4/components/qc/latestQcSummaryPresentation'
 import {
   runRecordPoolFilterQc,
@@ -1048,6 +1055,320 @@ describe('Record pool UI polish, loading UX & accessibility regressions', () => 
     } finally {
       loadSpy.mockRestore()
       vi.useRealTimers()
+    }
+  })
+})
+
+function deferredPromise<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
+describe('Batch 4 P1 worklist URL hygiene, assist overlay & concurrency guards', () => {
+  it('RecordPoolQcTaskHistory discards stale loadJobs, openJob and fetchDebugSnapshot responses after superseding or closeDetail', async () => {
+    const firstList = deferredPromise<{ success: boolean; data: { items: Array<Record<string, unknown>> } }>()
+    const secondList = deferredPromise<{ success: boolean; data: { items: Array<Record<string, unknown>> } }>()
+    const firstJob = deferredPromise<{ success: boolean; data: Record<string, unknown> }>()
+    const secondJob = deferredPromise<{ success: boolean; data: Record<string, unknown> }>()
+    const firstDebug = deferredPromise<{ success: boolean; data: Record<string, unknown> }>()
+
+    const listSpy = vi
+      .spyOn(sichuanService, 'listSichuanWorkspaceBatchJobs')
+      .mockReturnValueOnce(firstList.promise as never)
+      .mockReturnValueOnce(secondList.promise as never)
+    const getJobSpy = vi
+      .spyOn(sichuanService, 'getSichuanWorkspaceBatchJob')
+      .mockReturnValueOnce(firstJob.promise as never)
+      .mockReturnValueOnce(secondJob.promise as never)
+    const getDebugSpy = vi
+      .spyOn(sichuanService, 'getSichuanWorkspaceBatchJobDebugSnapshot')
+      .mockReturnValueOnce(firstDebug.promise as never)
+
+    const BatchDrawerStub = defineComponent({
+      name: 'SemanticRulesBatchResultDrawer',
+      props: {
+        open: { type: Boolean, default: false },
+        batchJobDetail: { type: Object, default: null },
+        batchJobDetailLoading: { type: Boolean, default: false },
+        batchJobDebugSnapshot: { type: Object, default: null },
+        batchJobDebugLoading: { type: Boolean, default: false },
+        close: { type: Function, default: () => {} },
+      },
+      setup(props) {
+        return () =>
+          h('div', {
+            'data-testid': 'task-history-detail-stub',
+            'data-open': String(props.open),
+            'data-job-id': String((props.batchJobDetail as { id?: string } | null)?.id || ''),
+            'data-debug-job-id': String(
+              (props.batchJobDebugSnapshot as { job_id?: string } | null)?.job_id || '',
+            ),
+          })
+      },
+    })
+
+    try {
+      const wrapper = mount(RecordPoolQcTaskHistory, {
+        global: {
+          stubs: {
+            ADrawer: passthroughStub('ADrawer'),
+            AButton: passthroughStub('AButton', 'button'),
+            ASpin: passthroughStub('ASpin'),
+            AEmpty: passthroughStub('AEmpty'),
+            SemanticRulesBatchResultDrawer: BatchDrawerStub,
+          },
+        },
+      })
+
+      // 并发 loadJobs：较新请求先返回，晚到的旧请求不得覆盖列表
+      await wrapper.get('[data-testid="record-pool-qc-task-history-entry"]').trigger('click')
+      await wrapper.get('.record-pool-task-history__toolbar button').trigger('click')
+
+      secondList.resolve({
+        success: true,
+        data: {
+          items: [
+            { id: 'job-new', rule_set_key: 'luxian_0609_qc_v1', status: 'completed', scope: 'all' },
+            { id: 'job-old', rule_set_key: 'luxian_0609_qc_v1', status: 'completed', scope: 'all' },
+          ],
+        },
+      })
+      await flushPromises()
+      firstList.resolve({
+        success: true,
+        data: {
+          items: [{ id: 'job-stale', rule_set_key: 'luxian_0609_qc_v1', status: 'failed', scope: 'all' }],
+        },
+      })
+      await flushPromises()
+      expect(wrapper.findAll('.record-pool-task-history__item')).toHaveLength(2)
+
+      // 并发 openJob：先点 job-new 再点 job-old，晚到的 job-new 不得覆盖 job-old
+      const items = wrapper.findAll('.record-pool-task-history__item')
+      await items[0]!.trigger('click')
+      await items[1]!.trigger('click')
+
+      secondJob.resolve({
+        success: true,
+        data: { id: 'job-old', rule_set_key: 'luxian_0609_qc_v1', status: 'completed' },
+      })
+      await flushPromises()
+      expect(wrapper.get('[data-testid="task-history-detail-stub"]').attributes('data-job-id')).toBe('job-old')
+
+      firstJob.resolve({
+        success: true,
+        data: { id: 'job-new', rule_set_key: 'luxian_0609_qc_v1', status: 'completed' },
+      })
+      await flushPromises()
+      expect(wrapper.get('[data-testid="task-history-detail-stub"]').attributes('data-job-id')).toBe('job-old')
+
+      // closeDetail 后迟到的 debug snapshot 响应必须丢弃
+      const drawerStub = wrapper.getComponent(BatchDrawerStub)
+      ;(drawerStub.props('close') as () => void)()
+      await flushPromises()
+      firstDebug.resolve({ success: true, data: { job_id: 'job-old' } })
+      await flushPromises()
+      expect(wrapper.get('[data-testid="task-history-detail-stub"]').attributes('data-open')).toBe('false')
+      expect(
+        wrapper.get('[data-testid="task-history-detail-stub"]').attributes('data-debug-job-id'),
+      ).toBe('')
+      wrapper.unmount()
+    } finally {
+      listSpy.mockRestore()
+      getJobSpy.mockRestore()
+      getDebugSpy.mockRestore()
+    }
+  })
+
+  it('WorkstationV4View: clears URL query on handleClearFilters, blocks stale localStorage assistTab overlay in list mode, guards concurrency, and avoids duplicate stage mount fetch', async () => {
+    resetClinicalSourceOptionsCache()
+    window.localStorage.setItem(
+      'workstation_v4_session',
+      JSON.stringify({
+        frontpageTab: 'fields',
+        assistPanelVisible: true,
+        assistTab: 'message',
+        icdDrawerVisible: false,
+        icdApplyTarget: 'mainDiagnosis',
+        icdApplyIndex: 1,
+      }),
+    )
+
+    const optionsSpy = vi.spyOn(clinicalSourcesApi, 'options').mockResolvedValue({
+      default_source: 'independent_cdm',
+      sources: [{ id: 'independent_cdm', name: '东华CDM', enabled: true }],
+    })
+    const getRawSpy = vi.spyOn(ApiService, 'getRaw').mockResolvedValue({
+      data: { records: [], departments: [], doctors: [], total: 0, page: 1 },
+    } as never)
+    const postRawSpy = vi.spyOn(ApiService, 'postRaw').mockResolvedValue({
+      data: { records: [], qc_summary: { total_records: 0 } },
+    } as never)
+    const stageResp1 = deferredPromise<{ data: { data: { items: Array<Record<string, unknown>>; total: number } } }>()
+    const stageResp2 = deferredPromise<{ data: { data: { items: Array<Record<string, unknown>>; total: number } } }>()
+    const apiGetSpy = vi
+      .spyOn(apiClient, 'get')
+      .mockReturnValueOnce(stageResp1.promise as never)
+      .mockReturnValueOnce(stageResp2.promise as never)
+    const verify1 = deferredPromise<{ data: { total: number; inpatient: number; discharged: number; unknown: number } }>()
+    const apiPostSpy = vi.spyOn(apiClient, 'post').mockReturnValueOnce(verify1.promise as never)
+    const successSpy = vi.spyOn(message, 'success').mockImplementation(() => (() => undefined) as never)
+
+    const WorkstationV4ListViewStub = defineComponent({
+      name: 'WorkstationV4ListView',
+      props: {
+        analyticsDrilldown: { type: Object, default: null },
+        syncScope: { type: String, default: 'all' },
+        workbenchRows: { type: Array, default: () => [] },
+      },
+      emits: ['clear-filters', 'toggle-today-inpatient', 'select-hosp-filter'],
+      setup(props) {
+        return () =>
+          h('div', {
+            'data-testid': 'workstation-list-stub',
+            'data-has-drilldown': String(Boolean(props.analyticsDrilldown)),
+            'data-sync-scope': props.syncScope,
+            'data-row-count': String(props.workbenchRows.length),
+          })
+      },
+    })
+
+    const WorkstationV4AssistViewStub = defineComponent({
+      name: 'WorkstationV4AssistView',
+      setup() {
+        return () => h('div', { 'data-testid': 'workstation-assist-stub' })
+      },
+    })
+
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes: [
+        { path: '/workstation-v5/worklist', component: WorkstationV4View },
+        { path: '/:pathMatch(.*)*', component: { template: '<div />' } },
+      ],
+    })
+
+    try {
+      await router.push(
+        '/workstation-v5/worklist?source=analytics&department=ICU&keyword=张三&analytics_scope=final&analytics_rule_id=R-1&keep=1',
+      )
+      await router.isReady()
+
+      const wrapper = mount(WorkstationV4View, {
+        global: {
+          plugins: [createPinia(), router],
+          stubs: {
+            WorkstationV4ListView: WorkstationV4ListViewStub,
+            WorkstationV4AssistView: WorkstationV4AssistViewStub,
+            CurrentMedicalRecordDrawer: true,
+            WorkstationV4DetailView: true,
+            WorkstationV4RulesView: true,
+            AModal: true,
+            ASegmented: true,
+            ATextarea: true,
+            AButton: true,
+          },
+        },
+      })
+      await flushPromises()
+
+      // 1) Stale localStorage assistTab === 'message' must NOT mount WorkstationV4AssistView in list mode
+      expect(wrapper.find('[data-testid="workstation-assist-stub"]').exists()).toBe(false)
+
+      // 2) handleClearFilters strips department, keyword, source, analytics_* from route.query
+      const listStub = wrapper.getComponent(WorkstationV4ListViewStub)
+      expect(listStub.attributes('data-has-drilldown')).toBe('true')
+      listStub.vm.$emit('clear-filters')
+      await flushPromises()
+
+      expect(router.currentRoute.value.query).toEqual({ keep: '1' })
+      expect(listStub.attributes('data-has-drilldown')).toBe('false')
+
+      // 3) toggleTodaySyncedInpatient ignores stale verify response if superseded by hospFilter change
+      listStub.vm.$emit('toggle-today-inpatient')
+      await flushPromises()
+      listStub.vm.$emit('select-hosp-filter', 'discharged')
+      await flushPromises()
+      verify1.resolve({ data: { total: 5, inpatient: 3, discharged: 1, unknown: 1 } })
+      await flushPromises()
+      expect(listStub.attributes('data-sync-scope')).toBe('all')
+      expect(successSpy).not.toHaveBeenCalled()
+
+      // 4) Explicit ?assist=message in list mode opens assist panel
+      await router.replace('/workstation-v5/worklist?assist=message')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="workstation-assist-stub"]').exists()).toBe(true)
+
+      wrapper.unmount()
+
+      // 5) Aggregated stage mount fetches fetchStageWorklist ONCE (no duplicate mount fetch) and guards stale responses
+      apiGetSpy.mockClear()
+      await router.push('/workstation-v5/worklist?stage=coding_qc')
+      await flushPromises()
+
+      const stageWrapper = mount(WorkstationV4View, {
+        global: {
+          plugins: [createPinia(), router],
+          stubs: {
+            WorkstationV4ListView: WorkstationV4ListViewStub,
+            WorkstationV4AssistView: WorkstationV4AssistViewStub,
+            CurrentMedicalRecordDrawer: true,
+            WorkstationV4DetailView: true,
+            WorkstationV4RulesView: true,
+            AModal: true,
+            ASegmented: true,
+            ATextarea: true,
+            AButton: true,
+          },
+        },
+      })
+      await flushPromises()
+      expect(apiGetSpy).toHaveBeenCalledTimes(1)
+
+      // Trigger a newer stage fetch; resolve newer first, then older -> older must not overwrite newer
+      const stageListStub = stageWrapper.getComponent(WorkstationV4ListViewStub)
+      stageListStub.vm.$emit('clear-filters')
+      await flushPromises()
+      expect(apiGetSpy).toHaveBeenCalledTimes(2)
+
+      stageResp2.resolve({
+        data: {
+          data: {
+            items: [{ visit_id: 'V-NEW', patient_name: '最新阶段病历', workflow_type: 'coding' }],
+            total: 1,
+          },
+        },
+      })
+      await flushPromises()
+      expect(stageListStub.attributes('data-row-count')).toBe('1')
+
+      stageResp1.resolve({
+        data: {
+          data: {
+            items: [
+              { visit_id: 'V-OLD-1', patient_name: '旧1', workflow_type: 'coding' },
+              { visit_id: 'V-OLD-2', patient_name: '旧2', workflow_type: 'coding' },
+            ],
+            total: 2,
+          },
+        },
+      })
+      await flushPromises()
+      expect(stageListStub.attributes('data-row-count')).toBe('1')
+      stageWrapper.unmount()
+    } finally {
+      window.localStorage.removeItem('workstation_v4_session')
+      optionsSpy.mockRestore()
+      getRawSpy.mockRestore()
+      postRawSpy.mockRestore()
+      apiGetSpy.mockRestore()
+      apiPostSpy.mockRestore()
+      successSpy.mockRestore()
     }
   })
 })

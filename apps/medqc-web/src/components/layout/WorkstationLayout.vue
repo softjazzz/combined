@@ -155,7 +155,7 @@
         <main class="ws-content">
           <router-view v-slot="{ Component }">
             <transition name="fade" mode="out-in">
-              <div :key="route.fullPath" class="workstation-route-view">
+              <div :key="route.path" class="workstation-route-view">
                 <component :is="Component" v-if="Component" />
               </div>
             </transition>

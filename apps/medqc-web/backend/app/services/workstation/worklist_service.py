@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from typing import Any, Dict, Iterable, List, Mapping, Optional
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import MetaData, Table, and_, desc, func, or_, select
 from sqlalchemy.orm import Session
@@ -110,6 +111,9 @@ ALLOWED_SORT_FIELDS = {
 }
 
 
+_ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
@@ -126,6 +130,23 @@ def _to_datetime(value: Any) -> Optional[datetime]:
         except ValueError:
             return None
     return None
+
+
+def _to_utc_datetime(value: Any) -> Optional[datetime]:
+    """将存储/事件时间戳统一为 UTC aware datetime（naive 视为 UTC）。"""
+    dt = _to_datetime(value)
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _bound_to_utc(value: datetime) -> datetime:
+    """将查询时间边界统一为 UTC aware datetime（naive 按医院本地 Asia/Shanghai 解释）。"""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=_ASIA_SHANGHAI).astimezone(timezone.utc)
+    return value.astimezone(timezone.utc)
 
 
 def _json_loads_if_needed(value: Any) -> Any:
@@ -153,7 +174,7 @@ def _serialize_row(row: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def _datetime_sort_number(value: Any) -> float:
-    dt = _to_datetime(value)
+    dt = _to_utc_datetime(value)
     if dt is None:
         return 0.0
     try:
@@ -444,7 +465,7 @@ class WorkstationAggregationService:
         该入口不读取 legacy items、Bundle 或结果文案，也不返回任何病历正文。
         """
 
-        if completed_from and completed_to and completed_from > completed_to:
+        if completed_from and completed_to and _bound_to_utc(completed_from) > _bound_to_utc(completed_to):
             raise ValueError("completed_from 不能晚于 completed_to")
         normalized_job_id = _safe_text(job_id).strip() or None
         normalized_institute_id = _safe_text(institute_id).strip() or None
@@ -623,9 +644,9 @@ class WorkstationAggregationService:
                 department_uncertain.setdefault(department_name, set()).add(identity)
                 physician_uncertain.setdefault(physician_name, set()).add(identity)
 
-            completed_at = _to_datetime(event.get("finished_at"))
+            completed_at = _to_utc_datetime(event.get("finished_at"))
             if completed_at is not None:
-                bucket = completed_at.date().isoformat()
+                bucket = completed_at.astimezone(_ASIA_SHANGHAI).date().isoformat()
                 time_buckets[bucket] = time_buckets.get(bucket, 0) + 1
 
         department_distribution = [
@@ -760,19 +781,21 @@ class WorkstationAggregationService:
         )
         if job_id:
             jobs_query = jobs_query.where(workspace_service._batch_job_table.c.id == job_id)
+        completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
+        completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
         jobs: Dict[str, Dict[str, Any]] = {}
         legacy_candidates: Dict[str, Dict[str, Any]] = {}
         for raw_row in session.execute(jobs_query).mappings().all():
             row = dict(raw_row)
             current_job_id = _safe_text(row.get("id")).strip()
-            finished_at = _to_datetime(row.get("finished_at"))
+            finished_at = _to_utc_datetime(row.get("finished_at"))
             filters = _json_loads_if_needed(row.get("filters_json"))
             source = filters if isinstance(filters, Mapping) else {}
             if (
                 not current_job_id
                 or finished_at is None
-                or (completed_from is not None and finished_at < completed_from)
-                or (completed_to is not None and finished_at > completed_to)
+                or (completed_from_utc is not None and finished_at < completed_from_utc)
+                or (completed_to_utc is not None and finished_at > completed_to_utc)
             ):
                 continue
             record_ids = _json_loads_if_needed(row.get("record_ids_json"))
@@ -1121,6 +1144,8 @@ class WorkstationAggregationService:
             else:
                 continue
 
+            if priority_limit <= 0:
+                continue
             priority_items.append(
                 {
                     "record_key": self._luxian_home_record_key(identity),
@@ -1178,7 +1203,7 @@ class WorkstationAggregationService:
                 "last_successful_qc_at": last_successful_qc_at,
             },
             "canonical_status_counts": dict(sorted(canonical_status_counts.items())),
-            "priority_items": priority_items[: max(1, priority_limit)],
+            "priority_items": priority_items[: max(0, priority_limit)],
             "department_options": department_options,
             "department_distribution": [
                 {
@@ -1374,6 +1399,9 @@ class WorkstationAggregationService:
         from ..medical_records.query_service import (
             MedicalRecordFrontpage,
             _apply_workstation_filters,
+            _filter_indexed_registration_records,
+            _load_hospitalization_projection_map,
+            _load_indexed_registration_records,
             _workstation_department_expr,
             _workstation_discharge_join_condition,
             _workstation_discharge_summary_subquery,
@@ -1456,6 +1484,59 @@ class WorkstationAggregationService:
                     "department": _safe_text(row.department).strip() or "未分科室",
                 },
             )
+        indexed_raw: list[Any] = []
+        if isinstance(session, Session) or hasattr(session, "get_bind"):
+            try:
+                indexed_raw = _load_indexed_registration_records(session)
+            except Exception:
+                indexed_raw = []
+        if indexed_raw:
+            try:
+                projection_map = _load_hospitalization_projection_map(session)
+            except Exception:
+                projection_map = {}
+            indexed_records = _filter_indexed_registration_records(
+                indexed_raw,
+                dept=None if is_unassigned_dept else normalized_department,
+                doctor=None,
+                keyword=keyword,
+                start_date=None,
+                end_date=None,
+                date_field="visit",
+                hospital_status="all",
+                sync_scope="all",
+                hospitalization_projection_map=projection_map,
+            )
+            for record in indexed_records:
+                identity = (
+                    _safe_text(record.institute_id).strip(),
+                    _safe_text(record.patient_id).strip(),
+                    _safe_text(record.visit_id).strip(),
+                )
+                if not all(identity):
+                    continue
+                if normalized_institute_id is not None and identity[0] != normalized_institute_id:
+                    continue
+                if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+                    continue
+                dept_label = _normalized_department_label(
+                    record.discharge_dept_name or record.admission_dept_name
+                )
+                if is_unassigned_dept and dept_label != "未分科室":
+                    continue
+                records_by_identity.setdefault(
+                    identity,
+                    {
+                        "institute_id": identity[0],
+                        "patient_id": identity[1],
+                        "visit_id": identity[2],
+                        "patient_name": _safe_text(record.name).strip(),
+                        "attending_physician": _safe_text(
+                            record.attending_physician_sign
+                        ).strip(),
+                        "department": dept_label,
+                    },
+                )
         return list(records_by_identity.values())
 
     def _get_readonly_custom_qc_workspace_service(self) -> Any:
@@ -1806,8 +1887,8 @@ class WorkstationAggregationService:
             current["occurrence_count"] += 1
             if not bool(row.get("is_read")):
                 current["unread_count"] += 1
-            current_time = _to_datetime(current.get("latest_created_at"))
-            next_time = _to_datetime(created_at)
+            current_time = _to_utc_datetime(current.get("latest_created_at"))
+            next_time = _to_utc_datetime(created_at)
             if next_time and (current_time is None or next_time > current_time):
                 current["latest_created_at"] = created_at
                 current["latest_notification_id"] = _safe_text(row.get("id"))
@@ -2076,12 +2157,10 @@ class WorkstationAggregationService:
         return _datetime_sort_number(candidate.get("due_at")) > _datetime_sort_number(current.get("due_at"))
 
     def _is_overdue(self, value: Any) -> bool:
-        dt = _to_datetime(value)
+        dt = _to_utc_datetime(value)
         if dt is None:
             return False
-        if dt.tzinfo is not None:
-            dt = dt.replace(tzinfo=None)
-        return dt <= datetime.now() - timedelta(days=1)
+        return dt <= datetime.now(timezone.utc) - timedelta(days=1)
 
     def _load_notifications_for_date(
         self,

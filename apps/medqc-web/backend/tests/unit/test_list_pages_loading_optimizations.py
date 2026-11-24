@@ -368,7 +368,7 @@ def test_result_analysis_reuses_readonly_workspace_watermark_caches_and_invalida
         assert res1["kpis"] == {
             "scoped_record_total": 2,
             "ready_record_total": 1,
-            "unavailable_result_total": 1,
+            "unavailable_result_total": 0,
         }
         assert init_readonly_flags == [True]
         assert len(build_calls) == 1

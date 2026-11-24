@@ -20,7 +20,7 @@
           <button
             type="button"
             class="full-result-button"
-            @click="openFull"
+            @click="openFull()"
           >
             <span class="full-result-label">
               <FileText
@@ -220,7 +220,7 @@
               <button
                 type="button"
                 class="text-button"
-                @click="openFull"
+                @click="openFull(item.rule_id)"
               >
                 原文核对<ArrowUpRight :size="14" />
               </button>
@@ -279,7 +279,9 @@ const props = withDefaults(
     carePhase: 'inpatient',
   },
 )
-const emit = defineEmits<{ 'open-full': [recordKey: string, previous?: PreviousResultRequest] }>()
+const emit = defineEmits<{
+  'open-full': [recordKey: string, previous?: PreviousResultRequest, ruleId?: string]
+}>()
 const { confirmedResultsOnly } = useQcResultVisibility()
 const items = ref<SingleRecordQcResultItem[]>([])
 const loadedResult = ref<SingleRecordQcResultPayload | null>(null)
@@ -375,8 +377,14 @@ function displayRuleTitle(item: SingleRecordQcResultItem): string {
   return title
 }
 
-function openFull() {
-  if (ready.value && props.row) emit('open-full', props.row.recordKey)
+function openFull(ruleId?: string) {
+  if (!ready.value || !props.row) return
+  const normalizedRuleId = typeof ruleId === 'string' ? ruleId.trim() : ''
+  if (normalizedRuleId) {
+    emit('open-full', props.row.recordKey, undefined, normalizedRuleId)
+    return
+  }
+  emit('open-full', props.row.recordKey)
 }
 
 async function loadResult() {

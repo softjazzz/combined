@@ -12,8 +12,9 @@ afterAll(() => {
 
 const apiGet = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({
-  query: {} as Record<string, string>,
+  query: {} as Record<string, string | string[]>,
   path: '/workstation-v5',
+  activeRoute: null as null | { query: Record<string, string | string[]>; path: string },
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 const routerReplace = vi.hoisted(() => vi.fn())
@@ -31,15 +32,24 @@ vi.mock('vue-router', async () => {
   return {
     useRoute: () => {
       const route = reactive({
-        ...routeState,
+        query: { ...routeState.query },
+        path: routeState.path,
         get fullPath() {
-          return `${this.path}?${new URLSearchParams(this.query).toString()}`
+          const params = new URLSearchParams()
+          for (const [k, v] of Object.entries(this.query as Record<string, string | string[]>)) {
+            if (Array.isArray(v)) v.forEach((item) => params.append(k, String(item)))
+            else if (v !== undefined) params.set(k, String(v))
+          }
+          return `${this.path}?${params.toString()}`
         },
       })
-      routerReplace.mockImplementation(async ({ query }: { query: Record<string, string> }) => {
-        route.query = query
-        await nextTick()
-      })
+      routeState.activeRoute = route
+      routerReplace.mockImplementation(
+        async ({ query }: { query: Record<string, string | string[]> }) => {
+          route.query = query
+          await nextTick()
+        },
+      )
       return route
     },
     useRouter: () => ({ push: routerPush, replace: routerReplace }),
@@ -1057,5 +1067,98 @@ describe('QCOverviewView', () => {
     const keywordGroup = wrapper.get('.qc-home-toolbar__keyword-group')
     expect(keywordGroup.find('.qc-home-toolbar__keyword').attributes('title')).toBe('关键词：罕见病历关键字')
     expect(keywordGroup.find('[aria-label="清除关键词"]').exists()).toBe(true)
+  })
+
+  it('科室切换同步至 URL（all 时移除 department）且不触发重复请求，并忽略无关查询参数变更', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ priority_limit: 0 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+
+    apiGet.mockClear()
+    routerReplace.mockClear()
+    await wrapper.get('select[aria-label="统计科室"]').setValue('神经外科')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenCalledWith({ query: { department: '神经外科' } })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+
+    // 无关 query 变化不触发重新拉取，也不覆盖当前科室选择
+    apiGet.mockClear()
+    routeState.activeRoute!.query = { ...routeState.activeRoute!.query, utm: 'banner' }
+    await flushHomeLoad()
+    expect(apiGet).not.toHaveBeenCalled()
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      '神经外科',
+    )
+
+    // 切回全部科室时从 URL 移除 department，保留其他参数且仅请求一次
+    routerReplace.mockClear()
+    await wrapper.get('select[aria-label="统计科室"]').setValue('all')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenCalledWith({ query: { utm: 'banner' } })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('兼容数组型与带空白的 URL 筛选参数', async () => {
+    routeState.query = { department: ['  神经外科  ', '心内科'], keyword: ['  心衰  '] }
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ department: '神经外科', keyword: '心衰', priority_limit: 0 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      '神经外科',
+    )
+    expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('关键词：心衰')
+    wrapper.unmount()
+  })
+
+  it('缺陷分析行向非演示用户透明展示未全部完成份数，对演示用户隐藏', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          department_distribution: [
+            {
+              ...clinicalQcPayload.clinical_qc.department_distribution[0],
+              partial_failed_record_total: 2,
+            },
+          ],
+          physician_distribution: [
+            {
+              ...clinicalQcPayload.clinical_qc.physician_distribution[0],
+              partial_failed_record_total: 1,
+            },
+          ],
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').text()).toContain(
+      '纳入 18 份 · 完成 13 份 · 未全部完成 2 份',
+    )
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+    await nextTick()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').text()).toContain(
+      '纳入 10 份 · 完成 8 份 · 未全部完成 1 份',
+    )
+    wrapper.unmount()
+
+    authState.isDemoAccount = true
+    const demoWrapper = mountView()
+    await flushHomeLoad()
+    expect(demoWrapper.get('[data-testid="defect-analysis-row"]').text()).not.toContain('未全部完成')
+    demoWrapper.unmount()
   })
 })

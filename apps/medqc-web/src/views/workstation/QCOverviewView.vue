@@ -477,8 +477,7 @@
               >
                 <div class="qc-home-defect-analysis__meta">
                   <strong :title="item.name">{{ item.name }}</strong>
-                  <span>纳入 {{ item.recordsTotal }} 份 · 完成
-                    {{ item.completedRecordTotal }} 份</span>
+                  <span>纳入 {{ item.recordsTotal }} 份 · 完成 {{ item.completedRecordTotal }} 份<template v-if="!confirmedResultsOnly && item.partialFailedRecordTotal > 0"> · 未全部完成 {{ item.partialFailedRecordTotal }} 份</template></span>
                 </div>
                 <div class="qc-home-defect-analysis__metric">
                   <div
@@ -772,6 +771,7 @@ interface DefectAnalysisItem {
   name: string
   recordsTotal: number
   completedRecordTotal: number
+  partialFailedRecordTotal: number
   highRiskReviewTotal: number
   dataGapRecordTotal: number
   defectTotal: number
@@ -1228,6 +1228,7 @@ const allDefectAnalysisItems = computed<DefectAnalysisItem[]>(() => {
         name: item.physician,
         recordsTotal: Math.max(0, Number(item.records_total || 0)),
         completedRecordTotal: Math.max(0, Number(item.completed_record_total || 0)),
+        partialFailedRecordTotal: Math.max(0, Number(item.partial_failed_record_total || 0)),
         highRiskReviewTotal: Math.max(0, Number(item.high_risk_review_total || 0)),
         dataGapRecordTotal: Math.max(0, Number(item.data_gap_record_total || 0)),
         defectTotal: Math.max(0, Number(item.defect_total || 0)),
@@ -1240,6 +1241,7 @@ const allDefectAnalysisItems = computed<DefectAnalysisItem[]>(() => {
       name: item.department,
       recordsTotal: Math.max(0, Number(item.records_total || 0)),
       completedRecordTotal: Math.max(0, Number(item.completed_record_total || 0)),
+      partialFailedRecordTotal: Math.max(0, Number(item.partial_failed_record_total || 0)),
       highRiskReviewTotal: Math.max(0, Number(item.high_risk_review_total || 0)),
       dataGapRecordTotal: Math.max(0, Number(item.data_gap_record_total || 0)),
       defectTotal: Math.max(0, Number(item.defect_total || 0)),
@@ -1303,13 +1305,33 @@ function formatDateTime(value?: string | null): string {
   return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
-function applyRouteFilters() {
-  const department = typeof route.query.department === 'string' ? route.query.department : 'all'
-  const queryKeyword = typeof route.query.keyword === 'string' ? route.query.keyword : ''
+function readQueryText(value: unknown): string {
+  const raw = Array.isArray(value) ? value[0] : value
+  return typeof raw === 'string' ? raw.trim() : ''
+}
+
+function applyRouteFilters(): boolean {
+  const department = readQueryText(route.query.department) || 'all'
+  const queryKeyword = readQueryText(route.query.keyword)
+  const currentDepartment = departmentFilter.value.trim() || 'all'
+  const currentKeyword = keyword.value.trim()
+  const changed = department !== currentDepartment || queryKeyword !== currentKeyword
   syncingFromRoute.value = true
-  departmentFilter.value = department || 'all'
+  departmentFilter.value = department
   keyword.value = queryKeyword
   syncingFromRoute.value = false
+  return changed
+}
+
+function syncDepartmentQuery(department: string) {
+  const normalized = department.trim()
+  const target = normalized && normalized !== 'all' ? normalized : ''
+  const current = readQueryText(route.query.department)
+  if (current === target) return
+  const query = { ...route.query }
+  if (target) query.department = target
+  else delete query.department
+  void router.replace({ query })
 }
 
 function openRecordPool() {
@@ -1342,11 +1364,22 @@ function clearKeyword() {
 }
 
 function resetFilters() {
-  if (typeof route.query.keyword === 'string' || typeof route.query.department === 'string') {
+  if (route.query.keyword !== undefined || route.query.department !== undefined) {
+    const hadRouteValues = Boolean(
+      readQueryText(route.query.keyword) || readQueryText(route.query.department),
+    )
     const query = { ...route.query }
     delete query.keyword
     delete query.department
     void router.replace({ query })
+    if (!hadRouteValues && (keyword.value.trim() || departmentFilter.value !== 'all')) {
+      syncingFromRoute.value = true
+      keyword.value = ''
+      departmentFilter.value = 'all'
+      syncingFromRoute.value = false
+      clearKeywordDebounceTimer()
+      void fetchHome()
+    }
     return
   }
   if (keyword.value.trim()) {
@@ -1395,7 +1428,7 @@ async function fetchHome() {
       {
         department: requestDepartment,
         keyword: requestKeyword,
-        priority_limit: 20,
+        priority_limit: 0,
       },
       { signal: controller.signal },
     )
@@ -1437,11 +1470,15 @@ watch(
   { immediate: true },
 )
 
+let routeFiltersInitialized = false
+
 watch(
-  () => route.fullPath,
+  [() => route.query.department, () => route.query.keyword],
   () => {
+    const changed = applyRouteFilters()
+    if (routeFiltersInitialized && !changed) return
+    routeFiltersInitialized = true
     clearKeywordDebounceTimer()
-    applyRouteFilters()
     void fetchHome()
   },
   { immediate: true },
@@ -1449,9 +1486,10 @@ watch(
 
 watch(
   departmentFilter,
-  () => {
+  (nextDepartment) => {
     if (syncingFromRoute.value) return
     clearKeywordDebounceTimer()
+    syncDepartmentQuery(nextDepartment)
     void fetchHome()
   },
   // 路由同步期间立即识别保护标记，由路由监听统一请求，避免重复加载。

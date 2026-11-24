@@ -4,6 +4,7 @@
  * 选中项、面包屑与可见性都由本模块的纯函数计算，布局组件只负责渲染。
  */
 import type { MqIconName } from '@/components/icons/mqIcons'
+import { readAnalyticsDrilldown } from '@/views/workstation-v4/utils/analyticsDrilldown'
 
 export const WORKSTATION_BASE = '/workstation-v5'
 
@@ -49,7 +50,7 @@ export interface SectionTab {
 const p = (sub = '') => `${WORKSTATION_BASE}${sub}`
 
 function stageOf(route: NavRouteLike): string {
-  const raw = route.query.stage
+  const raw = Array.isArray(route.query.stage) ? route.query.stage[0] : route.query.stage
   return typeof raw === 'string' ? raw.trim() : ''
 }
 
@@ -68,13 +69,21 @@ function matchPrefix(prefix: string, exclude: string[] = []) {
     !exclude.some((item) => route.path === item || route.path.startsWith(`${item}/`))
 }
 
-const HOME_LAUNCH_KEYS = ['record_id', 'action', 'from_stage', 'taskId', 'stage']
+const HOME_LAUNCH_KEYS = ['record_id', 'action', 'from_stage', 'taskId', 'task_id', 'stage']
+
+function hasQueryValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === 'string' && item.trim() !== '')
+  }
+  return typeof value === 'string' && value.trim() !== ''
+}
 
 function hasHomeLaunchQuery(route: NavRouteLike): boolean {
-  return HOME_LAUNCH_KEYS.some((key) => {
-    const value = route.query[key]
-    return typeof value === 'string' && value.trim() !== ''
-  })
+  return HOME_LAUNCH_KEYS.some((key) => hasQueryValue(route.query[key]))
+}
+
+function isHomeWorklistMode(route: NavRouteLike): boolean {
+  return hasHomeLaunchQuery(route) || readAnalyticsDrilldown(route.query) !== null
 }
 
 /** DRG/DIP 分析：一个导航入口，页内按路由切换 */
@@ -104,7 +113,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
         to: { path: p() },
         iconName: 'overview',
         match: (route) =>
-          (route.path === p() && !hasHomeLaunchQuery(route)) || route.path === p('/qc-overview'),
+          (route.path === p() && !isHomeWorklistMode(route)) || route.path === p('/qc-overview'),
       },
     ],
   },
@@ -119,7 +128,7 @@ export const WORKSTATION_NAV: NavGroup[] = [
         iconName: 'pool',
         match: (route) =>
           (route.path === p('/worklist') && stageOf(route) === '') ||
-          (route.path === p() && hasHomeLaunchQuery(route) && stageOf(route) === ''),
+          (route.path === p() && isHomeWorklistMode(route) && stageOf(route) === ''),
       },
       {
         key: 'records-running',

@@ -196,8 +196,50 @@ describe('QcRecordReviewPreview', () => {
     })
     await wrapper.get('.preview-item .text-button').trigger('click')
     await wrapper.get('.full-result-button').trigger('click')
-    expect(wrapper.emitted('open-full')).toEqual([[row.recordKey], [row.recordKey]])
+    expect(wrapper.emitted('open-full')).toEqual([
+      [row.recordKey, undefined, 'LX0609-01-01-01'],
+      [row.recordKey],
+    ])
     expect(wrapper.text()).not.toContain('定位成功')
+  })
+
+  it('点击不同问题卡片的「原文核对」会携带各自 rule_id，顶部按钮保持无 rule_id 兼容调用', async () => {
+    getLatestResult.mockResolvedValue({
+      success: true,
+      data: payload({
+        items: [
+          {
+            rule_id: 'LX0609-01-01-01',
+            rule_name: '问题一',
+            status: 'non_compliant',
+            conclusion: '结论一',
+            source_document: '入院记录',
+          },
+          {
+            rule_id: 'LX0609-02-02-02',
+            rule_name: '问题二',
+            status: 'non_compliant',
+            conclusion: '结论二',
+            source_document: '病程记录',
+          },
+        ],
+      }),
+    })
+    const wrapper = mount(QcRecordReviewPreview, { props: { row } })
+    await flushPromises()
+
+    const verifyButtons = wrapper.findAll('.preview-item .text-button')
+    expect(verifyButtons).toHaveLength(2)
+    await verifyButtons[0]!.trigger('click')
+    await verifyButtons[1]!.trigger('click')
+    await wrapper.get('.full-result-button').trigger('click')
+
+    expect(wrapper.emitted('open-full')).toEqual([
+      [row.recordKey, undefined, 'LX0609-01-01-01'],
+      [row.recordKey, undefined, 'LX0609-02-02-02'],
+      [row.recordKey],
+    ])
+    wrapper.unmount()
   })
 
   it('全文展开复用同一说明节点，已保存建议默认展示且完整分段', async () => {

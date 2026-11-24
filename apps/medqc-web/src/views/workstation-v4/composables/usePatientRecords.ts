@@ -309,7 +309,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
     }
   }
 
-  async function fetchData(page = 1, targetPageSize = pageSize.value, isPagination = false) {
+  async function fetchData(
+    page = 1,
+    targetPageSize = pageSize.value,
+    isPagination = false,
+    allowEmptyPageFallback = true,
+  ) {
     const requestSequence = ++activeRequestSequence
     listRequest?.abort()
     summaryRequest?.abort()
@@ -372,10 +377,12 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
         'analytics_scope',
       ] as const
       const analyticsQuery = new URLSearchParams(window.location.search)
-      for (const key of analyticsKeys) {
-        const value = analyticsQuery.get(key)
-        if (value?.trim()) {
-          params[key] = value.trim()
+      if (analyticsQuery.get('source')?.trim() === 'analytics') {
+        for (const key of analyticsKeys) {
+          const value = analyticsQuery.get(key)
+          if (value?.trim()) {
+            params[key] = value.trim()
+          }
         }
       }
 
@@ -396,6 +403,25 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       // 过期请求不得覆盖较新的筛选、分页或住院状态响应。
       if (requestSequence !== activeRequestSequence) return
 
+      const total = Number(data.total ?? data.total_count ?? 0)
+      const totalPagesComputed = requestedPageSize > 0 ? Math.ceil(total / requestedPageSize) : 1
+      const resolvedTotalPages = Math.max(1, totalPagesComputed || 1)
+      const resolvedPage = Number(data.page ?? data.current_page ?? page) || 1
+      if (
+        allowEmptyPageFallback &&
+        resolvedPage > 1 &&
+        normalizedRecords.length === 0 &&
+        total > 0
+      ) {
+        const fallbackPage = Math.max(1, Math.min(resolvedTotalPages, resolvedPage - 1))
+        currentPage.value = fallbackPage
+        serverTotal.value = total
+        serverTotalPages.value = resolvedTotalPages
+        pageSize.value = requestedPageSize
+        await fetchData(fallbackPage, requestedPageSize, isPagination, false)
+        return
+      }
+
       committedSearchText.value = keyword
       committedDateRange.value = nextDateRange
       allRecords.value = normalizedRecords.map((record) => ({
@@ -412,8 +438,6 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
           ? data.doctors.map((doctor: unknown) => normalizeDoctor(doctor))
           : [{ name: ALL_DOCTORS, total: 0 }]
 
-      const total = Number(data.total ?? data.total_count ?? 0)
-      const totalPagesComputed = requestedPageSize > 0 ? Math.ceil(total / requestedPageSize) : 1
       const scope = JSON.stringify(params)
       const reuseTotals = isPagination && loadedTotals.value?.scope === scope && loadedTotals.value.total === total
       if (!reuseTotals) {
@@ -422,8 +446,8 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
       }
 
       serverTotal.value = total
-      serverTotalPages.value = Math.max(1, totalPagesComputed || 1)
-      currentPage.value = Number(data.page ?? data.current_page ?? page) || 1
+      serverTotalPages.value = resolvedTotalPages
+      currentPage.value = resolvedPage
       pageSize.value = requestedPageSize
       if (total > 0) {
         void loadQcSummary(params, normalizedRecords, requestSequence, !reuseTotals, scope, total)

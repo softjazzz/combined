@@ -62,8 +62,12 @@ describe('usePatientRecords workstation filters', () => {
     mockWorkstationResponse()
   })
 
-  it('uses the analytics drill-down department from the URL for the server query', async () => {
-    window.history.replaceState({}, '', '/workstation-v5?department=ICU&analytics_scope=final')
+  it('uses the analytics drill-down department from the URL for the server query when source=analytics', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/workstation-v5?source=analytics&department=ICU&analytics_scope=final',
+    )
     const records = usePatientRecords()
 
     await records.fetchData()
@@ -82,6 +86,76 @@ describe('usePatientRecords workstation filters', () => {
       },
       { signal: expect.any(AbortSignal) },
     )
+  })
+
+  it('does not forward analytics_* params when source=analytics is absent', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/workstation-v5?department=ICU&analytics_scope=final&analytics_rule_id=R-1',
+    )
+    const records = usePatientRecords()
+
+    await records.fetchData()
+
+    expect(records.activeDept.value).toBe('ICU')
+    const [, params] = mocks.getRaw.mock.calls[0]
+    expect(params).toMatchObject({ dept: 'ICU' })
+    expect(params).not.toHaveProperty('analytics_scope')
+    expect(params).not.toHaveProperty('analytics_rule_id')
+  })
+
+  it('auto-falls back to the last valid page when current page becomes empty while total > 0', async () => {
+    mocks.getRaw.mockReset()
+    mocks.getRaw
+      .mockResolvedValueOnce({
+        data: {
+          records: [],
+          total: 20,
+          page: 3,
+          pageSize: 15,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          records: [
+            {
+              id: 'V-page2',
+              visit_id: 'V-page2',
+              record_key: '["H","P","V-page2"]',
+              name: '第二页患者',
+              department: '内科',
+            },
+          ],
+          total: 20,
+          page: 2,
+          pageSize: 15,
+        },
+      })
+
+    const records = usePatientRecords()
+    records.currentPage.value = 3
+    await records.refreshData()
+    await flushPromises()
+
+    expect(mocks.getRaw).toHaveBeenCalledTimes(2)
+    expect(mocks.getRaw).toHaveBeenNthCalledWith(
+      1,
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 3, page_size: 15 }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(mocks.getRaw).toHaveBeenNthCalledWith(
+      2,
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 2, page_size: 15 }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(records.currentPage.value).toBe(2)
+    expect(records.serverTotalPages.value).toBe(2)
+    expect(records.allRecords.value.map((r) => r.visitId)).toEqual(['V-page2'])
+    expect(records.loading.value).toBe(false)
+    expect(mocks.postRaw).toHaveBeenCalledTimes(1)
   })
 
   it('fetchData sends department, attending physician, keyword and date filters to backend', async () => {

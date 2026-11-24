@@ -27,12 +27,40 @@ _RESULT_STATUSES = (
     "not_applicable",
     "not_executed",
 )
+_STATUS_SEVERITY_RANK: dict[str, int] = {
+    "non_compliant": 0,
+    "ai_suggested_non_compliant": 1,
+    "technical_error": 2,
+    "data_gap": 3,
+    "uncertain": 4,
+    "compliant": 5,
+    "not_applicable": 6,
+    "not_executed": 7,
+}
+_UNKNOWN_STATUS_SEVERITY_RANK = len(_STATUS_SEVERITY_RANK)
 _ISSUE_STATUSES = frozenset({"non_compliant", "data_gap", "uncertain"})
 _CARE_PHASE_TO_HOSPITAL_STATUS = {
     "inpatient": "inpatient",
     "discharged": "discharged",
 }
 _ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+
+def _evict_result_analysis_cache_for_scope(scope_key: str) -> None:
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        stale_keys = [
+            key
+            for key in _RESULT_ANALYSIS_WATERMARK_CACHE
+            if key and key[0] == scope_key
+        ]
+        for key in stale_keys:
+            _RESULT_ANALYSIS_WATERMARK_CACHE.pop(key, None)
+
+
+if hasattr(_workspace_module, "register_summary_cache_scope_eviction_callback"):
+    _workspace_module.register_summary_cache_scope_eviction_callback(
+        _evict_result_analysis_cache_for_scope
+    )
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -50,16 +78,30 @@ def _identity_from_record(record: Mapping[str, Any]) -> tuple[str, str, str] | N
 
 
 def _parse_completed_at(value: Any) -> datetime | None:
-    text = _safe_text(value)
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _safe_text(value)
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _completed_at_sort_timestamp(value: Any) -> float:
+    parsed = _parse_completed_at(value)
+    if parsed is None:
+        return float("-inf")
+    return parsed.timestamp()
+
+
+def _status_severity_rank(status: Any) -> int:
+    return _STATUS_SEVERITY_RANK.get(_normalized_status(status), _UNKNOWN_STATUS_SEVERITY_RANK)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -589,6 +631,7 @@ class Luxian0609ResultAnalysisService:
             call_kwargs: dict[str, Any] = {
                 "record_refs": normalized_refs,
                 "include_items": True,
+                "include_latest_partial": True,
             }
             if self._session_factory is not None:
                 call_kwargs["session_factory"] = self._session_factory
@@ -609,6 +652,7 @@ class Luxian0609ResultAnalysisService:
         call_kwargs = {
             "record_refs": missing_refs,
             "include_items": True,
+            "include_latest_partial": True,
         }
         if self._session_factory is not None:
             call_kwargs["session_factory"] = self._session_factory
@@ -650,7 +694,7 @@ class Luxian0609ResultAnalysisService:
         normalized_status = _normalized_status(result_status)
         if normalized_status and normalized_status not in _RESULT_STATUSES:
             raise ValueError("result_status 无效")
-        if completed_from and completed_to and completed_from > completed_to:
+        if completed_from and completed_to and _as_utc(completed_from) > _as_utc(completed_to):
             raise ValueError("completed_from 不能晚于 completed_to")
         if page < 1:
             raise ValueError("page 必须大于或等于 1")
@@ -693,9 +737,16 @@ class Luxian0609ResultAnalysisService:
         ready_record_identities: set[tuple[str, str, str]] = set()
         for identity, record in records_by_identity.items():
             projection = projections.get(identity)
-            if not isinstance(projection, Mapping) or _normalized_status(projection.get("status")) != "ready":
-                if projection is not None:
-                    unavailable_result_total += 1
+            if projection is None:
+                continue
+            if not isinstance(projection, Mapping):
+                unavailable_result_total += 1
+                continue
+            projection_status = _normalized_status(projection.get("status"))
+            if projection_status == "not_run":
+                continue
+            if projection_status != "ready":
+                unavailable_result_total += 1
                 continue
             completed_at_text = _safe_text(projection.get("completed_at"))
             completed_at = _parse_completed_at(completed_at_text)
@@ -900,18 +951,23 @@ class Luxian0609ResultAnalysisService:
         for item in items:
             identity = item["identity"]
             current = records_by_identity.get(identity)
-            if current is None or _safe_text(item["completed_at"]) > _safe_text(current["completed_at"]):
+            if current is None:
+                records_by_identity[identity] = item
+                continue
+            item_ts = _completed_at_sort_timestamp(item["completed_at"])
+            current_ts = _completed_at_sort_timestamp(current["completed_at"])
+            if item_ts > current_ts or (
+                item_ts == current_ts
+                and _status_severity_rank(item["status"]) < _status_severity_rank(current["status"])
+            ):
                 records_by_identity[identity] = item
         ordered_items = sorted(
             records_by_identity.values(),
             key=lambda item: (
-                0 if item["status"] == "non_compliant" else 1,
-                0 if item["status"] == "data_gap" else 1,
-                0 if item["status"] == "uncertain" else 1,
-                _safe_text(item["completed_at"]),
+                _status_severity_rank(item["status"]),
+                -_completed_at_sort_timestamp(item["completed_at"]),
                 item["identity"],
             ),
-            reverse=False,
         )
         start = (page - 1) * page_size
         page_items = []

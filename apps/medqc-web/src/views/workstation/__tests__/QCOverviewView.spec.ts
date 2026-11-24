@@ -126,7 +126,7 @@ describe('QCOverviewView performance & race guards', () => {
     vi.useRealTimers()
   })
 
-  it('sends priority_limit=20 with AbortSignal and without unused legacy hotspot/todo params', async () => {
+  it('sends priority_limit=0 with AbortSignal and without unused legacy hotspot/todo params', async () => {
     apiGetMock.mockResolvedValue(makeHomePayload(12))
     const wrapper = mountOverview()
     await flushPromises()
@@ -137,7 +137,7 @@ describe('QCOverviewView performance & race guards', () => {
       {
         department: undefined,
         keyword: undefined,
-        priority_limit: 20,
+        priority_limit: 0,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
@@ -173,7 +173,7 @@ describe('QCOverviewView performance & race guards', () => {
       {
         department: '呼吸内科',
         keyword: undefined,
-        priority_limit: 20,
+        priority_limit: 0,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
@@ -208,7 +208,7 @@ describe('QCOverviewView performance & race guards', () => {
       {
         department: '呼吸内科',
         keyword: '张三',
-        priority_limit: 20,
+        priority_limit: 0,
       },
       expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
