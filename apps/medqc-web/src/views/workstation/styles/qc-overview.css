@@ -461,64 +461,124 @@ button.qc-home-defect-analysis__row:focus-visible {
   gap: 16px 20px;
 }
 
-.qc-home-rings__dial {
+.qc-home-rings__dial-stage {
   position: relative;
   display: grid;
   flex-shrink: 0;
-  width: 120px;
-  height: 120px;
+  width: 142px;
+  height: 132px;
   place-items: center;
+  perspective: 680px;
 }
 
-.qc-home-rings__dial svg,
-.qc-home-rings__center {
-  grid-area: 1 / 1;
+.qc-home-rings__dial-3d {
+  position: relative;
+  width: 136px;
+  height: 136px;
+  transform-style: preserve-3d;
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
 }
 
-.qc-home-rings__dial svg {
+.qc-home-rings__floor-shadow {
+  position: absolute;
+  inset: 14px 8px -6px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(30, 58, 138, 0.24) 0%,
+    rgba(30, 58, 138, 0.1) 48%,
+    rgba(30, 58, 138, 0) 76%
+  );
+  filter: blur(8px);
+  transform: translateZ(-18px) scaleY(0.92);
+  pointer-events: none;
+}
+
+.qc-home-rings__layer-svg {
+  position: absolute;
+  inset: 0;
   display: block;
+  overflow: visible;
+  pointer-events: none;
 }
 
-.qc-home-rings__arc-group {
-  transition: opacity 220ms cubic-bezier(0.22, 1, 0.36, 1);
+.qc-home-rings__base-svg {
+  transform: translateZ(0px);
 }
 
-.qc-home-rings__arc-group.is-dimmed {
-  opacity: 0.24;
+.qc-home-rings__ring-layer {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transform: translateZ(var(--ring-z, 8px));
+  transition:
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    filter 220ms ease;
+  pointer-events: none;
 }
 
-.qc-home-rings__center {
+.qc-home-rings__ring-layer.is-highlighted {
+  transform: translateZ(var(--ring-z-hover, 18px)) scale(1.025);
+  filter: drop-shadow(0 8px 12px rgba(30, 58, 138, 0.26));
+}
+
+.qc-home-rings__ring-layer.is-dimmed {
+  opacity: 0.28;
+}
+
+.qc-home-rings__medallion {
+  position: absolute;
+  top: 50%;
+  left: 50%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 1px;
+  width: 54px;
+  height: 54px;
+  margin: -27px 0 0 -27px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 32% 24%,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(241, 245, 249, 0.92) 70%,
+    rgba(219, 234, 254, 0.88) 100%
+  );
+  box-shadow:
+    0 10px 18px rgba(15, 23, 42, 0.16),
+    0 2px 5px rgba(30, 58, 138, 0.14),
+    inset 0 1.5px 1px rgba(255, 255, 255, 0.98);
   text-align: center;
+  transform: translateZ(24px) rotateX(-16deg);
   pointer-events: none;
 }
 
-.qc-home-rings__center strong {
+.qc-home-rings__medallion strong {
   color: var(--mq-text-primary);
   font-family: var(--mq-font-display);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
 }
 
-.qc-home-rings__center strong small {
-  margin-left: 1px;
+.qc-home-rings__medallion strong small {
+  margin-left: 0.5px;
   color: var(--mq-text-tertiary);
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
 }
 
-.qc-home-rings__center span {
+.qc-home-rings__medallion span {
   color: var(--mq-text-tertiary);
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 1.2;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1.15;
 }
 
 .qc-home-rings__legend {
