@@ -522,12 +522,11 @@ function rowClassName(record: WorkbenchRow): string {
 
 <style scoped>
 .batch-table-panel__task-status {
-  padding: 0 12px 12px;
+  padding: 8px 12px 10px;
 }
 
 .batch-table-panel__task-status :deep(.record-pool-qc-status) {
   border-radius: 10px;
-  background: rgba(10, 108, 255, 0.045);
   box-shadow: none;
 }
 

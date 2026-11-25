@@ -1,10 +1,15 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   downloadBlob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
+}))
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
@@ -394,9 +399,60 @@ it('材料准备失败显示根因与零执行，不显示76条已执行', () =>
 it('失败任务提供明确任务ID入口，不依赖通知ID', () => {
   const wrapper = mount(RecordPoolQcTaskStatusBar, {
     props: { job: job({ id: 'failed-job', status: 'failed' }), autoPoll: false },
+    global: {
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a :href="typeof to === \'string\' ? to : \'\'"><slot /></a>',
+        },
+      },
+    },
   })
   expect(wrapper.get('[data-testid="qc-task-detail-link"]').attributes('href')).toBe(
     '/workstation-v5/qc-task?job_id=failed-job',
   )
+  wrapper.unmount()
+})
+
+it('紧凑单行进度条默认折叠详情、0% 显示活态微光类并支持点击展开/收起', async () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      job: job({
+        status: 'running',
+        total_records: 1,
+        summary: {
+          total_records: 1,
+          success_count: 0,
+          failed_count: 0,
+          issue_records: 0,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 0,
+            rule_count: 76,
+            processed_records: 0,
+            total_records: 1,
+          },
+        },
+      }),
+      autoPoll: false,
+    },
+  })
+  const progressBar = wrapper.get('[role="progressbar"]')
+  expect(progressBar.classes()).toContain('is-indeterminate')
+  const toggle = wrapper.get('[data-testid="record-pool-qc-details-toggle"]')
+  const panel = wrapper.get('[data-testid="record-pool-qc-details-panel"]')
+  expect(toggle.attributes('aria-expanded')).toBe('false')
+  expect((panel.element as HTMLElement).style.display).toBe('none')
+
+  await toggle.trigger('click')
+  expect(toggle.attributes('aria-expanded')).toBe('true')
+  expect((panel.element as HTMLElement).style.display).toBe('')
+
+  await toggle.trigger('click')
+  expect(toggle.attributes('aria-expanded')).toBe('false')
+  expect((panel.element as HTMLElement).style.display).toBe('none')
   wrapper.unmount()
 })

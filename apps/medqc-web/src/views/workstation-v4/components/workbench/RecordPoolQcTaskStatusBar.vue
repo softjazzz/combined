@@ -2,28 +2,28 @@
   <section
     v-if="currentJob"
     class="record-pool-qc-status"
-    :class="[`record-pool-qc-status--${tone}`, { 'is-active': isActive }]"
+    :class="[`record-pool-qc-status--${tone}`, { 'is-active': isActive, 'is-expanded': detailsOpen }]"
     role="status"
     aria-live="polite"
     data-testid="record-pool-qc-task-status"
   >
-    <div class="record-pool-qc-status__main">
-      <div
-        v-if="!isActive"
-        class="record-pool-qc-status__indicator"
-        aria-hidden="true"
-      >
-        <CircleCheckBig
-          v-if="currentJob.status === 'completed'"
-          :size="18"
-        />
-        <CircleAlert
-          v-else
-          :size="18"
-        />
-      </div>
+    <div class="record-pool-qc-status__bar">
+      <div class="record-pool-qc-status__main">
+        <div
+          v-if="!isActive"
+          class="record-pool-qc-status__indicator"
+          aria-hidden="true"
+        >
+          <CircleCheckBig
+            v-if="currentJob.status === 'completed'"
+            :size="16"
+          />
+          <CircleAlert
+            v-else
+            :size="16"
+          />
+        </div>
 
-      <div class="record-pool-qc-status__content">
         <div class="record-pool-qc-status__heading">
           <i
             v-if="isActive"
@@ -31,26 +31,35 @@
             aria-hidden="true"
           />
           <strong>{{ statusTitle }}</strong>
-          <span v-if="isActive">{{ currentJob.status === 'queued' ? '排队中' : '执行中' }}</span>
-          <em v-if="isActive && progressPercent !== null">{{ progressPercent }}<small>%</small></em>
+          <span v-if="isActive" class="record-pool-qc-status__badge">
+            {{ currentJob.status === 'queued' ? '排队中' : '执行中' }}
+          </span>
         </div>
+
         <p
           v-if="isActive"
           class="record-pool-qc-status__phase"
+          :title="stageText"
         >
           {{ stageText }}
         </p>
 
         <div
           v-if="isActive && progressPercent !== null"
-          class="record-pool-qc-status__progress"
-          role="progressbar"
-          aria-label="质控执行进度"
-          :aria-valuenow="progressPercent"
-          :aria-valuemin="0"
-          :aria-valuemax="100"
+          class="record-pool-qc-status__progress-group"
         >
-          <span :style="{ width: `${progressPercent}%` }" />
+          <div
+            class="record-pool-qc-status__progress"
+            :class="{ 'is-indeterminate': progressPercent === 0 }"
+            role="progressbar"
+            aria-label="质控执行进度"
+            :aria-valuenow="progressPercent"
+            :aria-valuemin="0"
+            :aria-valuemax="100"
+          >
+            <span :style="{ width: `${progressPercent}%` }" />
+          </div>
+          <em class="record-pool-qc-status__percent">{{ progressPercent }}<small>%</small></em>
         </div>
 
         <div class="record-pool-qc-status__metrics">
@@ -58,99 +67,120 @@
           <span v-if="terminalSummary">{{ terminalSummary }}</span>
           <span class="record-pool-qc-status__record-count">{{ recordProgressText }}</span>
         </div>
+      </div>
 
-        <p
-          v-if="isActive && progressPercent === 100"
-          class="record-pool-qc-status__settling"
+      <div class="record-pool-qc-status__actions">
+        <button
+          type="button"
+          class="record-pool-qc-status__details-toggle"
+          :aria-expanded="detailsOpen"
+          data-testid="record-pool-qc-details-toggle"
+          @click="detailsOpen = !detailsOpen"
         >
-          处理进度已达 100%，正在等待任务最终确认；完成汇总与保存后将更新任务状态。
-        </p>
+          <span>{{ detailsOpen ? '收起' : '详情' }}</span>
+          <ChevronDown
+            :size="14"
+            class="record-pool-qc-status__details-chevron"
+            :class="{ 'is-open': detailsOpen }"
+            aria-hidden="true"
+          />
+        </button>
 
-        <details class="record-pool-qc-status__details">
-          <summary>{{ isActive ? '查看执行详情' : '查看任务详情' }}</summary>
-          <div
-            v-if="multiRecordRuntime"
-            class="record-pool-qc-status__concurrency"
-            data-testid="record-pool-qc-concurrency"
-            aria-label="多病历并发执行状态"
+        <template v-if="!isActive">
+          <RouterLink
+            :to="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
+            class="record-pool-qc-status__detail-link"
+            data-testid="qc-task-detail-link"
           >
-            <span>并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span>
-            <span class="is-active">执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span>
-            <span class="is-complete">已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span>
-            <span>排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span>
-          </div>
-
-          <ol
-            class="record-pool-qc-status__stages"
-            data-testid="record-pool-qc-task-stages"
-            aria-label="质控任务执行阶段"
+            {{ confirmedResultsOnly ? '查看本次质控结果' : '查看本次结果与失败原因' }}
+          </RouterLink>
+          <button
+            v-if="currentJob.status === 'completed' && !confirmedResultsOnly"
+            type="button"
+            class="record-pool-qc-status__export"
+            :disabled="exporting"
+            @click="exportCurrentBatch"
           >
-            <li
-              v-for="stage in workflowStages"
-              :key="stage.key"
-              :class="`is-${stage.state}`"
-              :data-stage-key="stage.key"
-              :title="stage.detail"
-            >
-              <span
-                class="record-pool-qc-status__stage-marker"
-                aria-hidden="true"
-              >{{
-                stage.state === 'complete' ? '✓' : ''
-              }}</span>
-              <span class="record-pool-qc-status__stage-copy">
-                <strong>{{ stage.label }}</strong>
-              </span>
-            </li>
-          </ol>
-
-          <p
-            v-if="stageText.startsWith('当前：')"
-            class="record-pool-qc-status__stage"
+            {{ exporting ? '正在导出…' : '导出本次结果 HTML' }}
+          </button>
+          <button
+            type="button"
+            class="record-pool-qc-status__dismiss"
+            aria-label="关闭质控任务状态"
+            @click="emit('dismiss')"
           >
-            {{ stageText }}
-          </p>
-        </details>
-        <p
-          v-if="!isActive && currentJob.status !== 'completed'"
-          class="record-pool-qc-status__refresh-note"
-        >
-          {{ stageText }}
-        </p>
-        <p
-          v-if="pollError"
-          class="record-pool-qc-status__refresh-note"
-        >
-          进度暂时未更新，正在重试读取任务状态。
-        </p>
+            <X :size="15" />
+          </button>
+        </template>
       </div>
     </div>
 
-    <div v-if="!isActive" class="record-pool-qc-status__actions">
-      <RouterLink
-        :to="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
-        class="record-pool-qc-status__detail-link"
-        data-testid="qc-task-detail-link"
+    <p
+      v-if="isActive && progressPercent === 100"
+      class="record-pool-qc-status__settling"
+    >
+      处理进度已达 100%，正在等待任务最终确认；完成汇总与保存后将更新任务状态。
+    </p>
+    <p
+      v-if="!isActive && currentJob.status !== 'completed'"
+      class="record-pool-qc-status__refresh-note"
+    >
+      {{ stageText }}
+    </p>
+    <p
+      v-if="pollError"
+      class="record-pool-qc-status__refresh-note"
+    >
+      进度暂时未更新，正在重试读取任务状态。
+    </p>
+
+    <div
+      v-show="detailsOpen"
+      class="record-pool-qc-status__details-panel"
+      data-testid="record-pool-qc-details-panel"
+    >
+      <div
+        v-if="multiRecordRuntime"
+        class="record-pool-qc-status__concurrency"
+        data-testid="record-pool-qc-concurrency"
+        aria-label="多病历并发执行状态"
       >
-        {{ confirmedResultsOnly ? '查看本次质控结果' : '查看本次结果与失败原因' }}
-      </RouterLink>
-      <button
-        v-if="currentJob.status === 'completed' && !confirmedResultsOnly"
-        type="button"
-        class="record-pool-qc-status__export"
-        :disabled="exporting"
-        @click="exportCurrentBatch"
+        <span>并发 <strong>{{ multiRecordRuntime.parallel }}</strong> 份</span>
+        <span class="is-active">执行中 <strong>{{ multiRecordRuntime.active }}</strong> 份</span>
+        <span class="is-complete">已完成 <strong>{{ multiRecordRuntime.completed }}</strong> 份</span>
+        <span>排队 <strong>{{ multiRecordRuntime.queued }}</strong> 份</span>
+      </div>
+
+      <ol
+        class="record-pool-qc-status__stages"
+        data-testid="record-pool-qc-task-stages"
+        aria-label="质控任务执行阶段"
       >
-        {{ exporting ? '正在导出…' : '导出本次结果 HTML' }}
-      </button>
-      <button
-        type="button"
-        class="record-pool-qc-status__dismiss"
-        aria-label="关闭质控任务状态"
-        @click="emit('dismiss')"
+        <li
+          v-for="stage in workflowStages"
+          :key="stage.key"
+          :class="`is-${stage.state}`"
+          :data-stage-key="stage.key"
+          :title="stage.detail"
+        >
+          <span
+            class="record-pool-qc-status__stage-marker"
+            aria-hidden="true"
+          >{{
+            stage.state === 'complete' ? '✓' : ''
+          }}</span>
+          <span class="record-pool-qc-status__stage-copy">
+            <strong>{{ stage.label }}</strong>
+          </span>
+        </li>
+      </ol>
+
+      <p
+        v-if="stageText.startsWith('当前：')"
+        class="record-pool-qc-status__stage"
       >
-        <X :size="16" />
-      </button>
+        {{ stageText }}
+      </p>
     </div>
   </section>
 </template>
@@ -158,7 +188,7 @@
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { CircleAlert, CircleCheckBig, X } from 'lucide-vue-next'
+import { ChevronDown, CircleAlert, CircleCheckBig, X } from 'lucide-vue-next'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   exportSichuanWorkspaceBatchJob,
@@ -202,6 +232,7 @@ const currentJob = ref<SichuanBatchJob | null>(null)
 const pollError = ref(false)
 const resultReadError = ref('')
 const exporting = ref(false)
+const detailsOpen = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let requestSequence = 0
 let consecutiveReadFailures = 0
@@ -542,118 +573,281 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
+/* 单行紧凑质控状态条：不挤占病历表首屏高度，点击「详情」平滑展开 4 阶段步骤与并发信息 */
 .record-pool-qc-status {
   position: relative;
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  overflow: hidden;
-  padding: 16px 20px;
-  border: 1px solid rgba(10, 108, 255, 0.13);
+  flex-direction: column;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 20%, var(--mq-border));
   border-radius: 10px;
-  background: var(--mq-bg-surface);
-  box-shadow: none;
+  background: color-mix(in srgb, var(--mq-brand-600) 4%, var(--mq-bg-surface));
   color: var(--mq-text-primary);
-}
-
-.record-pool-qc-status::before {
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: var(--mq-brand-600);
-  content: none;
-}
-
-/* 执行态沿用客户样本验证状态条的视觉层级，任务数据仍由原组件负责。 */
-.record-pool-qc-status.is-active {
-  padding: 16px;
-  border-color: rgba(10, 108, 255, 0.18);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.08);
-}
-.record-pool-qc-status__live-dot {
-  width: 9px;
-  height: 9px;
-  flex: none;
-  margin: 0 5px;
-  border-radius: 50%;
-  background: var(--mq-brand-600);
-  box-shadow: 0 0 0 5px rgba(10, 108, 255, 0.1);
-}
-.record-pool-qc-status__phase {
-  margin: -4px 0 2px 28px;
-  color: rgba(29, 29, 31, 0.6);
-  font-size: 13px;
-  line-height: 20px;
-}
-.record-pool-qc-status.is-active .record-pool-qc-status__heading strong {
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 650;
-}
-.record-pool-qc-status.is-active .record-pool-qc-status__progress {
-  height: 8px;
-  border-radius: 999px;
-  background: rgba(10, 108, 255, 0.1);
-}
-.record-pool-qc-status__percent {
-  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
+  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
+  transition:
+    background-color 180ms ease,
+    border-color 180ms ease;
 }
 
 .record-pool-qc-status--success {
-  border-color: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
-}
-
-.record-pool-qc-status--success::before {
-  background: var(--mq-success-icon);
+  border-color: color-mix(in srgb, var(--mq-success-icon) 26%, var(--mq-border));
+  background: color-mix(in srgb, var(--mq-success-icon) 5%, var(--mq-bg-surface));
 }
 
 .record-pool-qc-status--danger {
-  border-color: rgba(118, 128, 160, 0.24);
+  border-color: color-mix(in srgb, var(--mq-danger-icon) 28%, var(--mq-border));
+  background: color-mix(in srgb, var(--mq-danger-icon) 4.5%, var(--mq-bg-surface));
 }
 
-.record-pool-qc-status--danger::before {
-  background: var(--mq-danger-icon);
+.record-pool-qc-status__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 14px;
+  min-height: 30px;
+  flex-wrap: wrap;
 }
 
 .record-pool-qc-status__main {
   display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  flex: 1 1 360px;
   min-width: 0;
-  flex: 1;
-  gap: 14px;
+}
+
+.record-pool-qc-status__indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border-radius: 50%;
+  color: var(--mq-brand-600);
+}
+
+.record-pool-qc-status--success .record-pool-qc-status__indicator {
+  background: color-mix(in srgb, var(--mq-success-icon) 12%, transparent);
+  color: var(--mq-success-text);
+}
+
+.record-pool-qc-status--danger .record-pool-qc-status__indicator {
+  background: color-mix(in srgb, var(--mq-danger-icon) 12%, transparent);
+  color: var(--mq-danger-text);
+}
+
+.record-pool-qc-status__heading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.record-pool-qc-status__heading strong {
+  font-size: 13px;
+  line-height: 20px;
+  font-weight: 600;
+  color: var(--mq-text-primary);
+}
+
+.record-pool-qc-status__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 600;
+}
+
+.record-pool-qc-status__live-dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: var(--mq-brand-600);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mq-brand-600) 18%, transparent);
+  animation: record-pool-qc-pulse 1.8s ease-in-out infinite;
+}
+
+.record-pool-qc-status__phase {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.record-pool-qc-status__progress-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 1 180px;
+  min-width: 120px;
+}
+
+.record-pool-qc-status__progress {
+  position: relative;
+  flex: 1 1 112px;
+  min-width: 84px;
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--mq-brand-600) 13%, var(--mq-bg-surface));
+}
+
+.record-pool-qc-status__progress > span {
+  position: relative;
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--mq-brand-600);
+  transition: width 240ms ease;
+}
+
+/* 0% 刚启动时用流动微光表达任务活跃执行中，避免灰条像卡死 */
+.record-pool-qc-status__progress.is-indeterminate::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--mq-brand-600) 52%, transparent) 50%,
+    transparent 100%
+  );
+  animation: record-pool-qc-shimmer 1.4s ease-in-out infinite;
+}
+
+.record-pool-qc-status__percent {
+  flex: 0 0 auto;
+  color: var(--mq-brand-700);
+  font-size: 13px;
+  line-height: 18px;
+  font-style: normal;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.record-pool-qc-status__percent small {
+  font-size: 11px;
+  font-weight: 600;
+  margin-left: 1px;
+}
+
+.record-pool-qc-status__metrics {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.record-pool-qc-status__record-count {
+  color: var(--mq-text-secondary);
+  font-weight: 500;
 }
 
 .record-pool-qc-status__actions {
-  display: flex;
-  flex: 0 0 auto;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  flex: 0 0 auto;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.record-pool-qc-status__details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 14%, var(--mq-bg-surface));
+  border-radius: 7px;
+  background: var(--mq-bg-surface);
+  color: var(--mq-text-secondary);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.record-pool-qc-status__details-toggle:hover {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 35%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
+  background: color-mix(in srgb, var(--mq-brand-600) 4%, var(--mq-bg-surface));
+}
+
+.record-pool-qc-status__details-toggle:focus-visible,
+.record-pool-qc-status__detail-link:focus-visible,
+.record-pool-qc-status__export:focus-visible,
+.record-pool-qc-status__dismiss:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.record-pool-qc-status__details-chevron {
+  transition: transform 180ms ease;
+}
+
+.record-pool-qc-status__details-chevron.is-open {
+  transform: rotate(180deg);
 }
 
 .record-pool-qc-status__detail-link,
 .record-pool-qc-status__export {
   display: inline-flex;
   align-items: center;
-  min-height: 34px;
-  padding: 0 13px;
+  height: 28px;
+  padding: 0 11px;
   border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 17%, var(--mq-bg-surface));
-  border-radius: 9px;
+  border-radius: 7px;
   background: var(--mq-bg-surface);
   color: var(--mq-neutral-text);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   text-decoration: none;
+  white-space: nowrap;
   cursor: pointer;
 }
+
+.record-pool-qc-status--success .record-pool-qc-status__detail-link {
+  border-color: color-mix(in srgb, var(--mq-brand-600) 35%, var(--mq-bg-surface));
+  background: var(--mq-brand-600);
+  color: #ffffff;
+}
+
+.record-pool-qc-status--success .record-pool-qc-status__detail-link:hover {
+  background: var(--mq-brand-700);
+  border-color: var(--mq-brand-700);
+  color: #ffffff;
+}
+
 .record-pool-qc-status__detail-link:hover,
 .record-pool-qc-status__export:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--mq-brand-600) 27%, var(--mq-bg-surface));
-  background: color-mix(in srgb, var(--mq-brand-600) 3%, var(--mq-bg-surface));
-  color: var(--mq-brand-600);
+  border-color: color-mix(in srgb, var(--mq-brand-600) 30%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-brand-600) 4%, var(--mq-bg-surface));
+  color: var(--mq-brand-700);
 }
 
 .record-pool-qc-status__export:disabled {
@@ -661,167 +855,71 @@ onBeforeUnmount(() => {
   opacity: 0.58;
 }
 
-.record-pool-qc-status__indicator {
-  display: grid;
-  width: 24px;
-  height: 24px;
-  flex: 0 0 24px;
-  place-items: center;
+.record-pool-qc-status__dismiss {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  padding: 0;
   border: 0;
-  border-radius: 12px;
-  background: transparent;
-  color: var(--mq-brand-600);
-}
-
-.record-pool-qc-status--success .record-pool-qc-status__indicator {
+  border-radius: 7px;
   background: transparent;
   color: var(--mq-text-tertiary);
+  cursor: pointer;
 }
 
-.record-pool-qc-status--danger .record-pool-qc-status__indicator {
-  background: rgba(239, 68, 68, 0.09);
-  color: color-mix(in srgb, var(--mq-danger-text) 90%, var(--mq-text-primary));
+.record-pool-qc-status__dismiss:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--mq-text-primary);
 }
 
-.record-pool-qc-status__content {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 8px;
-  min-width: 0;
-  flex: 1;
-}
-.record-pool-qc-status__heading,
-.record-pool-qc-status__progress,
-.record-pool-qc-status__concurrency,
-.record-pool-qc-status__stage,
+.record-pool-qc-status__settling,
 .record-pool-qc-status__refresh-note {
-  grid-column: 1 / -1;
-}
-.record-pool-qc-status__progress {
-  height: 4px;
-  border-radius: 4px;
-  overflow: hidden;
-  background: color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
-}
-.record-pool-qc-status__progress > span {
-  display: block;
-  height: 100%;
-  background: var(--mq-brand-600);
-  border-radius: inherit;
-  transition: width 200ms ease;
-}
-.record-pool-qc-status--danger .record-pool-qc-status__progress > span {
-  background: color-mix(in srgb, var(--mq-danger-icon) 72%, var(--mq-neutral-text));
-}
-.record-pool-qc-status--success .record-pool-qc-status__progress > span {
-  background: color-mix(in srgb, var(--mq-success-icon) 48%, var(--mq-neutral-text));
-}
-
-.record-pool-qc-status__heading,
-.record-pool-qc-status__metrics {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 14px;
-}
-
-.record-pool-qc-status__heading strong {
-  font-size: 14px;
-  line-height: 22px;
-  font-weight: 600;
-}
-
-.record-pool-qc-status__heading span {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(10, 108, 255, 0.08);
-  color: var(--mq-brand-700);
+  margin: 0;
   font-size: 12px;
   line-height: 18px;
-  font-weight: 600;
+  color: var(--mq-text-secondary);
 }
 
-.record-pool-qc-status__heading em {
-  margin-left: auto;
-  color: var(--mq-text-primary);
-  font-size: 14px;
-  line-height: 20px;
-  font-style: normal;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+.record-pool-qc-status__refresh-note {
+  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
 }
 
-.record-pool-qc-status--success .record-pool-qc-status__heading em {
-  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
-}
-
-.record-pool-qc-status--danger .record-pool-qc-status__heading em {
-  color: color-mix(in srgb, var(--mq-danger-text) 80%, var(--mq-text-primary));
-}
-
-.record-pool-qc-status__metrics {
-  margin-top: 0;
-  color: var(--mq-text-tertiary);
-  font-size: 12px;
-  line-height: 20px;
-  font-weight: 400;
-}
-.record-pool-qc-status__record-count {
-  margin-left: auto;
-}
-.record-pool-qc-status__details {
-  font-size: 12px;
-  color: var(--mq-text-tertiary);
-}
-.record-pool-qc-status__details summary {
-  cursor: pointer;
-  width: fit-content;
-}
-.record-pool-qc-status__details[open] {
+.record-pool-qc-status__details-panel {
   padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 9%, var(--mq-bg-surface));
-}
-.record-pool-qc-status__details .record-pool-qc-status__stages {
-  justify-content: flex-start;
-  margin-top: 10px;
-}
-@media (prefers-reduced-motion: reduce) {
-  .record-pool-qc-status__progress > span {
-    transition: none;
-  }
+  border-top: 1px solid color-mix(in srgb, var(--mq-neutral-text) 10%, var(--mq-bg-surface));
 }
 
 .record-pool-qc-status__concurrency {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 8px;
+  margin-bottom: 8px;
 }
 
 .record-pool-qc-status__concurrency span {
   display: inline-flex;
   align-items: baseline;
   gap: 4px;
-  padding: 4px 9px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.025);
-  color: rgba(29, 29, 31, 0.62);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   line-height: 18px;
-  font-weight: 550;
 }
 
 .record-pool-qc-status__concurrency strong {
   color: var(--mq-text-primary);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
 }
 
 .record-pool-qc-status__concurrency span.is-active {
-  border-color: rgba(10, 108, 255, 0.14);
-  background: rgba(10, 108, 255, 0.07);
-  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
+  background: rgba(10, 108, 255, 0.08);
+  color: var(--mq-brand-700);
 }
 
 .record-pool-qc-status__concurrency span.is-active strong {
@@ -829,46 +927,38 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__concurrency span.is-complete {
-  border-color: rgba(16, 185, 129, 0.14);
-  background: rgba(16, 185, 129, 0.065);
-  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--mq-success-text);
 }
 
 .record-pool-qc-status__concurrency span.is-complete strong {
-  color: color-mix(in srgb, var(--mq-success-text) 71%, var(--mq-text-primary));
+  color: var(--mq-success-text);
 }
 
 .record-pool-qc-status__stages {
-  display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  gap: 8px 16px;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
   width: 100%;
   margin: 0;
-  padding: 0;
+  padding: 2px 0;
   list-style: none;
 }
 
 .record-pool-qc-status__stages li {
-  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   min-height: 20px;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
 }
 
 .record-pool-qc-status__stage-marker {
   width: 8px;
   height: 8px;
   flex: 0 0 8px;
-  z-index: 1;
-  margin-top: 0;
-  border: 2px solid rgba(29, 29, 31, 0.18);
+  border: 2px solid color-mix(in srgb, var(--mq-neutral-text) 24%, transparent);
   border-radius: 999px;
   background: var(--mq-bg-surface);
 }
@@ -876,70 +966,46 @@ onBeforeUnmount(() => {
 .record-pool-qc-status__stage-copy {
   display: grid;
   min-width: 0;
-  gap: 1px;
 }
 
 .record-pool-qc-status__stage-copy strong {
-  overflow: hidden;
-  font-size: 13px;
-  line-height: 19px;
-  font-weight: 650;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.record-pool-qc-status__stage-copy small {
-  overflow: hidden;
   font-size: 12px;
   line-height: 18px;
   font-weight: 500;
-  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.record-pool-qc-status__stage-progress {
-  position: absolute;
-  top: -11px;
-  right: 12px;
-  padding: 3px 8px;
-  border: 1px solid rgba(10, 108, 255, 0.2);
-  border-radius: 999px;
-  background: var(--mq-bg-surface);
-  color: var(--mq-brand-600);
-  font-size: 11px;
-  line-height: 16px;
-  font-weight: 700;
-  box-shadow: 0 3px 10px rgba(10, 108, 255, 0.1);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-pool-qc-status__stages li.is-complete {
-  color: var(--mq-text-tertiary);
+  color: var(--mq-text-secondary);
 }
 
 .record-pool-qc-status__stages li.is-complete .record-pool-qc-status__stage-marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   background: transparent;
-  width: 12px;
+  width: 13px;
   height: 16px;
-  flex-basis: 12px;
-  line-height: 16px;
+  flex-basis: 13px;
+  color: var(--mq-success-text);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .record-pool-qc-status__stages li.is-active {
-  border-color: rgba(10, 108, 255, 0.42);
-  background: transparent;
-  color: color-mix(in srgb, var(--mq-brand-700) 90%, var(--mq-text-primary));
+  color: var(--mq-brand-700);
 }
 
 .record-pool-qc-status__stages li.is-active .record-pool-qc-status__stage-marker {
   border-color: var(--mq-brand-600);
-  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.1);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mq-brand-600) 14%, transparent);
 }
 
 .record-pool-qc-status__stages li.is-error {
-  border-color: rgba(239, 68, 68, 0.28);
-  background: transparent;
-  color: color-mix(in srgb, var(--mq-danger-text) 80%, var(--mq-text-primary));
+  color: var(--mq-danger-text);
 }
 
 .record-pool-qc-status__stages li.is-error .record-pool-qc-status__stage-marker {
@@ -947,190 +1013,49 @@ onBeforeUnmount(() => {
   background: var(--mq-danger-icon);
 }
 
-.record-pool-qc-status__stage,
-.record-pool-qc-status__refresh-note {
-  margin: 5px 0 0;
-  color: rgba(29, 29, 31, 0.58);
+.record-pool-qc-status__stage {
+  margin: 6px 0 0;
+  color: var(--mq-text-secondary);
   font-size: 12px;
   line-height: 18px;
 }
 
-.record-pool-qc-status__refresh-note {
-  color: color-mix(in srgb, var(--mq-warning-text) 89%, var(--mq-text-primary));
+@keyframes record-pool-qc-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--mq-brand-600) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 5px color-mix(in srgb, var(--mq-brand-600) 6%, transparent);
+  }
 }
 
-.record-pool-qc-status__dismiss {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  flex: 0 0 30px;
-  cursor: pointer;
-  place-items: center;
-  border: 0;
-  border-radius: 8px;
-  background: transparent;
-  color: rgba(29, 29, 31, 0.48);
+@keyframes record-pool-qc-shimmer {
+  0% {
+    transform: translateX(-110%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
 }
 
-.record-pool-qc-status__dismiss:hover {
-  background: rgba(0, 0, 0, 0.05);
-  color: var(--mq-text-primary);
-}
-
-.record-pool-qc-status__spinner {
-  animation: record-pool-qc-spin 1s linear infinite;
-}
-
-@keyframes record-pool-qc-spin {
-  to {
-    transform: rotate(360deg);
+@media (prefers-reduced-motion: reduce) {
+  .record-pool-qc-status__progress > span,
+  .record-pool-qc-status__details-chevron {
+    transition: none;
+  }
+  .record-pool-qc-status__live-dot,
+  .record-pool-qc-status__progress.is-indeterminate::after {
+    animation: none;
   }
 }
 
 @media (max-width: 720px) {
   .record-pool-qc-status {
-    padding: 12px;
-  }
-
-  .record-pool-qc-status__metrics {
-    display: grid;
-    gap: 2px;
-  }
-
-  .record-pool-qc-status__stages {
-    grid-column: 1 / -1;
-    justify-content: flex-start;
-  }
-}
-/* 任务面板：以文字层次与细进度条呈现执行情况。 */
-.record-pool-qc-status,
-.record-pool-qc-status.is-active {
-  padding: 20px 24px;
-  border: 1px solid color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
-  border-radius: 16px;
-  background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
-  box-shadow: none;
-  font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
-}
-.record-pool-qc-status__main {
-  flex: 1;
-  min-width: 0;
-}
-.record-pool-qc-status__content {
-  width: 100%;
-  min-width: 0;
-}
-.record-pool-qc-status__heading {
-  gap: 10px;
-}
-.record-pool-qc-status.is-active .record-pool-qc-status__heading strong {
-  font-size: 15px;
-  font-weight: 600;
-}
-.record-pool-qc-status__heading em {
-  font-size: 24px;
-  line-height: 30px;
-  color: var(--mq-brand-700);
-  letter-spacing: -0.5px;
-}
-.record-pool-qc-status__heading em small {
-  font-size: 13px;
-  margin-left: 3px;
-}
-.record-pool-qc-status__heading span {
-  background: var(--mq-brand-50);
-  color: var(--mq-brand-700);
-  font-weight: 400;
-}
-.record-pool-qc-status__live-dot {
-  width: 7px;
-  height: 7px;
-  margin: 0 3px;
-  background: var(--mq-brand-600);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--mq-brand-600) 11%, var(--mq-bg-surface));
-}
-.record-pool-qc-status__phase {
-  margin: 0;
-  color: var(--mq-text-tertiary);
-  font-size: 13px;
-}
-.record-pool-qc-status.is-active .record-pool-qc-status__progress {
-  height: 5px;
-  margin: 6px 0;
-  background: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
-  border-radius: 99px;
-}
-.record-pool-qc-status__progress > span {
-  background: var(--mq-brand-600);
-}
-.record-pool-qc-status__metrics {
-  gap: 8px 20px;
-  font-size: 13px;
-  color: var(--mq-text-tertiary);
-}
-.record-pool-qc-status__record-count {
-  font-weight: 500;
-  color: var(--mq-neutral-text);
-}
-.record-pool-qc-status__details {
-  margin-top: 8px;
-}
-.record-pool-qc-status__details summary {
-  padding: 5px 0;
-  color: var(--mq-neutral-text);
-  font-size: 12px;
-}
-.record-pool-qc-status__details summary:focus-visible {
-  outline: 2px solid var(--mq-brand-600);
-  outline-offset: 3px;
-  border-radius: 4px;
-}
-.record-pool-qc-status__details[open] {
-  border-top-color: color-mix(in srgb, var(--mq-neutral-text) 13%, var(--mq-bg-surface));
-}
-.record-pool-qc-status__stages {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 14px;
-  padding: 10px 0;
-}
-.record-pool-qc-status__stage-copy strong {
-  font-size: 12px;
-  font-weight: 400;
-  white-space: normal;
-}
-.record-pool-qc-status__concurrency span {
-  border: 0;
-  border-radius: 6px;
-  font-weight: 400;
-}
-.record-pool-qc-status__settling {
-  margin: 0;
-  font-size: 12px;
-  line-height: 20px;
-  color: var(--mq-text-tertiary);
-}
-.record-pool-qc-status--danger {
-  background: rgba(255, 255, 255, 0.86);
-  border-color: rgba(118, 128, 160, 0.24);
-}
-.record-pool-qc-status--success {
-  background: color-mix(in srgb, var(--mq-success-icon) 4%, var(--mq-bg-surface));
-  border-color: color-mix(in srgb, var(--mq-success-text) 6%, var(--mq-bg-page));
-}
-.record-pool-qc-status__refresh-note {
-  line-height: 20px;
-}
-@media (max-width: 700px) {
-  .record-pool-qc-status,
-  .record-pool-qc-status.is-active {
-    padding: 16px;
+    padding: 10px 12px;
   }
   .record-pool-qc-status__stages {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .record-pool-qc-status__record-count {
-    margin-left: 0;
   }
 }
 </style>
