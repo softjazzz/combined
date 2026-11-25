@@ -117,9 +117,21 @@
               </template>
             </a-dropdown>
 
-            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">
-              <router-link class="ws-icon-button" to="/workstation-v5/messages" aria-label="消息中心">
+            <a-tooltip v-if="useFullMessageCenter" :title="messageCenterTooltip" placement="right">
+              <router-link
+                class="ws-icon-button ws-icon-button--messages"
+                to="/workstation-v5/messages"
+                :aria-label="messageCenterAriaLabel"
+              >
                 <Bell aria-hidden="true" />
+                <span
+                  v-if="messageUnreadBadge"
+                  class="ws-icon-button__badge"
+                  data-testid="ws-message-unread-badge"
+                  aria-hidden="true"
+                >
+                  {{ messageUnreadBadge }}
+                </span>
               </router-link>
             </a-tooltip>
             <a-popover v-else placement="rightBottom" trigger="click">
@@ -183,9 +195,16 @@ import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
+import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
 import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
+import {
+  getSharedMessageCenterUnreadVersion,
+  MESSAGE_CENTER_UNREAD_EVENT,
+  syncSharedMessageCenterUnreadCount,
+  useSharedMessageCenterUnreadCount,
+} from '@/views/workstation/useMessageCenter'
 import {
   DRG_SECTION_TABS,
   WORKSTATION_NAV,
@@ -212,6 +231,96 @@ const homePath = computed(() => resolveDefaultWorkstationPath(authStore.userRole
 const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))
 provide(WORKSTATION_REMINDER_PANEL, computed(() => canUseReminderPanel(authStore.userRoles)))
 
+const sharedMessageUnreadCount = useSharedMessageCenterUnreadCount()
+const messageUnreadCount = computed(() =>
+  useFullMessageCenter.value ? (sharedMessageUnreadCount.value ?? 0) : 0,
+)
+const messageUnreadBadge = computed(() => {
+  const count = messageUnreadCount.value
+  if (count <= 0) return ''
+  return count > 99 ? '99+' : String(count)
+})
+const messageCenterTooltip = computed(() =>
+  messageUnreadCount.value > 0 ? `消息中心（${messageUnreadCount.value} 条未读）` : '消息中心',
+)
+const messageCenterAriaLabel = computed(() =>
+  messageUnreadCount.value > 0 ? `消息中心，${messageUnreadCount.value} 条未读` : '消息中心',
+)
+
+let unreadFetchSeq = 0
+let fetchedUnreadForSessionKey = ''
+
+function isApiAuthenticated(): boolean {
+  return typeof ApiService?.isAuthenticated === 'function' ? ApiService.isAuthenticated() : false
+}
+
+async function fetchMessageUnreadCount(sessionKey: string) {
+  if (
+    !useFullMessageCenter.value ||
+    !isApiAuthenticated() ||
+    typeof ApiService?.get !== 'function'
+  ) {
+    return
+  }
+  const seq = ++unreadFetchSeq
+  const versionBefore = getSharedMessageCenterUnreadVersion()
+  try {
+    const result = await ApiService.get<{ unread_count?: number }>(
+      '/api/v1/notifications',
+      { page: 1, page_size: 1, is_read: false },
+      { skipErrorToast: true },
+    )
+    if (seq !== unreadFetchSeq || fetchedUnreadForSessionKey !== sessionKey) return
+    if (versionBefore !== getSharedMessageCenterUnreadVersion()) return
+    const unreadCount = result?.data?.unread_count
+    if (
+      result?.success &&
+      typeof unreadCount === 'number' &&
+      Number.isInteger(unreadCount) &&
+      unreadCount >= 0
+    ) {
+      syncSharedMessageCenterUnreadCount(unreadCount, { emitEvent: false })
+    }
+  } catch {
+    // 侧栏未读角标拉取失败时静默降级，不阻断工作台外壳渲染
+  }
+}
+
+const messageUnreadSessionKey = computed(() => {
+  if (!useFullMessageCenter.value) return ''
+  const userId = String(authStore.user?.id || '').trim()
+  return userId || (authStore.isAuthenticated ? 'authenticated' : '')
+})
+
+watch(
+  messageUnreadSessionKey,
+  (sessionKey, prevSessionKey) => {
+    if (!sessionKey) {
+      ++unreadFetchSeq
+      fetchedUnreadForSessionKey = ''
+      if (prevSessionKey) {
+        syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
+      }
+      return
+    }
+    if (sessionKey === fetchedUnreadForSessionKey) return
+    if (prevSessionKey && prevSessionKey !== sessionKey) {
+      syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
+    }
+    fetchedUnreadForSessionKey = sessionKey
+    void fetchMessageUnreadCount(sessionKey)
+  },
+  { immediate: true },
+)
+
+function handleUnreadCountEvent(event: Event) {
+  const detail = (event as CustomEvent<{ unreadCount?: number | null }>).detail
+  if (!detail || !('unreadCount' in detail)) return
+  const nextCount = detail.unreadCount ?? null
+  if (nextCount === sharedMessageUnreadCount.value) return
+  syncSharedMessageCenterUnreadCount(nextCount, { emitEvent: false })
+}
+
 // 宽度小于 1280 时默认折叠；用户手动切换后以用户选择为准，直到下次跨越断点
 const COLLAPSE_QUERY = '(max-width: 1279px)'
 const collapsed = ref(false)
@@ -226,6 +335,9 @@ function toggleCollapsed() {
 }
 
 onMounted(() => {
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(MESSAGE_CENTER_UNREAD_EVENT, handleUnreadCountEvent)
+  }
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
   collapseMedia = window.matchMedia(COLLAPSE_QUERY)
   syncCollapsedWithViewport(collapseMedia)
@@ -233,6 +345,10 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  ++unreadFetchSeq
+  if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+    window.removeEventListener(MESSAGE_CENTER_UNREAD_EVENT, handleUnreadCountEvent)
+  }
   collapseMedia?.removeEventListener('change', syncCollapsedWithViewport)
 })
 
@@ -335,6 +451,9 @@ watch(
 const drgActiveTab = computed(() => findDrgSectionTab(navRoute.value))
 
 const handleLogout = async () => {
+  ++unreadFetchSeq
+  fetchedUnreadForSessionKey = ''
+  syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
   await authStore.signOut()
   router.push('/workstation-v5/login')
 }
@@ -638,6 +757,7 @@ const handleLogout = async () => {
 }
 
 .ws-icon-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -650,6 +770,30 @@ const handleLogout = async () => {
   background: transparent;
   color: var(--mq-text-secondary);
   cursor: pointer;
+}
+
+.ws-icon-button__badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1.5px solid #ffffff;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(255, 59, 48, 0.35);
 }
 
 .ws-icon-button:hover {

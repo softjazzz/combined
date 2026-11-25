@@ -55,8 +55,47 @@
 .review-filters {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
-  align-items: end;
+  align-items: center;
   gap: var(--mq-space-3);
+}
+.review-filters .mq-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  min-width: 0;
+}
+.review-filters .mq-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+.review-filters select.mq-input {
+  box-sizing: border-box;
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  line-height: 32px;
+}
+.review-filters .mq-btn,
+.review-history-context .mq-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  line-height: 1;
+}
+.review-filters .mq-btn .mq-icon,
+.review-history-context .mq-btn .mq-icon {
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
 }
 .review-history-context,
 .review-pagination,

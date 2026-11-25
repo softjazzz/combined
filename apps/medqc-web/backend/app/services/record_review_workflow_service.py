@@ -1,6 +1,7 @@
 """运行/终末病历审核写 owner；决定行本身即不可变工作事件。"""
 
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -31,6 +32,14 @@ SOURCE_FIELDS = (
 STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
 REVIEWERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
 MAX_CASES = 5000
+_SKIPPABLE_SUMMARY_ERROR_REASONS = frozenset(
+    {
+        "canonical_envelope_missing",
+        "canonical_result_envelope_invalid",
+        "generation_conflict",
+    }
+)
+logger = logging.getLogger(__name__)
 
 
 def _qc_schema() -> str | None:
@@ -289,6 +298,8 @@ def _candidate_sources(session, actor):
     )
     if len(records) > MAX_CASES:
         raise RectificationError("病历审核范围超过5000份，无法完整核对", 422)
+    if not records:
+        return []
     summaries = CustomQCWorkspaceService(
         readonly=True
     ).build_luxian_0609_completed_record_result_summaries(
@@ -297,13 +308,31 @@ def _candidate_sources(session, actor):
         include_rule_set_context=True,
         session_factory=lambda: _BorrowedReadSession(session),
     )
-    if any(row.get("status") not in {"ready", "not_run"} for row in summaries.values()):
+    skipped_reasons: dict[str, int] = {}
+    for row in summaries.values():
+        status = row.get("status")
+        if status in {"ready", "not_run"}:
+            continue
+        reason_code = str(row.get("reason_code") or "").strip()
+        if (
+            status == "technical_error"
+            and reason_code in _SKIPPABLE_SUMMARY_ERROR_REASONS
+        ):
+            skipped_reasons[reason_code] = skipped_reasons.get(reason_code, 0) + 1
+            continue
         raise RectificationError("当前保存结果存在读取失败，审核待办暂不可用", 503)
+    if skipped_reasons:
+        logger.warning(
+            "病历审核跳过不可用历史保存结果 skipped=%s",
+            skipped_reasons,
+        )
     job_ids = {
         row.get("root_job_id")
         for row in summaries.values()
-        if row.get("status") == "ready"
+        if row.get("status") == "ready" and row.get("root_job_id")
     }
+    if not job_ids:
+        return []
     table = _batch_jobs_table(readonly=True)
     jobs = {
         row["id"]: row

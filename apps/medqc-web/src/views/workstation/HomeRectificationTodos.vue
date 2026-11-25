@@ -31,13 +31,19 @@
         >
         <a-select
           :id="scope ? 'defect-rectification-status' : 'rectification-status'"
-          v-model:value="state"
+          :value="state"
           :get-popup-container="popupContainer"
           :options="states"
           style="width: 130px"
           @change="changeState"
         />
-        <a-button :disabled="loading" aria-label="刷新整改待办" @click="load">
+        <a-button
+          class="rectification-todos__refresh"
+          shape="circle"
+          :disabled="loading"
+          aria-label="刷新整改待办"
+          @click="load"
+        >
           <template #icon>
             <MqIcon name="sync" :size="16" />
           </template>
@@ -67,7 +73,7 @@
       </p>
       <a-pagination
         v-if="!error && total"
-        v-model:current="page"
+        :current="page"
         :total="total"
         :page-size="10"
         :show-size-changer="false"
@@ -390,6 +396,14 @@ const states = [
   ...Object.entries(labels).map(([value, label]) => ({ value, label })),
 ]
 const VALID_STATES = new Set<RectificationState>(['pending', 'submitted', 'approved', 'rejected'])
+function normalizeStateValue(value: unknown): RectificationState | '' {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim()
+  if (!normalized || normalized === 'all') return ''
+  return VALID_STATES.has(normalized as RectificationState)
+    ? (normalized as RectificationState)
+    : ''
+}
 function defaultState(): RectificationState | '' {
   return props.scope ? '' : manager.value ? 'submitted' : 'pending'
 }
@@ -407,19 +421,6 @@ function readPageFromQuery(): number {
   const raw = Array.isArray(route.query.page) ? route.query.page[0] : route.query.page
   const parsed = Number(raw)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : 1
-}
-function syncFiltersToRoute() {
-  if (props.scope || disposed || !route || typeof router?.replace !== 'function') return
-  const nextStatus = state.value === '' ? 'all' : state.value
-  const nextPage = page.value > 1 ? String(page.value) : undefined
-  const curStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status
-  const curPage = Array.isArray(route.query.page) ? route.query.page[0] : route.query.page
-  if (curStatus === nextStatus && curPage === nextPage) return
-  const nextQuery = { ...route.query }
-  nextQuery.status = nextStatus
-  if (nextPage) nextQuery.page = nextPage
-  else delete nextQuery.page
-  void router.replace({ path: route.path, query: nextQuery })
 }
 const state = ref<RectificationState | ''>(readStateFromQuery()),
   page = ref(readPageFromQuery()),
@@ -537,15 +538,56 @@ const hasWithdrawableUrge = computed(() =>
   Boolean(selected.value?.events.some((event) => canWithdrawUrge(event))),
 )
 const showCommentForm = computed(() => actions.value.length > 0 || hasWithdrawableUrge.value)
-function changeState() {
-  page.value = 1
-  syncFiltersToRoute()
+let routeSyncToken = 0
+let pendingRouteSync: { state: RectificationState | ''; page: number } | null = null
+async function applyFilters(nextState: RectificationState | '', nextPage: number) {
+  if (disposed || !allowed.value) return
+  if (props.scope || !route || typeof router?.replace !== 'function') {
+    state.value = nextState
+    page.value = nextPage
+    void load()
+    return
+  }
+  const nextStatus = nextState === '' ? 'all' : nextState
+  const nextPageQuery = nextPage > 1 ? String(nextPage) : undefined
+  const curStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status
+  const curPage = Array.isArray(route.query.page) ? route.query.page[0] : route.query.page
+
+  state.value = nextState
+  page.value = nextPage
+
+  if (curStatus === nextStatus && curPage === nextPageQuery) {
+    void load()
+    return
+  }
+
+  const token = ++routeSyncToken
+  pendingRouteSync = { state: nextState, page: nextPage }
+  const nextQuery = { ...route.query }
+  nextQuery.status = nextStatus
+  if (nextPageQuery) nextQuery.page = nextPageQuery
+  else delete nextQuery.page
+
+  try {
+    await router.replace({ path: route.path, query: nextQuery })
+  } finally {
+    if (token === routeSyncToken) {
+      pendingRouteSync = null
+    }
+  }
+
+  if (disposed || token !== routeSyncToken || !allowed.value) return
   void load()
 }
+function changeState(nextValue?: unknown) {
+  const nextState = normalizeStateValue(nextValue)
+  if (nextState === state.value && page.value === 1) return
+  void applyFilters(nextState, 1)
+}
 function handlePageChange(nextPage: number) {
-  page.value = nextPage
-  syncFiltersToRoute()
-  void load()
+  if (!Number.isInteger(nextPage) || nextPage < 1) return
+  if (nextPage === page.value) return
+  void applyFilters(state.value, nextPage)
 }
 async function load() {
   const token = ++listToken
@@ -620,6 +662,8 @@ function reset() {
   resetComparison()
   ++listToken
   ++detailToken
+  ++routeSyncToken
+  pendingRouteSync = null
   items.value = []
   selected.value = null
   open.value = false
@@ -627,9 +671,18 @@ function reset() {
   loading.value = false
   saving.value = false
 }
+const authIdentityKey = computed(() =>
+  [
+    auth.user?.id ?? '',
+    auth.user?.role ?? '',
+    Array.isArray(auth.user?.roles) ? auth.user.roles.join(',') : '',
+    effectiveUserRoles.value.join(','),
+    allowed.value ? '1' : '0',
+  ].join('|'),
+)
 let authInitialized = false
 watch(
-  () => [auth.user?.id, auth.user?.roles, auth.user?.role, ...effectiveUserRoles.value, allowed.value],
+  authIdentityKey,
   () => {
     reset()
     if (!authInitialized) {
@@ -642,7 +695,7 @@ watch(
     }
     if (allowed.value) void load()
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 watch(open, (value) => {
   if (!value) {
@@ -656,7 +709,7 @@ watch(open, (value) => {
 watch(
   () => [route?.query?.status, route?.query?.page],
   () => {
-    if (props.scope || !allowed.value) return
+    if (props.scope || !allowed.value || pendingRouteSync) return
     const nextState = readStateFromQuery()
     const nextPage = readPageFromQuery()
     if (nextState === state.value && nextPage === page.value) return

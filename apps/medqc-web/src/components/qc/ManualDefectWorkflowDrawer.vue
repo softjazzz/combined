@@ -598,7 +598,56 @@ onUnmounted(() => {
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: center;
+}
+.workflow-toolbar .mq-segmented {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  padding: 3px;
+}
+.workflow-toolbar .mq-segmented__item {
+  box-sizing: border-box;
+  height: 28px;
+  padding: 0 12px;
+  line-height: 28px;
+}
+.workflow-toolbar .mq-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.workflow-toolbar .mq-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+.workflow-toolbar select.mq-input {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 112px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  line-height: 32px;
+}
+.workflow-toolbar .mq-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  line-height: 1;
+}
+.workflow-toolbar .mq-btn .mq-icon {
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
 }
 .workflow-identity {
   padding: 12px;
@@ -634,6 +683,13 @@ onUnmounted(() => {
   .workflow-toolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+  .workflow-toolbar .mq-field {
+    width: 100%;
+  }
+  .workflow-toolbar select.mq-input {
+    flex: 1;
+    width: auto;
   }
   .mq-segmented {
     display: flex;

@@ -393,7 +393,49 @@ onUnmounted(reset)
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: end;
+  align-items: center;
+}
+.appeal-toolbar > strong {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  white-space: nowrap;
+}
+.appeal-toolbar .mq-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.appeal-toolbar .mq-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+.appeal-toolbar select.mq-input {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 112px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  line-height: 32px;
+}
+.appeal-toolbar .mq-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  line-height: 1;
+}
+.appeal-toolbar .mq-btn .mq-icon {
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
 }
 .appeal-form {
   display: grid;

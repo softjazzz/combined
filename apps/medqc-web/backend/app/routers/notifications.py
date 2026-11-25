@@ -169,7 +169,10 @@ def _safe_int(value: object) -> int:
 @router.get("")
 async def list_notifications(
     request: Request,
-    type: Optional[str] = Query(None, description="消息类型: defect_urge/task_assign/appeal_result/remediation/system"),
+    type: Optional[str] = Query(
+        None,
+        description="消息类型: qc_result_ready/remediation/defect_urge/appeal_result/case_communication/account_registration/task_assign/drg_alert/system/general",
+    ),
     is_read: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),

@@ -14,6 +14,46 @@ interface MessagePage {
   unread_count: number
 }
 
+export const MESSAGE_CENTER_UNREAD_EVENT = 'medqc:notifications-unread-updated'
+
+const sharedMessageCenterUnreadCount = ref<number | null>(null)
+let sharedMessageCenterUnreadVersion = 0
+
+function normalizeUnreadCount(value: unknown): number | null {
+  if (value === null || value === undefined) return null
+  const num = Number(value)
+  return Number.isInteger(num) && num >= 0 ? num : null
+}
+
+export function useSharedMessageCenterUnreadCount() {
+  return sharedMessageCenterUnreadCount
+}
+
+export function getSharedMessageCenterUnreadVersion() {
+  return sharedMessageCenterUnreadVersion
+}
+
+export function syncSharedMessageCenterUnreadCount(
+  count: number | null,
+  options: { emitEvent?: boolean } = {},
+) {
+  const normalized = normalizeUnreadCount(count)
+  sharedMessageCenterUnreadVersion += 1
+  sharedMessageCenterUnreadCount.value = normalized
+  if (
+    options.emitEvent !== false &&
+    typeof window !== 'undefined' &&
+    typeof window.dispatchEvent === 'function' &&
+    typeof CustomEvent === 'function'
+  ) {
+    window.dispatchEvent(
+      new CustomEvent(MESSAGE_CENTER_UNREAD_EVENT, {
+        detail: { unreadCount: normalized },
+      }),
+    )
+  }
+}
+
 export const MESSAGE_TYPE_LABELS: Record<string, string> = {
   qc_result_ready: '质控结果',
   remediation: '整改反馈',
@@ -27,7 +67,19 @@ export const MESSAGE_TYPE_LABELS: Record<string, string> = {
   general: '其他消息',
 }
 
+export function isAccountRegistrationNotification(
+  item: Pick<NotificationVM, 'type' | 'interaction_target'>,
+) {
+  return (
+    item.type === 'account_registration' ||
+    item.type === 'account_registration_result' ||
+    item.interaction_target?.kind === 'account_registration' ||
+    item.interaction_target?.kind === 'account_registration_result'
+  )
+}
+
 export function messageTypeLabel(item: NotificationVM) {
+  if (isAccountRegistrationNotification(item)) return MESSAGE_TYPE_LABELS.account_registration
   if (item.type?.endsWith('_batch_summary')) return '批量摘要'
   return MESSAGE_TYPE_LABELS[item.type || ''] || '其他消息'
 }
@@ -121,10 +173,23 @@ export function useMessageCenter() {
   const mobileReading = ref(false)
   let sequence = 0
   let identity = 0
-  let syncingFromRoute = false
+  let pendingRouteSyncKey: string | null = null
+  let suppressFilterWatchKey: string | null = null
   let authInitialized = false
   let disposed = false
   const selected = computed(() => items.value.find((item) => item.id === selectedId.value))
+  const hasActiveFilter = computed(() => {
+    const normalizedType = type.value.trim()
+    return Boolean(normalizedType && normalizedType !== 'all')
+  })
+
+  function queryStateKey(
+    nextStatus: MessageStatusFilter,
+    nextType: string,
+    nextPage: number,
+  ): string {
+    return `${nextStatus}|${nextType}|${nextPage}`
+  }
 
   function syncQueryToUrl() {
     if (disposed || !route || typeof router?.replace !== 'function') return
@@ -135,7 +200,13 @@ export function useMessageCenter() {
     const curStatus = readSingleQuery(currentQuery, 'status') || undefined
     const curType = readSingleQuery(currentQuery, 'type') || undefined
     const curPage = readSingleQuery(currentQuery, 'page') || undefined
-    if (curStatus === nextStatus && curType === nextType && curPage === nextPage) return
+    if (curStatus === nextStatus && curType === nextType && curPage === nextPage) {
+      pendingRouteSyncKey = null
+      return
+    }
+    const desiredKey = queryStateKey(status.value, type.value, page.value)
+    if (pendingRouteSyncKey === desiredKey) return
+    pendingRouteSyncKey = desiredKey
     const nextQuery = { ...route.query }
     if (nextStatus) nextQuery.status = nextStatus
     else delete nextQuery.status
@@ -143,7 +214,11 @@ export function useMessageCenter() {
     else delete nextQuery.type
     if (nextPage) nextQuery.page = nextPage
     else delete nextQuery.page
-    void router.replace({ path: route.path, query: nextQuery })
+    void Promise.resolve(router.replace({ path: route.path, query: nextQuery }))
+      .catch(() => {})
+      .finally(() => {
+        if (pendingRouteSyncKey === desiredKey) pendingRouteSyncKey = null
+      })
   }
 
   async function load() {
@@ -189,6 +264,7 @@ export function useMessageCenter() {
       items.value = rows
       total.value = data.total
       unread.value = data.unread_count
+      syncSharedMessageCenterUnreadCount(data.unread_count)
       if (!rows.some((row) => row.id === selectedId.value)) {
         selectedId.value = rows[0]?.id || ''
         mobileReading.value = false
@@ -199,6 +275,16 @@ export function useMessageCenter() {
     } finally {
       if (token === sequence) loading.value = false
     }
+  }
+
+  function setStatus(nextStatus: MessageStatusFilter) {
+    if (busy.value || status.value === nextStatus) return
+    status.value = nextStatus
+  }
+
+  function resetFilters() {
+    if (busy.value || !hasActiveFilter.value) return
+    type.value = ''
   }
 
   function select(item: NotificationVM) {
@@ -251,13 +337,17 @@ export function useMessageCenter() {
   }
 
   watch([status, type], () => {
-    if (syncingFromRoute) return
+    const filterKey = `${status.value}|${type.value}`
+    if (suppressFilterWatchKey === filterKey) {
+      suppressFilterWatchKey = null
+      return
+    }
+    suppressFilterWatchKey = null
     page.value = 1
     items.value = []
     total.value = 0
     selectedId.value = ''
     mobileReading.value = false
-    syncQueryToUrl()
     void load()
   })
   watch(
@@ -268,17 +358,34 @@ export function useMessageCenter() {
       const nextStatus = parseStatusQuery(query)
       const nextType = parseTypeQuery(query)
       const nextPage = parsePageQuery(query)
+      const incomingKey = queryStateKey(nextStatus, nextType, nextPage)
+      if (pendingRouteSyncKey) {
+        if (incomingKey === pendingRouteSyncKey) {
+          pendingRouteSyncKey = null
+        }
+        return
+      }
       if (nextStatus === status.value && nextType === type.value && nextPage === page.value) return
-      syncingFromRoute = true
+      if (nextStatus !== status.value || nextType !== type.value) {
+        suppressFilterWatchKey = `${nextStatus}|${nextType}`
+      }
       status.value = nextStatus
       type.value = nextType
       page.value = nextPage
-      syncingFromRoute = false
+      selectedId.value = ''
+      mobileReading.value = false
       void load()
     },
   )
+  const authSignature = computed(() => {
+    const userId = String(auth.user?.id || '')
+    const roles = Array.isArray(auth.userRoles)
+      ? [...auth.userRoles].map((role) => String(role)).sort().join(',')
+      : ''
+    return `${userId}::${roles}`
+  })
   watch(
-    () => [auth.user?.id, auth.userRoles],
+    authSignature,
     () => {
       ++identity
       ++sequence
@@ -296,10 +403,12 @@ export function useMessageCenter() {
       if (ApiService.isAuthenticated()) void load()
       else loading.value = false
     },
-    { deep: true, immediate: true },
+    { immediate: true },
   )
   onBeforeUnmount(() => {
     disposed = true
+    pendingRouteSyncKey = null
+    suppressFilterWatchKey = null
     ++sequence
     ++identity
   })
@@ -312,12 +421,15 @@ export function useMessageCenter() {
     pageSize,
     status,
     type,
+    hasActiveFilter,
     loading,
     error,
     busy,
     selected,
     mobileReading,
     load,
+    setStatus,
+    resetFilters,
     select,
     markRead,
     markAllRead,

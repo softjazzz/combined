@@ -1,6 +1,7 @@
 """统一消息读取及医生交互提醒；已读状态不代替整改/申诉业务状态。"""
 
 from datetime import datetime, timezone
+import re
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import MetaData, and_, exists, func, inspect, or_, select, update
@@ -25,6 +26,158 @@ SOURCE = "v5_doctor_feedback"
 QC_SOURCE = "v5_qc_feedback"
 REGISTRATION_SOURCE = "v5_account_registration"
 GLOBAL_ADMIN_ROLES = {"admin", "super_admin"}
+MODERN_SOURCES = (SOURCE, QC_SOURCE, REGISTRATION_SOURCE, RESULT_SOURCE)
+ACCOUNT_REGISTRATION_RELATED_TYPES = (
+    "account_registration",
+    "account_registration_result",
+)
+_LEGACY_TYPE_TO_CANONICAL = {
+    "remediation_assigned": "remediation",
+    "remediation_submitted": "remediation",
+    "remediation_approved": "remediation",
+    "appeal_created": "appeal_result",
+    "appeal_reviewed": "appeal_result",
+    "task_assigned": "task_assign",
+}
+_UUID_PATTERN = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_UUID_FULL_RE = re.compile(rf"^{_UUID_PATTERN}$")
+_UUID_RE = re.compile(_UUID_PATTERN)
+_RECORD_UUID_ANALYSIS_DONE_RE = re.compile(
+    rf"病历\s*{_UUID_PATTERN}\s*analysis\s*完成",
+    re.IGNORECASE,
+)
+_RECORD_UUID_RE = re.compile(rf"病历\s*{_UUID_PATTERN}")
+_ANALYSIS_STAGE_RE = re.compile(
+    r"(?<![A-Za-z0-9_])analysis(?=(?:[\u4e00-\u9fff]|[^A-Za-z0-9_]|$))",
+    re.IGNORECASE,
+)
+_CJK_REDUNDANT_SPACE_RE = re.compile(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])")
+
+
+def _is_account_registration_row(row) -> bool:
+    return (
+        row.type == "account_registration"
+        or row.related_type in ACCOUNT_REGISTRATION_RELATED_TYPES
+        or row.source_key == REGISTRATION_SOURCE
+    )
+
+
+def _is_account_registration_expr():
+    return or_(
+        Notification.type == "account_registration",
+        Notification.related_type.in_(ACCOUNT_REGISTRATION_RELATED_TYPES),
+        Notification.source_key == REGISTRATION_SOURCE,
+    )
+
+
+def _is_not_account_registration_expr():
+    return and_(
+        or_(Notification.type.is_(None), Notification.type != "account_registration"),
+        or_(
+            Notification.related_type.is_(None),
+            Notification.related_type.not_in(ACCOUNT_REGISTRATION_RELATED_TYPES),
+        ),
+        or_(
+            Notification.source_key.is_(None),
+            Notification.source_key != REGISTRATION_SOURCE,
+        ),
+    )
+
+
+def _canonical_notification_type(row) -> str | None:
+    if _is_account_registration_row(row):
+        return "account_registration"
+    if row.source_key == RESULT_SOURCE or row.related_type == "qc_result_ready":
+        return "qc_result_ready"
+    if row.related_type == "case_communication":
+        return "case_communication"
+    if row.related_type == "modern_appeal":
+        return "appeal_result"
+    if row.related_type == "rectification" and row.type != "defect_urge":
+        return "remediation"
+    raw_type = row.type
+    if isinstance(raw_type, str):
+        return _LEGACY_TYPE_TO_CANONICAL.get(raw_type, raw_type)
+    return raw_type
+
+
+def _type_filter_predicate(notification_type: str):
+    if notification_type == "account_registration":
+        return _is_account_registration_expr()
+    if notification_type == "system":
+        return and_(Notification.type == "system", _is_not_account_registration_expr())
+    if notification_type == "qc_result_ready":
+        return or_(
+            Notification.type == "qc_result_ready",
+            Notification.related_type == "qc_result_ready",
+            Notification.source_key == RESULT_SOURCE,
+        )
+    if notification_type == "case_communication":
+        return or_(
+            Notification.type == "case_communication",
+            Notification.related_type == "case_communication",
+        )
+    if notification_type == "appeal_result":
+        return or_(
+            Notification.type.in_(
+                ("appeal_result", "appeal_created", "appeal_reviewed")
+            ),
+            Notification.related_type == "modern_appeal",
+        )
+    if notification_type == "remediation":
+        return or_(
+            Notification.type.in_(
+                (
+                    "remediation",
+                    "remediation_assigned",
+                    "remediation_submitted",
+                    "remediation_approved",
+                )
+            ),
+            and_(
+                Notification.related_type == "rectification",
+                or_(Notification.type.is_(None), Notification.type != "defect_urge"),
+            ),
+        )
+    if notification_type == "task_assign":
+        return Notification.type.in_(("task_assign", "task_assigned"))
+    return Notification.type == notification_type
+
+
+def _readable_visit_label(visit_id: str | None) -> str | None:
+    text = str(visit_id or "").strip()
+    if not text or _UUID_FULL_RE.match(text):
+        return None
+    return text
+
+
+def sanitize_legacy_notification_text(
+    text: str | None, *, visit_id: str | None = None
+) -> str | None:
+    """读取投影层清洗历史通知中的英文阶段码（如 analysis）与裸露 36 位 UUID。"""
+    if not isinstance(text, str) or not text:
+        return text
+    cleaned = text
+    visit_label = _readable_visit_label(visit_id)
+    if _RECORD_UUID_ANALYSIS_DONE_RE.search(cleaned):
+        replacement = f"病历 {visit_label} 分析完成" if visit_label else "该病历分析完成"
+        cleaned = _RECORD_UUID_ANALYSIS_DONE_RE.sub(replacement, cleaned)
+    if _RECORD_UUID_RE.search(cleaned):
+        replacement = f"病历 {visit_label}" if visit_label else "该病历"
+        cleaned = _RECORD_UUID_RE.sub(replacement, cleaned)
+    if _UUID_RE.search(cleaned):
+        replacement = f"病历 {visit_label}" if visit_label else "该病历"
+        cleaned = _UUID_RE.sub(replacement, cleaned)
+    if _ANALYSIS_STAGE_RE.search(cleaned):
+        cleaned = _ANALYSIS_STAGE_RE.sub("病历分析", cleaned)
+    if cleaned != text:
+        cleaned = cleaned.replace("该病历 病历分析", "该病历分析")
+        cleaned = cleaned.replace("该病历病历分析", "该病历分析")
+        cleaned = _CJK_REDUNDANT_SPACE_RE.sub("", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
 
 
 def _publish_qc_notification(
@@ -455,6 +608,14 @@ class DoctorNotificationService:
             item["interaction_target"] = {"kind": row.related_type, "id": row.related_id}
         if row.source_key == RESULT_SOURCE:
             item["interaction_target"] = {"kind": "qc_result_ready", "id": row.id}
+        item["type"] = _canonical_notification_type(row)
+        if row.source_key not in MODERN_SOURCES:
+            item["title"] = sanitize_legacy_notification_text(
+                item.get("title"), visit_id=row.visit_id
+            )
+            item["content"] = sanitize_legacy_notification_text(
+                item.get("content"), visit_id=row.visit_id
+            )
         return item
 
     def result_ready(self, actor_id, notification_id, loader):
@@ -483,7 +644,7 @@ class DoctorNotificationService:
             predicate = self._predicate(actor, session)
             statement = select(Notification).where(predicate)
             if type:
-                statement = statement.where(Notification.type == type)
+                statement = statement.where(_type_filter_predicate(type))
             if is_read is not None:
                 statement = statement.where(Notification.is_read == is_read)
             total = session.scalar(
