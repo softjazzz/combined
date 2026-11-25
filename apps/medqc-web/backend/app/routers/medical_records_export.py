@@ -1,6 +1,7 @@
 """病案数据 - 导出子域。"""
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from ..core.pagination import page_param, page_size_param
 from ..core.roles import effective_roles
@@ -54,7 +55,7 @@ def _resolve_request_user(request: Request) -> dict | None:
 
 
 @router.get("/schema", dependencies=[Depends(require_roles(*_TABLE_DATA_ROLES))])
-async def get_schema_api():
+def get_schema_api():
     try:
         return get_schema()
     except Exception as exc:
@@ -62,7 +63,7 @@ async def get_schema_api():
 
 
 @router.get("/table-data/{table_name}")
-async def get_table_data_api(
+def get_table_data_api(
     table_name: str,
     page: int = page_param(),
     page_size: int = page_size_param(),
@@ -81,8 +82,7 @@ async def get_table_data_api(
         raise_medical_records_http_error(exc)
 
 
-@router.get("/frontpage-sheet/{patient_id}/{visit_id}")
-async def get_frontpage_sheet_api(request: Request, patient_id: str, visit_id: str):
+def _get_frontpage_sheet_sync(request: Request, patient_id: str, visit_id: str):
     try:
         identity = getattr(request.state, "doctor_case_identity", None)
         institute = request.query_params.get("institute_id")
@@ -106,3 +106,8 @@ async def get_frontpage_sheet_api(request: Request, patient_id: str, visit_id: s
         return get_frontpage_sheet(patient_id, visit_id, **({"institute_id": institute} if institute else {}))
     except Exception as exc:
         raise_medical_records_http_error(exc)
+
+
+@router.get("/frontpage-sheet/{patient_id}/{visit_id}")
+async def get_frontpage_sheet_api(request: Request, patient_id: str, visit_id: str):
+    return await run_in_threadpool(_get_frontpage_sheet_sync, request, patient_id, visit_id)

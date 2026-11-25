@@ -351,6 +351,9 @@ def create_user(
     if SessionLocal is not None and persistent_auth_ready:
         session = SessionLocal()
         try:
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.connection(execution_options=owner_opts)
             orm_user = SysUser(
                 id=payload["id"],
                 username=payload["username"],
@@ -365,6 +368,8 @@ def create_user(
             )
             session.add(orm_user)
             session.commit()
+            if owner_opts:
+                session.connection(execution_options=owner_opts)
             session.refresh(orm_user)
             payload = _orm_user_to_dict(orm_user, session=session)
             payload["bio"] = bio or ""
@@ -386,10 +391,19 @@ def touch_last_login(user_id: str) -> dict[str, Any] | None:
         try:
             if not _supports_persistent_auth(session):
                 return None
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 user.last_login_at = datetime.utcnow()
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 payload = _orm_user_to_dict(user, session=session)
                 _sync_memory_user(payload)
@@ -425,12 +439,20 @@ def update_user_profile(
             persistent_auth_ready = _supports_persistent_auth(session)
             if not persistent_auth_ready:
                 raise RuntimeError("sys_users persistent auth schema is not ready")
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 normalized_phone = str(phone or "").strip() or None
                 if normalized_phone and normalized_phone != str(user.phone or "").strip():
                     duplicate = session.execute(
-                        select(SysUser.id).where(SysUser.phone == normalized_phone, SysUser.id != user_id).limit(1)
+                        select(SysUser.id).where(SysUser.phone == normalized_phone, SysUser.id != user_id).limit(1),
+                        execution_options=owner_opts,
                     ).scalar_one_or_none()
                     if duplicate is not None:
                         raise ValueError("手机号已被占用")
@@ -440,6 +462,8 @@ def update_user_profile(
                 if department is not None:
                     user.department = department
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user, session=session)
         except ValueError:
@@ -490,10 +514,19 @@ def update_user_password(*, user_id: str, password_hash: str) -> dict[str, Any] 
             persistent_auth_ready = _supports_persistent_auth(session)
             if not persistent_auth_ready:
                 return None
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 user.password_hash = password_hash
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user, session=session)
         except Exception:

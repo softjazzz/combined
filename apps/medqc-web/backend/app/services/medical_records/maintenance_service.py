@@ -33,6 +33,13 @@ def resolve_maintenance_institute_scope(current_user: dict[str, Any] | None) -> 
     return saved_result_institute_scope(actor_id)
 
 
+def _reject_legacy_write_in_cdm_mode(code: str = "legacy_local_write_disabled_in_independent_cdm") -> None:
+    from ...database import clinical_connection
+
+    if clinical_connection.configured():
+        raise HTTPException(status_code=409, detail=code)
+
+
 def _enforce_institute_scope(allowed_institute_id: str | None, target_institute_id: Any) -> str:
     target = str(target_institute_id or "").strip()
     if allowed_institute_id is not None:
@@ -47,6 +54,7 @@ def save_frontpage(
     allowed_institute_id: str | None = None,
 ) -> dict[str, Any]:
     _enforce_institute_scope(allowed_institute_id, data.get("institute_id"))
+    _reject_legacy_write_in_cdm_mode()
     repo = get_repository()
     return repo.save_frontpage(data)
 
@@ -69,6 +77,7 @@ def save_ai_frontpage_draft(
         raise MedicalRecordsValidationError("draft_json 不能为空")
 
     _enforce_institute_scope(allowed_institute_id, institute_id)
+    _reject_legacy_write_in_cdm_mode()
 
     if isinstance(draft_json, dict):
         draft_json = json.dumps(draft_json, ensure_ascii=False)
@@ -180,7 +189,6 @@ def save_qc_results(
     *,
     allowed_institute_id: str | None = None,
 ) -> int:
-    repo = get_repository()
     results = data.get("results", [])
     if not results:
         raise MedicalRecordsValidationError("results 不能为空")
@@ -189,6 +197,8 @@ def save_qc_results(
             if not isinstance(item, dict):
                 raise MedicalRecordsValidationError("results 元素格式无效")
             _enforce_institute_scope(allowed_institute_id, item.get("institute_id"))
+    _reject_legacy_write_in_cdm_mode()
+    repo = get_repository()
     return repo.save_qc_results(results)
 
 

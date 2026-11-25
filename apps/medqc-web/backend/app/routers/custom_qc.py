@@ -1,7 +1,9 @@
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Mapping, Optional, Sequence
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi import HTTPException
@@ -12,6 +14,8 @@ from starlette.concurrency import run_in_threadpool
 from ..core.response import get_trace_id, success_response
 from ..core.roles import effective_roles
 from ..core.security import get_current_user, require_roles
+from ..database import clinical_connection
+from ..services import clinical_sources
 from ..services.custom_qc_service import (
     create_custom_qc_service,
     ensure_record_medical_text,
@@ -479,6 +483,29 @@ def _hydrate_scoped_workspace_records(
     return hydrated
 
 
+_SAFE_PUBLISH_VALUE_ERRORS = frozenset({
+    "草稿不存在或无权限",
+    "请至少完成一次成功测试后再发布",
+})
+
+
+def _build_export_content_disposition(rule_code: Any, timestamp: str, ext: str) -> str:
+    """构造兼容 RFC 5987 的 Content-Disposition 头（ASCII 回退 + UTF-8 编码）。"""
+    raw_stem = re.sub(r"[\r\n\"\\/:*?<>|]+", "_", str(rule_code or "workspace")).strip(" ._") or "workspace"
+    utf8_name = f"{raw_stem}_{timestamp}.{ext}"
+    ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_stem).strip("._-") or "workspace"
+    ascii_name = f"{ascii_stem}_{timestamp}.{ext}"
+    return f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(utf8_name, safe="")}'
+
+
+def _sanitize_batch_job_error(exc: Exception) -> str:
+    if isinstance(exc, clinical_connection.ClinicalSourceConfigurationError) or (
+        isinstance(exc, ValueError) and str(exc).strip() == "invalid_saved_clinical_source"
+    ):
+        return "临床数据源快照无效，任务执行失败"
+    return "批量任务执行失败，请稍后重试"
+
+
 def _is_workspace_job_canceled_or_missing(workspace: Any, job_id: str) -> bool:
     checker = getattr(workspace, "is_batch_job_canceled_or_missing", None)
     if callable(checker):
@@ -504,6 +531,30 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             or job
         )
         filters = current_job.get("filters") or {}
+        source = clinical_sources.saved_snapshot(filters)
+        with clinical_connection.selected(source):
+            await _execute_workspace_batch_job_in_source(
+                job_id=job_id,
+                workspace=workspace,
+                current_job=current_job,
+                filters=filters,
+            )
+    except Exception as exc:
+        logger.exception("workspace batch job failed: %s", exc)
+        await asyncio.to_thread(
+            workspace.fail_batch_job,
+            job_id=job_id,
+            error_message=_sanitize_batch_job_error(exc),
+        )
+
+
+async def _execute_workspace_batch_job_in_source(
+    *,
+    job_id: str,
+    workspace: Any,
+    current_job: Dict[str, Any],
+    filters: Dict[str, Any],
+) -> None:
         draft_ids = [str(item).strip() for item in (current_job.get("draft_ids") or []) if str(item).strip()]
         if not draft_ids:
             current_draft_id = str(current_job.get("draft_id") or "").strip()
@@ -700,7 +751,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         "visit_id": str(record.get("visit_id") or ""),
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),
-                        "error": str(exc),
+                        "error": "病历质控执行失败，请稍后重试",
                     }
                     failed_records.append(failed_payload)
                     rule_failed.append(failed_payload)
@@ -851,9 +902,6 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                 created_by=current_job["created_by"],
                 summary=summary,
             )
-    except Exception as exc:
-        logger.exception("workspace batch job failed: %s", exc)
-        await asyncio.to_thread(workspace.fail_batch_job, job_id=job_id, error_message=str(exc))
 
 
 @router.post("/prompt/generate")
@@ -976,7 +1024,7 @@ async def test_custom_qc_batch(
                 "visit_id": str(record.get("visit_id") or ""),
                 "patient_name": str(record.get("patient_name") or ""),
                 "department": str(record.get("department") or ""),
-                "error": str(exc),
+                "error": "病历质控试跑失败，请稍后重试",
             }
             failed_records.append(failed_item)
 
@@ -1025,7 +1073,8 @@ async def list_workspace_drafts(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    result = workspace.list_drafts(
+    result = await run_in_threadpool(
+        workspace.list_drafts,
         created_by=_current_user_id(current_user),
         status=status,
         query=q,
@@ -1052,7 +1101,8 @@ async def create_workspace_draft(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止创建规则草稿")
-    draft = workspace.create_draft(
+    draft = await run_in_threadpool(
+        workspace.create_draft,
         created_by=_current_user_id(current_user),
         payload=payload.model_dump(),
     )
@@ -1072,7 +1122,8 @@ async def update_workspace_draft(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止修改规则草稿")
-    updated = workspace.update_draft(
+    updated = await run_in_threadpool(
+        workspace.update_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
         payload={k: v for k, v in payload.model_dump().items() if v is not None},
@@ -1094,7 +1145,8 @@ async def delete_workspace_draft(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止删除规则草稿")
-    ok = workspace.delete_draft(
+    ok = await run_in_threadpool(
+        workspace.delete_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
     )
@@ -1115,7 +1167,11 @@ async def generate_workspace_draft_prompt(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止生成规则 Prompt")
-    draft = workspace.get_draft(draft_id=draft_id, created_by=_current_user_id(current_user))
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
@@ -1138,7 +1194,8 @@ async def generate_workspace_draft_prompt(
     check_logic["generation_mode"] = prompt_result.get("generation_mode") or "fallback_template"
     check_logic["last_prompt_summary"] = prompt_result.get("summary") or ""
 
-    updated = workspace.update_draft(
+    updated = await run_in_threadpool(
+        workspace.update_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
         payload={
@@ -1166,14 +1223,22 @@ async def publish_workspace_draft(
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止发布全局规则")
-    _require_global_admin(current_user, "仅全局管理员允许发布全局自定义规则")
+    await run_in_threadpool(_require_global_admin, current_user, "仅全局管理员允许发布全局自定义规则")
     try:
-        result = workspace.publish_draft(
+        result = await run_in_threadpool(
+            workspace.publish_draft,
             draft_id=draft_id,
             created_by=_current_user_id(current_user),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        msg = str(exc).strip()
+        safe_detail = msg if msg in _SAFE_PUBLISH_VALUE_ERRORS else "规则草稿参数无效，无法发布"
+        raise HTTPException(status_code=400, detail=safe_detail) from None
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("发布自定义规则草稿失败 draft_id=%s", draft_id)
+        raise HTTPException(status_code=500, detail="发布规则失败，请稍后重试") from None
     return success_response(
         data=result,
         message="发布规则成功",
@@ -1215,6 +1280,7 @@ async def list_workspace_records(
         res_page = result.page
         res_page_size = result.page_size
     else:
+        need_fallback = False
         try:
             result = await run_in_threadpool(
                 workspace.list_records,
@@ -1233,10 +1299,16 @@ async def list_workspace_records(
                 item for item in result.items
                 if str(item.get("institute_id") or "") == institute_scope
             ]
-            total = result.total
-            res_page = result.page
-            res_page_size = result.page_size
+            if len(items) != len(result.items):
+                need_fallback = True
+            else:
+                total = result.total
+                res_page = result.page
+                res_page_size = result.page_size
         except TypeError:
+            need_fallback = True
+
+        if need_fallback:
             all_scoped = await run_in_threadpool(
                 workspace.collect_records,
                 scope=scope,
@@ -1373,7 +1445,11 @@ async def test_workspace_single(
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
     institute_scope = await _resolve_workspace_institute_scope(current_user)
-    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=_current_user_id(current_user))
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=payload.draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
@@ -1402,7 +1478,8 @@ async def test_workspace_single(
         "compliant_records": 1 if result.get("is_compliant") else 0,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    workspace.save_last_test_summary(
+    await run_in_threadpool(
+        workspace.save_last_test_summary,
         draft_id=payload.draft_id,
         created_by=_current_user_id(current_user),
         summary=summary,
@@ -1442,7 +1519,11 @@ async def test_workspace_batch(
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
     institute_scope = await _resolve_workspace_institute_scope(current_user)
-    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=_current_user_id(current_user))
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=payload.draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
@@ -1495,7 +1576,7 @@ async def test_workspace_batch(
                     "visit_id": str(record.get("visit_id") or ""),
                     "patient_name": str(record.get("patient_name") or ""),
                     "department": str(record.get("department") or ""),
-                    "error": str(exc),
+                    "error": "病历质控试跑失败，请稍后重试",
                 }
             )
 
@@ -1519,7 +1600,8 @@ async def test_workspace_batch(
         },
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    workspace.save_last_test_summary(
+    await run_in_threadpool(
+        workspace.save_last_test_summary,
         draft_id=payload.draft_id,
         created_by=_current_user_id(current_user),
         summary=summary,
@@ -1581,7 +1663,7 @@ async def create_workspace_batch_job(
     drafts: List[Dict[str, Any]] = []
     missing_draft_ids: List[str] = []
     for draft_id in normalized_draft_ids:
-        draft = workspace.get_draft(draft_id=draft_id, created_by=created_by)
+        draft = await run_in_threadpool(workspace.get_draft, draft_id=draft_id, created_by=created_by)
         if draft:
             drafts.append(draft)
         else:
@@ -1652,7 +1734,8 @@ async def create_workspace_batch_job(
     from ..services.case_material_snapshot import MaterialSnapshotError
     from ..services.material_admission import safe_material_failure
     try:
-        job = workspace.create_batch_job(
+        job = await run_in_threadpool(
+            workspace.create_batch_job,
             draft=primary_draft,
             created_by=created_by,
             scope=payload.scope,
@@ -1668,6 +1751,11 @@ async def create_workspace_batch_job(
     except MaterialSnapshotError as exc:
         failure = safe_material_failure(str(exc))
         raise HTTPException(status_code=409, detail=f"{failure['message']}（{failure['code']}）") from None
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("创建批量质控任务失败")
+        raise HTTPException(status_code=500, detail="创建批量任务失败，请稍后重试") from None
     background_tasks.add_task(_run_workspace_batch_job, job["id"])
     return success_response(
         data={
@@ -1707,8 +1795,7 @@ async def list_workspace_batch_jobs(
     elif cache_hit_value in {"miss", "false", "0", "no"}:
         cache_hit_filter = False
 
-    result = await run_in_threadpool(
-        workspace.list_batch_jobs,
+    base_kwargs: Dict[str, Any] = dict(
         created_by=_current_user_id(current_user),
         draft_id=draft_id,
         status=status,
@@ -1718,23 +1805,91 @@ async def list_workspace_batch_jobs(
         cache_hit=cache_hit_filter,
         created_start_date=created_start_date,
         created_end_date=created_end_date,
-        page=page,
-        page_size=page_size,
     )
-    items = (
-        [
-            item for item in result.items
-            if _workspace_job_belongs_to_institute_scope(item, institute_scope)
-        ]
-        if institute_scope is not None
-        else result.items
-    )
+    if institute_scope is None:
+        result = await run_in_threadpool(
+            workspace.list_batch_jobs,
+            **base_kwargs,
+            page=page,
+            page_size=page_size,
+        )
+        items = result.items
+        total = result.total
+        res_page = result.page
+        res_page_size = result.page_size
+    else:
+        need_fallback = False
+        try:
+            result = await run_in_threadpool(
+                workspace.list_batch_jobs,
+                **base_kwargs,
+                institute_id=institute_scope,
+                page=page,
+                page_size=page_size,
+            )
+            scoped_items = [
+                item for item in result.items
+                if _workspace_job_belongs_to_institute_scope(item, institute_scope)
+            ]
+            if len(scoped_items) != len(result.items):
+                need_fallback = True
+            else:
+                items = scoped_items
+                total = result.total
+                res_page = result.page
+                res_page_size = result.page_size
+        except TypeError:
+            need_fallback = True
+
+        if need_fallback:
+            all_items: List[Dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            scan_page = 1
+            scan_page_size = 100
+            max_scan_pages = 50
+            while scan_page <= max_scan_pages:
+                batch_res = await run_in_threadpool(
+                    workspace.list_batch_jobs,
+                    **base_kwargs,
+                    page=scan_page,
+                    page_size=scan_page_size,
+                )
+                batch_items = list(batch_res.items or [])
+                if not batch_items:
+                    break
+                added = 0
+                for item in batch_items:
+                    item_id = str(item.get("id") or "")
+                    if item_id and item_id in seen_ids:
+                        continue
+                    if item_id:
+                        seen_ids.add(item_id)
+                    all_items.append(item)
+                    added += 1
+                if (
+                    added == 0
+                    or len(batch_items) < scan_page_size
+                    or len(all_items) >= int(batch_res.total or 0)
+                ):
+                    break
+                scan_page += 1
+
+            filtered = [
+                item for item in all_items
+                if _workspace_job_belongs_to_institute_scope(item, institute_scope)
+            ]
+            total = len(filtered)
+            offset = (page - 1) * page_size
+            items = filtered[offset : offset + page_size]
+            res_page = page
+            res_page_size = page_size
+
     return success_response(
         data={
             "items": items,
-            "total": len(items) if institute_scope is not None else result.total,
-            "page": result.page,
-            "page_size": result.page_size,
+            "total": total,
+            "page": res_page,
+            "page_size": res_page_size,
         },
         message="获取批量任务成功",
         trace_id=get_trace_id(request),
@@ -1853,20 +2008,25 @@ async def export_workspace_batch_job(
         raise HTTPException(status_code=403, detail="无权导出其他机构批量任务结果")
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_rule = (job.get("rule_code") or "workspace").replace("/", "_")
-    if format.lower() == "csv":
-        content = workspace.export_batch_job_csv(job=job)
-        filename = f"{safe_rule}_{timestamp}.csv"
-        return StreamingResponse(
-            iter([content.getvalue().encode("utf-8-sig")]),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
-        )
+    try:
+        if format.lower() == "csv":
+            content = await run_in_threadpool(workspace.export_batch_job_csv, job=job)
+            disposition = _build_export_content_disposition(job.get("rule_code"), timestamp, "csv")
+            return StreamingResponse(
+                iter([content.getvalue().encode("utf-8-sig")]),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": disposition},
+            )
 
-    workbook = workspace.export_batch_job_workbook(job=job)
-    filename = f"{safe_rule}_{timestamp}.xlsx"
-    return StreamingResponse(
-        workbook,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
+        workbook = await run_in_threadpool(workspace.export_batch_job_workbook, job=job)
+        disposition = _build_export_content_disposition(job.get("rule_code"), timestamp, "xlsx")
+        return StreamingResponse(
+            workbook,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": disposition},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("导出批量任务结果失败 job_id=%s", job_id)
+        raise HTTPException(status_code=500, detail="导出批量任务结果失败，请稍后重试") from None

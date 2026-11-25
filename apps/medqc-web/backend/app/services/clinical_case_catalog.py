@@ -1,14 +1,17 @@
 """独立CDM病历目录：临床查询只在源库执行，结果摘要另从业务库装配。"""
 from collections import Counter
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 import logging
 import math
+import re
 from time import monotonic
 
 from fastapi import HTTPException
 from sqlalchemy import Date, DateTime, MetaData, Table, String, and_, case, cast, column, func, inspect, literal, or_, select, table, tuple_, union_all
 from sqlalchemy.exc import ProgrammingError
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.sql.functions import FunctionElement
 
 from ..database import clinical_connection as clinical
 from .case_identity import CaseRef
@@ -19,6 +22,170 @@ from .validation_material_source import EXPLICITLY_INVALID_DOCUMENT_STATUSES, ma
 logger = logging.getLogger(__name__)
 REQUIRED_TABLES = ("mr", "inpat_registration", "admission_record", "discharge_record")
 KEYS = ("institute_id", "patient_id", "visit_id")
+DATE_FIELDS = frozenset({"admission", "discharge", "updated"})
+_HOSPITAL_TZ = timezone(timedelta(hours=8))
+_SHORT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})$")
+_COMPACT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})(\d{2})$")
+_PG_NAIVE_ISO_RE = (
+    r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
+    r"($|[ T]([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9](\.[0-9]{1,6})?)?$)"
+)
+_PG_TZ_ISO_RE = (
+    r"^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])"
+    r"[ T]([01][0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9](\.[0-9]{1,6})?)?"
+    r"([Zz]|[+-](0[0-9]|1[0-4])(:?[0-5][0-9])?)$"
+)
+
+
+class _ShanghaiISODate(FunctionElement):
+    """将临床日期/时间列安全归一化为 Asia/Shanghai 口径 YYYY-MM-DD，兼容 PG 与 SQLite。"""
+
+    type = String()
+    name = "shanghai_iso_date"
+    inherit_cache = True
+
+
+class _ShanghaiISOTimestamp(FunctionElement):
+    """将临床日期/时间列安全归一化为 Asia/Shanghai 口径排序时间串，脏串返回 NULL。"""
+
+    type = String()
+    name = "shanghai_iso_timestamp"
+    inherit_cache = True
+
+
+def _pg_calendar_guard(trimmed_sql: str, valid_expr: str) -> str:
+    year_sql = f"substr({trimmed_sql}, 1, 4)"
+    month_sql = f"substr({trimmed_sql}, 6, 2)"
+    day_sql = f"substr({trimmed_sql}, 9, 2)"
+    year_int = f"CAST({year_sql} AS INTEGER)"
+    return (
+        "CASE "
+        f"WHEN {year_sql} = '0000' THEN NULL "
+        f"WHEN {month_sql} IN ('04', '06', '09', '11') AND {day_sql} > '30' THEN NULL "
+        f"WHEN {month_sql} = '02' AND {day_sql} > '29' THEN NULL "
+        f"WHEN {month_sql} = '02' AND {day_sql} = '29' "
+        f"AND NOT (({year_int} % 4 = 0 AND {year_int} % 100 != 0) OR {year_int} % 400 = 0) THEN NULL "
+        f"ELSE {valid_expr} "
+        "END"
+    )
+
+
+@compiles(_ShanghaiISODate, "postgresql")
+def _compile_shanghai_iso_date_pg(element, compiler, **kw):
+    col_sql = compiler.process(list(element.clauses)[0], **kw)
+    trimmed = f"btrim(CAST({col_sql} AS TEXT))"
+    naive_guard = _pg_calendar_guard(trimmed, f"substr({trimmed}, 1, 10)")
+    tz_guard = _pg_calendar_guard(
+        trimmed,
+        f"to_char(CAST({trimmed} AS TIMESTAMP WITH TIME ZONE) AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD')",
+    )
+    return (
+        "(CASE "
+        f"WHEN {col_sql} IS NULL THEN NULL "
+        f"WHEN {trimmed} ~ '{_PG_NAIVE_ISO_RE}' THEN {naive_guard} "
+        f"WHEN {trimmed} ~ '{_PG_TZ_ISO_RE}' THEN {tz_guard} "
+        "ELSE NULL END)"
+    )
+
+
+@compiles(_ShanghaiISODate, "sqlite")
+def _compile_shanghai_iso_date_sqlite(element, compiler, **kw):
+    col_sql = compiler.process(list(element.clauses)[0], **kw)
+    trimmed = f"trim(CAST({col_sql} AS TEXT))"
+    day_prefix = f"substr({trimmed}, 1, 10)"
+    return (
+        "(CASE "
+        f"WHEN {col_sql} IS NULL THEN NULL "
+        f"WHEN length({trimmed}) < 10 THEN NULL "
+        f"WHEN {day_prefix} NOT GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]' THEN NULL "
+        f"WHEN date({day_prefix}, '+0 days') != {day_prefix} THEN NULL "
+        f"WHEN length({trimmed}) = 10 THEN {day_prefix} "
+        f"WHEN substr({trimmed}, 11, 1) NOT IN (' ', 'T', 't') THEN NULL "
+        f"WHEN upper(substr({trimmed}, -1, 1)) = 'Z' THEN date({trimmed}, '+8 hours') "
+        f"WHEN substr({trimmed}, 12) GLOB '*[+-][0-9][0-9]:[0-9][0-9]' THEN date({trimmed}, '+8 hours') "
+        f"WHEN substr({trimmed}, 12) GLOB '*[+-][0-9][0-9]' THEN date({trimmed} || ':00', '+8 hours') "
+        f"WHEN datetime({trimmed}) IS NOT NULL THEN {day_prefix} "
+        "ELSE NULL END)"
+    )
+
+
+@compiles(_ShanghaiISODate)
+def _compile_shanghai_iso_date_default(element, compiler, **kw):
+    col_sql = compiler.process(list(element.clauses)[0], **kw)
+    trimmed = f"trim(CAST({col_sql} AS VARCHAR))"
+    day_prefix = f"substr({trimmed}, 1, 10)"
+    return (
+        "(CASE "
+        f"WHEN {col_sql} IS NULL THEN NULL "
+        f"WHEN {day_prefix} LIKE '____-__-__' "
+        f"AND substr({day_prefix}, 6, 2) BETWEEN '01' AND '12' "
+        f"AND substr({day_prefix}, 9, 2) BETWEEN '01' AND '31' "
+        f"THEN {day_prefix} "
+        "ELSE NULL END)"
+    )
+
+
+@compiles(_ShanghaiISOTimestamp, "postgresql")
+def _compile_shanghai_iso_ts_pg(element, compiler, **kw):
+    col_sql = compiler.process(list(element.clauses)[0], **kw)
+    trimmed = f"btrim(CAST({col_sql} AS TEXT))"
+    naive_ts = (
+        f"CASE WHEN length({trimmed}) = 10 THEN {trimmed} || ' 00:00:00' "
+        f"ELSE replace(substr({trimmed}, 1, 19), 'T', ' ') END"
+    )
+    naive_guard = _pg_calendar_guard(trimmed, naive_ts)
+    tz_guard = _pg_calendar_guard(
+        trimmed,
+        f"to_char(CAST({trimmed} AS TIMESTAMP WITH TIME ZONE) AT TIME ZONE 'Asia/Shanghai', 'YYYY-MM-DD HH24:MI:SS')",
+    )
+    return (
+        "(CASE "
+        f"WHEN {col_sql} IS NULL THEN NULL "
+        f"WHEN {trimmed} ~ '{_PG_NAIVE_ISO_RE}' THEN {naive_guard} "
+        f"WHEN {trimmed} ~ '{_PG_TZ_ISO_RE}' THEN {tz_guard} "
+        "ELSE NULL END)"
+    )
+
+
+@compiles(_ShanghaiISOTimestamp, "sqlite")
+def _compile_shanghai_iso_ts_sqlite(element, compiler, **kw):
+    col_sql = compiler.process(list(element.clauses)[0], **kw)
+    trimmed = f"trim(CAST({col_sql} AS TEXT))"
+    day_prefix = f"substr({trimmed}, 1, 10)"
+    return (
+        "(CASE "
+        f"WHEN {col_sql} IS NULL THEN NULL "
+        f"WHEN length({trimmed}) < 10 THEN NULL "
+        f"WHEN {day_prefix} NOT GLOB '[0-9][0-9][0-9][0-9]-[0-1][0-9]-[0-3][0-9]' THEN NULL "
+        f"WHEN date({day_prefix}, '+0 days') != {day_prefix} THEN NULL "
+        f"WHEN length({trimmed}) = 10 THEN {day_prefix} || ' 00:00:00' "
+        f"WHEN substr({trimmed}, 11, 1) NOT IN (' ', 'T', 't') THEN NULL "
+        f"WHEN upper(substr({trimmed}, -1, 1)) = 'Z' THEN datetime({trimmed}, '+8 hours') "
+        f"WHEN substr({trimmed}, 12) GLOB '*[+-][0-9][0-9]:[0-9][0-9]' THEN datetime({trimmed}, '+8 hours') "
+        f"WHEN substr({trimmed}, 12) GLOB '*[+-][0-9][0-9]' THEN datetime({trimmed} || ':00', '+8 hours') "
+        f"WHEN datetime({trimmed}) IS NOT NULL THEN datetime({trimmed}) "
+        "ELSE NULL END)"
+    )
+
+
+@compiles(_ShanghaiISOTimestamp)
+def _compile_shanghai_iso_ts_default(element, compiler, **kw):
+    return _compile_shanghai_iso_date_default(element, compiler, **kw)
+
+
+def _normalize_catalog_field(col, *, field: str, is_pg: bool):
+    if field in DATE_FIELDS:
+        if is_pg and isinstance(col.type, DateTime):
+            if getattr(col.type, "timezone", False):
+                return func.to_char(
+                    col.op("AT TIME ZONE")("Asia/Shanghai"),
+                    "YYYY-MM-DD HH24:MI:SS",
+                )
+            return func.to_char(col, "YYYY-MM-DD HH24:MI:SS")
+        if is_pg and isinstance(col.type, Date):
+            return func.to_char(col, "YYYY-MM-DD")
+        return func.nullif(func.trim(cast(col, String)), "")
+    return func.nullif(cast(col, String), "")
 FIELDS = {
     "name": ("name",), "sex": ("sex",), "age": ("age",),
     "insurance": ("insurance_type_name", "insurance_type"), "bed": ("bed_no",),
@@ -33,6 +200,7 @@ FIELDS = {
 def catalog(engine, *, include_frontpage=True):
     metadata = MetaData()
     queries = []
+    is_pg = engine.dialect.name == "postgresql"
     # 首页仅供展示目录选择；普通质控的身份、时间与筛选直接来自原始临床源。
     for priority, name in enumerate(REQUIRED_TABLES):
         if name == "mr" and not include_frontpage:
@@ -45,9 +213,11 @@ def catalog(engine, *, include_frontpage=True):
         columns = [cast(table.c[key], String).label(key) for key in KEYS]
         columns.append(literal(priority).label("priority"))
         for field, aliases in FIELDS.items():
-            candidates = [func.nullif(func.trim(cast(table.c[key], String)) if field == "discharge"
-                                      else cast(table.c[key], String), "")
-                          for key in aliases if key in table.c]
+            candidates = [
+                _normalize_catalog_field(table.c[key], field=field, is_pg=is_pg)
+                for key in aliases
+                if key in table.c
+            ]
             # 展示目录使用首页主治签名；原始目录使用入院主治签名，不把提交人当负责人。
             if field == "doctor" and name != "mr" and (include_frontpage or name != "admission_record"):
                 candidates = []
@@ -99,12 +269,26 @@ def resolve_identity(record_id: str, *, patient_id: str | None = None, institute
 def _datetime(value):
     if not value:
         return None
-    if len(str(value)) == 10:
-        return date.fromisoformat(str(value))
-    result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    if isinstance(value, datetime):
+        if value.tzinfo:
+            return value.astimezone(_HOSPITAL_TZ).replace(tzinfo=None)
+        return value
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        if len(text) == 10:
+            return date.fromisoformat(text)
+        normalized = text[:-1] + "+00:00" if text.endswith(("Z", "z")) else text
+        normalized = _SHORT_TZ_OFFSET_RE.sub(r"\1:00", normalized)
+        normalized = _COMPACT_TZ_OFFSET_RE.sub(r"\1:\2", normalized)
+        result = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
     if result.tzinfo:
-        from zoneinfo import ZoneInfo
-        result = result.astimezone(ZoneInfo("Asia/Shanghai")).replace(tzinfo=None)
+        return result.astimezone(_HOSPITAL_TZ).replace(tzinfo=None)
     return result
 
 
@@ -178,15 +362,27 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
     elif hospital_status == "unknown":
         predicates.append(source.c.discharge.is_(None))
     # 与既有病历池一致：visit范围包含入院或出院，不能仅按入院过滤。
+    # 禁止在 PG 直接 CAST(varchar AS DATE)；统一按 Asia/Shanghai 安全 ISO 日期校验与比较。
     if start_date or end_date:
+        start_iso = (
+            start_date.isoformat()
+            if isinstance(start_date, (date, datetime))
+            else str(start_date).strip()[:10]
+        ) if start_date else None
+        end_iso = (
+            end_date.isoformat()
+            if isinstance(end_date, (date, datetime))
+            else str(end_date).strip()[:10]
+        ) if end_date else None
         names = ("admission", "discharge") if date_field in (None, "visit") else (date_field,)
         ranges = []
         for name in names:
+            day_expr = _ShanghaiISODate(source.c[name])
             bounds = []
-            if start_date:
-                bounds.append(cast(source.c[name], Date) >= start_date)
-            if end_date:
-                bounds.append(cast(source.c[name], Date) <= end_date)
+            if start_iso:
+                bounds.append(day_expr >= start_iso)
+            if end_iso:
+                bounds.append(day_expr <= end_iso)
             ranges.append(and_(*bounds))
         predicates.append(or_(*ranges))
     if institute_id:
@@ -418,7 +614,9 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                             if doc_name:
                                 doctor_counts[doc_name] += int(row["cnt"])
                 if total > 0 and qc_summary_identities is None and not page_only:
-                    order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                    order = _ShanghaiISOTimestamp(
+                        source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission)
+                    )
                     order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
                     page_query = select(source).where(*predicates).order_by(
                         order, *[source.c[k] for k in KEYS]
@@ -429,7 +627,9 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 )
             else:
                 if qc_summary_identities is None and not page_only:
-                    order = cast(source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission), DateTime)
+                    order = _ShanghaiISOTimestamp(
+                        source.c.admission if inpatient_sort in {"longest", "recent"} else func.coalesce(source.c.updated, source.c.admission)
+                    )
                     order = order.asc().nulls_last() if inpatient_sort == "longest" else order.desc().nulls_last()
                     page_columns = filter_columns if qc_summary_mode == "only" else [source]
                     page_query = select(*page_columns).where(*predicates).order_by(

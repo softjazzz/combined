@@ -12,19 +12,22 @@ from .clinical_source_policy import legacy_sync_operation
 
 import logging
 import re
+import threading
 import uuid
 from contextlib import nullcontext
 from pathlib import Path
 from datetime import datetime, date, timedelta, timezone
 from typing import Callable, Dict, List, Optional, Any, Tuple, Sequence
 from dataclasses import dataclass, field, asdict
+from urllib.parse import urlsplit
 
 import psycopg2
 import psycopg2.extras
 from psycopg2.extensions import make_dsn
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import inspect as sa_inspect, text
 
+from ..database import connection as db_connection
 from ..database.connection import DB_SCHEMA_MODE, engine
 from .visit_index_service import ingest_sync_rows
 from .sync_policy import load_sync_policy
@@ -36,7 +39,10 @@ from .homology_sync import HOMOLOGY_TABLE_KEYS, resolve_homology_source
 
 logger = logging.getLogger(__name__)
 
+_INITIAL_DB_SCHEMA_MODE = DB_SCHEMA_MODE
 _SYNC_LOCK_KEY = int(os.getenv("PG_SYNC_LOCK_KEY", "2026032601"))
+_SYNC_LOCK_LEASE_SECONDS = max(60, int(os.getenv("PG_SYNC_LEASE_SECONDS", "1800")))
+_SYNC_MEMORY_LOCK = threading.Lock()
 _HOSPITAL_TIMEZONE = timezone(timedelta(hours=8))
 _runtime_remote_password: str = ""
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -485,24 +491,163 @@ class SyncState:
 
 # 全局状态（内存中维护，重启后重置）
 _sync_state = SyncState()
+_sync_state_heartbeat_at: Optional[datetime] = None
+
+
+def _is_split_schema_mode() -> bool:
+    mode = (
+        DB_SCHEMA_MODE
+        if DB_SCHEMA_MODE != _INITIAL_DB_SCHEMA_MODE
+        else getattr(db_connection, "DB_SCHEMA_MODE", "single")
+    )
+    return str(mode or "single").strip().lower() == "split"
+
+
+def _is_sqlite_bind(session_or_bind: Any) -> bool:
+    bind = (
+        session_or_bind.get_bind()
+        if session_or_bind is not None and hasattr(session_or_bind, "get_bind")
+        else session_or_bind
+    )
+    return str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower() == "sqlite"
+
+
+def _qc_schema_name(session_or_bind: Any = None) -> Optional[str]:
+    if not _is_split_schema_mode():
+        return None
+    if session_or_bind is not None and _is_sqlite_bind(session_or_bind):
+        return None
+    return "qc"
+
+
+def _qc_table_name(table_name: str, session_or_bind: Any = None) -> str:
+    schema = _qc_schema_name(session_or_bind)
+    return f"{schema}.{table_name}" if schema else table_name
+
+
+def _to_utc_datetime(value: Any) -> Optional[datetime]:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text_val = str(value).strip()
+        if not text_val:
+            return None
+        if " " in text_val and "T" not in text_val:
+            text_val = text_val.replace(" ", "T")
+        if text_val.endswith("Z"):
+            text_val = text_val[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text_val)
+        except ValueError:
+            return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _is_sync_lease_expired(
+    updated_at: Any,
+    *,
+    now: Optional[datetime] = None,
+) -> bool:
+    parsed = _to_utc_datetime(updated_at)
+    if parsed is None:
+        return False
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    else:
+        current = current.astimezone(timezone.utc)
+    return parsed + timedelta(seconds=max(1, int(_SYNC_LOCK_LEASE_SECONDS))) <= current
+
+
+def _sanitize_display_url(raw_url: str) -> str:
+    value = str(raw_url or "").strip()
+    if not value:
+        return ""
+    if value.lower().startswith("sqlite"):
+        return "sqlite:///***"
+    try:
+        parsed = urlsplit(value)
+        scheme = parsed.scheme or "postgresql"
+        # Strip credentials safely even when password contains '@' or ':'
+        netloc = parsed.netloc
+        hostport = netloc.rsplit("@", 1)[-1] if "@" in netloc else netloc
+        path = parsed.path or ""
+        if hostport:
+            return f"{scheme}://***@{hostport}{path}"
+        return f"{scheme}://***{path}"
+    except Exception:
+        return "***"
+
+
+def _sanitize_sync_error(exc: Any, *, fallback: str = "数据库操作失败") -> str:
+    text_val = str(exc or "").strip()
+    if not text_val:
+        return fallback
+    lowered = text_val.lower()
+    if any(
+        token in lowered
+        for token in (
+            "postgresql://",
+            "postgres://",
+            "password=",
+            "pwd=",
+            "secret",
+            "token",
+            "traceback",
+            "select ",
+            "insert ",
+            "update ",
+            "delete ",
+        )
+    ):
+        return fallback
+    return fallback
 
 
 def _ensure_sync_job_state_table(session: Session):
-    exists = session.execute(
-        text(
-            """
-            SELECT 1
-            FROM information_schema.tables
-            WHERE table_schema = 'qc'
-              AND table_name = 'sync_job_state'
-            """
-        )
-    ).first()
+    if _is_sqlite_bind(session):
+        inspector = sa_inspect(session.get_bind())
+        if inspector.has_table("sync_job_state") or inspector.has_table("sync_job_state", schema="qc"):
+            return
+        raise RuntimeError("缺少 sync_job_state（请先执行 Alembic 迁移）")
+
+    schema = _qc_schema_name(session)
+    if schema:
+        exists = session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = :schema_name
+                  AND table_name = 'sync_job_state'
+                """
+            ),
+            {"schema_name": schema},
+        ).first()
+        missing_label = f"{schema}.sync_job_state"
+    else:
+        exists = session.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = COALESCE(current_schema(), 'public')
+                  AND table_name = 'sync_job_state'
+                """
+            )
+        ).first()
+        missing_label = "sync_job_state"
     if not exists:
-        raise RuntimeError("缺少 qc.sync_job_state（请先执行 Alembic 迁移）")
+        raise RuntimeError(f"缺少 {missing_label}（请先执行 Alembic 迁移）")
 
 
 def _upsert_sync_job_state(state: SyncState):
+    global _sync_state_heartbeat_at
+    _sync_state_heartbeat_at = datetime.now(timezone.utc) if state.is_running else None
     if engine is None:
         if _pg_required_in_current_env():
             raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
@@ -510,10 +655,11 @@ def _upsert_sync_job_state(state: SyncState):
     payload = asdict(state)
     with Session(engine) as session:
         _ensure_sync_job_state_table(session)
+        state_table = _qc_table_name("sync_job_state", session)
         session.execute(
             text(
                 f"""
-                INSERT INTO {_SYNC_JOB_STATE_TABLE} (
+                INSERT INTO {state_table} (
                     job_name, is_running, last_sync_time, last_sync_status,
                     total_records_synced, logs_json, progress_json,
                     remote_connected, local_connected, updated_at
@@ -551,21 +697,28 @@ def _upsert_sync_job_state(state: SyncState):
 
 
 def get_sync_state() -> Dict:
-    """获取当前同步状态（优先读取数据库状态，回退内存）"""
+    """获取当前同步状态（优先读取数据库状态，回退内存；自动回收过期运行租约）"""
+    global _sync_state_heartbeat_at
     if engine is None:
         if _pg_required_in_current_env():
             raise RuntimeError("PG 未就绪：生产环境禁止 etl_sync sync_state 内存回退")
-        return asdict(_sync_state)
+        with _SYNC_MEMORY_LOCK:
+            if _sync_state.is_running and _is_sync_lease_expired(_sync_state_heartbeat_at):
+                logger.warning("检测到过期内存同步锁租约，自动回收 is_running=False")
+                _sync_state.is_running = False
+                _sync_state_heartbeat_at = None
+            return asdict(_sync_state)
     try:
         with Session(engine) as session:
             _ensure_sync_job_state_table(session)
+            state_table = _qc_table_name("sync_job_state", session)
             row = session.execute(
                 text(
                     f"""
                     SELECT
                         is_running, last_sync_time, last_sync_status, total_records_synced,
-                        logs_json, progress_json, remote_connected, local_connected
-                    FROM {_SYNC_JOB_STATE_TABLE}
+                        logs_json, progress_json, remote_connected, local_connected, updated_at
+                    FROM {state_table}
                     WHERE job_name = 'pg_sync'
                     """
                 )
@@ -573,6 +726,26 @@ def get_sync_state() -> Dict:
             if not row:
                 _upsert_sync_job_state(_sync_state)
                 return asdict(_sync_state)
+            is_running = bool(row.get("is_running"))
+            if is_running and _is_sync_lease_expired(row.get("updated_at")):
+                logger.warning(
+                    "检测到过期的 sync_job_state 运行锁租约（updated_at=%s），自动回收 is_running=False",
+                    row.get("updated_at"),
+                )
+                session.execute(
+                    text(
+                        f"""
+                        UPDATE {state_table}
+                        SET is_running = :running_false, updated_at = CURRENT_TIMESTAMP
+                        WHERE job_name = 'pg_sync' AND is_running = :running_true
+                        """
+                    ),
+                    {"running_false": False, "running_true": True},
+                )
+                session.commit()
+                is_running = False
+                _sync_state.is_running = False
+                _sync_state_heartbeat_at = None
             logs = row.get("logs_json") or []
             progress = row.get("progress_json") or {}
             last_sync_time = row.get("last_sync_time")
@@ -591,7 +764,7 @@ def get_sync_state() -> Dict:
                 except Exception:
                     progress = {}
             return {
-                "is_running": bool(row.get("is_running")),
+                "is_running": is_running,
                 "last_sync_time": last_sync_time,
                 "last_sync_status": row.get("last_sync_status") or "never",
                 "total_records_synced": int(row.get("total_records_synced") or 0),
@@ -602,7 +775,7 @@ def get_sync_state() -> Dict:
             }
     except Exception as exc:
         if _pg_required_in_current_env():
-            raise RuntimeError("读取 qc.sync_job_state 失败：生产环境禁止回退内存状态") from exc
+            raise RuntimeError("读取 sync_job_state 失败：生产环境禁止回退内存状态") from exc
         logger.warning("读取 sync_job_state 失败，回退内存状态: %s", exc)
         return asdict(_sync_state)
 
@@ -616,9 +789,9 @@ _DB_CONFIG_NAMESPACE = "sync"
 _DB_CONFIG_KEY = "pg_source_config"
 _TABLE_CONFIG_NAMESPACE = "sync"
 _TABLE_CONFIG_KEY = "sync_tables"
-_SYNC_JOB_STATE_TABLE = "qc.sync_job_state"
-_SYNC_RUN_DETAILS_TABLE = "qc.sync_run_details"
-_SYNC_ERROR_TABLE = "qc.sync_error_records"
+_SYNC_JOB_STATE_TABLE = "sync_job_state"
+_SYNC_RUN_DETAILS_TABLE = "sync_run_details"
+_SYNC_ERROR_TABLE = "sync_error_records"
 
 _DEFAULT_CONFIG = {
     "remote_host": "192.168.140.160",
@@ -638,25 +811,47 @@ def _safe_identifier(name: str) -> str:
 
 
 def _ensure_sync_tracking_tables(session: Session) -> None:
-    required = (
-        ("qc", "sync_run_details"),
-        ("qc", "sync_error_records"),
-    )
+    required_tables = ("sync_run_details", "sync_error_records")
     missing: list[str] = []
-    for schema_name, table_name in required:
-        exists = session.execute(
-            text(
-                """
-                SELECT 1
-                FROM information_schema.tables
-                WHERE table_schema = :schema_name
-                  AND table_name = :table_name
-                """
-            ),
-            {"schema_name": schema_name, "table_name": table_name},
-        ).first()
-        if not exists:
-            missing.append(f"{schema_name}.{table_name}")
+    if _is_sqlite_bind(session):
+        inspector = sa_inspect(session.get_bind())
+        for table_name in required_tables:
+            if not (
+                inspector.has_table(table_name)
+                or inspector.has_table(table_name, schema="qc")
+            ):
+                missing.append(table_name)
+    else:
+        schema = _qc_schema_name(session)
+        for table_name in required_tables:
+            if schema:
+                exists = session.execute(
+                    text(
+                        """
+                        SELECT 1
+                        FROM information_schema.tables
+                        WHERE table_schema = :schema_name
+                          AND table_name = :table_name
+                        """
+                    ),
+                    {"schema_name": schema, "table_name": table_name},
+                ).first()
+                label = f"{schema}.{table_name}"
+            else:
+                exists = session.execute(
+                    text(
+                        """
+                        SELECT 1
+                        FROM information_schema.tables
+                        WHERE table_schema = COALESCE(current_schema(), 'public')
+                          AND table_name = :table_name
+                        """
+                    ),
+                    {"table_name": table_name},
+                ).first()
+                label = table_name
+            if not exists:
+                missing.append(label)
     if missing:
         raise RuntimeError(f"缺少同步追踪表（请先执行 Alembic 迁移）: {', '.join(missing)}")
 
@@ -682,10 +877,11 @@ def _record_sync_run_detail(
         return
     with Session(engine) as session:
         _ensure_sync_tracking_tables(session)
+        details_table = _qc_table_name("sync_run_details", session)
         session.execute(
             text(
                 f"""
-                INSERT INTO {_SYNC_RUN_DETAILS_TABLE} (
+                INSERT INTO {details_table} (
                     id, run_id, source_table, target_table, status,
                     pulled_count, upserted_count, failed_count,
                     started_at, finished_at, error_message, created_at
@@ -732,10 +928,11 @@ def _record_sync_error(
         return
     with Session(engine) as session:
         _ensure_sync_tracking_tables(session)
+        error_table = _qc_table_name("sync_error_records", session)
         session.execute(
             text(
                 f"""
-                INSERT INTO {_SYNC_ERROR_TABLE} (
+                INSERT INTO {error_table} (
                     id, run_id, source_table, source_primary_key, visit_id,
                     error_code, error_message, payload_json, retry_count, created_at
                 )
@@ -1270,15 +1467,14 @@ def get_remote_db_url() -> str:
 
 
 def get_remote_display_url() -> str:
-    """返回脱敏后的远端连接信息，供 UI/日志展示。"""
+    """返回脱敏后的远端连接信息，供 UI/日志展示（不暴露用户名、口令或查询参数）。"""
     cfg = load_db_config()
     host = str(cfg.get("remote_host") or "").strip()
     port = str(cfg.get("remote_port") or "5432").strip() or "5432"
     db = str(cfg.get("remote_database") or "").strip()
-    user = str(cfg.get("remote_username") or "").strip()
-    if not host or not user:
+    if not host:
         return ""
-    return f"postgresql://{user}:***@{host}:{port}/{db}"
+    return f"postgresql://***@{host}:{port}/{db}"
 
 
 def _refresh_all_bundle_variants_after_sync(
@@ -1320,11 +1516,12 @@ def test_remote_connection() -> Dict:
             "error": "",
         }
     except Exception as e:
+        logger.warning("远端数据库连接测试失败: %s", type(e).__name__, exc_info=True)
         _sync_state.remote_connected = False
         _upsert_sync_job_state(_sync_state)
         return {
             "connected": False,
-            "error": str(e)[:200],
+            "error": _sanitize_sync_error(e, fallback="远端数据库连接失败，请检查配置与网络连通性"),
             "url": display_url,
         }
 
@@ -1332,48 +1529,51 @@ def test_remote_connection() -> Dict:
 def test_local_connection() -> Dict:
     """测试本地数据库连接"""
     from ..database.connection import DATABASE_URL
-    display_url = DATABASE_URL
-    try:
-        if "@" in DATABASE_URL and ":" in DATABASE_URL.split("@")[0]:
-            parts = DATABASE_URL.split("@")
-            credential = parts[0].rsplit(":", 1)
-            display_url = credential[0] + ":***@" + parts[1]
-    except Exception:
-        pass
+    display_url = _sanitize_display_url(DATABASE_URL)
 
     try:
         with Session(engine) as session:
-            result = session.execute(text("SELECT version()"))
+            is_sqlite = _is_sqlite_bind(session)
+            version_sql = "SELECT sqlite_version()" if is_sqlite else "SELECT version()"
+            result = session.execute(text(version_sql))
             version = result.scalar()
-            # 统计各表数据量
+            # 统计各表数据量（逐表 SAVEPOINT 防单表异常毒化外层 PG 事务）
             tables_info = {}
             for table_name in ["mr", "diagnosis", "admission_record"]:
                 try:
-                    schema_name, _, _ = _get_local_table_meta(session, table_name)
-                    if not schema_name:
-                        tables_info[table_name] = 0
-                        continue
-                    schema_ident = _safe_identifier(schema_name)
-                    table_ident = _safe_identifier(table_name)
-                    count = session.execute(text(f"SELECT count(*) FROM {schema_ident}.{table_ident}")).scalar()
-                    tables_info[table_name] = int(count or 0)
+                    nested = session.begin_nested() if hasattr(session, "begin_nested") else nullcontext()
+                    with nested:
+                        table_ident = _safe_identifier(table_name)
+                        if is_sqlite:
+                            count = session.execute(text(f"SELECT count(*) FROM {table_ident}")).scalar()
+                        else:
+                            schema_name, _, _ = _get_local_table_meta(session, table_name)
+                            if not schema_name:
+                                tables_info[table_name] = 0
+                                continue
+                            schema_ident = _safe_identifier(schema_name)
+                            count = session.execute(
+                                text(f"SELECT count(*) FROM {schema_ident}.{table_ident}")
+                            ).scalar()
+                        tables_info[table_name] = int(count or 0)
                 except Exception:
                     tables_info[table_name] = 0
         _sync_state.local_connected = True
         _upsert_sync_job_state(_sync_state)
         return {
             "connected": True,
-            "version": version[:80] if version else "",
+            "version": str(version)[:80] if version else "",
             "url": display_url,
             "tables": tables_info,
             "error": "",
         }
     except Exception as e:
+        logger.warning("本地数据库连接测试失败: %s", type(e).__name__, exc_info=True)
         _sync_state.local_connected = False
         _upsert_sync_job_state(_sync_state)
         return {
             "connected": False,
-            "error": str(e)[:200],
+            "error": _sanitize_sync_error(e, fallback="本地数据库连接失败，请检查数据库服务状态"),
             "url": display_url,
         }
 
@@ -2351,7 +2551,7 @@ def _resolve_local_table_schema(session: Session, table_name: str) -> Optional[s
 
 def _resolve_local_table_schema_priority(table_name: str) -> Tuple[str, ...]:
     normalized_table = str(table_name or "").strip()
-    if DB_SCHEMA_MODE == "split" and normalized_table in _CDM_SYNC_TABLE_NAMES:
+    if _is_split_schema_mode() and normalized_table in _CDM_SYNC_TABLE_NAMES:
         ordered = [_CDM_TARGET_SCHEMA]
         ordered.extend(schema for schema in _LOCAL_TARGET_SCHEMAS if schema != _CDM_TARGET_SCHEMA)
         return tuple(ordered)
@@ -3414,23 +3614,51 @@ def run_sync(
     Returns:
         同步结果
     """
+    global _sync_state_heartbeat_at
     lock_conn = None
     lock_acquired = False
+    pg_lock_acquired = False
     try:
         if engine is not None:
-            lock_conn = engine.connect()
-            lock_acquired = bool(
-                lock_conn.execute(
-                    text("SELECT pg_try_advisory_lock(:lock_key)"),
-                    {"lock_key": _SYNC_LOCK_KEY},
-                ).scalar()
-            )
-            if not lock_acquired:
-                return {"success": False, "error": "同步正在进行中，请稍后再试"}
-        elif _sync_state.is_running:
-            return {"success": False, "error": "同步正在进行中，请稍后再试"}
+            if _is_sqlite_bind(engine):
+                with _SYNC_MEMORY_LOCK:
+                    if _sync_state.is_running and not _is_sync_lease_expired(_sync_state_heartbeat_at):
+                        return {"success": False, "error": "同步正在进行中，请稍后再试"}
+                    try:
+                        with Session(engine) as check_session:
+                            _ensure_sync_job_state_table(check_session)
+                            state_table = _qc_table_name("sync_job_state", check_session)
+                            row = check_session.execute(
+                                text(f"SELECT is_running, updated_at FROM {state_table} WHERE job_name = 'pg_sync'")
+                            ).mappings().first()
+                            if row and bool(row.get("is_running")) and not _is_sync_lease_expired(row.get("updated_at")):
+                                return {"success": False, "error": "同步正在进行中，请稍后再试"}
+                    except Exception:
+                        pass
+                    _sync_state.is_running = True
+                    _sync_state_heartbeat_at = datetime.now(timezone.utc)
+                    lock_acquired = True
+            else:
+                lock_conn = engine.connect()
+                pg_lock_acquired = bool(
+                    lock_conn.execute(
+                        text("SELECT pg_try_advisory_lock(:lock_key)"),
+                        {"lock_key": _SYNC_LOCK_KEY},
+                    ).scalar()
+                )
+                if not pg_lock_acquired:
+                    return {"success": False, "error": "同步正在进行中，请稍后再试"}
+                lock_acquired = True
+        else:
+            with _SYNC_MEMORY_LOCK:
+                if _sync_state.is_running and not _is_sync_lease_expired(_sync_state_heartbeat_at):
+                    return {"success": False, "error": "同步正在进行中，请稍后再试"}
+                _sync_state.is_running = True
+                _sync_state_heartbeat_at = datetime.now(timezone.utc)
+                lock_acquired = True
 
         _sync_state.is_running = True
+        _sync_state_heartbeat_at = datetime.now(timezone.utc)
         _sync_state.logs = []
         _upsert_sync_job_state(_sync_state)
         _emit_sync_progress(
@@ -3997,19 +4225,20 @@ def run_sync(
             ]
         return result_payload
     finally:
-        _sync_state.is_running = False
-        try:
-            _upsert_sync_job_state(_sync_state)
-        except Exception as exc:
-            logger.exception("同步结束写入 sync_job_state 失败: %s", exc)
-        finally:
-            if lock_conn is not None and lock_acquired:
-                try:
-                    lock_conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": _SYNC_LOCK_KEY})
-                except Exception as exc:
-                    logger.warning("释放同步锁失败: %s", exc)
-            if lock_conn is not None:
-                try:
-                    lock_conn.close()
-                except Exception:
-                    pass
+        if lock_acquired:
+            _sync_state.is_running = False
+            _sync_state_heartbeat_at = None
+            try:
+                _upsert_sync_job_state(_sync_state)
+            except Exception as exc:
+                logger.exception("同步结束写入 sync_job_state 失败: %s", exc)
+        if lock_conn is not None and pg_lock_acquired:
+            try:
+                lock_conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": _SYNC_LOCK_KEY})
+            except Exception as exc:
+                logger.warning("释放同步锁失败: %s", exc)
+        if lock_conn is not None:
+            try:
+                lock_conn.close()
+            except Exception:
+                pass

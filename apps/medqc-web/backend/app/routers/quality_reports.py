@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -23,6 +25,196 @@ from ..services.defect_rectification_service import RectificationError
 router = APIRouter(prefix="/api/v1/quality-reports", tags=["quality-reports"])
 logger = logging.getLogger(__name__)
 _UNAVAILABLE_DETAIL = "病历质量报表暂不可用，请稍后重试"
+_DEMO_PRIVILEGED_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_DEMO_HIDDEN_REMEDIATION_STATES = frozenset({"source_unknown", "history_unknown"})
+_DEMO_UNCERTAIN_STATUSES = frozenset({"data_gap", "uncertain", "technical_error"})
+_DEMO_ZERO_KEYS = frozenset(
+    {
+        "qc_unavailable_total",
+        "unavailable_result_total",
+        "selected_unavailable_result_total",
+        "unavailable_records",
+        "source_unknown",
+        "history_unknown",
+        "data_gap",
+        "uncertain",
+        "data_gap_count",
+        "uncertain_count",
+        "data_gap_record_total",
+        "uncertain_record_total",
+        "records_with_data_gap",
+        "canonical_invalid_or_missing_total",
+    }
+)
+_DEMO_DROP_KEYS = frozenset({"reason_code", "source_reason"})
+
+
+def _is_restricted_demo_account(current_user: dict | None) -> bool:
+    """仅对显式 is_demo_account is True 且非特权角色的受限演示账号生效。"""
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    roles = {
+        str(role).strip().lower()
+        for role in (current_user.get("roles") or [])
+        if isinstance(role, str) and role.strip()
+    }
+    single_role = current_user.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.add(single_role.strip().lower())
+    return not bool(roles & _DEMO_PRIVILEGED_ROLES)
+
+
+def _strip_diagnostic_fields(value: Any) -> Any:
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in value.items():
+            if key in _DEMO_DROP_KEYS:
+                continue
+            if (
+                key in _DEMO_ZERO_KEYS
+                and isinstance(item, (int, float))
+                and not isinstance(item, bool)
+            ):
+                cleaned[key] = 0
+            else:
+                cleaned[key] = _strip_diagnostic_fields(item)
+        return cleaned
+    if isinstance(value, list):
+        return [_strip_diagnostic_fields(item) for item in value]
+    return value
+
+
+def _trim_csv_bytes_for_demo(
+    content: bytes,
+    *,
+    drop_headers: frozenset[str] = frozenset(),
+    drop_row: Callable[[dict[str, str]], bool] | None = None,
+) -> bytes:
+    has_bom = content.startswith(b"\xef\xbb\xbf")
+    text = content.decode("utf-8-sig") if has_bom else content.decode("utf-8")
+    rows = list(csv.reader(io.StringIO(text)))
+    if not rows:
+        return content
+    headers = rows[0]
+    keep_indices = [
+        idx for idx, header in enumerate(headers) if header not in drop_headers
+    ]
+    out = io.StringIO(newline="")
+    writer = csv.writer(out)
+    writer.writerow([headers[idx] for idx in keep_indices])
+    for row in rows[1:]:
+        row_map = {
+            headers[idx]: (row[idx] if idx < len(row) else "")
+            for idx in range(len(headers))
+        }
+        if drop_row is not None and drop_row(row_map):
+            continue
+        writer.writerow([row[idx] if idx < len(row) else "" for idx in keep_indices])
+    encoded = out.getvalue().encode("utf-8")
+    return (b"\xef\xbb\xbf" + encoded) if has_bom else encoded
+
+
+def _trim_record_quality_summary_for_demo(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = _strip_diagnostic_fields(data)
+    kpis = trimmed.get("kpis")
+    if isinstance(kpis, dict):
+        kpis = dict(kpis)
+        if "qc_unavailable_total" in kpis:
+            kpis["qc_unavailable_total"] = 0
+        trimmed["kpis"] = kpis
+    classification_unknown = trimmed.get("classification_unknown")
+    if isinstance(classification_unknown, dict):
+        trimmed["classification_unknown"] = {
+            key: (
+                0
+                if isinstance(val, (int, float)) and not isinstance(val, bool)
+                else val
+            )
+            for key, val in classification_unknown.items()
+        }
+    if "unavailable_dimensions" in trimmed:
+        trimmed["unavailable_dimensions"] = []
+    return trimmed
+
+
+def _trim_record_quality_records_for_demo(
+    data: Any, *, unknown_classification: str | None = None
+) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = _strip_diagnostic_fields(data)
+    if unknown_classification is not None:
+        trimmed["items"] = []
+        if "total" in trimmed:
+            trimmed["total"] = 0
+    return trimmed
+
+
+def _trim_remediation_analysis_for_demo(analysis: Any) -> Any:
+    if not isinstance(analysis, dict):
+        return analysis
+    trimmed = dict(analysis)
+    state_counts = trimmed.get("state_counts")
+    if isinstance(state_counts, dict):
+        patched_counts = dict(state_counts)
+        for hidden_state in _DEMO_HIDDEN_REMEDIATION_STATES:
+            if hidden_state in patched_counts:
+                patched_counts[hidden_state] = 0
+        trimmed["state_counts"] = patched_counts
+    rows = trimmed.get("rows")
+    if isinstance(rows, list):
+        trimmed["rows"] = [
+            _strip_diagnostic_fields(row)
+            for row in rows
+            if not (
+                isinstance(row, dict)
+                and row.get("rectification_state") in _DEMO_HIDDEN_REMEDIATION_STATES
+            )
+        ]
+    return trimmed
+
+
+def _trim_remediation_page_for_demo(data: Any, *, label: str | None = None) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = _strip_diagnostic_fields(data)
+    state_counts = trimmed.get("state_counts")
+    if isinstance(state_counts, dict):
+        patched_counts = dict(state_counts)
+        for hidden_state in _DEMO_HIDDEN_REMEDIATION_STATES:
+            if hidden_state in patched_counts:
+                patched_counts[hidden_state] = 0
+        trimmed["state_counts"] = patched_counts
+    if label in _DEMO_HIDDEN_REMEDIATION_STATES:
+        if "items" in trimmed:
+            trimmed["items"] = []
+        if "total" in trimmed:
+            trimmed["total"] = 0
+        return trimmed
+    items = trimmed.get("items")
+    if isinstance(items, list):
+        kept = [
+            item
+            for item in items
+            if not (
+                isinstance(item, dict)
+                and item.get("rectification_state") in _DEMO_HIDDEN_REMEDIATION_STATES
+            )
+        ]
+        if len(kept) != len(items):
+            removed = len(items) - len(kept)
+            trimmed["items"] = kept
+            if isinstance(trimmed.get("total"), int):
+                trimmed["total"] = max(0, trimmed["total"] - removed)
+    return trimmed
+
+
+def _trim_frontpage_payload_for_demo(data: Any) -> Any:
+    return _strip_diagnostic_fields(data)
 
 
 def _report_params(
@@ -109,6 +301,8 @@ async def get_record_quality(
         data = await run_in_threadpool(report_service.summarize, context)
     except Exception as exc:
         _raise_report_error(exc, "summary")
+    if _is_restricted_demo_account(current_user):
+        data = _trim_record_quality_summary_for_demo(data)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -135,6 +329,10 @@ async def get_record_quality_records(
         )
     except Exception as exc:
         _raise_report_error(exc, "records")
+    if _is_restricted_demo_account(current_user):
+        data = _trim_record_quality_records_for_demo(
+            data, unknown_classification=drilldown.get("unknown_classification")
+        )
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -149,11 +347,14 @@ async def get_record_remediations(
 ):
     query = _authorized_params(current_user, params)
     actor_id = _task_actor_id(current_user)
+    is_demo = _is_restricted_demo_account(current_user)
     try:
         context = await run_in_threadpool(report_service.build_report_context, **query)
         analysis = await run_in_threadpool(
             remediation_report_service.build_analysis, context, actor_id=actor_id
         )
+        if is_demo:
+            analysis = _trim_remediation_analysis_for_demo(analysis)
         data = await run_in_threadpool(
             remediation_report_service.page,
             analysis,
@@ -165,6 +366,8 @@ async def get_record_remediations(
         raise HTTPException(exc.status, str(exc)) from None
     except Exception as exc:
         _raise_report_error(exc, "remediations")
+    if is_demo:
+        data = _trim_remediation_page_for_demo(data, label=label)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -177,16 +380,28 @@ async def export_record_remediations(
 ):
     query = _authorized_params(current_user, params)
     actor_id = _task_actor_id(current_user)
+    is_demo = _is_restricted_demo_account(current_user)
     try:
         context = await run_in_threadpool(report_service.build_report_context, **query)
         analysis = await run_in_threadpool(
             remediation_report_service.build_analysis, context, actor_id=actor_id
         )
+        if is_demo:
+            analysis = _trim_remediation_analysis_for_demo(analysis)
         content = await run_in_threadpool(
             remediation_report_service.export_csv, analysis, label=label
         )
         if not isinstance(content, bytes):
             raise TypeError("整改分析导出服务未返回 CSV 字节")
+        if is_demo:
+            content = _trim_csv_bytes_for_demo(
+                content,
+                drop_headers=frozenset({"reason_code", "source_reason"}),
+                drop_row=lambda row: (
+                    label in _DEMO_HIDDEN_REMEDIATION_STATES
+                    or row.get("rectification_state") in _DEMO_HIDDEN_REMEDIATION_STATES
+                ),
+            )
     except RectificationError as exc:
         raise HTTPException(exc.status, str(exc)) from None
     except Exception as exc:
@@ -220,6 +435,7 @@ async def export_record_quality(
     current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
+    is_demo = _is_restricted_demo_account(current_user)
     try:
         selected_columns = None
         if columns is not None:
@@ -248,6 +464,24 @@ async def export_record_quality(
         )
         if not isinstance(content, bytes):
             raise TypeError("导出服务未返回 CSV 字节")
+        if is_demo:
+            hide_all_rows = (
+                sheet == "records"
+                and drilldown.get("unknown_classification") is not None
+            )
+            content = _trim_csv_bytes_for_demo(
+                content,
+                drop_headers=frozenset(
+                    {
+                        "qc_unavailable_total",
+                        "unavailable_result_total",
+                        "reason_code",
+                        "data_gap",
+                        "uncertain",
+                    }
+                ),
+                drop_row=(lambda _row: True) if hide_all_rows else None,
+            )
     except Exception as exc:
         _raise_report_error(exc, "export")
     audit_event(
@@ -330,6 +564,8 @@ async def get_frontpage_quality(
         data = await run_in_threadpool(frontpage_report_service.summarize, context)
     except Exception as exc:
         _raise_frontpage_error(exc, "summary")
+    if _is_restricted_demo_account(current_user):
+        data = _trim_frontpage_payload_for_demo(data)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -357,6 +593,8 @@ async def get_frontpage_quality_records(
         )
     except Exception as exc:
         _raise_frontpage_error(exc, "records")
+    if _is_restricted_demo_account(current_user):
+        data = _trim_frontpage_payload_for_demo(data)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -369,6 +607,7 @@ async def export_frontpage_quality(
     current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
+    is_demo = _is_restricted_demo_account(current_user)
     try:
         context = await run_in_threadpool(
             frontpage_report_service.build_report_context, **query
@@ -386,6 +625,19 @@ async def export_frontpage_quality(
         )
         if not isinstance(content, bytes):
             raise TypeError("导出服务未返回 CSV 字节")
+        if is_demo:
+            content = _trim_csv_bytes_for_demo(
+                content,
+                drop_headers=frozenset(
+                    {
+                        "qc_unavailable_total",
+                        "unavailable_result_total",
+                        "reason_code",
+                        "data_gap",
+                        "uncertain",
+                    }
+                ),
+            )
     except Exception as exc:
         _raise_frontpage_error(exc, "export")
     audit_event(

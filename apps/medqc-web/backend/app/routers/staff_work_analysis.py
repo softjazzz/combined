@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -15,10 +15,79 @@ from ..core.response import get_trace_id, success_response
 from ..core.security import require_roles
 from ..services import staff_work_analysis_service as analysis_service
 from ..services.defect_rectification_service import RectificationError
+from .quality_reports import (
+    _is_restricted_demo_account,
+    _strip_diagnostic_fields,
+    _trim_csv_bytes_for_demo,
+)
 
 router = APIRouter(prefix="/api/v1/quality-reports", tags=["quality-reports"])
 logger = logging.getLogger(__name__)
 _UNAVAILABLE_DETAIL = "质控员工作分析暂不可用，请稍后重试"
+
+
+def _trim_coverage_for_demo(coverage: Any) -> Any:
+    if not isinstance(coverage, dict):
+        return coverage
+    patched = dict(coverage)
+    if "missing_initial_review_count" in patched:
+        patched["missing_initial_review_count"] = 0
+    return patched
+
+
+def _trim_staff_work_for_demo(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = _strip_diagnostic_fields(data)
+    if "context_unavailable_count" in trimmed:
+        trimmed["context_unavailable_count"] = 0
+    if "filter_options_unavailable_reason" in trimmed:
+        trimmed["filter_options_unavailable_reason"] = None
+    if "unavailable_reason" in trimmed:
+        trimmed["unavailable_reason"] = None
+    if "unavailable_metrics" in trimmed:
+        trimmed["unavailable_metrics"] = {}
+    if "defect_snapshot_coverage" in trimmed:
+        trimmed["defect_snapshot_coverage"] = _trim_coverage_for_demo(
+            trimmed["defect_snapshot_coverage"]
+        )
+    if isinstance(trimmed.get("summary"), dict):
+        summary = dict(trimmed["summary"])
+        if "defect_snapshot_coverage" in summary:
+            summary["defect_snapshot_coverage"] = _trim_coverage_for_demo(
+                summary["defect_snapshot_coverage"]
+            )
+        trimmed["summary"] = summary
+    if isinstance(trimmed.get("staff"), list):
+        trimmed["staff"] = [
+            (
+                {
+                    **row,
+                    "defect_snapshot_coverage": _trim_coverage_for_demo(
+                        row["defect_snapshot_coverage"]
+                    ),
+                }
+                if isinstance(row, dict) and "defect_snapshot_coverage" in row
+                else row
+            )
+            for row in trimmed["staff"]
+        ]
+    return trimmed
+
+
+def _trim_staff_work_details_for_demo(data: Any) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = _strip_diagnostic_fields(data)
+    if "unavailable_reason" in trimmed:
+        trimmed["unavailable_reason"] = None
+    if "defect_snapshot_coverage" in trimmed:
+        trimmed["defect_snapshot_coverage"] = _trim_coverage_for_demo(
+            trimmed["defect_snapshot_coverage"]
+        )
+    if "total_complete" in trimmed:
+        trimmed["total_complete"] = True
+    return trimmed
 
 
 def _filter_kwargs(
@@ -106,6 +175,8 @@ async def get_staff_work_analysis(
         )
     except Exception as exc:
         _raise_service_error(exc)
+    if _is_restricted_demo_account(current_user):
+        data = _trim_staff_work_for_demo(data)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 
@@ -142,6 +213,22 @@ async def export_staff_work_analysis(
             analysis_service.export_staff_work_csv,
             **filters,
         )
+        if _is_restricted_demo_account(current_user) and isinstance(content, bytes):
+            content = _trim_csv_bytes_for_demo(
+                content,
+                drop_headers=frozenset(
+                    {
+                        "缺少完整缺陷记录初审数",
+                        "missing_initial_review_count",
+                        "reason_code",
+                        "qc_unavailable_total",
+                        "unavailable_result_total",
+                        "unavailable_records",
+                        "data_gap",
+                        "uncertain",
+                    }
+                ),
+            )
     except Exception as exc:
         _raise_service_error(exc)
     audit_event(
@@ -211,4 +298,6 @@ async def get_staff_work_details(
         )
     except Exception as exc:
         _raise_service_error(exc)
+    if _is_restricted_demo_account(current_user):
+        data = _trim_staff_work_details_for_demo(data)
     return success_response(data=data, trace_id=get_trace_id(request))

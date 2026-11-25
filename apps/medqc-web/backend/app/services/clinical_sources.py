@@ -55,8 +55,21 @@ class SourceSettings(BaseModel):
     cdm: CDMProfile = Field(default_factory=CDMProfile)
 
 
+def _qc_table(table_name: str, session=None) -> str:
+    from ..database import connection as db_connection
+    mode = str(getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single").strip().lower()
+    if mode != "split":
+        return table_name
+    bind = session.get_bind() if session is not None and hasattr(session, "get_bind") else None
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    if dialect_name == "sqlite":
+        return table_name
+    return f"qc.{table_name}"
+
+
 def load(session) -> tuple[SourceSettings, str | None]:
-    row = session.execute(text("SELECT payload_json FROM qc.sync_config_registry WHERE namespace=:n AND config_key=:k"), {"n": NAMESPACE, "k": KEY}).first()
+    config_table = _qc_table("sync_config_registry", session)
+    row = session.execute(text(f"SELECT payload_json FROM {config_table} WHERE namespace=:n AND config_key=:k"), {"n": NAMESPACE, "k": KEY}).first()
     if row is None:
         return SourceSettings(), None
     try:
@@ -106,12 +119,13 @@ def save(session, proposed: SourceSettings, actor: str) -> SourceSettings:
     if proposed.cdm.enabled:
         snapshot(proposed, "independent_cdm")
     saved = proposed.model_copy(update={"version": current.version + 1})
+    config_table = _qc_table("sync_config_registry", session)
     params = dict(n=NAMESPACE, k=KEY, value=saved.model_dump_json(), actor=actor)
     if raw is None:
-        query = "INSERT INTO qc.sync_config_registry(namespace,config_key,payload_json,updated_by,source,change_reason,updated_at) VALUES(:n,:k,:value,:actor,'clinical_sources','configure clinical sources',CURRENT_TIMESTAMP) ON CONFLICT(namespace,config_key) DO NOTHING"
+        query = f"INSERT INTO {config_table}(namespace,config_key,payload_json,updated_by,source,change_reason,updated_at) VALUES(:n,:k,:value,:actor,'clinical_sources','configure clinical sources',CURRENT_TIMESTAMP) ON CONFLICT(namespace,config_key) DO NOTHING"
     else:
         params["old"] = raw
-        query = "UPDATE qc.sync_config_registry SET payload_json=:value,updated_by=:actor,updated_at=CURRENT_TIMESTAMP WHERE namespace=:n AND config_key=:k AND payload_json=:old"
+        query = f"UPDATE {config_table} SET payload_json=:value,updated_by=:actor,updated_at=CURRENT_TIMESTAMP WHERE namespace=:n AND config_key=:k AND payload_json=:old"
     if session.execute(text(query), params).rowcount != 1:
         raise PipelineError("clinical_source_configuration_changed", 409)
     session.commit()
@@ -145,12 +159,12 @@ def _registered_local_case(ref: dict) -> bool:
         return True
     if identity["institute_id"] != "CUSTOMER_TEST":
         return False
-    from ..database.connection import SessionLocal, DB_SCHEMA_MODE
+    from ..database.connection import SessionLocal
     if SessionLocal is None:
         raise PipelineError("clinical_material_registration_unavailable")
-    schema = "qc" if str(DB_SCHEMA_MODE).lower()=="split" else "public"
     with SessionLocal() as session:
-        found = session.execute(text(f"SELECT 1 FROM {schema}.manual_problem_sample_pool_items WHERE pool_id=:pool AND matched_institute_id=:institute_id AND matched_patient_id=:patient_id AND matched_visit_id=:visit_id LIMIT 1"), {**identity, "pool":"customer-created-test-records-v1"}).first()
+        sample_items_table = _qc_table("manual_problem_sample_pool_items", session)
+        found = session.execute(text(f"SELECT 1 FROM {sample_items_table} WHERE pool_id=:pool AND matched_institute_id=:institute_id AND matched_patient_id=:patient_id AND matched_visit_id=:visit_id LIMIT 1"), {**identity, "pool":"customer-created-test-records-v1"}).first()
     if found is None:
         raise PipelineError("clinical_material_identity_not_registered", 422)
     return True
@@ -206,6 +220,8 @@ def prepare_request(request: Request) -> None:
         "/api/v1/workstation",
         "/api/v1/frontpage-qc",
         "/api/v1/quality-reports",
+        "/api/v1/core-system-reports",
+        "/api/v1/custom-qc/workspace",
     )
     paths = (
         "/api/medical-records",
@@ -306,7 +322,8 @@ def prepare_request(request: Request) -> None:
         if request.state.clinical_source["id"] == "independent_cdm" and "medical-records/" in path:
             suffix = path.split("medical-records/", 1)[1]
             supported = ("workstation", "list", "departments", "stats", "frontpage/", "frontpage-by-mr/",
-                         "frontpage-sheet/", "diagnoses/", "surgeries/", "cost/", "record-content/", "documents/")
+                         "frontpage-sheet/", "diagnoses/", "surgeries/", "cost/", "record-content/", "documents/",
+                         "settlement/rules/list")
             workstation_summary = path == "/api/medical-records/workstation/qc-summary" and request.method == "POST"
             if not workstation_summary and (request.method != "GET" or not suffix.startswith(supported)):
                 raise PipelineError("clinical_source_operation_not_supported", 422)
@@ -382,10 +399,11 @@ def source_for_saved_job(request: Request, job_id: str) -> dict:
         raise PipelineError("clinical_source_job_unavailable", 503)
     try:
         with SessionLocal() as session:
+            jobs_table = _qc_table("custom_qc_batch_jobs", session)
             def lookup(saved_job_id):
                 return session.execute(text(
                     "SELECT id,created_by,filters_json,parent_job_id,job_kind,child_job_ids_json "
-                    "FROM qc.custom_qc_batch_jobs WHERE id=:id"
+                    f"FROM {jobs_table} WHERE id=:id"
                 ), {"id": saved_job_id}).mappings().first()
             row = lookup(job_id)
             if row is None:

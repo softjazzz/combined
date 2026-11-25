@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin, require_roles
 from ..services.case_identity import CaseRef
 from ..services.doctor_case_scope import get_doctor_case_scope
 from ..services.medical_records.detail_service import (
@@ -61,12 +61,23 @@ def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any
 
 
 @router.post("/workstation/hospitalization-status/verify")
-async def verify_workstation_hospitalization_status(
-    current_user: Dict[str, Any] = Depends(
-        require_roles(*_VERIFY_HOSPITALIZATION_STATUS_ROLES)
-    ),
+def verify_workstation_hospitalization_status(
+    current_user: Dict[str, Any] = Depends(require_global_system_admin),
 ):
     """轻量核验病历池病例当前是否仍在院，不同步病历文书。"""
+    from ..database import clinical_connection
+    from ..services.clinical_source_policy import fixed_cdm
+
+    selection = clinical_connection.current_selection()
+    if (
+        (selection is not None and selection.get("id") == "independent_cdm")
+        or clinical_connection.configured()
+        or fixed_cdm()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="hospitalization_status_verify_disabled_in_independent_cdm",
+        )
 
     try:
         return default_hospitalization_status_service.verify_current_statuses()
@@ -75,7 +86,7 @@ async def verify_workstation_hospitalization_status(
 
 
 @router.get("/list")
-async def list_medical_records_api(
+def list_medical_records_api(
     request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     keyword: Optional[str] = Query(None, description="患者姓名/病案号搜索"),
@@ -100,7 +111,7 @@ async def list_medical_records_api(
 
 
 @router.get("/stats")
-async def get_stats_api(
+def get_stats_api(
     request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     start_date: Optional[date] = Query(None),
@@ -119,7 +130,7 @@ async def get_stats_api(
 
 
 @router.get("/departments")
-async def get_departments_api(
+def get_departments_api(
     request: Request,
     current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):

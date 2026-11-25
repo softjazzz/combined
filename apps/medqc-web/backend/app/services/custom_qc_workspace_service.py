@@ -3332,6 +3332,7 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         page: int,
         page_size: int,
+        institute_id: Optional[str] = None,
     ) -> WorkspaceListResult:
         return self._record_repository().list_records(
             scope=scope,
@@ -3343,6 +3344,7 @@ class CustomQCWorkspaceService:
             keyword=keyword,
             page=page,
             page_size=page_size,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def get_record_filters(
@@ -3350,10 +3352,12 @@ class CustomQCWorkspaceService:
         *,
         scope: str,
         department: Optional[str],
+        institute_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self._record_repository().get_record_filters(
             scope=scope,
             department=department,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def collect_records(
@@ -3421,6 +3425,7 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        institute_id: Optional[str] = None,
     ) -> int:
         return self._record_repository().count_records(
             scope=scope,
@@ -3432,6 +3437,7 @@ class CustomQCWorkspaceService:
             keyword=keyword,
             record_ids=record_ids,
             record_refs=record_refs,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def hydrate_records_with_medical_text(
@@ -3951,6 +3957,46 @@ class CustomQCWorkspaceService:
             )
         return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
+    @staticmethod
+    def _batch_job_matches_institute_scope(
+        job: Mapping[str, Any],
+        institute_scope: Optional[str],
+    ) -> bool:
+        if institute_scope is None:
+            return True
+        if not isinstance(job, Mapping):
+            return False
+        filters = job.get("filters") if isinstance(job.get("filters"), Mapping) else {}
+        record_refs = filters.get("record_refs")
+        items = job.get("items")
+        checked = False
+        if isinstance(record_refs, list) and record_refs:
+            for ref in record_refs:
+                if not isinstance(ref, Mapping):
+                    return False
+                ref_inst = ref.get("institute_id")
+                if not isinstance(ref_inst, str) or not ref_inst.strip() or ref_inst != institute_scope:
+                    return False
+            checked = True
+        if isinstance(items, list) and items:
+            for item in items:
+                if not isinstance(item, Mapping):
+                    return False
+                item_inst = item.get("institute_id")
+                if item_inst is not None:
+                    if not isinstance(item_inst, str) or not item_inst.strip() or item_inst != institute_scope:
+                        return False
+                    checked = True
+                elif not checked:
+                    return False
+        if checked:
+            return True
+        filter_inst = filters.get("institute_id")
+        if isinstance(filter_inst, str) and filter_inst.strip() and filter_inst == institute_scope:
+            if int(job.get("total_records") or 0) == 0:
+                return True
+        return False
+
     def list_batch_jobs(
         self,
         *,
@@ -3965,6 +4011,7 @@ class CustomQCWorkspaceService:
         created_end_date: Optional[str] = None,
         record_id: Optional[str] = None,
         include_children: bool = False,
+        institute_id: Optional[str] = None,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
@@ -3982,7 +4029,12 @@ class CustomQCWorkspaceService:
                 include_children=include_children,
             )
             executor_value = _safe_text(executor_type).lower()
-            enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
+            institute_scope = _safe_text(institute_id) or None
+            enable_runtime_filter = (
+                executor_value in {"program", "llm"}
+                or cache_hit is not None
+                or institute_scope is not None
+            )
 
             if not enable_runtime_filter:
                 total = int(
@@ -4031,6 +4083,12 @@ class CustomQCWorkspaceService:
             ]
 
             filtered_items = all_items
+            if institute_scope is not None:
+                filtered_items = [
+                    item
+                    for item in filtered_items
+                    if self._batch_job_matches_institute_scope(item, institute_scope)
+                ]
             if executor_value in {"program", "llm"}:
                 filtered_items = [
                     item
@@ -8192,6 +8250,7 @@ class CustomQCWorkspaceService:
                 )
             )
             session.commit()
+            _invalidate_in_process_rule_caches()
             return {
                 "draft_id": draft_id,
                 "rule_code": draft["rule_code"],
@@ -8200,6 +8259,37 @@ class CustomQCWorkspaceService:
             }
         finally:
             session.close()
+
+
+def _invalidate_in_process_rule_caches() -> None:
+    """发布自定义规则后联动清理进程内规则缓存，失败仅记录日志不影响发布结果。"""
+    log = logging.getLogger(__name__)
+    try:
+        from . import sichuan_qc_service as _sichuan_svc_mod
+
+        fn = getattr(_sichuan_svc_mod, "invalidate_rule_cache", None)
+        if callable(fn):
+            fn()
+    except Exception:
+        log.debug("跳过 sichuan_qc_service.invalidate_rule_cache 清理", exc_info=True)
+
+    try:
+        from ..routers import qc_sichuan as _qc_sichuan_router
+
+        singleton = getattr(_qc_sichuan_router, "service", None)
+        if singleton is not None:
+            inv = getattr(singleton, "invalidate_rule_cache", None)
+            if callable(inv):
+                inv()
+    except Exception:
+        log.debug("跳过 qc_sichuan.service.invalidate_rule_cache 清理", exc_info=True)
+
+    try:
+        from .customer_rule_sets import invalidate_customer_rule_set_cache
+
+        invalidate_customer_rule_set_cache()
+    except Exception:
+        log.debug("跳过 invalidate_customer_rule_set_cache 清理", exc_info=True)
 
 
 # SQLAlchemy is imported lazily here to avoid polluting top-level namespace usage above.

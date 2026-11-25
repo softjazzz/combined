@@ -90,19 +90,54 @@ def test_hospitalization_status_verify_rejects_unprivileged_roles(monkeypatch, d
     assert called == []
 
 
-@pytest.mark.parametrize("allowed_role", ["admin", "super_admin", "qc_manager", "sync_admin"])
-def test_hospitalization_status_verify_allows_privileged_roles(monkeypatch, allowed_role):
+@pytest.mark.parametrize(
+    ("allowed_role", "institute_id"),
+    [
+        ("admin", None),
+        ("super_admin", ""),
+        ("sync_admin", "H1"),
+    ],
+)
+def test_hospitalization_status_verify_allows_privileged_roles(monkeypatch, allowed_role, institute_id):
+    from app.services import clinical_source_policy
+
+    monkeypatch.setattr(db_connection, "SessionLocal", None)
     monkeypatch.setattr(
         medical_records_query.default_hospitalization_status_service,
         "verify_current_statuses",
         lambda: {"checked": 3},
     )
-    holder = {"user": _make_user(roles=[allowed_role])}
+    holder = {"user": _make_user(roles=[allowed_role], institute_id=institute_id)}
     client = _make_query_client(holder)
 
+    # fixed_cdm 下全局管理员也拦截返回 409
+    monkeypatch.setattr(clinical_source_policy, "fixed_cdm", lambda: True)
+    monkeypatch.setattr(clinical_connection, "configured", lambda: True)
+    resp_cdm = client.post("/api/medical-records/workstation/hospitalization-status/verify")
+    assert resp_cdm.status_code == 409
+
+    # legacy_compat 下全局管理员放行 200
+    monkeypatch.setattr(clinical_source_policy, "fixed_cdm", lambda: False)
+    monkeypatch.setattr(clinical_connection, "configured", lambda: False)
     resp = client.post("/api/medical-records/workstation/hospitalization-status/verify")
     assert resp.status_code == 200
     assert resp.json() == {"checked": 3}
+
+
+@pytest.mark.parametrize(
+    ("role", "institute_id"),
+    [
+        ("qc_manager", "H1"),
+        ("admin", "H1"),
+        ("super_admin", "H1"),
+    ],
+)
+def test_hospitalization_status_verify_rejects_non_global_roles(monkeypatch, role, institute_id):
+    monkeypatch.setattr(db_connection, "SessionLocal", None)
+    holder = {"user": _make_user(roles=[role], institute_id=institute_id)}
+    client = _make_query_client(holder)
+    resp = client.post("/api/medical-records/workstation/hospitalization-status/verify")
+    assert resp.status_code == 403
 
 
 @pytest.mark.parametrize("denied_roles", [[], ["guest"], ["read_only_observer"], ["unknown_role"]])

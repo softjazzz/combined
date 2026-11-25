@@ -5,6 +5,8 @@ from typing import Any, Dict, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
+from sqlalchemy import select
+from starlette.concurrency import run_in_threadpool
 
 from ..core.response import get_trace_id, success_response
 from ..core.roles import effective_roles
@@ -13,8 +15,12 @@ from ..services.product_activation import require_product_activation
 from ..services.rule_validation import (
     RuleValidationConflict,
     RuleValidationService,
+    _coverage,
+    _event_view,
+    _run_view,
     compare_cases,
     derive_stage,
+    expected_statuses,
     RULE_SET_0609,
     RULE_SET_0916,
     RULE_SETS,
@@ -167,13 +173,20 @@ def _error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=status, detail=str(exc))
 
 
-async def _read_job(request: Request, job_id: str | None, current_user: Dict[str, Any]) -> dict | None:
+async def _read_job(
+    request: Request,
+    job_id: str | None,
+    current_user: Dict[str, Any],
+    *,
+    job_cache: dict[str, dict | None] | None = None,
+) -> dict | None:
     if not job_id:
         return None
+    if job_cache is not None and job_id in job_cache:
+        return job_cache[job_id]
     # 读取通过 Envelope 校验的 Canonical 结果（正式保存层），不直接读 items_json；
     # 客户投影把病例坐标换成不可逆引用，无法按病例比较，所以比较在服务端完成，只返回比较行。
     # 任务号来自本系统的验收运行记录；本路由已限定 admin/qc_manager，多人协作复核不限任务创建人。
-    from fastapi.concurrency import run_in_threadpool
     from .qc_sichuan import _hydrate_luxian_canonical_batch_job_or_409, _sichuan_workspace_service
     workspace = _sichuan_workspace_service()
     job = await run_in_threadpool(workspace.get_batch_job_for_processing, job_id=job_id)
@@ -190,12 +203,23 @@ async def _read_job(request: Request, job_id: str | None, current_user: Dict[str
                     expected_record_refs=filters.get("record_refs") or [])
             except ValueError as exc:
                 raise HTTPException(status_code=409, detail="0916 已保存结果不符合交付合同，无法比较") from exc
+        if job_cache is not None:
+            job_cache[job_id] = job
         return job
-    return await run_in_threadpool(_hydrate_luxian_canonical_batch_job_or_409, workspace=workspace, job=job)
+    hydrated = await run_in_threadpool(_hydrate_luxian_canonical_batch_job_or_409, workspace=workspace, job=job)
+    if job_cache is not None:
+        job_cache[job_id] = hydrated
+    return hydrated
 
 
-async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -> list[dict]:
-    job = await _read_job(request, run["job_id"], current_user)
+async def _run_rows(
+    request: Request,
+    run: dict,
+    current_user: Dict[str, Any],
+    *,
+    job_cache: dict[str, dict | None] | None = None,
+) -> list[dict]:
+    job = await _read_job(request, run["job_id"], current_user, job_cache=job_cache)
     if job is None:
         job = {"status": "creation_failed" if run["state"] == "creation_failed" else "creating"}
     baseline_jobs = {}
@@ -204,7 +228,7 @@ async def _run_rows(request: Request, run: dict, current_user: Dict[str, Any]) -
         if not baseline_id or baseline_id in baseline_jobs:
             continue
         try:
-            baseline_jobs[baseline_id] = await _read_job(request, baseline_id, current_user)
+            baseline_jobs[baseline_id] = await _read_job(request, baseline_id, current_user, job_cache=job_cache)
         except HTTPException as exc:
             if exc.status_code not in {404, 409}:
                 raise
@@ -234,13 +258,136 @@ def _project_result(item: dict) -> dict:
     return {k: projected.get(k) for k in _RESULT_FIELDS}
 
 
-async def _detail(request: Request, service: RuleValidationService, rule_id: str, current_user) -> dict:
+def _is_thread_isolated_sqlite_memory(service: Any) -> bool:
+    """检测线程隔离内存 SQLite（SingletonThreadPool + :memory:），避免工作线程读到空库。"""
+    try:
+        from sqlalchemy.pool import SingletonThreadPool
+        from ..database import connection as db_connection
+
+        candidates = []
+        sessions = getattr(service, "sessions", None)
+        if sessions is not None:
+            kw = getattr(sessions, "kw", None)
+            if isinstance(kw, dict) and kw.get("bind") is not None:
+                candidates.append(kw["bind"])
+        sl = getattr(db_connection, "SessionLocal", None)
+        if sl is not None:
+            kw = getattr(sl, "kw", None)
+            if isinstance(kw, dict) and kw.get("bind") is not None:
+                candidates.append(kw["bind"])
+
+        for bind in candidates:
+            dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "")
+            if dialect_name != "sqlite":
+                return False
+            pool = getattr(bind, "pool", None)
+            url = getattr(bind, "url", None)
+            db_name = getattr(url, "database", None) if url is not None else None
+            return isinstance(pool, SingletonThreadPool) and db_name in (None, "", ":memory:")
+    except Exception:
+        pass
+    return False
+
+
+async def _run_service_sync(service: Any, fn, *args, **kwargs):
+    if _is_thread_isolated_sqlite_memory(service):
+        return fn(*args, **kwargs)
+    return await run_in_threadpool(fn, *args, **kwargs)
+
+
+def _load_rule_detail_sync(service: RuleValidationService, rule_id: str) -> tuple[dict, list[dict], list[dict], list[dict]]:
     rule = service._rule(rule_id)
     cases = service.list_cases(rule_id)
     runs = service.list_runs(rule_id)
     events = service.list_events(rule_id)
+    return rule, cases, runs, events
+
+
+def _load_rules_list_batch_sync(
+    service: RuleValidationService,
+    *,
+    rule_set_key: str,
+    include_released: bool,
+) -> list[tuple[str, dict, list[dict], list[dict], list[dict], dict]]:
+    """在工作线程中一次性批量加载规则列表所需的病例/运行/事件，消除 N+1 查库与事件循环阻塞。"""
+    selected: list[tuple[str, dict]] = []
+    for rule_id, rule in sorted(service.catalog().items()):
+        if rule.get("rule_set_key", RULE_SET_0609) != rule_set_key:
+            continue
+        if rule["release_scope"] != "acceptance_only" and not include_released:
+            continue
+        selected.append((rule_id, rule))
+    if not selected:
+        return []
+
+    if (
+        isinstance(service, RuleValidationService)
+        and hasattr(service, "_read_connection")
+        and hasattr(service, "_customer_items")
+        and hasattr(service, "_case_view")
+        and hasattr(service, "runs")
+        and hasattr(service, "events")
+    ):
+        rule_ids = [rule_id for rule_id, _ in selected]
+        with service._read_connection() as session:
+            customer_items = service._customer_items(session)
+            run_rows = (
+                session.execute(
+                    select(service.runs)
+                    .where(service.runs.c.rule_id.in_(rule_ids))
+                    .order_by(service.runs.c.created_at.desc())
+                )
+                .mappings()
+                .all()
+            )
+            event_rows = (
+                session.execute(
+                    select(service.events)
+                    .where(service.events.c.rule_id.in_(rule_ids))
+                    .order_by(service.events.c.created_at.asc())
+                )
+                .mappings()
+                .all()
+            )
+        runs_by_rule: dict[str, list[dict]] = {rid: [] for rid in rule_ids}
+        for row in run_rows:
+            view = _run_view(dict(row))
+            runs_by_rule.setdefault(view["rule_id"], []).append(view)
+        events_by_rule: dict[str, list[dict]] = {rid: [] for rid in rule_ids}
+        for row in event_rows:
+            view = _event_view(dict(row))
+            events_by_rule.setdefault(view["rule_id"], []).append(view)
+
+        bundled: list[tuple[str, dict, list[dict], list[dict], list[dict], dict]] = []
+        for rule_id, rule in selected:
+            views = [service._case_view(item, rule_id) for item in customer_items]
+            cases = sorted((v for v in views if v), key=lambda v: v["item_id"])
+            runs = runs_by_rule.get(rule_id, [])
+            events = events_by_rule.get(rule_id, [])
+            coverage = _coverage(cases, expected_statuses(rule))
+            bundled.append((rule_id, rule, cases, runs, events, coverage))
+        return bundled
+
+    bundled = []
+    for rule_id, rule in selected:
+        cases = service.list_cases(rule_id)
+        runs = service.list_runs(rule_id)
+        events = service.list_events(rule_id)
+        coverage = service.summarize(rule_id)["coverage"]
+        bundled.append((rule_id, rule, cases, runs, events, coverage))
+    return bundled
+
+
+async def _detail(request: Request, service: RuleValidationService, rule_id: str, current_user) -> dict:
+    rule, cases, runs, events = await _run_service_sync(service, _load_rule_detail_sync, service, rule_id)
     latest_rows = await _run_rows(request, runs[0], current_user) if runs else None
-    summary = service.summarize(rule_id, run=runs[0] if runs else None, rows=latest_rows)
+    summary = await _run_service_sync(
+        service,
+        service.summarize,
+        rule_id,
+        run=runs[0] if runs else None,
+        rows=latest_rows,
+    )
     return {
         "rule": rule,
         "stage": derive_stage(rule, cases, runs, events, latest_rows),
@@ -261,26 +408,27 @@ async def list_rules(request: Request, include_released: bool = False,
     if rule_set_key not in RULE_SETS:
         raise HTTPException(status_code=422, detail="不支持的规则集")
     service = _service()
+    bundled = await _run_service_sync(
+        service,
+        _load_rules_list_batch_sync,
+        service,
+        rule_set_key=rule_set_key,
+        include_released=include_released,
+    )
+    job_cache: dict[str, dict | None] = {}
     items = []
-    for rule_id, rule in sorted(service.catalog().items()):
-        if rule.get("rule_set_key", RULE_SET_0609) != rule_set_key:
-            continue
-        if rule["release_scope"] != "acceptance_only" and not include_released:
-            continue
-        cases = service.list_cases(rule_id)
-        runs = service.list_runs(rule_id)
-        events = service.list_events(rule_id)
+    for rule_id, rule, cases, runs, events, coverage in bundled:
         latest_rows = None
         if runs:
             try:
-                latest_rows = await _run_rows(request, runs[0], current_user)
+                latest_rows = await _run_rows(request, runs[0], current_user, job_cache=job_cache)
             except HTTPException:
                 latest_rows = None  # 任务不可读时列表只显示为验证中，不阻塞整页
         items.append({
             **rule,
             "stage": derive_stage(rule, cases, runs, events, latest_rows),
             "case_count": len(cases),
-            "coverage": service.summarize(rule_id)["coverage"],
+            "coverage": coverage,
             "latest_run": runs[0] if runs else None,
         })
     return success_response(data={"items": items}, trace_id=get_trace_id(request))
@@ -296,8 +444,8 @@ async def get_rule(request: Request, rule_id: str, current_user: Dict[str, Any] 
 
 
 @router.get("/rules/{rule_id}/candidate-cases")
-async def list_candidate_cases(request: Request, rule_id: str,
-                               current_user: Dict[str, Any] = Depends(get_current_user)):
+def list_candidate_cases(request: Request, rule_id: str,
+                         current_user: Dict[str, Any] = Depends(get_current_user)):
     try:
         data = _service().list_candidate_cases(rule_id)
     except (LookupError, ValueError) as exc:
@@ -306,8 +454,8 @@ async def list_candidate_cases(request: Request, rule_id: str,
 
 
 @router.put("/rules/{rule_id}/cases/{item_id}")
-async def upsert_case_answer(request: Request, rule_id: str, item_id: str, payload: CaseAnswerRequest,
-                             current_user: Dict[str, Any] = Depends(get_current_user)):
+def upsert_case_answer(request: Request, rule_id: str, item_id: str, payload: CaseAnswerRequest,
+                       current_user: Dict[str, Any] = Depends(get_current_user)):
     _reject_restricted_demo_account(current_user, "演示账号禁止修改规则验收预期")
     _require_global_admin(current_user, "仅全局管理员可维护全平台规则验收预期")
     try:
@@ -321,8 +469,8 @@ async def upsert_case_answer(request: Request, rule_id: str, item_id: str, paylo
 
 
 @router.delete("/rules/{rule_id}/cases/{item_id}")
-async def remove_case_answer(request: Request, rule_id: str, item_id: str, revision: int,
-                             current_user: Dict[str, Any] = Depends(get_current_user)):
+def remove_case_answer(request: Request, rule_id: str, item_id: str, revision: int,
+                       current_user: Dict[str, Any] = Depends(get_current_user)):
     _reject_restricted_demo_account(current_user, "演示账号禁止删除规则验收预期")
     _require_global_admin(current_user, "仅全局管理员可维护全平台规则验收预期")
     try:
@@ -341,8 +489,8 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
     from ..services.custom_qc_sample_pool_service import CUSTOMER_TEST_POOL_ID
     service = _service()
     try:
-        rule = service._rule(rule_id)
-        run = service.begin_run(rule_id, payload.item_ids, _user(current_user))
+        rule = await _run_service_sync(service, service._rule, rule_id)
+        run = await _run_service_sync(service, service.begin_run, rule_id, payload.item_ids, _user(current_user))
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
     # 同一测试病例可能同时是本规则病例与同族保护集病例，提交任务时按病例去重
@@ -365,7 +513,7 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
             current_user, activation)
     except Exception:
         try:
-            service.bind_run(run["id"], None, None)
+            await _run_service_sync(service, service.bind_run, run["id"], None, None)
         except RuleValidationConflict:
             pass
         raise
@@ -379,11 +527,12 @@ async def start_run(request: Request, rule_id: str, payload: RunRequest,
 async def get_run(request: Request, run_id: str, current_user: Dict[str, Any] = Depends(get_current_user)):
     service = _service()
     try:
-        run = service.get_run(run_id)
+        run = await _run_service_sync(service, service.get_run, run_id)
     except LookupError as exc:
         raise _error(exc) from exc
     rows = await _run_rows(request, run, current_user)
-    reviews = [e for e in service.list_events(run["rule_id"]) if e["run_id"] == run_id and e["kind"] == "case_review"]
+    events = await _run_service_sync(service, service.list_events, run["rule_id"])
+    reviews = [e for e in events if e["run_id"] == run_id and e["kind"] == "case_review"]
     return success_response(data={"run": run, "rows": rows, "reviews": reviews}, trace_id=get_trace_id(request))
 
 
@@ -393,10 +542,18 @@ async def review_case(request: Request, run_id: str, item_id: str, payload: Case
     _reject_restricted_demo_account(current_user, "演示账号禁止提交规则验收复核")
     service = _service()
     try:
-        run = service.get_run(run_id)
+        run = await _run_service_sync(service, service.get_run, run_id)
         rows = await _run_rows(request, run, current_user)
-        event = service.review_case(run, rows, item_id, decision=payload.decision, note=payload.note,
-                                    user=_user(current_user))
+        event = await _run_service_sync(
+            service,
+            service.review_case,
+            run,
+            rows,
+            item_id,
+            decision=payload.decision,
+            note=payload.note,
+            user=_user(current_user),
+        )
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
     return success_response(data=event, trace_id=get_trace_id(request))
@@ -408,26 +565,34 @@ async def conclude(request: Request, rule_id: str, payload: ConclusionRequest,
     _reject_restricted_demo_account(current_user, "演示账号禁止提交规则验收结论")
     service = _service()
     try:
-        run = service.get_run(payload.run_id)
+        run = await _run_service_sync(service, service.get_run, payload.run_id)
         if run["rule_id"] != rule_id:
             raise LookupError("运行不属于该规则")
-        runs = service.list_runs(rule_id)
+        runs = await _run_service_sync(service, service.list_runs, rule_id)
         if not runs:
             raise LookupError("该规则尚无验收运行记录")
         latest = runs[0]
         if latest["id"] != run["id"]:
             raise RuleValidationConflict("只能对最新一次运行下结论")
         rows = await _run_rows(request, run, current_user)
-        event = service.conclude(run, rows, decision=payload.decision, note=payload.note,
-                                 gap_ack=payload.gap_ack, user=_user(current_user))
+        event = await _run_service_sync(
+            service,
+            service.conclude,
+            run,
+            rows,
+            decision=payload.decision,
+            note=payload.note,
+            gap_ack=payload.gap_ack,
+            user=_user(current_user),
+        )
     except (LookupError, ValueError) as exc:
         raise _error(exc) from exc
     return success_response(data=event, trace_id=get_trace_id(request))
 
 
 @router.post("/rules/{rule_id}/approval")
-async def approve(request: Request, rule_id: str, payload: ApprovalRequest,
-                  current_user: Dict[str, Any] = Depends(get_current_user)):
+def approve(request: Request, rule_id: str, payload: ApprovalRequest,
+            current_user: Dict[str, Any] = Depends(get_current_user)):
     _reject_restricted_demo_account(current_user, "演示账号禁止批准规则上线")
     _require_global_admin(current_user, "仅全局管理员可批准全局规则上线")
     try:

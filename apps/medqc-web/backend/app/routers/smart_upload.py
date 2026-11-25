@@ -20,6 +20,7 @@ import pandas as pd
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from ..core.rate_limit import enforce_rate_limit
 from ..core.security import require_roles
@@ -133,7 +134,8 @@ async def smart_upload(
 
     # 流式分块读取，超限直接 413 截断
     content = await _read_upload_limited(file, MAX_FILE_SIZE)
-    validate_uploaded_file(
+    await run_in_threadpool(
+        validate_uploaded_file,
         request=request,
         file=file,
         content=content,
@@ -144,7 +146,8 @@ async def smart_upload(
 
     if sync:
         try:
-            result = task_service.process_upload_sync(
+            result = await run_in_threadpool(
+                task_service.process_upload_sync,
                 filename=filename,
                 content=content,
                 current_user=current_user,
@@ -156,7 +159,12 @@ async def smart_upload(
             logger.exception("[SmartUpload] sync upload processing failed")
             raise HTTPException(status_code=400, detail="文件处理失败，请检查文件格式后重试") from None
 
-    task = task_service.submit_upload(filename=filename, content=content, current_user=current_user)
+    task = await run_in_threadpool(
+        task_service.submit_upload,
+        filename=filename,
+        content=content,
+        current_user=current_user,
+    )
     return JSONResponse(
         status_code=202,
         content={
@@ -184,7 +192,7 @@ async def get_smart_upload_task_status(
     current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
 ):
     service = get_smart_upload_async_service(UPLOAD_DIR)
-    return service.get_task_status(task_id, current_user=current_user)
+    return await run_in_threadpool(service.get_task_status, task_id, current_user=current_user)
 
 
 @router.get("/smart-upload/tasks/{task_id}/result")
@@ -193,7 +201,7 @@ async def get_smart_upload_task_result(
     current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
 ):
     service = get_smart_upload_async_service(UPLOAD_DIR)
-    return service.get_task_result(task_id, current_user=current_user)
+    return await run_in_threadpool(service.get_task_result, task_id, current_user=current_user)
 
 
 @router.post("/smart-upload/tasks/{task_id}/cancel")
@@ -202,19 +210,14 @@ async def cancel_smart_upload_task(
     current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
 ):
     service = get_smart_upload_async_service(UPLOAD_DIR)
-    return service.cancel_task(task_id, current_user=current_user)
+    return await run_in_threadpool(service.cancel_task, task_id, current_user=current_user)
 
 
 # ============================================================================
 # 2. 映射状态查询（前端轮询）
 # ============================================================================
 
-@router.get("/mapping-status/{file_id}")
-async def get_mapping_status(
-    file_id: str,
-    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
-):
-    """查询后台 LLM 字段映射是否完成"""
+def _get_mapping_status_sync(file_id: str, current_user: dict) -> dict:
     service = get_smart_upload_async_service(UPLOAD_DIR)
     file_dir = service.assert_file_access(
         file_id,
@@ -244,23 +247,21 @@ async def get_mapping_status(
     return {"ready": False}
 
 
+@router.get("/mapping-status/{file_id}")
+async def get_mapping_status(
+    file_id: str,
+    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
+):
+    """查询后台 LLM 字段映射是否完成"""
+    return await run_in_threadpool(_get_mapping_status_sync, file_id, current_user)
+
+
 # ============================================================================
 # 3. 获取字段映射建议
 # ============================================================================
 
-@router.post("/mapping/suggest")
-async def suggest_mapping(
-    request: MappingSuggestRequest,
-    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
-):
-    """
-    获取 AI 推荐的字段映射
-
-    如果后台 LLM 映射已完成则直接返回缓存结果，
-    否则同步调用 LLM 获取映射建议。
-    """
+def _prepare_mapping_suggest_sync(file_id: str, current_user: dict):
     service = get_smart_upload_async_service(UPLOAD_DIR)
-    file_id = request.file_id
     file_dir_path = service.assert_file_access(
         file_id,
         current_user,
@@ -276,19 +277,21 @@ async def suggest_mapping(
             with open(cache_path, "r", encoding="utf-8") as f:
                 cached = json.load(f)
             if cached.get("mappings"):
-                return {
-                    "file_id": file_id,
-                    "suggested_mappings": cached["mappings"],
-                    "confidence": cached.get("confidence", 0.85),
-                    "unmapped": cached.get("unmapped", []),
-                    "missing_required": cached.get("missing_required", []),
-                    "standard_fields": STANDARD_FIELDS,
-                    "fallback": cached.get("fallback", False),
-                }
+                return (
+                    "cached",
+                    {
+                        "file_id": file_id,
+                        "suggested_mappings": cached["mappings"],
+                        "confidence": cached.get("confidence", 0.85),
+                        "unmapped": cached.get("unmapped", []),
+                        "missing_required": cached.get("missing_required", []),
+                        "standard_fields": STANDARD_FIELDS,
+                        "fallback": cached.get("fallback", False),
+                    },
+                )
         except Exception:
             pass
 
-    # 缓存不存在，读取文件数据后同步调用 LLM
     excel_files = [
         str((file_dir_path / f).resolve())
         for f in os.listdir(file_dir)
@@ -299,22 +302,50 @@ async def suggest_mapping(
     if not excel_files:
         raise HTTPException(status_code=404, detail="数据文件不存在")
 
+    processor = MultiFileProcessor(file_dir)
+    processor.explore_files(excel_files)
+    if not processor.files_info:
+        raise HTTPException(status_code=400, detail="Excel 解析失败")
+
+    first_file = processor.files_info[0]
     try:
-        processor = MultiFileProcessor(file_dir)
-        processor.explore_files(excel_files)
-        if not processor.files_info:
-            raise HTTPException(status_code=400, detail="Excel 解析失败")
+        preview_df = pd.read_excel(first_file["path"], sheet_name=first_file.get("sheet_name", 0), nrows=5)
+    except Exception:
+        preview_df = pd.read_excel(first_file["path"], nrows=5)
 
-        first_file = processor.files_info[0]
-        try:
-            preview_df = pd.read_excel(first_file["path"], sheet_name=first_file.get("sheet_name", 0), nrows=5)
-        except Exception:
-            preview_df = pd.read_excel(first_file["path"], nrows=5)
+    preview_df.columns = [processor._normalize_column_name(c) for c in list(preview_df.columns)]
+    columns = list(preview_df.columns)
+    sample_data = preview_df.fillna("").astype(str).to_dict(orient="records")
+    return ("preview", (file_dir_path, cache_path, columns, sample_data))
 
-        preview_df.columns = [processor._normalize_column_name(c) for c in list(preview_df.columns)]
-        columns = list(preview_df.columns)
-        sample_data = preview_df.fillna("").astype(str).to_dict(orient="records")
 
+def _write_mapping_cache_sync(file_dir_path: Path, cache_path: Path, mapping_result: dict) -> None:
+    try:
+        if cache_path.is_relative_to(file_dir_path):
+            with open(cache_path, "w", encoding="utf-8") as f:
+                json.dump(mapping_result, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+@router.post("/mapping/suggest")
+async def suggest_mapping(
+    request: MappingSuggestRequest,
+    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
+):
+    """
+    获取 AI 推荐的字段映射
+
+    如果后台 LLM 映射已完成则直接返回缓存结果，
+    否则在工作线程读取文件样本后调用 LLM 获取映射建议。
+    """
+    file_id = request.file_id
+    try:
+        mode, payload = await run_in_threadpool(_prepare_mapping_suggest_sync, file_id, current_user)
+        if mode == "cached":
+            return payload
+
+        file_dir_path, cache_path, columns, sample_data = payload
         with llm_observation_context(
             business_scene="smart_upload_field_mapping",
             root_job_id=file_id,
@@ -328,12 +359,7 @@ async def suggest_mapping(
         raise HTTPException(status_code=500, detail="获取字段映射建议失败，请稍后重试") from None
 
     # 写入缓存
-    try:
-        if cache_path.is_relative_to(file_dir_path):
-            with open(cache_path, "w", encoding="utf-8") as f:
-                json.dump(mapping_result, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    await run_in_threadpool(_write_mapping_cache_sync, file_dir_path, cache_path, mapping_result)
 
     return {
         "file_id": file_id,
@@ -352,16 +378,10 @@ async def suggest_mapping(
 # 4. 确认映射 + 执行分析 + 生成报表
 # ============================================================================
 
-@router.post("/mapping/confirm")
-async def confirm_mapping(
+def _confirm_mapping_sync(
     request: MappingConfirmRequest,
-    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
-):
-    """
-    确认字段映射，执行数据清洗 + EnhancedAnalyzer 分析 + ChartService 生成报表
-
-    返回完整的分析结果（包含 ECharts 配置和 AI 洞察）
-    """
+    current_user: dict,
+) -> dict:
     from ..services.analyzers import EnhancedAnalyzer
     from ..services.charts import ChartService
 
@@ -524,6 +544,19 @@ async def confirm_mapping(
     service.cleanup_file_dir(file_dir, base_dir=UPLOAD_DIR)
 
     return response_payload
+
+
+@router.post("/mapping/confirm")
+async def confirm_mapping(
+    request: MappingConfirmRequest,
+    current_user: dict = Depends(require_roles(*_SMART_UPLOAD_ROLES)),
+):
+    """
+    确认字段映射，执行数据清洗 + EnhancedAnalyzer 分析 + ChartService 生成报表
+
+    返回完整的分析结果（包含 ECharts 配置和 AI 洞察）
+    """
+    return await run_in_threadpool(_confirm_mapping_sync, request, current_user)
 
 
 # ============================================================================

@@ -2,10 +2,11 @@
 
 import csv
 import io
+import re
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, tuple_
 
 from ..database import clinical_connection
 from ..database.connection import SessionLocal
@@ -14,6 +15,9 @@ from . import special_record_report_source_service as source
 
 HOSPITAL_TZ = timezone(timedelta(hours=8))
 MAX_CASES = 5000
+_SHORT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})$")
+_COMPACT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})(\d{2})$")
+_LOCAL_TIME_CHUNK_SIZE = 500
 
 
 def _to_datetime(value):
@@ -23,10 +27,16 @@ def _to_datetime(value):
         return datetime(value.year, value.month, value.day)
     if isinstance(value, str) and value.strip():
         text = value.strip()
-        if len(text) == 10:
-            parsed = date.fromisoformat(text)
-            return datetime(parsed.year, parsed.month, parsed.day)
-        return datetime.fromisoformat(text.replace("Z", "+00:00"))
+        try:
+            if len(text) == 10:
+                parsed = date.fromisoformat(text)
+                return datetime(parsed.year, parsed.month, parsed.day)
+            normalized = text[:-1] + "+00:00" if text.endswith(("Z", "z")) else text
+            normalized = _SHORT_TZ_OFFSET_RE.sub(r"\1:00", normalized)
+            normalized = _COMPACT_TZ_OFFSET_RE.sub(r"\1:\2", normalized)
+            return datetime.fromisoformat(normalized)
+        except ValueError:
+            return None
     return None
 
 
@@ -37,13 +47,12 @@ def _load_independent_cohort(*, discharged_from, discharged_to, department, inst
     if clinical_engine is None:
         raise RuntimeError("独立临床库只读连接不可用")
     catalog = catalog_service.catalog(clinical_engine, include_frontpage=False)
-    is_sqlite = clinical_engine.dialect.name == "sqlite"
     predicates = catalog_service._predicates(
         catalog,
         dept=department,
         hospital_status="discharged",
-        start_date=None if is_sqlite else discharged_from,
-        end_date=None if is_sqlite else discharged_to,
+        start_date=discharged_from,
+        end_date=discharged_to,
         date_field="discharge",
         institute_id=institute_id,
     )
@@ -59,9 +68,8 @@ def _load_independent_cohort(*, discharged_from, discharged_to, department, inst
         )
         .where(*predicates)
         .order_by(catalog.c.institute_id, catalog.c.patient_id, catalog.c.visit_id)
+        .limit(MAX_CASES + 1)
     )
-    if not is_sqlite:
-        stmt = stmt.limit(MAX_CASES + 1)
     with clinical_engine.connect() as connection:
         raw_rows = connection.execute(stmt).mappings().all()
     rows = []
@@ -94,6 +102,222 @@ def _load_independent_cohort(*, discharged_from, discharged_to, department, inst
     return rows
 
 
+def _load_local_case_times(identities):
+    """按三坐标批量补齐本地队列的入院/出院时间，遵循 single/split 临床只读路由。"""
+    if not identities:
+        return {}
+    from .clinical_read import clinical_query
+    from .medical_records.query_service import (
+        AdmissionRecord,
+        InpatRegistration,
+        MedicalRecordFrontpage,
+        _session_factory as query_session_factory,
+        _workstation_discharge_summary_subquery,
+    )
+
+    factory = query_session_factory or SessionLocal
+    if factory is None:
+        return {}
+    ordered = sorted(identities)
+    times = {identity: {"admission": None, "discharge": None} for identity in ordered}
+    with factory() as session:
+        discharge_summary = _workstation_discharge_summary_subquery(session)
+        for offset in range(0, len(ordered), _LOCAL_TIME_CHUNK_SIZE):
+            chunk = ordered[offset : offset + _LOCAL_TIME_CHUNK_SIZE]
+            if discharge_summary is not None:
+                for row in (
+                    clinical_query(
+                        session,
+                        discharge_summary.c.institute_id,
+                        discharge_summary.c.patient_id,
+                        discharge_summary.c.visit_id,
+                        discharge_summary.c.discharge_time,
+                    )
+                    .filter(
+                        tuple_(
+                            discharge_summary.c.institute_id,
+                            discharge_summary.c.patient_id,
+                            discharge_summary.c.visit_id,
+                        ).in_(chunk)
+                    )
+                    .all()
+                ):
+                    identity = (
+                        str(row.institute_id or "").strip(),
+                        str(row.patient_id or "").strip(),
+                        str(row.visit_id or "").strip(),
+                    )
+                    if identity in times and times[identity]["discharge"] is None:
+                        times[identity]["discharge"] = _to_datetime(row.discharge_time)
+            for row in (
+                clinical_query(
+                    session,
+                    InpatRegistration.institute_id,
+                    InpatRegistration.patient_id,
+                    InpatRegistration.visit_id,
+                    InpatRegistration.admission_datetime,
+                    InpatRegistration.discharge_datetime,
+                )
+                .filter(
+                    tuple_(
+                        InpatRegistration.institute_id,
+                        InpatRegistration.patient_id,
+                        InpatRegistration.visit_id,
+                    ).in_(chunk)
+                )
+                .all()
+            ):
+                identity = (
+                    str(row.institute_id or "").strip(),
+                    str(row.patient_id or "").strip(),
+                    str(row.visit_id or "").strip(),
+                )
+                if identity in times:
+                    if times[identity]["discharge"] is None:
+                        times[identity]["discharge"] = _to_datetime(
+                            row.discharge_datetime
+                        )
+                    if times[identity]["admission"] is None:
+                        times[identity]["admission"] = _to_datetime(
+                            row.admission_datetime
+                        )
+            for row in (
+                clinical_query(
+                    session,
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                    MedicalRecordFrontpage.admission_datetime,
+                    MedicalRecordFrontpage.discharge_datetime,
+                )
+                .filter(
+                    tuple_(
+                        MedicalRecordFrontpage.institute_id,
+                        MedicalRecordFrontpage.patient_id,
+                        MedicalRecordFrontpage.visit_id,
+                    ).in_(chunk)
+                )
+                .all()
+            ):
+                identity = (
+                    str(row.institute_id or "").strip(),
+                    str(row.patient_id or "").strip(),
+                    str(row.visit_id or "").strip(),
+                )
+                if identity in times:
+                    if times[identity]["discharge"] is None:
+                        times[identity]["discharge"] = _to_datetime(
+                            row.discharge_datetime
+                        )
+                    if times[identity]["admission"] is None:
+                        times[identity]["admission"] = _to_datetime(
+                            row.admission_datetime
+                        )
+            for row in (
+                clinical_query(
+                    session,
+                    AdmissionRecord.institute_id,
+                    AdmissionRecord.patient_id,
+                    AdmissionRecord.visit_id,
+                    AdmissionRecord.admission_datetime,
+                )
+                .filter(
+                    tuple_(
+                        AdmissionRecord.institute_id,
+                        AdmissionRecord.patient_id,
+                        AdmissionRecord.visit_id,
+                    ).in_(chunk)
+                )
+                .all()
+            ):
+                identity = (
+                    str(row.institute_id or "").strip(),
+                    str(row.patient_id or "").strip(),
+                    str(row.visit_id or "").strip(),
+                )
+                if identity in times and times[identity]["admission"] is None:
+                    times[identity]["admission"] = _to_datetime(row.admission_datetime)
+    return times
+
+
+def _load_local_fallback_cohort(
+    *, discharged_from, discharged_to, department, institute_id
+):
+    from . import report_case_scope
+
+    records = report_case_scope.load_current_workstation_records(
+        department=department,
+        doctor=None,
+        hospital_status="discharged",
+        start_date=discharged_from,
+        end_date=discharged_to,
+        date_field="discharge",
+        institute_id=institute_id,
+    )
+    if len(records) > MAX_CASES:
+        raise source.SpecialReportInvalid("出院队列超过5000例，请缩小范围")
+    if not records:
+        return []
+    missing_time_identities = set()
+    parsed_records = []
+    for record in records:
+        identity = tuple(
+            str(record.get(field) or "").strip() for field in source.COORDINATES
+        )
+        if not all(identity):
+            continue
+        discharge_dt = _to_datetime(
+            record.get("discharge_time") or record.get("discharge_datetime")
+        )
+        admission_dt = _to_datetime(
+            record.get("admission_time") or record.get("admission_datetime")
+        )
+        if discharge_dt is None or admission_dt is None:
+            missing_time_identities.add(identity)
+        parsed_records.append((identity, record, admission_dt, discharge_dt))
+    looked_up = (
+        _load_local_case_times(missing_time_identities)
+        if missing_time_identities
+        else {}
+    )
+    rows = []
+    seen = set()
+    for identity, record, admission_dt, discharge_dt in parsed_records:
+        if identity in seen:
+            continue
+        fallback_times = looked_up.get(identity, {})
+        if discharge_dt is None:
+            discharge_dt = fallback_times.get("discharge")
+        if admission_dt is None:
+            admission_dt = fallback_times.get("admission")
+        if not isinstance(discharge_dt, datetime):
+            continue
+        discharge_day = (
+            discharge_dt.astimezone(HOSPITAL_TZ)
+            if discharge_dt.tzinfo
+            else discharge_dt
+        ).date()
+        if not discharged_from <= discharge_day <= discharged_to:
+            continue
+        seen.add(identity)
+        dept_name = str(record.get("department") or "").strip() or None
+        rows.append(
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+                "patient_name": str(record.get("patient_name") or "").strip(),
+                "department": dept_name,
+                "hospitalization_status": "discharged",
+                "admission_time": admission_dt,
+                "discharge_time": discharge_dt,
+            }
+        )
+        if len(rows) > MAX_CASES:
+            raise source.SpecialReportInvalid("出院队列超过5000例，请缩小范围")
+    return rows
+
+
 def load_cohort(*, discharged_from, discharged_to, department, institute_id):
     if clinical_connection.configured():
         return _load_independent_cohort(
@@ -104,20 +328,39 @@ def load_cohort(*, discharged_from, discharged_to, department, institute_id):
         )
     from .case_scope_service import CaseScopeService
 
-    rows = []
-    start = discharged_from
     owner = CaseScopeService()
-    while start <= discharged_to:
-        end = min(start + timedelta(days=30), discharged_to)
-        result = owner.resolve_hospitalization_scope(
-            scope_mode="discharged",
-            as_of_date=datetime.now(HOSPITAL_TZ).date(),
-            admission_start_date=None,
-            discharge_start_date=start,
-            discharge_end_date=end,
-            departments=[department] if department else [],
+    remote_url_loader = getattr(owner, "_remote_url_loader", None)
+    if callable(remote_url_loader) and not remote_url_loader():
+        return _load_local_fallback_cohort(
+            discharged_from=discharged_from,
+            discharged_to=discharged_to,
+            department=department,
             institute_id=institute_id,
         )
+
+    rows = []
+    start = discharged_from
+    while start <= discharged_to:
+        end = min(start + timedelta(days=30), discharged_to)
+        try:
+            result = owner.resolve_hospitalization_scope(
+                scope_mode="discharged",
+                as_of_date=datetime.now(HOSPITAL_TZ).date(),
+                admission_start_date=None,
+                discharge_start_date=start,
+                discharge_end_date=end,
+                departments=[department] if department else [],
+                institute_id=institute_id,
+            )
+        except ValueError as exc:
+            if "远端" in str(exc) or "remote" in str(exc).lower():
+                return _load_local_fallback_cohort(
+                    discharged_from=discharged_from,
+                    discharged_to=discharged_to,
+                    department=department,
+                    institute_id=institute_id,
+                )
+            raise
         if result.source_status != "ready" or len(result.case_refs) != len(
             result.selected
         ):

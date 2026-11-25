@@ -20,7 +20,7 @@ _MAINTENANCE_ROLES = ("admin", "qc_manager", "sync_admin")
 
 
 @router.put("/frontpage")
-async def save_frontpage_api(
+def save_frontpage_api(
     data: dict,
     current_user: dict = Depends(require_roles(*_MAINTENANCE_ROLES)),
 ):
@@ -33,7 +33,7 @@ async def save_frontpage_api(
 
 
 @router.post("/ai-frontpage-draft")
-async def save_ai_frontpage_draft_api(
+def save_ai_frontpage_draft_api(
     data: dict,
     current_user: dict = Depends(require_roles(*_MAINTENANCE_ROLES)),
 ):
@@ -46,7 +46,7 @@ async def save_ai_frontpage_draft_api(
 
 
 @router.get("/ai-frontpage-draft/{visit_id}")
-async def get_ai_frontpage_draft_api(
+def get_ai_frontpage_draft_api(
     visit_id: str,
     institute_id: Optional[str] = Query(None, description="机构号"),
     patient_id: Optional[str] = Query(None, description="患者号"),
@@ -65,7 +65,7 @@ async def get_ai_frontpage_draft_api(
 
 
 @router.post("/qc-results")
-async def save_qc_results_api(
+def save_qc_results_api(
     data: dict,
     current_user: dict = Depends(require_roles(*_MAINTENANCE_ROLES)),
 ):
@@ -78,7 +78,7 @@ async def save_qc_results_api(
 
 
 @router.get("/qc-results/{institute_id}/{patient_id}/{visit_id}")
-async def get_qc_results_api(
+def get_qc_results_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,

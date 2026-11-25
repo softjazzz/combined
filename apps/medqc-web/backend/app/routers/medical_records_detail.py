@@ -49,7 +49,7 @@ def _get_documents_runtime_callable():
 
 
 @router.get("/frontpage/{institute_id}/{patient_id}/{visit_id}")
-async def get_frontpage_api(
+def get_frontpage_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -68,7 +68,7 @@ async def get_frontpage_api(
 
 
 @router.get("/frontpage-by-mr/{mr_no}")
-async def get_frontpage_by_mr_no_api(
+def get_frontpage_by_mr_no_api(
     request: Request,
     mr_no: str,
     institute_id: Optional[str] = Query(None, description="机构标识"),
@@ -89,7 +89,7 @@ async def get_frontpage_by_mr_no_api(
 
 
 @router.get("/diagnoses/{institute_id}/{patient_id}/{visit_id}")
-async def get_diagnoses_api(
+def get_diagnoses_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -103,7 +103,7 @@ async def get_diagnoses_api(
 
 
 @router.get("/surgeries/{institute_id}/{patient_id}/{visit_id}")
-async def get_surgeries_api(
+def get_surgeries_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -117,7 +117,7 @@ async def get_surgeries_api(
 
 
 @router.get("/cost/{institute_id}/{patient_id}/{visit_id}")
-async def get_cost_api(
+def get_cost_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -136,7 +136,7 @@ async def get_cost_api(
 
 
 @router.get("/record-content/{institute_id}/{patient_id}/{visit_id}")
-async def get_record_content_api(
+def get_record_content_api(
     institute_id: str,
     patient_id: str,
     visit_id: str,
@@ -156,7 +156,7 @@ async def get_record_content_api(
 
 
 @router.get("/documents/{visit_id}")
-async def get_documents_api(
+def get_documents_api(
     request: Request,
     visit_id: str,
     mode: Optional[str] = Query(None, description="返回模式: 默认返回列表, concat=拼接全文"),

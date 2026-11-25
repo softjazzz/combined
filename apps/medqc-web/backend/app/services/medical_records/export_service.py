@@ -157,6 +157,14 @@ def get_table_data(
     if normalized_name not in metadata.tables:
         raise MedicalRecordsNotFoundError(f"表不存在: {normalized_name}")
 
+    from ...database import clinical_connection
+
+    if clinical_connection.configured():
+        raise HTTPException(
+            status_code=409,
+            detail="legacy_table_data_disabled_in_independent_cdm",
+        )
+
     session_factory = session_factory or _session_factory
     table_obj = metadata.tables[normalized_name]
     # 通用查表仅允许白名单内的业务表，同步临床表限定到 cdm schema。

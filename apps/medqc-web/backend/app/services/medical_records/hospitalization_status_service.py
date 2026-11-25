@@ -8,7 +8,7 @@ from typing import Any, Callable, Mapping
 from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.orm import Session
 
-from ..clinical_read import clinical_query
+from ..clinical_read import clinical_read_schema
 from ...database.connection import engine
 from ...database.models.cdm import (
     AdmissionRecord,
@@ -26,6 +26,24 @@ CaseIdentity = tuple[str, str, str]
 
 def _session_factory() -> Session:
     return Session(engine)
+
+
+def _resolve_target_schema(session: Session) -> str | None:
+    schema = clinical_read_schema()
+    if not schema:
+        return None
+    bind = session.get_bind() if hasattr(session, "get_bind") else None
+    if bind is not None and getattr(getattr(bind, "dialect", None), "name", "") == "sqlite":
+        if schema not in sa_inspect(bind).get_schema_names():
+            return None
+    return schema
+
+
+def _scoped_query(session: Session, schema: str | None, *entities: Any):
+    query = session.query(*entities)
+    if schema:
+        query = query.execution_options(schema_translate_map={None: schema})
+    return query
 
 
 def _identity(row: Any) -> CaseIdentity | None:
@@ -128,7 +146,14 @@ class HospitalizationStatusService:
         )
         verified_at = now.replace(tzinfo=None)
         with self._session_factory() as session:
-            local_identities, local_discharge_times = self._load_local_cases(session)
+            target_schema = _resolve_target_schema(session)
+            if target_schema and hasattr(session, "connection"):
+                session.connection(
+                    execution_options={"schema_translate_map": {None: target_schema}}
+                )
+            local_identities, local_discharge_times = self._load_local_cases(
+                session, target_schema=target_schema
+            )
             rows = reconcile_hospitalization_statuses(
                 local_identities=local_identities,
                 local_discharge_times=local_discharge_times,
@@ -138,7 +163,9 @@ class HospitalizationStatusService:
             try:
                 existing = {
                     (item.institute_id, item.patient_id, item.visit_id): item
-                    for item in clinical_query(session, HospitalizationStatusProjection).all()
+                    for item in _scoped_query(
+                        session, target_schema, HospitalizationStatusProjection
+                    ).all()
                 }
                 for row in rows:
                     identity = (row["institute_id"], row["patient_id"], row["visit_id"])
@@ -170,6 +197,8 @@ class HospitalizationStatusService:
     @staticmethod
     def _load_local_cases(
         session: Session,
+        *,
+        target_schema: str | None = None,
     ) -> tuple[set[CaseIdentity], dict[CaseIdentity, datetime]]:
         identities: set[CaseIdentity] = set()
         discharge_times: dict[CaseIdentity, datetime] = {}
@@ -189,8 +218,9 @@ class HospitalizationStatusService:
                         break
 
         include(
-            clinical_query(
+            _scoped_query(
                 session,
+                target_schema,
                 MedicalRecordFrontpage.institute_id,
                 MedicalRecordFrontpage.patient_id,
                 MedicalRecordFrontpage.visit_id,
@@ -199,8 +229,9 @@ class HospitalizationStatusService:
             ("discharge_datetime",),
         )
         include(
-            clinical_query(
+            _scoped_query(
                 session,
+                target_schema,
                 InpatRegistration.institute_id,
                 InpatRegistration.patient_id,
                 InpatRegistration.visit_id,
@@ -209,16 +240,18 @@ class HospitalizationStatusService:
             ("discharge_datetime",),
         )
         include(
-            clinical_query(
+            _scoped_query(
                 session,
+                target_schema,
                 AdmissionRecord.institute_id,
                 AdmissionRecord.patient_id,
                 AdmissionRecord.visit_id,
             ).all()
         )
         include(
-            clinical_query(
+            _scoped_query(
                 session,
+                target_schema,
                 DischargeRecord.institute_id,
                 DischargeRecord.patient_id,
                 DischargeRecord.visit_id,
@@ -227,9 +260,15 @@ class HospitalizationStatusService:
             ).all(),
             ("discharge_time", "discharge_date"),
         )
-        if sa_inspect(session.get_bind()).has_table("visit_index"):
+        inspector = sa_inspect(session.get_bind())
+        visit_index_sql = None
+        if target_schema and inspector.has_table("visit_index", schema=target_schema):
+            visit_index_sql = f"{target_schema}.visit_index"
+        elif inspector.has_table("visit_index"):
+            visit_index_sql = "visit_index"
+        if visit_index_sql:
             for row in session.execute(
-                text("SELECT institute_id, patient_id, visit_id FROM visit_index")
+                text(f"SELECT institute_id, patient_id, visit_id FROM {visit_index_sql}")
             ).mappings():
                 identity = tuple(
                     str(row.get(field) or "").strip()

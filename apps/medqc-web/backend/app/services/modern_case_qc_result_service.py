@@ -13,9 +13,10 @@ from datetime import datetime
 from functools import lru_cache
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import MetaData, Table, desc, func, nullslast, or_, select
+from sqlalchemy import MetaData, Table, desc, func, inspect as sa_inspect, nullslast, or_, select
 from sqlalchemy.orm import Session
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal, engine
 from .qc_report_identity import VerifiedQCIdentity
 
@@ -29,6 +30,7 @@ IDENTITY_COLUMNS = (
 )
 # cdm.mr 的病例三坐标。
 CASE_COLUMNS = ("institute_id", "patient_id", "visit_id")
+RESULT_STORE_TABLES = ("qc_results", "qc_defects")
 STORE_TABLES = ("qc_results", "qc_defects", "notifications")
 # 客户可见字段白名单：既是对外投影，也是查询列（缺列即 SchemaUnavailable）。
 RESULT_COLUMNS = (
@@ -137,8 +139,36 @@ def _projection(table: Table) -> List[Any]:
     return [table.c[name] for name in TABLE_PROJECTIONS[table.name]]
 
 
-@lru_cache(maxsize=8)
-def _table(schema: str, table_name: str) -> Table:
+def _resolve_schema(split_schema: str, probe_table: str, bind_engine: Any = None) -> Optional[str]:
+    mode = str(getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single").strip().lower()
+    active_engine = bind_engine if bind_engine is not None else engine
+    is_sqlite = (
+        active_engine is not None
+        and getattr(getattr(active_engine, "dialect", None), "name", None) == "sqlite"
+    )
+    if mode != "split":
+        if is_sqlite:
+            try:
+                inspector = sa_inspect(active_engine)
+                if not inspector.has_table(probe_table, schema=None) and inspector.has_table(
+                    probe_table, schema=split_schema
+                ):
+                    return split_schema
+            except Exception:
+                return None
+        return None
+    if is_sqlite:
+        try:
+            if sa_inspect(active_engine).has_table(probe_table, schema=split_schema):
+                return split_schema
+        except Exception:
+            return None
+        return None
+    return split_schema
+
+
+@lru_cache(maxsize=16)
+def _table(schema: Optional[str], table_name: str) -> Table:
     if engine is None:
         raise SourceUnavailable("modern case QC source is unavailable")
     metadata = MetaData()
@@ -307,8 +337,9 @@ class ModernCaseQCResultService:
         current_result_defects_offset: int = 0,
         defects_limit: int = DEFAULT_DEFECTS_LIMIT,
     ) -> Dict[str, Any]:
+        recipient = _safe_text(recipient_id).strip()
         self._require_exact_case(session, identity)
-        tables = self._require_modern_tables()
+        tables = self._require_modern_tables(include_notifications=bool(recipient))
         snapshot: Dict[str, Any] = {
             "identity_status": "verified",
             "source_key": identity.source_key,
@@ -359,7 +390,6 @@ class ModernCaseQCResultService:
             if current_has_more
             else None
         )
-        recipient = _safe_text(recipient_id).strip()
         if recipient:
             snapshot["latest_notification"] = self._load_notification(
                 session, tables["notifications"], identity, recipient, latest_id
@@ -367,17 +397,29 @@ class ModernCaseQCResultService:
         return snapshot
 
     @staticmethod
-    def _reflect(schema: str, table_name: str) -> Table:
+    def _reflect(schema: Optional[str], table_name: str) -> Table:
         return _table(schema, table_name)
+
+    def _reflect_for_mode(
+        self, schema: Optional[str], split_schema: str, table_name: str
+    ) -> Tuple[Table, Optional[str]]:
+        try:
+            return self._reflect(schema, table_name), schema
+        except KeyError:
+            if schema is None:
+                return self._reflect(split_schema, table_name), split_schema
+            raise
 
     def _require_exact_case(
         self, session: Session, identity: VerifiedQCIdentity
     ) -> None:
-        mr = self._reflect("cdm", "mr")
+        schema = _resolve_schema("cdm", "mr")
+        mr, effective_schema = self._reflect_for_mode(schema, "cdm", "mr")
+        table_label = f"{effective_schema}.mr" if effective_schema else "mr"
         missing = [name for name in CASE_COLUMNS if name not in mr.c]
         if missing:
             raise SchemaUnavailable(
-                f"cdm.mr missing case identity columns: {sorted(missing)}"
+                f"{table_label} missing case identity columns: {sorted(missing)}"
             )
         count = session.execute(
             select(func.count())
@@ -385,26 +427,31 @@ class ModernCaseQCResultService:
             .where(*(mr.c[name] == getattr(identity, name) for name in CASE_COLUMNS))
         ).scalar_one()
         if count == 0:
-            raise CaseNotFound("modern case is absent from cdm.mr")
+            raise CaseNotFound(f"modern case is absent from {table_label}")
         if count != 1:
             raise CaseIdentityAmbiguous(
-                "modern case identity matches multiple cdm.mr rows"
+                f"modern case identity matches multiple {table_label} rows"
             )
 
-    def _require_modern_tables(self) -> Dict[str, Table]:
+    def _require_modern_tables(
+        self, *, include_notifications: bool = False
+    ) -> Dict[str, Table]:
+        schema = _resolve_schema("qc", "qc_results")
+        table_names = STORE_TABLES if include_notifications else RESULT_STORE_TABLES
         tables: Dict[str, Table] = {}
-        for name in STORE_TABLES:
-            table = self._reflect("qc", name)
+        for name in table_names:
+            table, effective_schema = self._reflect_for_mode(schema, "qc", name)
+            table_label = f"{effective_schema}.{name}" if effective_schema else name
             missing = [column for column in IDENTITY_COLUMNS if column not in table.c]
             if missing:
                 raise SchemaUnavailable(
-                    f"qc.{name} missing modern identity columns: {sorted(missing)}"
+                    f"{table_label} missing modern identity columns: {sorted(missing)}"
                 )
             required = (*TABLE_PROJECTIONS[name], *TABLE_QUERY_COLUMNS[name])
             missing = [column for column in required if column not in table.c]
             if missing:
                 raise SchemaUnavailable(
-                    f"qc.{name} missing required columns: {sorted(missing)}"
+                    f"{table_label} missing required columns: {sorted(missing)}"
                 )
             tables[name] = table
         return tables

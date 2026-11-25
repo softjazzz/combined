@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta
+import threading
+import weakref
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from sqlalchemy import text
@@ -18,6 +20,9 @@ from ..database.connection import engine
 
 logger = logging.getLogger(__name__)
 MAX_ITEMS = 300
+_INIT_LOCK = threading.Lock()
+_INITIALIZED_ENGINES: weakref.WeakSet[Any] = weakref.WeakSet()
+_INITIALIZED_ENGINE_IDS: set[int] = set()
 
 
 def _ensure_table(session: Session):
@@ -59,27 +64,32 @@ def _ensure_table(session: Session):
     )
 
 
+def _ensure_table_once(target_engine: Any) -> None:
+    if target_engine is None:
+        return
+    with _INIT_LOCK:
+        try:
+            already = target_engine in _INITIALIZED_ENGINES
+        except TypeError:
+            already = id(target_engine) in _INITIALIZED_ENGINE_IDS
+        if already:
+            return
+        with Session(target_engine) as init_session:
+            _ensure_table(init_session)
+            init_session.commit()
+        try:
+            _INITIALIZED_ENGINES.add(target_engine)
+        except TypeError:
+            _INITIALIZED_ENGINE_IDS.add(id(target_engine))
+
+
 def append_sync_run_record(record: dict[str, Any], max_items: int = MAX_ITEMS) -> None:
     if engine is None:
         logger.warning("append_sync_run_record skipped: database engine unavailable")
         return
-    def _parse_dt(value: Any):
-        if value is None:
-            return None
-        if isinstance(value, datetime):
-            return value
-        text_value = str(value).strip()
-        if not text_value:
-            return None
-        if text_value.endswith("Z"):
-            text_value = text_value[:-1] + "+00:00"
-        try:
-            return datetime.fromisoformat(text_value)
-        except Exception:
-            return None
 
+    _ensure_table_once(engine)
     with Session(engine) as session:
-        _ensure_table(session)
         session.execute(
             text(
                 """
@@ -100,8 +110,8 @@ def append_sync_run_record(record: dict[str, Any], max_items: int = MAX_ITEMS) -
                 "tier": str(record.get("tier") or "all"),
                 "tables_json": json.dumps(record.get("tables") or [], ensure_ascii=False),
                 "status": str(record.get("status") or "unknown"),
-                "started_at": _parse_dt(record.get("started_at")),
-                "finished_at": _parse_dt(record.get("finished_at")),
+                "started_at": _to_datetime(record.get("started_at")),
+                "finished_at": _to_datetime(record.get("finished_at")),
                 "duration_ms": int(record.get("duration_ms") or 0),
                 "total_records": int(record.get("total_records") or 0),
                 "error": str(record.get("error") or "")[:500],
@@ -147,8 +157,8 @@ def list_sync_run_records(
             "page_size": safe_page_size,
             "total_pages": 0,
         }
+    _ensure_table_once(engine)
     with Session(engine) as session:
-        _ensure_table(session)
         where_clauses = []
         params: dict[str, Any] = {"limit": safe_page_size, "offset": safe_offset}
         if source:
@@ -234,18 +244,21 @@ def _to_datetime(value: Any) -> Optional[datetime]:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value
-    text_value = str(value).strip()
-    if not text_value:
-        return None
-    if text_value.endswith("Z"):
-        text_value = text_value[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(text_value)
-    except Exception:
-        return None
+        parsed = value
+    else:
+        text_value = str(value).strip()
+        if not text_value:
+            return None
+        if " " in text_value and "T" not in text_value:
+            text_value = text_value.replace(" ", "T")
+        if text_value.endswith("Z"):
+            text_value = text_value[:-1] + "+00:00"
+        try:
+            parsed = datetime.fromisoformat(text_value)
+        except Exception:
+            return None
     if parsed.tzinfo is not None:
-        return parsed.replace(tzinfo=None)
+        return parsed.astimezone(timezone.utc).replace(tzinfo=None)
     return parsed
 
 
@@ -267,8 +280,8 @@ def get_sync_health_stats(*, window_minutes: int = 60, sample_limit: int = 500) 
             "last_success_lag_seconds": 0,
         }
 
+    _ensure_table_once(engine)
     with Session(engine) as session:
-        _ensure_table(session)
         rows = session.execute(
             text(
                 """
@@ -281,7 +294,7 @@ def get_sync_health_stats(*, window_minutes: int = 60, sample_limit: int = 500) 
             {"limit": safe_limit},
         ).mappings().all()
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
     window_from = now - timedelta(minutes=safe_window)
     window_total = 0
     window_failed = 0

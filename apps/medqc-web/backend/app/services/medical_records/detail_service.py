@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import dataclass
 from typing import Any, Callable, Literal, Optional
 
@@ -225,17 +226,19 @@ def _get_table_columns(session: Session, table_name: str) -> set[str]:
             if not inspector.has_table(table_name, schema=schema):
                 return set()
             return {column["name"] for column in inspector.get_columns(table_name, schema=schema)}
-        rows = session.execute(
-            sql_text(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_name = :table_name
-                  AND table_schema = :source_schema
-                """
-            ),
-            {"table_name": table_name, "source_schema": clinical_read_schema() or "public"},
-        ).mappings().all()
+        nested = session.begin_nested() if hasattr(session, "begin_nested") else nullcontext()
+        with nested:
+            rows = session.execute(
+                sql_text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name = :table_name
+                      AND table_schema = :source_schema
+                    """
+                ),
+                {"table_name": table_name, "source_schema": clinical_read_schema() or "public"},
+            ).mappings().all()
     except Exception:
         return {"record_content"}
     columns = {str(row.get("column_name")) for row in rows if row.get("column_name")}
@@ -436,39 +439,41 @@ def get_documents(
             )
             for table_name, label in DOC_TYPES:
                 try:
-                    columns = _get_table_columns(session, table_name)
-                    if not columns:
-                        documents.append(_document_entry(table_name, label, {}, 0))
-                        continue
+                    nested = session.begin_nested() if hasattr(session, "begin_nested") else nullcontext()
+                    with nested:
+                        columns = _get_table_columns(session, table_name)
+                        if not columns:
+                            documents.append(_document_entry(table_name, label, {}, 0))
+                            continue
 
-                    select_fields = build_document_select_columns(table_name, columns)
-                    time_columns = _pick_time_columns(columns)
+                        select_fields = build_document_select_columns(table_name, columns)
+                        time_columns = _pick_time_columns(columns)
 
-                    order_by = ""
-                    if time_columns and "document_id" in columns:
-                        order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST, document_id NULLS LAST"
-                    elif time_columns:
-                        order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST"
-                    elif "document_id" in columns:
-                        order_by = " ORDER BY document_id NULLS LAST"
+                        order_by = ""
+                        if time_columns and "document_id" in columns:
+                            order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST, document_id NULLS LAST"
+                        elif time_columns:
+                            order_by = f" ORDER BY COALESCE({', '.join(time_columns)}) NULLS LAST"
+                        elif "document_id" in columns:
+                            order_by = " ORDER BY document_id NULLS LAST"
 
-                    where_clauses = ["visit_id = :vid"]
-                    params: dict[str, Any] = {"vid": visit_id}
-                    if resolved_inst and "institute_id" in columns:
-                        where_clauses.append("institute_id = :inst_id")
-                        params["inst_id"] = resolved_inst
-                    if resolved_pat and "patient_id" in columns:
-                        where_clauses.append("patient_id = :pid")
-                        params["pid"] = resolved_pat
+                        where_clauses = ["visit_id = :vid"]
+                        params: dict[str, Any] = {"vid": visit_id}
+                        if resolved_inst and "institute_id" in columns:
+                            where_clauses.append("institute_id = :inst_id")
+                            params["inst_id"] = resolved_inst
+                        if resolved_pat and "patient_id" in columns:
+                            where_clauses.append("patient_id = :pid")
+                            params["pid"] = resolved_pat
 
-                    rows = session.execute(
-                        sql_text(
-                            f"SELECT {', '.join(select_fields)} FROM {clinical_table_sql(table_name)} "
-                            f"WHERE {' AND '.join(where_clauses)}"
-                            f"{order_by}"
-                        ),
-                        params,
-                    ).mappings().all()
+                        rows = session.execute(
+                            sql_text(
+                                f"SELECT {', '.join(select_fields)} FROM {clinical_table_sql(table_name)} "
+                                f"WHERE {' AND '.join(where_clauses)}"
+                                f"{order_by}"
+                            ),
+                            params,
+                        ).mappings().all()
                     if rows:
                         for idx, row in enumerate(rows):
                             # SQLAlchemy 2.x 的 mappings() 返回 RowMapping；

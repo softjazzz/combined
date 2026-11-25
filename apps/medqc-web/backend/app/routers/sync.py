@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import logging
@@ -44,6 +45,46 @@ logger = logging.getLogger(__name__)
 _AUTO_QC_ENQUEUE_FAILED_WARNING = "资料同步已完成，但质控任务未创建；可重试创建质控任务"
 _AUTO_QC_WORKFLOW_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{7,95}$")
 _AUTO_QC_FINAL_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_CONN_URI_PATTERN = re.compile(
+    r"(?:postgres(?:ql)?(?:\+\w+)?|mysql(?:\+\w+)?|sqlite)://\S+",
+    re.IGNORECASE,
+)
+_SENSITIVE_CONN_KEYS = frozenset({"url", "display_url", "connection_url", "dsn", "traceback", "stack"})
+
+
+def _sanitize_error_message(raw: object, default: str = "同步服务处理失败，请稍后重试") -> str:
+    text = str(raw or "").strip()
+    if not text:
+        return default
+    lowered = text.lower()
+    if (
+        "traceback (most recent call last)" in lowered
+        or "file \"" in lowered
+        or "\n" in text
+        or _CONN_URI_PATTERN.search(text)
+        or "psycopg2" in lowered
+        or "sqlalchemy" in lowered
+    ):
+        return default
+    return text
+
+
+def _sanitize_connection_result(raw: object, *, source_label: str = "数据库") -> dict:
+    """脱敏连接测试结果：不回传 display_url/url 连接串与底层异常堆栈。"""
+    if not isinstance(raw, dict):
+        return {"connected": False, "error": f"{source_label}连接失败，请检查配置或网络连通性"}
+    connected = bool(raw.get("connected"))
+    sanitized = {k: v for k, v in raw.items() if k not in _SENSITIVE_CONN_KEYS}
+    sanitized["connected"] = connected
+    if connected:
+        sanitized["error"] = ""
+    else:
+        raw_err = str(raw.get("error") or "").strip()
+        if raw_err == "REMOTE_DB_URL 未配置":
+            sanitized["error"] = "远端数据库连接未配置"
+        else:
+            sanitized["error"] = f"{source_label}连接失败，请检查配置或网络连通性"
+    return sanitized
 
 def require_legacy_sync_available():
     from ..services.clinical_source_policy import fixed_cdm
@@ -71,10 +112,12 @@ def _err(request: Request, error: str, code: str, data: dict | None = None):
 
 
 def _public_sync_result(result: dict[str, object]) -> dict[str, object]:
-    """剥离仅供服务端补建质控任务使用的病例三坐标。"""
+    """剥离仅供服务端补建质控任务使用的病例三坐标，并脱敏连接串/堆栈字段。"""
 
-    payload = dict(result)
+    payload = {k: v for k, v in dict(result).items() if k not in _SENSITIVE_CONN_KEYS}
     payload.pop("_internal_synced_case_refs", None)
+    if payload.get("error"):
+        payload["error"] = _sanitize_error_message(payload.get("error"), default="同步执行失败，请稍后重试")
     auto_qc = payload.get("auto_qc")
     if isinstance(auto_qc, dict):
         payload["auto_qc"] = {
@@ -106,7 +149,8 @@ async def _enqueue_qc_after_sync(
 
     if qc_scope == "final" and not explicit_request:
         workspace = qc_sichuan._sichuan_workspace_service()
-        eligible_refs = workspace.find_terminal_reevaluation_candidates(
+        eligible_refs = await asyncio.to_thread(
+            workspace.find_terminal_reevaluation_candidates,
             record_refs=record_refs,
         )
         if not eligible_refs:
@@ -620,25 +664,34 @@ def _normalize_target_departments(values: Optional[list[str]]) -> Optional[list[
 def _raise_mapped_service_error(exc: Exception) -> None:
     if isinstance(exc, HTTPException):
         raise exc
-    message = str(exc) or "请求处理失败"
     if isinstance(exc, ValueError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=message)
+        safe_msg = _sanitize_error_message(exc, default="同步请求参数无效")
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=safe_msg) from None
     if isinstance(exc, RuntimeError):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=message)
+        logger.warning("sync service runtime error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="同步服务暂不可用，请稍后重试",
+        ) from None
     if isinstance(exc, SAOperationalError) or (
         PGOperationalError and isinstance(exc, PGOperationalError)
     ):
+        logger.warning("sync service operational error: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"数据源连接不可用：{message}",
-        )
-    raise exc
+            detail="数据源连接不可用，请检查数据库配置或网络状态",
+        ) from None
+    logger.exception("sync service unexpected error: %s", exc)
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail="同步服务处理失败，请稍后重试",
+    ) from None
 
 
 # ==================== 状态查询 ====================
 
 @router.get("/status")
-async def get_sync_status(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_sync_status(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取同步状态（仅 PG）"""
     try:
         from ..services.etl_sync import get_sync_state
@@ -651,7 +704,7 @@ async def get_sync_status(request: Request, _: dict = Depends(require_sync_read_
 
 
 @router.get("/statistics")
-async def get_statistics(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_statistics(request: Request, _: dict = Depends(require_sync_read_access)):
     """同步统计（PG 口径，保留旧字段形状）"""
     try:
         from ..services.etl_sync import get_sync_state
@@ -679,7 +732,7 @@ async def get_statistics(request: Request, _: dict = Depends(require_sync_read_a
 # ==================== PG 配置 ====================
 
 @router.get("/config/pg")
-async def get_pg_config(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_pg_config(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 同步配置（密码脱敏）"""
     try:
         from ..services.etl_sync import load_db_config
@@ -691,7 +744,7 @@ async def get_pg_config(request: Request, _: dict = Depends(require_sync_read_ac
 
 
 @router.put("/config/pg")
-async def update_pg_config(
+def update_pg_config(
     request: Request,
     update: PgConfigUpdate,
     current_user: dict = Depends(require_sync_write_access),
@@ -723,7 +776,7 @@ async def update_pg_config(
             raise ValueError("请填写本院长期稳定的机构标识，不能使用系统占位值")
         merged["default_institute_id"] = institute_id
         save_db_config(merged, runtime_password=remote_password)
-        conn_result = test_remote_connection()
+        conn_result = _sanitize_connection_result(test_remote_connection(), source_label="远端 PG")
         audit_event(
             request,
             action="sync.config.pg.update",
@@ -749,7 +802,7 @@ async def update_pg_config(
 
 
 @router.get("/config/policy")
-async def get_sync_policy(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_sync_policy(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 抽取策略（scope/日期窗口/调度/夜间窗口）。"""
     try:
         from ..services.sync_policy import load_sync_policy
@@ -761,7 +814,7 @@ async def get_sync_policy(request: Request, _: dict = Depends(require_sync_read_
 
 
 @router.put("/config/policy")
-async def update_sync_policy(
+def update_sync_policy(
     request: Request,
     update: SyncPolicyUpdate,
     current_user: dict = Depends(require_sync_write_access),
@@ -774,7 +827,10 @@ async def update_sync_policy(
         keep_policy_version = bool(payload.pop("keep_policy_version", False))
         saved = save_sync_policy(payload, keep_policy_version=keep_policy_version)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_sanitize_error_message(exc, default="同步策略参数无效"),
+        ) from None
     except Exception as exc:
         _raise_mapped_service_error(exc)
 
@@ -794,7 +850,7 @@ async def update_sync_policy(
 
 
 @router.get("/config/pg/tables")
-async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 表直连同步配置（默认启用全部已配置表）"""
     try:
         from ..services.etl_sync import list_sync_tables
@@ -806,7 +862,7 @@ async def get_pg_sync_tables(request: Request, _: dict = Depends(require_sync_re
 
 
 @router.get("/config/pg/table-groups")
-async def get_pg_sync_table_groups(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_pg_sync_table_groups(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取 PG 同步表分组（核心8/扩展分组/全量56）。"""
     try:
         from ..services.etl_sync import list_sync_table_groups
@@ -818,7 +874,7 @@ async def get_pg_sync_table_groups(request: Request, _: dict = Depends(require_s
 
 
 @router.put("/config/pg/tables")
-async def update_pg_sync_tables(
+def update_pg_sync_tables(
     request: Request,
     payload: PgSyncTablesUpdate,
     current_user: dict = Depends(require_sync_write_access),
@@ -830,7 +886,10 @@ async def update_pg_sync_tables(
         updates = [item.model_dump(exclude_none=True) for item in payload.items]
         items = save_sync_tables_config(updates)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc))
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=_sanitize_error_message(exc, default="同步表配置参数无效"),
+        ) from None
     except Exception as exc:
         _raise_mapped_service_error(exc)
 
@@ -851,35 +910,35 @@ async def update_pg_sync_tables(
 # ==================== 连接测试 ====================
 
 @router.post("/test-connection/pg-remote")
-async def test_pg_remote(request: Request, _: dict = Depends(require_sync_write_access)):
+def test_pg_remote(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试远端 PG 连接（仅 admin）"""
     try:
         from ..services.etl_sync import test_remote_connection
 
-        return _ok(request, test_remote_connection())
+        return _ok(request, _sanitize_connection_result(test_remote_connection(), source_label="远端 PG"))
     except Exception as exc:
         _raise_mapped_service_error(exc)
 
 
 @router.post("/test-connection/pg-local")
-async def test_pg_local(request: Request, _: dict = Depends(require_sync_write_access)):
+def test_pg_local(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试本地 PG 连接（仅 admin）"""
     try:
         from ..services.etl_sync import test_local_connection
 
-        return _ok(request, test_local_connection())
+        return _ok(request, _sanitize_connection_result(test_local_connection(), source_label="本地 PG"))
     except Exception as exc:
         _raise_mapped_service_error(exc)
 
 
 @router.post("/test-connection/all")
-async def test_all_connections(request: Request, _: dict = Depends(require_sync_write_access)):
+def test_all_connections(request: Request, _: dict = Depends(require_sync_write_access)):
     """测试全连接（远端 PG + 本地 PG）"""
     try:
         from ..services.etl_sync import test_local_connection, test_remote_connection
 
-        pg_remote = test_remote_connection()
-        pg_local = test_local_connection()
+        pg_remote = _sanitize_connection_result(test_remote_connection(), source_label="远端 PG")
+        pg_local = _sanitize_connection_result(test_local_connection(), source_label="本地 PG")
         all_connected = bool(pg_remote.get("connected")) and bool(pg_local.get("connected"))
         connected_count = int(bool(pg_remote.get("connected"))) + int(bool(pg_local.get("connected")))
         return _ok(request, {
@@ -921,7 +980,7 @@ async def get_departments(request: Request, _: dict = Depends(require_sync_read_
 # ==================== 试运行预检 ====================
 
 @router.post("/preflight")
-async def run_preflight(
+def run_preflight(
     request: Request,
     req: PreflightRequest,
     _: dict = Depends(require_sync_write_access),
@@ -937,15 +996,15 @@ async def run_preflight(
             validate_pg_sync_plan,
         )
 
-        local_result = test_local_connection()
-        remote_result = test_remote_connection()
+        local_result = _sanitize_connection_result(test_local_connection(), source_label="本地 PG")
+        remote_result = _sanitize_connection_result(test_remote_connection(), source_label="远端 PG")
         blockers: list[str] = []
         warnings: list[str] = []
 
         if not local_result.get("connected"):
-            blockers.append(f"本地 PG 未连通: {local_result.get('error', '未知错误')}")
+            blockers.append(f"本地 PG 未连通: {local_result.get('error', '连接失败')}")
         if not remote_result.get("connected"):
-            blockers.append(f"远端 PG 未连通: {remote_result.get('error', '未知错误')}")
+            blockers.append(f"远端 PG 未连通: {remote_result.get('error', '连接失败')}")
 
         if req.tables and len(req.tables) > 10:
             warnings.append("本次指定同步表数量较多，建议分批执行。")
@@ -1111,7 +1170,8 @@ async def trigger_sync(
         auto_qc_workflow_token=auto_qc_workflow_token,
     )
 
-    reservation = reserve_sync_trigger(
+    reservation = await asyncio.to_thread(
+        reserve_sync_trigger,
         idempotency_key=idempotency_key,
         source=req.source,
         tier=effective_tier,
@@ -1131,13 +1191,17 @@ async def trigger_sync(
             reused_result.get("auto_qc") if isinstance(reused_result, dict) else None
         )
         retry_scope = str(scene or "").strip().lower()
-        retry_record_refs = claim_sync_auto_qc_retry(idempotency_key) if (
-            bool(req.auto_qc_after_sync)
-            and isinstance(existing_auto_qc, dict)
-            and str(existing_auto_qc.get("status") or "").strip().lower()
-            in {"enqueue_failed", "enqueueing"}
-            and retry_scope in {"running", "final"}
-        ) else None
+        retry_record_refs = (
+            await asyncio.to_thread(claim_sync_auto_qc_retry, idempotency_key)
+            if (
+                bool(req.auto_qc_after_sync)
+                and isinstance(existing_auto_qc, dict)
+                and str(existing_auto_qc.get("status") or "").strip().lower()
+                in {"enqueue_failed", "enqueueing"}
+                and retry_scope in {"running", "final"}
+            )
+            else None
+        )
         if retry_record_refs and isinstance(reused_result, dict):
             claimed_auto_qc = dict(existing_auto_qc)
             claimed_auto_qc["status"] = "enqueueing"
@@ -1159,7 +1223,8 @@ async def trigger_sync(
                         item for item in warnings
                         if item != _AUTO_QC_ENQUEUE_FAILED_WARNING
                     ]
-                complete_sync_trigger(
+                await asyncio.to_thread(
+                    complete_sync_trigger,
                     idempotency_key=idempotency_key,
                     status=reservation.status,
                     result=reused_result,
@@ -1183,7 +1248,8 @@ async def trigger_sync(
                 warnings = reused_result.setdefault("warnings", [])
                 if isinstance(warnings, list) and _AUTO_QC_ENQUEUE_FAILED_WARNING not in warnings:
                     warnings.append(_AUTO_QC_ENQUEUE_FAILED_WARNING)
-                complete_sync_trigger(
+                await asyncio.to_thread(
+                    complete_sync_trigger,
                     idempotency_key=idempotency_key,
                     status=reservation.status,
                     result=reused_result,
@@ -1196,7 +1262,8 @@ async def trigger_sync(
             in {"enqueue_failed", "enqueueing"}
             and retry_scope in {"running", "final"}
         ):
-            refreshed_reservation = reserve_sync_trigger(
+            refreshed_reservation = await asyncio.to_thread(
+                reserve_sync_trigger,
                 idempotency_key=idempotency_key,
                 source=req.source,
                 tier=effective_tier,
@@ -1255,7 +1322,7 @@ async def trigger_sync(
                 if isinstance(auto_terminal_summary, dict):
                     reused_payload["auto_terminal_qc"] = dict(auto_terminal_summary)
         if reservation.error:
-            reused_payload["error"] = reservation.error
+            reused_payload["error"] = _sanitize_error_message(reservation.error, default="同步执行失败，请稍后重试")
         audit_event(
             request,
             action="sync.trigger",
@@ -1290,11 +1357,12 @@ async def trigger_sync(
             include_internal_case_refs=True,
         )
     except Exception as exc:
-        complete_sync_trigger(
+        await asyncio.to_thread(
+            complete_sync_trigger,
             idempotency_key=idempotency_key,
             status="failed",
             result=None,
-            error=str(exc),
+            error=_sanitize_error_message(exc, default="同步执行失败，请稍后重试"),
         )
         _raise_mapped_service_error(exc)
 
@@ -1413,7 +1481,8 @@ async def trigger_sync(
 
     try:
         if _is_rejected_running(result):
-            complete_sync_trigger(
+            await asyncio.to_thread(
+                complete_sync_trigger,
                 idempotency_key=idempotency_key,
                 status="rejected",
                 result=result if isinstance(result, dict) else None,
@@ -1442,7 +1511,8 @@ async def trigger_sync(
             "email": current_user.get("email"),
             "roles": current_user.get("roles") or [],
         }
-        append_sync_run_record(
+        await asyncio.to_thread(
+            append_sync_run_record,
             {
                 "id": run_id,
                 "source": req.source,
@@ -1458,9 +1528,9 @@ async def trigger_sync(
                 "finished_at": _utc_iso(finished_at),
                 "duration_ms": int((finished_at - started_at).total_seconds() * 1000),
                 "total_records": total_records,
-                "error": result.get("error") if isinstance(result, dict) else None,
+                "error": _sanitize_error_message(result.get("error"), default="同步执行失败") if (isinstance(result, dict) and result.get("error")) else None,
                 "operator": operator,
-            }
+            },
         )
         logger.info(
             "sync.trigger operator=%s source=%s tier=%s status=%s total_records=%s",
@@ -1478,11 +1548,13 @@ async def trigger_sync(
         and bool(result.get("success")) is False
         and status_name != "partial"
     ):
-        complete_sync_trigger(
+        safe_sync_error = _sanitize_error_message(result.get("error"), default="同步执行失败")
+        await asyncio.to_thread(
+            complete_sync_trigger,
             idempotency_key=idempotency_key,
             status="failed",
             result=result,
-            error=str(result.get("error") or "同步执行失败"),
+            error=safe_sync_error,
         )
         audit_event(
             request,
@@ -1499,17 +1571,18 @@ async def trigger_sync(
                 "idempotency_key": idempotency_key,
                 "status": status_name,
                 "total_records": total_records,
-                "error": result.get("error"),
+                "error": safe_sync_error,
             },
         )
         return _err(
             request,
-            str(result.get("error") or "同步执行失败"),
+            safe_sync_error,
             code="SYNC_TRIGGER_FAILED",
             data=_public_sync_result(result),
         )
 
-    complete_sync_trigger(
+    await asyncio.to_thread(
+        complete_sync_trigger,
         idempotency_key=idempotency_key,
         status=status_name,
         result=result if isinstance(result, dict) else None,
@@ -1549,7 +1622,7 @@ async def get_sync_mappings(request: Request, _: dict = Depends(require_sync_rea
 
 
 @router.get("/runs")
-async def get_sync_runs(
+def get_sync_runs(
     request: Request,
     source: Optional[Literal["pg"]] = Query(default=None),
     tier: Optional[Literal["tier1", "tier2", "tier3", "all"]] = Query(default=None),
@@ -1578,7 +1651,7 @@ async def get_sync_runs(
 
 
 @router.get("/templates")
-async def get_sync_templates(request: Request, _: dict = Depends(require_sync_read_access)):
+def get_sync_templates(request: Request, _: dict = Depends(require_sync_read_access)):
     """获取同步模板目录"""
     from ..services.sync_templates import list_sync_templates
 
@@ -1586,7 +1659,7 @@ async def get_sync_templates(request: Request, _: dict = Depends(require_sync_re
 
 
 @router.post("/templates/apply")
-async def apply_sync_template(
+def apply_sync_template(
     request: Request,
     req: SyncTemplateApplyRequest,
     current_user: dict = Depends(require_sync_write_access),

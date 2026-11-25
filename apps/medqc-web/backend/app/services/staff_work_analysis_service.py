@@ -11,6 +11,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import (
     DefectRectification,
@@ -289,8 +290,11 @@ def _event(
 
 
 def _appeal_execution_options(session: Any) -> dict[str, Any]:
-    """申诉与申诉审核的权威表在 qc；PostgreSQL 下不经 search_path 命中 public 同名旧表。"""
-    if session.get_bind().dialect.name == "postgresql":
+    """申诉与申诉审核的权威表在 split 模式下位于 qc；single/SQLite 不附加 qc schema 映射。"""
+    schema_mode = str(
+        getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single"
+    ).strip().lower()
+    if session.get_bind().dialect.name == "postgresql" and schema_mode == "split":
         return {"schema_translate_map": {None: "qc"}}
     return {}
 
@@ -589,8 +593,6 @@ def _load_base_events(
             statement = _modern(statement, QCAppeal)
         if scope.institute_id is not None:
             statement = statement.where(QCAppeal.institute_id == scope.institute_id)
-        if scope.department is not None:
-            statement = statement.where(QCAppeal.case_department == scope.department)
         appeals = session.execute(
             statement.limit(MAX_EVENT_SOURCE_ROWS + 1),
             execution_options=_appeal_execution_options(session),
@@ -749,6 +751,9 @@ def _load_events(
         ):
             event["department"] = departments.get(identity)
 
+    # 在应用 task_id 与 department 自身筛选前先计算全量可用任务选项（遵循当前用户院区隔离）。
+    option_task_ids = sorted({event["task_id"] for event in events if event["task_id"]})
+
     context_unavailable_count = 0
     if scope.task_id is not None:
         filtered = []
@@ -778,12 +783,11 @@ def _load_events(
                 context_unavailable_count += 1
         events = filtered
 
-    task_ids = sorted({event["task_id"] for event in events if event["task_id"]})
     task_names = {}
-    if task_ids:
+    if option_task_ids:
         try:
             with session.begin_nested():
-                for chunk in _chunked(task_ids):
+                for chunk in _chunked(option_task_ids):
                     for row in (
                         session.execute(select(QCTask).where(QCTask.id.in_(chunk)))
                         .scalars()
@@ -800,7 +804,8 @@ def _load_events(
             for institute, name in department_options
         ],
         task_options=[
-            {"task_id": value, "task_name": task_names.get(value)} for value in task_ids
+            {"task_id": value, "task_name": task_names.get(value)}
+            for value in option_task_ids
         ],
         filter_options_unavailable_reason=(
             department_error

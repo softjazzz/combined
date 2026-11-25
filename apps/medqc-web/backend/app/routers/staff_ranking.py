@@ -12,6 +12,8 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, Iterable, List, Optional
@@ -31,6 +33,7 @@ from ..services.user_scope_owner import (
 
 router = APIRouter(prefix="/api/v1/staff-ranking", tags=["staff-ranking"])
 logger = logging.getLogger(__name__)
+_DEFAULT_ASYNC_EXECUTE = async_execute
 
 _GLOBAL_ROLES = frozenset({"admin", "sync_admin", "super_admin"})
 _RANKING_READ_ROLES = _GLOBAL_ROLES | frozenset({"qc_manager", "qc_staff"})
@@ -192,8 +195,18 @@ def _filter_rankings_by_actor_institute(
     return filtered
 
 
+def _execute_ranking_query(query: Any) -> Any:
+    """在线程池中直接同步执行查询；若单测替换了 async_execute 则兼容执行。"""
+    if async_execute is not _DEFAULT_ASYNC_EXECUTE:
+        result = async_execute(query)
+        if inspect.isawaitable(result):
+            return asyncio.run(result)
+        return result
+    return query.execute()
+
+
 @router.get("")
-async def get_staff_ranking(
+def get_staff_ranking(
     request: Request,
     period: str = Query("this_month", description="统计周期: this_week/this_month/this_quarter"),
     sort_by: str = Query("qc_count", description="排序字段: qc_count/recheck_count/defect_found/pass_rate"),
@@ -224,7 +237,7 @@ async def get_staff_ranking(
             # 兼容不同视图字段命名；若缺失时间列则回退到全量并显式返回标记。
             for candidate in ("stat_date", "created_at", "updated_at", "date"):
                 try:
-                    resp = await async_execute(
+                    resp = _execute_ranking_query(
                         sb.table("v_qc_coder_ranking").select("*").gte(candidate, period_start.isoformat())
                     )
                     rows = list(getattr(resp, "data", None) or [])
@@ -234,7 +247,7 @@ async def get_staff_ranking(
                     continue
 
         if period_filter_field is None:
-            resp = await async_execute(sb.table("v_qc_coder_ranking").select("*"))
+            resp = _execute_ranking_query(sb.table("v_qc_coder_ranking").select("*"))
             rows = list(getattr(resp, "data", None) or [])
 
         rows = _filter_rankings_by_actor_institute(rows, actor)
