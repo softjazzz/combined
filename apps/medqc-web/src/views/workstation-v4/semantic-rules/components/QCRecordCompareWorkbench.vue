@@ -61,7 +61,10 @@
         @load-orders="loadOrders"
       />
 
-      <main class="record-content-column">
+      <section
+        class="record-content-column"
+        aria-label="病历原文"
+      >
         <div class="record-content-toolbar">
           <div>
             <strong>
@@ -267,7 +270,7 @@
               : '质控结果仍可查看，但当前无法定位到来源文书。'
           }}</span>
         </div>
-      </main>
+      </section>
 
       <aside
         v-if="!documentOnly"
@@ -2004,7 +2007,7 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 1;
 }
 .record-result-toggle {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-tertiary);
   line-height: 0;
 }
 .record-result-toggle svg {
@@ -2130,7 +2133,7 @@ onBeforeUnmount(() => {
 .record-compare-state,
 .record-content-empty {
   padding: 30px 16px;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 20px;
   text-align: center;

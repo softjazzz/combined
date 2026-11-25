@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page report-page">
+  <section class="mq-page report-page" aria-label="病历质量分析">
     <header class="page-head mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -15,23 +15,33 @@
       <div class="head-actions mq-page-head__actions">
         <div class="mq-segmented" role="tablist" aria-label="报表专题">
           <button
+            id="record-report-tab-quality"
+            ref="qualityTabRef"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === 'quality' }"
             role="tab"
             :aria-selected="reportTab === 'quality'"
+            aria-controls="record-report-panel-quality"
+            :tabindex="reportTab === 'quality' ? 0 : -1"
             @click="setReportTab('quality')"
+            @keydown="onReportTabKeydown($event, 'quality')"
           >
             病历质量分析
           </button>
           <button
+            id="record-report-tab-core"
+            ref="coreTabRef"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === 'core' }"
             role="tab"
             :aria-selected="reportTab === 'core'"
+            aria-controls="record-report-panel-core"
+            :tabindex="reportTab === 'core' ? 0 : -1"
             data-testid="core-tab"
             @click="setReportTab('core')"
+            @keydown="onReportTabKeydown($event, 'core')"
           >
             18项核心制度
           </button>
@@ -65,12 +75,29 @@
         </button>
       </div>
     </header>
-    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
-    <div v-show="reportTab === 'quality'">
+    <div
+      id="record-report-panel-core"
+      role="tabpanel"
+      aria-labelledby="record-report-tab-core"
+      :hidden="reportTab !== 'core'"
+    >
+      <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
+    </div>
+    <div
+      id="record-report-panel-quality"
+      v-show="reportTab === 'quality'"
+      role="tabpanel"
+      aria-labelledby="record-report-tab-quality"
+      :hidden="reportTab !== 'quality'"
+    >
       <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
         <div class="field mq-field scene-field">
-          <label>场景</label>
-          <div class="segmented mq-segmented" role="group" aria-label="质控场景">
+          <span id="report-scene-label" class="field-label mq-field__label">场景</span>
+          <div
+            class="segmented mq-segmented"
+            role="group"
+            aria-labelledby="report-scene-label"
+          >
             <button
               type="button"
               class="mq-segmented__item"
@@ -108,7 +135,7 @@
             placeholder="全部医生"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--datetime mq-field">
           <label for="report-from">完成时间起</label
           ><input
             id="report-from"
@@ -117,7 +144,7 @@
             type="datetime-local"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--datetime mq-field">
           <label for="report-to">完成时间止</label
           ><input
             id="report-to"
@@ -134,10 +161,12 @@
             <option value="manual">人工缺陷</option>
           </select>
         </div>
-        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
-          <MqIcon name="search" :size="16" />查询
-        </button>
-        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+        <div class="filter-actions">
+          <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+            <MqIcon name="search" :size="16" />查询
+          </button>
+          <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+        </div>
       </section>
 
       <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
@@ -157,6 +186,49 @@
           />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
           统计范围未按“已归档”核验，可能包含尚未归档的病历。
         </div>
+        <section
+          v-if="isZeroCaseReport"
+          class="empty-guide mq-card"
+          role="status"
+          data-testid="report-empty-guide"
+        >
+          <div class="empty-guide__copy">
+            <MqIcon name="issue" :size="18" />
+            <div>
+              <p class="empty-guide__title">
+                {{
+                  hasActiveFilters
+                    ? `当前筛选条件下暂无符合口径的${scene === 'running' ? '运行病历' : '终末病历'}（0 份）`
+                    : `当前${scene === 'running' ? '运行病历' : '终末病历'}范围内暂无已完成质控结果的病例（0 份）`
+                }}
+              </p>
+              <p class="empty-guide__desc">
+                {{
+                  hasActiveFilters
+                    ? '可清空科室、主治医师或放宽完成时间范围后重新查询，也可切换至另一质控场景查看统计。'
+                    : `请先在质控工作台完成病历质控，或切换至「${scene === 'running' ? '终末病历' : '运行病历'}」查看其他场景数据。`
+                }}
+              </p>
+            </div>
+          </div>
+          <div class="empty-guide__actions">
+            <button
+              v-if="hasActiveFilters"
+              class="mq-btn mq-btn--primary"
+              type="button"
+              @click="resetFilters"
+            >
+              重置筛选条件
+            </button>
+            <button
+              class="mq-btn"
+              type="button"
+              @click="setScene(scene === 'running' ? 'final' : 'running')"
+            >
+              切换到{{ scene === 'running' ? '终末病历' : '运行病历' }}
+            </button>
+          </div>
+        </section>
         <section class="overview" aria-label="总览">
           <h2>总览</h2>
           <div class="metrics">
@@ -266,13 +338,14 @@
           <div class="top-panel mq-card">
             <div class="top-head">
               <h3>缺陷 Top 20</h3>
-              <div class="segmented mq-segmented">
+              <div class="segmented mq-segmented" role="group" aria-label="缺陷 Top 20 维度">
                 <button
                   v-for="tab in topTabs"
                   :key="tab.key"
                   type="button"
                   class="mq-segmented__item"
                   :class="{ active: activeTop === tab.key, 'is-active': activeTop === tab.key }"
+                  :aria-pressed="activeTop === tab.key"
                   @click="activeTop = tab.key"
                 >
                   {{ tab.label }}
@@ -353,11 +426,11 @@
               <span>{{ report.department_rows.length }} 个科室</span>
             </div>
             <div class="table-scroll">
-              <table class="mq-table">
+              <table class="mq-table mq-table--sticky-first">
                 <thead>
                   <tr>
-                    <th>科室</th>
-                    <th v-for="column in shownColumns" :key="column.key">
+                    <th scope="col">科室</th>
+                    <th v-for="column in shownColumns" :key="column.key" scope="col" class="col-compact">
                       {{ column.label }}
                     </th>
                   </tr>
@@ -390,11 +463,11 @@
               <span>{{ report.doctor_rows.length }} 位医生</span>
             </div>
             <div class="table-scroll">
-              <table class="mq-table">
+              <table class="mq-table mq-table--sticky-first">
                 <thead>
                   <tr>
-                    <th>主治医师</th>
-                    <th v-for="column in shownColumns" :key="column.key">
+                    <th scope="col">主治医师</th>
+                    <th v-for="column in shownColumns" :key="column.key" scope="col" class="col-compact">
                       {{ column.label }}
                     </th>
                   </tr>
@@ -518,7 +591,7 @@
         </div>
       </a-drawer>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -619,6 +692,8 @@ function readDefectSource(value: unknown): DefectSource {
 const reportTab = ref<'quality' | 'core'>(
   queryString(route?.query?.tab) === 'core' ? 'core' : 'quality',
 )
+const qualityTabRef = ref<HTMLButtonElement | null>(null)
+const coreTabRef = ref<HTMLButtonElement | null>(null)
 const localScene = ref<ReportScene>(queryString(route?.query?.scene) === 'final' ? 'final' : 'running')
 const authKey = computed(() =>
   JSON.stringify([
@@ -914,9 +989,36 @@ function syncUrlQuery(overrides?: { scene?: ReportScene; tab?: 'quality' | 'core
   }
 }
 
+const isZeroCaseReport = computed(
+  () => report.value !== null && report.value.kpis.record_total === 0,
+)
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.value.department ||
+      filters.value.doctor ||
+      filters.value.completed_from ||
+      filters.value.completed_to ||
+      (filters.value.defect_source && filters.value.defect_source !== 'all'),
+  ),
+)
+
 function setReportTab(tab: 'quality' | 'core'): void {
   reportTab.value = tab
   syncUrlQuery({ tab })
+}
+
+function onReportTabKeydown(event: KeyboardEvent, current: 'quality' | 'core'): void {
+  const order: Array<'quality' | 'core'> = ['quality', 'core']
+  const index = order.indexOf(current)
+  let next: 'quality' | 'core' | null = null
+  if (event.key === 'ArrowRight') next = order[(index + 1) % order.length]!
+  else if (event.key === 'ArrowLeft') next = order[(index - 1 + order.length) % order.length]!
+  else if (event.key === 'Home') next = order[0]!
+  else if (event.key === 'End') next = order[order.length - 1]!
+  if (!next) return
+  event.preventDefault()
+  setReportTab(next)
+  ;(next === 'quality' ? qualityTabRef.value : coreTabRef.value)?.focus()
 }
 
 async function loadReport(): Promise<void> {

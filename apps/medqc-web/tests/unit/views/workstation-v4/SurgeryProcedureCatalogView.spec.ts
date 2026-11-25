@@ -131,7 +131,7 @@ describe('SurgeryProcedureCatalogView', () => {
     expect(wrapper.text()).toContain('院内绩效分配优先')
     const table = wrapper.findComponent(ATableStub)
     expect(table.props('columns')).toHaveLength(4)
-    expect(table.props('scroll')).toEqual({ x: 1020 })
+    expect(table.props('scroll')).toEqual({ x: 840 })
     expect(table.props('tableLayout')).toBe('fixed')
     expect(wrapper.find('.catalog-table-wrap').exists()).toBe(true)
   })

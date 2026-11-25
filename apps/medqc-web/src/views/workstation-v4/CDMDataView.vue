@@ -131,14 +131,24 @@
             <div
               class="toggle-btn"
               :class="{ active: leftView === 'schema' }"
+              role="button"
+              tabindex="0"
+              :aria-pressed="leftView === 'schema'"
               @click="leftView = 'schema'"
+              @keydown.enter.prevent="leftView = 'schema'"
+              @keydown.space.prevent="leftView = 'schema'"
             >
               <ProfileOutlined /> 结构
             </div>
             <div
               class="toggle-btn"
               :class="{ active: leftView === 'data' }"
+              role="button"
+              tabindex="0"
+              :aria-pressed="leftView === 'data'"
               @click="switchToDataView()"
+              @keydown.enter.prevent="switchToDataView()"
+              @keydown.space.prevent="switchToDataView()"
             >
               <OrderedListOutlined /> 数据
             </div>
@@ -152,14 +162,19 @@
             :key="table.name"
             class="table-tab"
             :class="{ active: selectedTable === table.name }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="selectedTable === table.name"
             @click="selectTable(table.name)"
+            @keydown.enter.prevent="selectTable(table.name)"
+            @keydown.space.prevent="selectTable(table.name)"
           >
             <span class="tab-label">{{ table.label }}</span>
             <span class="tab-name">{{ table.name }}</span>
             <a-badge
               :count="table.column_count"
               :number-style="{
-                backgroundColor: selectedTable === table.name ? '#0a6cff' : 'rgba(29,29,31,0.38)',
+                backgroundColor: selectedTable === table.name ? '#0a6cff' : '#59595e',
                 fontSize: '11px',
               }"
             />
@@ -342,7 +357,12 @@
             :key="patientKey(pt)"
             class="patient-card"
             :class="{ active: selectedPatient && patientKey(selectedPatient) === patientKey(pt) }"
+            role="button"
+            tabindex="0"
+            :aria-pressed="Boolean(selectedPatient && patientKey(selectedPatient) === patientKey(pt))"
             @click="selectPatient(pt)"
+            @keydown.enter.self.prevent="selectPatient(pt)"
+            @keydown.space.self.prevent="selectPatient(pt)"
           >
             <div class="pt-top">
               <span class="pt-name">{{ pt.name }}</span>
@@ -1062,7 +1082,7 @@ onBeforeUnmount(() => {
 .cdm-page-header p {
   max-width: 760px;
   margin: 8px 0 0;
-  color: rgba(29, 29, 31, 0.6);
+  color: var(--mq-text-secondary);
   font-size: 14px;
   font-weight: 500;
   line-height: 22px;
@@ -1083,11 +1103,12 @@ onBeforeUnmount(() => {
 /* ===== 顶部统计 ===== */
 .stats-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 14px;
   margin-bottom: 16px;
 }
 .stat-card {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 18px;
@@ -1154,7 +1175,7 @@ onBeforeUnmount(() => {
 }
 .stat-label {
   font-size: 13px;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-weight: 600;
   margin-top: 2px;
 }
@@ -1167,6 +1188,8 @@ onBeforeUnmount(() => {
   padding: 12px 20px;
   margin-bottom: 16px;
   display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: space-between;
   align-items: center;
   -webkit-backdrop-filter: blur(18px);
@@ -1200,7 +1223,7 @@ onBeforeUnmount(() => {
 }
 .ds-text {
   font-size: 14px;
-  color: rgba(29, 29, 31, 0.66);
+  color: var(--mq-text-secondary);
   font-weight: 500;
 }
 .ds-right {
@@ -1210,7 +1233,7 @@ onBeforeUnmount(() => {
 }
 .ds-path {
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
 }
 
@@ -1224,6 +1247,7 @@ onBeforeUnmount(() => {
 
 /* ===== 左侧面板 ===== */
 .schema-panel {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 20px;
@@ -1277,22 +1301,29 @@ onBeforeUnmount(() => {
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   display: flex;
   align-items: center;
   gap: 4px;
   transition: all 0.2s;
 }
 .toggle-btn:hover {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 .toggle-btn.active {
   background: rgba(255, 255, 255, 0.92);
   color: #0a6cff;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
+.toggle-btn:focus-visible,
+.table-tab:focus-visible,
+.patient-card:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
 
 .table-tabs {
+  min-width: 0;
   min-height: 0;
   border-right: 1px solid rgba(0, 0, 0, 0.08);
   overflow-y: auto;
@@ -1313,6 +1344,7 @@ onBeforeUnmount(() => {
 }
 .table-tab {
   width: 100%;
+  min-width: 0;
   padding: 9px 10px;
   border-radius: 8px;
   font-size: 12px;
@@ -1335,14 +1367,19 @@ onBeforeUnmount(() => {
 }
 .tab-label {
   font-weight: 600;
+  white-space: nowrap;
 }
 .tab-name {
-  color: rgba(29, 29, 31, 0.38);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--mq-text-tertiary);
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
   font-size: 11px;
 }
 .table-tab.active .tab-name {
-  color: rgba(10, 108, 255, 0.58);
+  color: var(--mq-brand-700);
 }
 
 /* 结构视图 */
@@ -1358,7 +1395,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   font-size: 11px;
   font-weight: 700;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
@@ -1380,7 +1417,7 @@ onBeforeUnmount(() => {
 }
 .col-name {
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-weight: 500;
   display: flex;
   align-items: center;
@@ -1392,7 +1429,7 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 .col-comment {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 .pk-badge {
@@ -1416,7 +1453,7 @@ onBeforeUnmount(() => {
 .data-empty {
   padding: 40px;
   text-align: center;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   font-size: 14px;
   display: flex;
   align-items: center;
@@ -1426,7 +1463,7 @@ onBeforeUnmount(() => {
 .data-table-info {
   padding: 8px 16px;
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 .data-table-scroll {
@@ -1451,7 +1488,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   text-align: left;
   font-weight: 700;
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   font-family: 'SF Mono', 'Cascadia Code', ui-monospace, monospace;
   font-size: 11px;
@@ -1470,7 +1507,7 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 .cell-value {
-  color: rgba(29, 29, 31, 0.7);
+  color: var(--mq-text-secondary);
 }
 .data-table-wrap {
   display: flex;
@@ -1481,6 +1518,7 @@ onBeforeUnmount(() => {
 
 /* ===== 右侧 ===== */
 .data-panel {
+  min-width: 0;
   background: rgba(255, 255, 255, 0.86);
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 20px;
@@ -1536,18 +1574,18 @@ onBeforeUnmount(() => {
 }
 .pt-age {
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
 }
 .pt-info {
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   margin-bottom: 4px;
 }
 .pt-dept {
   font-weight: 600;
 }
 .pt-divider {
-  color: rgba(29, 29, 31, 0.22);
+  color: var(--mq-text-tertiary);
   margin: 0 4px;
 }
 .pt-mr {
@@ -1560,7 +1598,7 @@ onBeforeUnmount(() => {
 }
 .pt-dates {
   font-size: 11px;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 .pt-days {
   background: rgba(0, 0, 0, 0.05);
@@ -1597,7 +1635,7 @@ onBeforeUnmount(() => {
 .section-title {
   font-size: 14px;
   font-weight: 700;
-  color: rgba(29, 29, 31, 0.72);
+  color: var(--mq-text-secondary);
   margin-bottom: 10px;
   display: flex;
   align-items: center;
@@ -1619,7 +1657,7 @@ onBeforeUnmount(() => {
 .diag-name {
   flex: 1;
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-weight: 500;
 }
 .diag-code {
@@ -1632,11 +1670,11 @@ onBeforeUnmount(() => {
 }
 .cost-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 .cost-total {
-  grid-column: span 3;
+  grid-column: 1 / -1;
   border: 1px solid rgba(10, 108, 255, 0.16);
   background: rgba(10, 108, 255, 0.08);
   color: #0a6cff;
@@ -1657,15 +1695,16 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   display: flex;
   justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
-  color: rgba(29, 29, 31, 0.66);
+  color: var(--mq-text-secondary);
 }
 
 /* 弹窗 */
 .modal-loading {
   padding: 60px;
   text-align: center;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 15px;
   display: flex;
   flex-direction: column;
@@ -1674,10 +1713,25 @@ onBeforeUnmount(() => {
 }
 
 /* 响应式 */
-@media (max-width: 1200px) {
+@media (max-width: 1400px) {
   .stats-row {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
+  .main-content {
+    grid-template-columns: minmax(0, 1fr) 360px;
+  }
+  .schema-panel {
+    grid-template-columns: 200px minmax(0, 1fr);
+  }
+  .cost-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cost-total {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1200px) {
   .main-content {
     grid-template-columns: 1fr;
   }

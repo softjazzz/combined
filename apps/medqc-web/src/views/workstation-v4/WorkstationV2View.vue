@@ -16,6 +16,7 @@
         <a-button
           type="text"
           size="small"
+          :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
           @click="sidebarCollapsed = !sidebarCollapsed"
         >
           <MenuFoldOutlined v-if="!sidebarCollapsed" />
@@ -95,8 +96,11 @@
       </a-menu>
     </aside>
 
-    <!-- 主内容区 -->
-    <main class="ws-v2-main">
+    <!-- 主内容区（embedded 模式下避开外层 WorkstationLayout 的 <main>，避免嵌套地标） -->
+    <component
+      :is="embedded ? 'section' : 'main'"
+      class="ws-v2-main"
+    >
       <!-- 工作台视图 -->
       <div
         v-if="currentView === 'workbench'"
@@ -488,7 +492,7 @@
       >
         <ICDSearchPanel />
       </div>
-    </main>
+    </component>
 
     <!-- 编码优化建议抽屉 -->
     <CodingOptimizationDrawer
@@ -980,7 +984,10 @@ onUnmounted(() => {
 /* ==================== 主内容区 ==================== */
 .ws-v2-main {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   background: #f5f5f7;
@@ -1577,9 +1584,20 @@ onUnmounted(() => {
   background: transparent;
 }
 
-/* 外壳已无顶栏，嵌入高度不再扣除 64px */
+/* 外壳已无顶栏，嵌入模式下允许纵向自然滚动，避免 1280×720 裁切上传/映射操作区 */
 .ws-v2-embedded {
-  height: 100vh;
+  height: auto;
+  min-height: calc(100vh - 18px);
+  overflow: visible;
+}
+
+.ws-v2-embedded .ws-v2-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.ws-v2-embedded .workbench-layout {
+  min-height: calc(100vh - 18px);
 }
 
 .ws-v2-main :deep(.pre-analysis-shell),

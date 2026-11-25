@@ -25,17 +25,25 @@
             选择示例或输入病历文本，验证该规则识别结果。
           </div>
         </div>
-        <div class="test-example-switch">
+        <div
+          class="test-example-switch"
+          role="group"
+          aria-label="测试示例类型"
+        >
           <button
+            type="button"
             class="test-example-btn"
             :class="{ active: exampleType === 'negative' }"
+            :aria-pressed="exampleType === 'negative'"
             @click="emit('update:exampleType', 'negative')"
           >
             反例（有缺陷）
           </button>
           <button
+            type="button"
             class="test-example-btn"
             :class="{ active: exampleType === 'positive' }"
+            :aria-pressed="exampleType === 'positive'"
             @click="emit('update:exampleType', 'positive')"
           >
             正例（无缺陷）
@@ -190,7 +198,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
   max-height: min(78vh, 760px);
   overflow-y: auto;
   padding: 18px 22px 20px;
-  background: #f5f5f7;
+  background: var(--mq-bg-page);
 }
 
 .test-wrap {
@@ -234,7 +242,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
 
 .test-rule-subtitle {
   margin-top: 4px;
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -251,7 +259,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
 .test-example-btn {
   border: none;
   background: transparent;
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   border-radius: 999px;
   height: 28px;
   padding: 0 12px;
@@ -261,6 +269,11 @@ const { confirmedResultsOnly } = useQcResultVisibility()
   transition:
     background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
     color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.test-example-btn:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .test-example-btn.active {
@@ -293,7 +306,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
 }
 
 .test-action-hint {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -324,7 +337,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
 }
 
 .test-result-kicker {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -363,7 +376,7 @@ const { confirmedResultsOnly } = useQcResultVisibility()
 .test-result-block-title {
   padding: 8px 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }

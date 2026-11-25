@@ -14,7 +14,7 @@
     </figure>
     <figure
       v-if="defects.length && defects.some((row) => row.count > 0)"
-      class="chart-panel mq-inset"
+      class="chart-panel chart-panel--bar mq-inset"
     >
       <VChart :option="defectOption" autoresize aria-label="缺陷Top10柱状图" />
     </figure>
@@ -47,19 +47,27 @@ const props = defineProps<{
   grades: Array<{ grade: string; count: number; ratio: number }>
   defects: SpecialDefectRow[]
 }>()
-// ECharts 画布读不到 CSS 变量，挂载时从 V7.1 Token 取值；单一蓝色系，不用语义色暗示好坏
-function token(name: string) {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+// ECharts 画布读不到 CSS 变量，挂载时从 V7.1 Token 取值；单一蓝色系，全部保持白底高对比
+function token(name: string, fallback: string) {
+  const value =
+    typeof document !== 'undefined'
+      ? getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+      : ''
+  return value || fallback
 }
 const palette = [
-  '--mq-brand-600',
-  '--mq-brand-400',
-  '--mq-brand-200',
-  '--mq-brand-700',
-  '--mq-text-tertiary',
-].map(token)
-const textColor = token('--mq-text-secondary')
-const titleStyle = { fontSize: 14, fontWeight: 600, color: token('--mq-text-primary') }
+  token('--mq-brand-600', '#0a6cff'),
+  token('--mq-brand-700', '#0a5fd6'),
+  token('--mq-brand-400', '#3b8bff'),
+  '#174ea6',
+  token('--mq-text-tertiary', '#59595e'),
+]
+const textColor = token('--mq-text-secondary', '#515154')
+const titleStyle = {
+  fontSize: 14,
+  fontWeight: 600,
+  color: token('--mq-text-primary', '#1d1d1f'),
+}
 function donut(title: string, data: Array<{ name: string; value: number }>) {
   return {
     color: palette,
@@ -87,13 +95,13 @@ const defectOption = computed(() => ({
   color: [palette[0]],
   title: { text: '缺陷 Top10', textStyle: titleStyle },
   tooltip: { trigger: 'axis' },
-  grid: { left: 140, right: 20, top: 40, bottom: 20 },
+  grid: { left: 12, right: 20, top: 40, bottom: 20, containLabel: true },
   xAxis: { type: 'value', minInterval: 1, axisLabel: { color: textColor } },
   yAxis: {
     type: 'category',
     inverse: true,
     data: props.defects.map((row) => row.name),
-    axisLabel: { width: 120, overflow: 'truncate', color: textColor },
+    axisLabel: { width: 112, overflow: 'truncate', ellipsis: '…', color: textColor },
   },
   series: [{ type: 'bar', data: props.defects.map((row) => row.count) }],
 }))
@@ -114,7 +122,16 @@ const defectOption = computed(() => ({
   height: 280px;
   min-width: 0;
 }
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
+  .charts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .chart-panel--bar,
+  .chart-panel:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
   .charts {
     grid-template-columns: 1fr;
   }

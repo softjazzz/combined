@@ -20,6 +20,7 @@
           type="button"
           class="mq-segmented__item"
           :class="{ 'is-active': workspaceMode === 'batch' }"
+          :aria-pressed="workspaceMode === 'batch'"
           @click="workspaceMode = 'batch'"
         >
           批量执行视图
@@ -28,6 +29,7 @@
           type="button"
           class="mq-segmented__item"
           :class="{ 'is-active': workspaceMode === 'design' }"
+          :aria-pressed="workspaceMode === 'design'"
           @click="workspaceMode = 'design'"
         >
           规则设计视图
@@ -2677,22 +2679,22 @@ onBeforeUnmount(() => {
 </script>
 <style scoped>
 .custom-rule-workspace {
-  --panel-bg: rgba(255, 255, 255, 0.86);
-  --panel-border: rgba(0, 0, 0, 0.08);
-  --panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 10px 30px rgba(0, 0, 0, 0.06);
-  --panel-hover-shadow: 0 2px 12px rgba(0, 0, 0, 0.1), 0 6px 22px rgba(0, 0, 0, 0.075);
-  --ink-strong: #1d1d1f;
-  --ink-main: rgba(29, 29, 31, 0.78);
-  --ink-muted: rgba(29, 29, 31, 0.6);
-  --ink-subtle: rgba(29, 29, 31, 0.38);
-  --brand-blue: #0a6cff;
-  --brand-soft: rgba(10, 108, 255, 0.08);
-  --surface-muted: rgba(0, 0, 0, 0.03);
+  --panel-bg: var(--mq-glass-bg);
+  --panel-border: var(--mq-glass-border);
+  --panel-shadow: var(--mq-glass-shadow);
+  --panel-hover-shadow: var(--mq-glass-shadow);
+  --ink-strong: var(--mq-text-primary);
+  --ink-main: var(--mq-text-secondary);
+  --ink-muted: var(--mq-text-tertiary);
+  --ink-subtle: var(--mq-text-tertiary);
+  --brand-blue: var(--mq-brand-600);
+  --brand-soft: var(--mq-info-bg);
+  --surface-muted: rgba(118, 128, 160, 0.07);
   min-height: 100%;
   padding: 14px;
   font-family: var(--mq-font-family);
   color: var(--ink-main);
-  background: #f5f5f7;
+  background: transparent;
 }
 
 .ops-overview {
@@ -3394,8 +3396,8 @@ onBeforeUnmount(() => {
 :deep(.ant-input-number),
 :deep(.ant-picker),
 :deep(.ant-select-selector) {
-  border-radius: 8px !important;
-  border-color: var(--panel-border) !important;
+  border-radius: var(--mq-radius-control);
+  border-color: var(--panel-border);
   font-family: var(--mq-font-family);
 }
 
@@ -3485,7 +3487,7 @@ onBeforeUnmount(() => {
   --ink-strong: var(--mq-text-primary);
   --ink-main: var(--mq-text-secondary);
   --ink-muted: var(--mq-text-tertiary);
-  --ink-subtle: var(--mq-text-disabled);
+  --ink-subtle: var(--mq-text-tertiary);
   --brand-blue: var(--mq-brand-600);
   --brand-soft: var(--mq-info-bg);
   --surface-muted: rgba(118, 128, 160, 0.07);

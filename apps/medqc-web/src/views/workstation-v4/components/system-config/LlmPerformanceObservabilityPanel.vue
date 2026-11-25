@@ -384,7 +384,7 @@
 
     <a-drawer
       :open="drawerOpen"
-      :width="860"
+      width="min(860px, 100vw)"
       placement="right"
       :title="drawerTitle"
       @close="closeRecordCalls"
@@ -700,7 +700,7 @@ const chartBase = {
   legend: {
     top: 0,
     right: 0,
-    textStyle: { color: 'rgba(29,29,31,.6)', fontSize: 11 },
+    textStyle: { color: '#515154', fontSize: 11 },
   },
   grid: { left: 18, right: 18, top: 38, bottom: 8, containLabel: true },
 }
@@ -713,18 +713,18 @@ const callTokenChartOption = computed(() => ({
     boundaryGap: false,
     axisLine: { lineStyle: { color: 'rgba(0,0,0,.08)' } },
     axisTick: { show: false },
-    axisLabel: { color: 'rgba(29,29,31,.45)', fontSize: 11 },
+    axisLabel: { color: '#59595e', fontSize: 11 },
   },
   yAxis: [
     {
       type: 'value',
       splitLine: { lineStyle: { color: 'rgba(0,0,0,.055)' } },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
     {
       type: 'value',
       splitLine: { show: false },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
   ],
   series: [
@@ -769,19 +769,19 @@ const latencyConcurrencyChartOption = computed(() => ({
     boundaryGap: false,
     axisLine: { lineStyle: { color: 'rgba(0,0,0,.08)' } },
     axisTick: { show: false },
-    axisLabel: { color: 'rgba(29,29,31,.45)', fontSize: 11 },
+    axisLabel: { color: '#59595e', fontSize: 11 },
   },
   yAxis: [
     {
       type: 'value',
-      axisLabel: { color: 'rgba(29,29,31,.45)', formatter: '{value} ms' },
+      axisLabel: { color: '#59595e', formatter: '{value} ms' },
       splitLine: { lineStyle: { color: 'rgba(0,0,0,.055)' } },
     },
     {
       type: 'value',
       minInterval: 1,
       splitLine: { show: false },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
   ],
   series: [
@@ -1176,7 +1176,7 @@ onMounted(() => {
 .llm-observability__state p,
 .llm-observability__drawer-state p {
   margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   line-height: 20px;
 }
@@ -1206,7 +1206,7 @@ onMounted(() => {
   grid-template-columns: auto minmax(128px, 164px);
   align-items: center;
   gap: 8px;
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1223,7 +1223,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1261,7 +1261,7 @@ onMounted(() => {
 .llm-observability__kpi span,
 .llm-observability__kpi em {
   display: block;
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-style: normal;
 }
@@ -1277,14 +1277,18 @@ onMounted(() => {
 
 .llm-observability__billing {
   display: grid;
-  grid-template-columns: minmax(210px, 1.1fr) minmax(260px, 1fr) minmax(280px, 1.25fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: center;
-  gap: 18px;
+  gap: 16px 18px;
   padding: 15px 18px;
   margin-bottom: 8px;
   border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 14px;
   background: linear-gradient(90deg, rgba(10, 108, 255, 0.075), rgba(255, 255, 255, 0.92));
+}
+
+.llm-observability__billing > * {
+  min-width: 0;
 }
 
 .llm-observability__billing-total span,
@@ -1293,7 +1297,7 @@ onMounted(() => {
 .llm-observability__billing-rates span,
 .llm-observability__billing-rates em {
   display: block;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-style: normal;
 }
@@ -1313,7 +1317,7 @@ onMounted(() => {
 }
 
 .llm-observability__billing-breakdown strong {
-  color: rgba(29, 29, 31, 0.82);
+  color: var(--mq-text-primary);
 }
 
 .llm-observability__billing-rates {
@@ -1322,7 +1326,7 @@ onMounted(() => {
 }
 
 .llm-observability__billing-rates em {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .llm-observability__health-strip {
@@ -1331,14 +1335,14 @@ onMounted(() => {
   gap: 8px 20px;
   padding: 8px 14px;
   margin-bottom: 14px;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
 .llm-observability__chart-grid,
 .llm-observability__distribution-grid {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -1364,7 +1368,7 @@ onMounted(() => {
 }
 
 .llm-observability__section-head > span {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1409,7 +1413,7 @@ onMounted(() => {
 }
 
 .llm-observability__model-row span {
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
 }
 
@@ -1452,7 +1456,7 @@ onMounted(() => {
   gap: 8px;
   min-height: 110px;
   margin: 0;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 13px;
 }
 
@@ -1483,13 +1487,13 @@ onMounted(() => {
 }
 
 .llm-observability th {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 650;
 }
 
 .llm-observability td {
-  color: rgba(29, 29, 31, 0.72);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -1500,7 +1504,7 @@ onMounted(() => {
   padding: 0 8px;
   border-radius: 999px;
   background: rgba(29, 29, 31, 0.06);
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   font-size: 11px;
   font-weight: 650;
 }
@@ -1526,13 +1530,19 @@ onMounted(() => {
 }
 
 .llm-observability__link {
-  padding: 0;
+  padding: 2px 4px;
   border: 0;
+  border-radius: 4px;
   background: none;
   color: #0a6cff;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+}
+
+.llm-observability__link:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .llm-observability__state {
@@ -1583,7 +1593,7 @@ onMounted(() => {
   margin-bottom: 12px;
   border-radius: 10px;
   background: rgba(10, 108, 255, 0.06);
-  color: rgba(29, 29, 31, 0.64);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
@@ -1611,7 +1621,7 @@ onMounted(() => {
 
 .llm-observability__attempt-head > div > span {
   margin-top: 3px;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1627,14 +1637,14 @@ onMounted(() => {
 }
 
 .llm-observability__attempt dt {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
 }
 
 .llm-observability__attempt dd {
   overflow: hidden;
   margin: 3px 0 0;
-  color: rgba(29, 29, 31, 0.8);
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -1643,10 +1653,10 @@ onMounted(() => {
 
 .llm-observability__drawer-state {
   padding: 28px 4px;
-  color: rgba(29, 29, 31, 0.65);
+  color: var(--mq-text-secondary);
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1440px) {
   .llm-observability__kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1659,6 +1669,15 @@ onMounted(() => {
   .llm-observability__kpi:nth-child(5),
   .llm-observability__kpi:nth-child(6) {
     border-top: 1px solid rgba(0, 0, 0, 0.07);
+  }
+}
+
+@media (max-width: 1200px) {
+  .llm-observability__billing-rates {
+    padding-top: 10px;
+    padding-left: 0;
+    border-top: 1px solid rgba(10, 108, 255, 0.12);
+    border-left: 0;
   }
 }
 

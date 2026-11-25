@@ -4,7 +4,10 @@
     <div class="mapping-header">
       <div class="flex items-center gap-3">
         <button
-          class="text-slate-400 hover:text-slate-600 transition-colors"
+          type="button"
+          class="mapping-back-btn"
+          aria-label="返回重新上传"
+          title="返回重新上传"
           @click="$emit('back')"
         >
           <ArrowLeftOutlined class="text-lg" />
@@ -13,7 +16,7 @@
           <h2 class="text-xl font-semibold text-slate-800">
             字段映射确认
           </h2>
-          <p class="text-sm text-slate-500 mt-1">
+          <p class="mapping-subtitle mt-1">
             AI 已自动识别字段对应关系，请核对后确认
           </p>
         </div>
@@ -23,7 +26,7 @@
           v-if="confidence > 0"
           class="flex items-center gap-2"
         >
-          <span class="text-xs text-slate-500">AI 置信度</span>
+          <span class="mapping-confidence-label">AI 置信度</span>
           <a-progress
             :percent="Math.round(confidence * 100)"
             :size="[120, 6]"
@@ -45,10 +48,10 @@
       class="mapping-loading"
     >
       <a-spin size="large" />
-      <p class="mt-4 text-slate-500">
+      <p class="mapping-loading-title mt-4">
         正在进行 AI 字段识别...
       </p>
-      <p class="text-xs text-slate-400 mt-1">
+      <p class="mapping-loading-hint mt-1">
         首次分析可能需要 5-10 秒
       </p>
     </div>
@@ -139,7 +142,7 @@
               />
               <MinusOutlined
                 v-else
-                class="text-slate-300"
+                class="mapping-arrow-unmapped"
               />
             </div>
 
@@ -550,21 +553,26 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .field-mapping-step {
-  height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  height: auto;
   display: flex;
   flex-direction: column;
   background: #f5f5f7;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-family:
     'Source Han Sans SC', 'SF Pro Text', 'San Francisco', 'SF Pro Display', Inter, 'PingFang SC',
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .mapping-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
   padding: 16px 24px;
   background: rgba(255, 255, 255, 0.86);
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
@@ -573,8 +581,53 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
+.mapping-back-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--mq-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--mq-text-secondary);
+  cursor: pointer;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.mapping-back-btn:hover {
+  color: var(--mq-text-primary);
+  border-color: var(--mq-border-strong);
+  background: #ffffff;
+}
+
+.mapping-back-btn:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+.mapping-subtitle,
+.mapping-loading-title {
+  color: var(--mq-text-secondary);
+  font-size: 14px;
+}
+
+.mapping-confidence-label,
+.mapping-loading-hint {
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+}
+
+.mapping-arrow-unmapped {
+  color: var(--mq-text-tertiary);
+}
+
 .mapping-header :deep(h2) {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 20px;
   line-height: 26px;
 }
@@ -585,18 +638,20 @@ onBeforeUnmount(() => {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 240px;
 }
 
 .mapping-content {
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
-  padding: 20px 24px;
+  padding: 20px 24px 28px;
 }
 
 .section-title {
   font-size: 15px;
   font-weight: 600;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   margin-bottom: 12px;
   display: flex;
   align-items: center;
@@ -604,9 +659,9 @@ onBeforeUnmount(() => {
 }
 
 .mapped-count {
-  font-weight: 400;
+  font-weight: 500;
   font-size: 13px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   margin-left: auto;
 }
 
@@ -633,7 +688,7 @@ onBeforeUnmount(() => {
   padding: 8px 12px;
   background: #f5f5f7;
   font-weight: 600;
-  color: rgba(29, 29, 31, 0.66);
+  color: var(--mq-text-secondary);
   text-align: left;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   position: sticky;
@@ -642,7 +697,7 @@ onBeforeUnmount(() => {
 
 .preview-td {
   padding: 6px 12px;
-  color: rgba(29, 29, 31, 0.66);
+  color: var(--mq-text-secondary);
   border-bottom: 1px solid rgba(0, 0, 0, 0.05);
   max-width: 150px;
   overflow: hidden;
@@ -677,8 +732,9 @@ onBeforeUnmount(() => {
 }
 
 .mapping-row-unmapped {
-  border-color: rgba(0, 0, 0, 0.08);
-  opacity: 0.7;
+  border-style: dashed;
+  border-color: rgba(0, 0, 0, 0.14);
+  background: rgba(255, 255, 255, 0.82);
 }
 
 .source-col {
@@ -689,13 +745,13 @@ onBeforeUnmount(() => {
 .col-name {
   font-weight: 600;
   font-size: 13px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
 }
 
 .col-sample {
   display: block;
   font-size: 11px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   margin-top: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -721,7 +777,7 @@ onBeforeUnmount(() => {
 
 .field-key {
   font-size: 10px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   margin-left: auto;
 }
 
@@ -734,6 +790,7 @@ onBeforeUnmount(() => {
 .mapping-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 16px 0;
   border-top: 1px solid rgba(0, 0, 0, 0.08);

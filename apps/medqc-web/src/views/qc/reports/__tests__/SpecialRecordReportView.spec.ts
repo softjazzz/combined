@@ -152,7 +152,7 @@ describe('特殊病历报表页面', () => {
   it('V7.1页头、分段按压态与类型选中态，未知来源提示保留', async () => {
     const wrapper = render()
     await flushPromises()
-    expect(wrapper.find('main.mq-page .mq-page-head .mq-page-title').text()).toBe('特殊病历报表')
+    expect(wrapper.find('section.mq-page .mq-page-head .mq-page-title').text()).toBe('特殊病历报表')
     expect(wrapper.find('.archive-notice').text()).toContain('缺失来源单列未知')
     expect(wrapper.find('.type-item.is-active .type-main').attributes('aria-pressed')).toBe('true')
     const segments = wrapper.findAll('.mq-segmented__item')

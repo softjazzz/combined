@@ -1,10 +1,10 @@
 <template>
-  <main class="mq-page system-config-page">
+  <section class="mq-page system-config-page" aria-labelledby="system-config-title">
     <!-- 页头：眉标 + 大标题；右侧分段切换替代原 Tabs，页签可见性规则不变 -->
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">数据与配置 · 系统配置</span>
-        <h1 class="mq-page-title">系统配置</h1>
+        <h1 id="system-config-title" class="mq-page-title">系统配置</h1>
       </div>
       <div
         class="mq-segmented"
@@ -14,24 +14,43 @@
         :data-active-key="activeTab"
       >
         <button
-          v-for="tab in configTabs"
+          v-for="(tab, index) in configTabs"
           :key="tab.key"
+          :id="`system-config-tab-${tab.key}`"
+          :ref="(el) => setTabButtonRef(tab.key, el)"
           type="button"
           role="tab"
           class="mq-segmented__item"
           :class="{ 'is-active': activeTab === tab.key }"
           :aria-selected="activeTab === tab.key"
+          :aria-controls="`system-config-panel-${tab.key}`"
+          :tabindex="activeTab === tab.key ? 0 : -1"
           :data-testid="tab.testId"
           @click="handleSelectTab(tab.key)"
+          @keydown="handleTabKeydown($event, index)"
         >
           {{ tab.label }}
         </button>
       </div>
     </header>
 
-    <DailyQcSchedulePanel v-if="activeTab === 'dailyQc' && canManageLlmConfig" />
+    <div
+      v-if="activeTab === 'dailyQc' && canManageLlmConfig"
+      id="system-config-panel-dailyQc"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-dailyQc"
+      class="system-config-tabpanel"
+    >
+      <DailyQcSchedulePanel />
+    </div>
 
-    <template v-else-if="activeTab === 'dataSync'">
+    <div
+      v-else-if="activeTab === 'dataSync'"
+      id="system-config-panel-dataSync"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-dataSync"
+      class="system-config-tabpanel"
+    >
       <ClinicalSourceSettingsPanel v-if="canManageLlmConfig" />
       <DataPipelineSettingsPanel
         v-if="canManageLlmConfig"
@@ -437,21 +456,33 @@
           </div>
         </template>
       </section>
-    </template>
+    </div>
 
     <section
       v-else-if="activeTab === 'frontpageExtraction' && canManageFrontpageConfig"
+      id="system-config-panel-frontpageExtraction"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-frontpageExtraction"
       class="mq-card system-config-panel"
     >
       <FrontpageExtractionSettingsPanel />
     </section>
 
-    <section v-else-if="activeTab === 'qcRuntime' && canViewLlmObservability" class="mq-card system-config-panel">
+    <section
+      v-else-if="activeTab === 'qcRuntime' && canViewLlmObservability"
+      id="system-config-panel-qcRuntime"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-qcRuntime"
+      class="mq-card system-config-panel"
+    >
       <QcRuntimeSettingsPanel />
     </section>
 
     <section
       v-else-if="activeTab === 'llmObservability' && canViewLlmObservability"
+      id="system-config-panel-llmObservability"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-llmObservability"
       class="mq-card system-config-panel"
     >
       <LlmPerformanceObservabilityPanel />
@@ -459,6 +490,9 @@
 
     <section
       v-else-if="activeTab === 'accounts' && canManageAccounts"
+      id="system-config-panel-accounts"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-accounts"
       class="mq-card system-config-panel account-config-panel"
     >
       <AccountManagementPanel />
@@ -466,6 +500,9 @@
 
     <section
       v-else-if="activeTab === 'llmConfig' && canManageLlmConfig"
+      id="system-config-panel-llmConfig"
+      role="tabpanel"
+      aria-labelledby="system-config-tab-llmConfig"
       class="model-settings-panel"
     >
       <LLMApiConfig ref="llmConfigRef" />
@@ -516,7 +553,7 @@
         </div>
       </div>
     </a-modal>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -685,6 +722,16 @@ function syncTabToRoute(tab: string) {
   void Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
 }
 
+const tabButtonRefs = new Map<string, HTMLButtonElement>()
+
+function setTabButtonRef(key: string, el: unknown) {
+  if (el instanceof HTMLButtonElement) {
+    tabButtonRefs.set(key, el)
+  } else {
+    tabButtonRefs.delete(key)
+  }
+}
+
 async function handleSelectTab(nextTab: string) {
   if (!nextTab || nextTab === activeTab.value) return
   if (!configTabs.value.some((tab) => tab.key === nextTab)) return
@@ -694,6 +741,30 @@ async function handleSelectTab(nextTab: string) {
   }
   activeTab.value = nextTab
   syncTabToRoute(nextTab)
+}
+
+async function handleTabKeydown(event: KeyboardEvent, currentIndex: number) {
+  const tabs = configTabs.value
+  if (tabs.length <= 1) return
+  let nextIndex = -1
+  if (event.key === 'ArrowRight') {
+    nextIndex = (currentIndex + 1) % tabs.length
+  } else if (event.key === 'ArrowLeft') {
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = tabs.length - 1
+  } else {
+    return
+  }
+  event.preventDefault()
+  const nextTab = tabs[nextIndex]
+  if (!nextTab) return
+  await handleSelectTab(nextTab.key)
+  if (activeTab.value === nextTab.key) {
+    tabButtonRefs.get(nextTab.key)?.focus()
+  }
 }
 
 const LAST_SYNC_STATUS_TEXT: Record<string, string> = {

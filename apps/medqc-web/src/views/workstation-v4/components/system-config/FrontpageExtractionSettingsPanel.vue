@@ -398,7 +398,7 @@ onBeforeUnmount(() => {
 
 .ds-section-desc {
   margin: 0;
-  color: rgba(29, 29, 31, 0.6);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -442,7 +442,7 @@ onBeforeUnmount(() => {
 .ds-group__title {
   font-size: 13px;
   font-weight: 700;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   letter-spacing: 0;
   padding: 10px 18px;
 }
@@ -461,14 +461,14 @@ onBeforeUnmount(() => {
 
 .ds-row__label {
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-weight: 600;
 }
 
 .ds-row__hint {
   margin-top: 2px;
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .ds-card__footer {
@@ -488,7 +488,7 @@ onBeforeUnmount(() => {
 
 .ds-footer-meta {
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .ds-root :deep(.ant-btn) {
@@ -519,7 +519,7 @@ onBeforeUnmount(() => {
 }
 
 .ds-root :deep(.ant-alert-description) {
-  color: rgba(29, 29, 31, 0.6);
+  color: var(--mq-text-secondary);
 }
 
 .ds-root :deep(.ant-input-number),

@@ -8,21 +8,32 @@
         </div>
         <div class="rules-tab-group mq-segmented" role="tablist" aria-label="规则分类">
           <button
-            v-for="tab in tabs"
+            v-for="(tab, index) in tabs"
+            :id="`rules-tab-${tab.key}`"
             :key="tab.key"
+            ref="tabRefs"
             type="button"
             role="tab"
             class="rules-tab mq-segmented__item"
             :class="{ active: activeTab === tab.key, 'is-active': activeTab === tab.key }"
             :aria-selected="activeTab === tab.key"
+            :aria-controls="`rules-tabpanel-${tab.key}`"
+            :tabindex="activeTab === tab.key || (!activeTab && tab.key === 'semantic') ? 0 : -1"
             @click="selectTab(tab.key)"
+            @keydown="handleTabKeydown($event, index)"
           >
             {{ tab.label }}
           </button>
         </div>
       </section>
 
-      <div class="rules-panel-shell">
+      <div
+        :id="`rules-tabpanel-${activeTab ?? 'semantic'}`"
+        class="rules-panel-shell"
+        role="tabpanel"
+        :aria-labelledby="`rules-tab-${activeTab ?? 'semantic'}`"
+        tabindex="0"
+      >
         <CodingRulesTab v-if="activeTab === 'coding'" />
         <FrontpageRulesTab v-else-if="activeTab === 'frontpage'" />
         <WorkstationSemanticRulesView v-else-if="activeTab === 'semantic'" />
@@ -47,6 +58,7 @@ type TabKey = 'coding' | 'frontpage' | 'settlement' | 'semantic'
 const SUPPORTED_TABS: TabKey[] = ['coding', 'frontpage', 'settlement', 'semantic']
 
 const activeTab = ref<TabKey>()
+const tabRefs = ref<HTMLButtonElement[]>([])
 
 const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'coding', label: '编码规则' },
@@ -54,6 +66,18 @@ const tabs: Array<{ key: TabKey; label: string }> = [
   { key: 'settlement', label: '结算规则' },
   { key: 'semantic', label: '语义规则' },
 ]
+
+function handleTabKeydown(event: KeyboardEvent, index: number) {
+  let nextIndex = -1
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % tabs.length
+  else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + tabs.length) % tabs.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = tabs.length - 1
+  if (nextIndex < 0) return
+  event.preventDefault()
+  selectTab(tabs[nextIndex].key)
+  tabRefs.value[nextIndex]?.focus()
+}
 
 const resolveTab = (tab: string | undefined): TabKey => {
   if (tab && SUPPORTED_TABS.includes(tab as TabKey)) {
@@ -135,19 +159,22 @@ watch(
 
 .rules-panel-shell :deep(.rounded-2xl.bg-white),
 .rules-panel-shell :deep(.ant-card) {
-  border: 1px solid var(--mq-glass-border) !important;
-  border-radius: var(--mq-radius-card) !important;
-  background: var(--mq-glass-bg) !important;
+  border: 1px solid var(--mq-glass-border);
+  border-radius: var(--mq-radius-card);
+  background: var(--mq-glass-bg);
   -webkit-backdrop-filter: var(--mq-glass-blur);
   backdrop-filter: var(--mq-glass-blur);
-  box-shadow: var(--mq-glass-shadow) !important;
+  box-shadow: var(--mq-glass-shadow);
 }
 
 .rules-panel-shell :deep(.ant-table),
-.rules-panel-shell :deep(.ant-table-container),
+.rules-panel-shell :deep(.ant-table-container) {
+  background: transparent;
+}
+
 .rules-panel-shell :deep(.ant-table-cell-fix-left),
 .rules-panel-shell :deep(.ant-table-cell-fix-right) {
-  background: transparent;
+  background: var(--mq-bg-surface);
 }
 
 .rules-panel-shell :deep(.ant-table-thead > tr > th) {
@@ -155,6 +182,11 @@ watch(
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   font-weight: 600;
+}
+
+.rules-panel-shell :deep(.ant-table-thead > tr > th.ant-table-cell-fix-left),
+.rules-panel-shell :deep(.ant-table-thead > tr > th.ant-table-cell-fix-right) {
+  background: var(--mq-bg-page);
 }
 
 .rules-panel-shell :deep(.ant-table-thead > tr > th::before) {
@@ -166,8 +198,18 @@ watch(
   background: transparent;
 }
 
+.rules-panel-shell :deep(.ant-table-tbody > tr > td.ant-table-cell-fix-left),
+.rules-panel-shell :deep(.ant-table-tbody > tr > td.ant-table-cell-fix-right) {
+  background: var(--mq-bg-surface);
+}
+
 .rules-panel-shell :deep(.ant-table-tbody > tr:hover > td) {
   background: rgba(10, 108, 255, 0.04);
+}
+
+.rules-panel-shell :deep(.ant-table-tbody > tr:hover > td.ant-table-cell-fix-left),
+.rules-panel-shell :deep(.ant-table-tbody > tr:hover > td.ant-table-cell-fix-right) {
+  background: var(--mq-brand-50);
 }
 
 .rules-panel-shell :deep(.ant-input-affix-wrapper),
@@ -184,8 +226,4 @@ watch(
     align-items: flex-start;
   }
 }
-</style>
-
-<style>
-@import './styles/workstation-v4-view.css';
 </style>

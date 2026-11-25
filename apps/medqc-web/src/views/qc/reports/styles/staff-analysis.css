@@ -201,21 +201,48 @@ h2 {
   min-width: 0;
 }
 .staff-table {
-  min-width: 1160px;
+  min-width: 1120px;
+  overflow: visible;
 }
 .staff-table th,
 .staff-table td {
-  padding: 0 14px;
+  padding: 0 12px;
   text-align: right;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
 .staff-table th:nth-child(-n + 2),
 .staff-table td:nth-child(-n + 2) {
+  position: sticky;
+  z-index: 2;
   text-align: left;
+  background: var(--mq-bg-surface, #ffffff);
+  background-clip: padding-box;
+}
+.staff-table th:nth-child(1),
+.staff-table td:nth-child(1) {
+  left: 0;
+  width: 68px;
+  min-width: 68px;
+  max-width: 68px;
+  box-sizing: border-box;
+}
+.staff-table th:nth-child(2),
+.staff-table td:nth-child(2) {
+  left: 68px;
+  min-width: 116px;
+  border-right: 1px solid var(--mq-border);
+  box-shadow: 6px 0 12px -6px rgba(10, 55, 115, 0.14);
+}
+.staff-table thead th:nth-child(-n + 2) {
+  z-index: 3;
+  background: #f4f6fa;
 }
 .staff-table tbody tr:hover {
   background: var(--mq-bg-subtle);
+}
+.staff-table tbody tr:hover td:nth-child(-n + 2) {
+  background: #f6f8fc;
 }
 .rank {
   color: var(--mq-text-tertiary);

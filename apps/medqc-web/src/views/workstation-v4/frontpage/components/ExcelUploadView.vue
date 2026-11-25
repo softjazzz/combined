@@ -22,10 +22,15 @@
           <!-- Drag & Drop Zone -->
           <div
             :class="['upload-dropzone', { 'upload-dropzone--dragging': isDragging }]"
+            role="button"
+            tabindex="0"
+            aria-label="拖拽文件到此处或点击上传"
             @dragover.prevent="isDragging = true"
             @dragleave="isDragging = false"
             @drop.prevent="handleDrop"
             @click="triggerFileInput"
+            @keydown.enter.self.prevent="triggerFileInput"
+            @keydown.space.self.prevent="triggerFileInput"
           >
             <input
               ref="fileInput"
@@ -107,7 +112,13 @@
         <aside class="upload-history-card">
           <div class="upload-history-head">
             <h3>历史批次</h3>
-            <button class="upload-refresh-btn" type="button" @click="() => loadBatches()">
+            <button
+              class="upload-refresh-btn"
+              type="button"
+              aria-label="刷新历史批次"
+              title="刷新历史批次"
+              @click="() => loadBatches()"
+            >
               <MqIcon
                 name="sync"
                 :class="['upload-refresh-icon', { 'upload-spin': loadingBatches }]"
@@ -128,7 +139,12 @@
                 'upload-history-item',
                 { 'upload-history-item--selected': selectedBatchId === batch.batch_id },
               ]"
+              role="button"
+              tabindex="0"
+              :aria-pressed="selectedBatchId === batch.batch_id"
               @click="selectBatch(batch)"
+              @keydown.enter.prevent="selectBatch(batch)"
+              @keydown.space.prevent="selectBatch(batch)"
             >
               <div class="upload-history-item-top">
                 <span>{{ batch.batch_id.substring(6, 21) }}</span>

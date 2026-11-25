@@ -2,7 +2,7 @@
   <a-drawer
     :open="Boolean(jobId)"
     title="同步任务详情"
-    :width="720"
+    width="min(720px, 100vw)"
     @close="emit('close')"
   >
     <a-alert

@@ -294,15 +294,19 @@ td:nth-child(3) {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
-@media (max-width: 900px) {
+@media (max-width: 1360px) {
   .remediation-groups {
     grid-template-columns: minmax(0, 1fr);
     gap: 16px;
   }
   .remediation-group + .remediation-group {
     padding-left: 0;
+    padding-top: 16px;
     border-left: 0;
+    border-top: 1px solid var(--mq-border);
   }
+}
+@media (max-width: 900px) {
   .remediation-source {
     grid-template-columns: minmax(0, 1fr);
     gap: 6px;

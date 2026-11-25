@@ -1,5 +1,5 @@
 <template>
-  <main
+  <section
     class="mq-page rule-validation-page"
     data-testid="rule-validation-new-case"
   >
@@ -347,7 +347,7 @@
         </div>
       </div>
     </a-modal>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -617,6 +617,12 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   gap: 14px;
 }
 
+.nc-grid .mq-input,
+.nc-grid :deep(.ant-picker) {
+  width: 100%;
+  min-width: 0;
+}
+
 .nc-span-2 {
   grid-column: span 2;
 }
@@ -661,18 +667,26 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
 }
 
 .nc-doc__head {
-  display: grid;
-  grid-template-columns: auto 170px 210px minmax(0, 1fr) auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 10px;
 }
 
 .nc-doc__head > .rv-tag {
+  flex: 0 0 auto;
   align-self: center;
 }
 
+.nc-doc__head > .mq-field {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
 .nc-remove {
+  flex: 0 0 auto;
   width: 32px;
+  margin-left: auto;
   padding: 0;
   font-size: 16px;
 }
@@ -719,7 +733,7 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   line-height: 1.8;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   .nc-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -733,7 +747,21 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   }
 
   .nc-doc__head {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: wrap;
+  }
+
+  .nc-doc__head > .mq-field {
+    flex: 1 1 200px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nc-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nc-span-2 {
+    grid-column: span 1;
   }
 }
 </style>

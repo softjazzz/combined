@@ -469,7 +469,7 @@ function formatPolicySource(value: string): string {
   max-height: min(78vh, 760px);
   overflow-y: auto;
   padding: 18px 22px 20px;
-  background: #f5f5f7;
+  background: var(--mq-bg-page);
 }
 
 .detail-wrap {
@@ -548,7 +548,7 @@ function formatPolicySource(value: string): string {
 }
 
 .detail-descriptions :deep(.ant-descriptions-item-label) {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -631,7 +631,7 @@ function formatPolicySource(value: string): string {
 
 .luxian-section .muted {
   margin-top: 4px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -655,7 +655,7 @@ function formatPolicySource(value: string): string {
 }
 
 .engine-label {
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -782,7 +782,7 @@ function formatPolicySource(value: string): string {
 }
 
 .mapping-empty {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 

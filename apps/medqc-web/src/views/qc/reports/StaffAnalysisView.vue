@@ -1,5 +1,8 @@
 <template>
-  <main class="mq-page staff-analysis">
+  <section
+    class="mq-page staff-analysis"
+    :aria-label="reportTab === 'manual' ? '人工质控报表' : '质控员工作分析'"
+  >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -18,14 +21,19 @@
         <div class="mq-segmented" role="tablist" aria-label="报表切换">
           <button
             v-for="option in reportTabs"
+            :id="`staff-report-tab-${option.value}`"
             :key="option.value"
+            :ref="(el) => setReportTabRef(option.value, el)"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === option.value }"
             role="tab"
             :aria-selected="reportTab === option.value"
+            :aria-controls="`staff-report-panel-${option.value}`"
+            :tabindex="reportTab === option.value ? 0 : -1"
             :data-testid="`staff-report-tab-${option.value}`"
             @click="setReportTab(option.value)"
+            @keydown="onReportTabKeydown($event, option.value)"
           >
             {{ option.label }}
           </button>
@@ -51,7 +59,14 @@
         </div>
       </div>
     </header>
-    <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
+    <div
+      id="staff-report-panel-manual"
+      role="tabpanel"
+      aria-labelledby="staff-report-tab-manual"
+      :hidden="reportTab !== 'manual'"
+    >
+      <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
+    </div>
     <ModernAppealWorkflowDrawer
       v-if="appealOpen"
       :open="appealOpen"
@@ -66,7 +81,14 @@
       @close="reviewOpen = false"
       @changed="loadReport"
     />
-    <div v-show="reportTab === 'staff'" class="staff-body">
+    <div
+      id="staff-report-panel-staff"
+      v-show="reportTab === 'staff'"
+      class="staff-body"
+      role="tabpanel"
+      aria-labelledby="staff-report-tab-staff"
+      :hidden="reportTab !== 'staff'"
+    >
       <section class="filters mq-card mq-card--padded" aria-label="工作分析筛选">
         <div class="filter-switches">
           <div class="filter-field mq-field">
@@ -441,7 +463,7 @@
         </template>
       </a-drawer>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -522,6 +544,13 @@ function departmentKeyFromQuery(query: Record<string, unknown> | undefined): str
 }
 
 const reportTab = ref<ReportTab>(queryString(route?.query?.tab) === 'manual' ? 'manual' : 'staff')
+const reportTabRefs = reactive<Record<ReportTab, HTMLButtonElement | null>>({
+  staff: null,
+  manual: null,
+})
+function setReportTabRef(tab: ReportTab, el: unknown): void {
+  reportTabRefs[tab] = el instanceof HTMLButtonElement ? el : null
+}
 const rankMetric = ref<StaffAnalysisMetric>(rankMetricFromQuery(route?.query?.rank_metric))
 const appealOpen = ref(false)
 const appealId = ref<string>()
@@ -805,6 +834,19 @@ function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab 
 function setReportTab(tab: ReportTab): void {
   reportTab.value = tab
   syncUrlQuery({ tab })
+}
+function onReportTabKeydown(event: KeyboardEvent, current: ReportTab): void {
+  const order: ReportTab[] = reportTabs.map((item) => item.value)
+  const index = order.indexOf(current)
+  let next: ReportTab | null = null
+  if (event.key === 'ArrowRight') next = order[(index + 1) % order.length]!
+  else if (event.key === 'ArrowLeft') next = order[(index - 1 + order.length) % order.length]!
+  else if (event.key === 'Home') next = order[0]!
+  else if (event.key === 'End') next = order[order.length - 1]!
+  if (!next) return
+  event.preventDefault()
+  setReportTab(next)
+  reportTabRefs[next]?.focus()
 }
 function onRankMetricChange(): void {
   syncUrlQuery()

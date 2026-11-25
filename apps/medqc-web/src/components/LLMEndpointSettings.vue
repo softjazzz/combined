@@ -22,7 +22,7 @@
     <a-drawer
       v-model:open="visible"
       title="推理服务连接"
-      :width="560"
+      width="min(560px, 100vw)"
       :destroy-on-close="true"
       @after-open-change="onVisibleChange"
     >

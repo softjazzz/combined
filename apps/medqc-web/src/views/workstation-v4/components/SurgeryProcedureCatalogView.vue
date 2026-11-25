@@ -1,5 +1,8 @@
 <template>
-  <main class="catalog-page">
+  <section
+    class="catalog-page"
+    aria-label="手术操作分级目录"
+  >
     <div class="catalog-page-inner">
       <header class="catalog-page-header">
         <div class="catalog-title-block">
@@ -38,30 +41,38 @@
 
         <div class="summary-strip">
           <button
+            type="button"
             class="summary-item"
             :class="{ active: isAllFilter }"
+            :aria-pressed="isAllFilter"
             data-testid="catalog-summary-all"
             @click="showAll"
           >
             <span>目录总数</span><strong>{{ data?.summary.total ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: filters.category === '手术' && !filters.level }"
+            :aria-pressed="filters.category === '手术' && !filters.level"
             @click="showSurgeries"
           >
             <span>手术</span><strong>{{ data?.summary.surgery ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: isLevelFourFilter }"
+            :aria-pressed="isLevelFourFilter"
             @click="showLevelFour"
           >
             <span>四级手术</span><strong>{{ data?.summary.level_four_surgery ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: filters.category === 'operation' }"
+            :aria-pressed="filters.category === 'operation'"
             @click="showOperations"
           >
             <span>非手术操作</span><strong>{{ data?.summary.operation ?? '—' }}</strong>
@@ -128,15 +139,17 @@
               {{ source.label }}
             </a-select-option>
           </a-select>
-          <a-button
-            type="primary"
-            @click="applyFilters"
-          >
-            <Search :size="15" />查询
-          </a-button>
-          <a-button @click="resetFilters">
-            <RefreshCw :size="15" />重置
-          </a-button>
+          <div class="filter-actions">
+            <a-button
+              type="primary"
+              @click="applyFilters"
+            >
+              <Search :size="15" />查询
+            </a-button>
+            <a-button @click="resetFilters">
+              <RefreshCw :size="15" />重置
+            </a-button>
+          </div>
         </div>
 
         <div class="catalog-table-wrap">
@@ -165,7 +178,7 @@
             :loading="loading"
             :pagination="pagination"
             :row-key="(record: SurgeryProcedureCatalogItem) => record.code"
-            :scroll="{ x: 1020 }"
+            :scroll="{ x: 840 }"
             size="middle"
             table-layout="fixed"
             @change="handleTableChange"
@@ -221,7 +234,7 @@
         </div>
       </section>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -329,10 +342,10 @@ function isAbortError(error: unknown): boolean {
 }
 
 const columns: TableColumnsType<SurgeryProcedureCatalogItem> = [
-  { title: '编码与名称', key: 'identity', width: 500 },
-  { title: '类型', key: 'category', width: 130 },
-  { title: '有效等级', key: 'effective_level', width: 130 },
-  { title: '原始等级与来源', key: 'basis', width: 260 },
+  { title: '编码与名称', key: 'identity', width: 380 },
+  { title: '类型', key: 'category', width: 100 },
+  { title: '有效等级', key: 'effective_level', width: 110 },
+  { title: '原始等级与来源', key: 'basis', width: 220 },
 ]
 
 const categoryOptions = computed(() => {
@@ -488,9 +501,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .catalog-page {
-  background: #f5f5f7;
+  background: transparent;
   box-sizing: border-box;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   min-height: 100%;
   overflow-x: hidden;
   padding: 22px 24px 34px;
@@ -512,7 +525,7 @@ onBeforeUnmount(() => {
 }
 
 .catalog-title-block h1 {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -521,7 +534,7 @@ onBeforeUnmount(() => {
 }
 
 .catalog-title-block p {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   line-height: 20px;
   margin: 7px 0 0;
@@ -535,7 +548,6 @@ onBeforeUnmount(() => {
 
 .catalog-page-actions :deep(.ant-btn) {
   align-items: center;
-  border-radius: 8px;
   display: inline-flex;
   font-size: 13px;
   gap: 6px;
@@ -564,7 +576,7 @@ onBeforeUnmount(() => {
 .catalog-version {
   background: rgba(0, 0, 0, 0.04);
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   padding: 6px 10px;
 }
@@ -589,7 +601,7 @@ onBeforeUnmount(() => {
   font-size: 13px;
 }
 .policy-strip span {
-  color: rgba(29, 29, 31, 0.64);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
@@ -604,12 +616,17 @@ onBeforeUnmount(() => {
   background: transparent;
   border: 0;
   border-right: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.55);
+  color: var(--mq-text-secondary);
   cursor: pointer;
   display: flex;
   gap: 10px;
   justify-content: center;
   padding: 5px 12px;
+}
+
+.summary-item:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .summary-item:last-child {
@@ -620,7 +637,7 @@ onBeforeUnmount(() => {
   color: #0066cc;
 }
 .summary-item strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 22px;
   line-height: 28px;
 }
@@ -632,28 +649,31 @@ onBeforeUnmount(() => {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 16px 26px;
+  gap: 8px;
+  padding: 14px 22px;
+}
+
+.filter-actions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .catalog-search {
-  flex: 1 1 300px;
-  max-width: 420px;
-  min-width: 260px;
+  flex: 1 1 200px;
+  max-width: 340px;
+  min-width: 180px;
 }
 .catalog-select {
-  width: 150px;
+  flex: 0 0 auto;
+  width: 132px;
 }
 .level-select {
-  width: 125px;
+  width: 112px;
 }
 .source-select {
-  width: 190px;
-}
-.filter-bar :deep(.ant-input-affix-wrapper),
-.filter-bar :deep(.ant-select-selector),
-.filter-bar :deep(.ant-btn) {
-  border-radius: 8px !important;
+  width: 156px;
 }
 .filter-bar :deep(.ant-btn) {
   align-items: center;
@@ -668,7 +688,7 @@ onBeforeUnmount(() => {
 }
 .catalog-table-meta {
   box-sizing: border-box;
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   display: flex;
   font-size: 12px;
   justify-content: space-between;
@@ -695,7 +715,7 @@ onBeforeUnmount(() => {
 }
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
   background: rgba(0, 0, 0, 0.025);
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -703,7 +723,7 @@ onBeforeUnmount(() => {
   border-bottom-color: rgba(0, 0, 0, 0.06);
 }
 .catalog-table-wrap :deep(.ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 102, 204, 0.025) !important;
+  background: rgba(0, 102, 204, 0.025);
 }
 .catalog-table-wrap :deep(.ant-pagination) {
   margin: 16px 24px;
@@ -718,18 +738,18 @@ onBeforeUnmount(() => {
 .catalog-identity code {
   background: rgba(0, 0, 0, 0.04);
   border-radius: 6px;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   flex: 0 0 auto;
   font-size: 12px;
   padding: 3px 7px;
 }
 .catalog-identity strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 600;
 }
 .category-label {
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 .category-label.surgery {
@@ -739,7 +759,7 @@ onBeforeUnmount(() => {
 .level-label {
   background: rgba(0, 0, 0, 0.045);
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.68);
+  color: var(--mq-text-secondary);
   display: inline-flex;
   font-size: 12px;
   font-weight: 600;
@@ -755,46 +775,13 @@ onBeforeUnmount(() => {
   gap: 2px;
 }
 .basis-cell strong {
-  color: rgba(29, 29, 31, 0.72);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 .basis-cell span,
 .muted-value {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
-}
-
-@media (max-width: 980px) {
-  .catalog-page {
-    padding: 16px;
-  }
-  .catalog-page-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .catalog-page-actions {
-    justify-content: space-between;
-  }
-  .filter-bar {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-  .catalog-search {
-    max-width: none;
-    width: 100%;
-  }
-  .catalog-table-meta {
-    align-items: flex-start;
-    flex-direction: column;
-    white-space: normal;
-  }
-  .summary-strip {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .summary-item:nth-child(2) {
-    border-right: 0;
-  }
 }
 
 /* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
@@ -896,9 +883,9 @@ onBeforeUnmount(() => {
 
 .filter-bar :deep(.ant-input-affix-wrapper),
 .filter-bar :deep(.ant-select-selector) {
-  border-color: rgba(60, 60, 80, 0.1) !important;
-  border-radius: var(--mq-radius-control) !important;
-  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
@@ -1011,6 +998,66 @@ onBeforeUnmount(() => {
 
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
   font-weight: 500;
+}
+
+@media (max-width: 1360px) {
+  .catalog-page {
+    padding: 8px 18px 28px;
+  }
+  .filter-bar {
+    gap: 8px;
+    padding: 14px 18px;
+  }
+  .catalog-search {
+    flex: 1 1 180px;
+    max-width: 280px;
+    min-width: 160px;
+  }
+  .catalog-select {
+    width: 120px;
+  }
+  .level-select {
+    width: 104px;
+  }
+  .source-select {
+    width: 144px;
+  }
+  .catalog-table-meta {
+    padding: 12px 18px;
+  }
+}
+
+@media (max-width: 980px) {
+  .catalog-page {
+    padding: 16px;
+  }
+  .catalog-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .catalog-page-actions {
+    justify-content: space-between;
+  }
+  .filter-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .catalog-search {
+    max-width: none;
+    width: 100%;
+  }
+  .catalog-table-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    white-space: normal;
+  }
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .summary-item:nth-child(2) {
+    border-right: 0;
+  }
 }
 </style>
 

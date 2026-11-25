@@ -16,6 +16,7 @@
             <a-select
               :value="selectedRuleSetValue"
               class="rule-set-select"
+              aria-label="切换规则集"
               popup-class-name="semantic-rule-select-dropdown"
               @change="handleRuleSetSelectChange"
             >
@@ -170,6 +171,7 @@
             <div class="rule-main">
               <div class="rule-main-content">
                 <button
+                  type="button"
                   class="rule-main-title"
                   @click="emit('viewDetail', record as SemanticRuleItem)"
                 >
@@ -308,15 +310,15 @@ const hasReleaseScope = computed(
   () => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope),
 )
 const columns = computed(() => [
-  { title: '序号', key: 'index', width: 56, align: 'center' as const, responsive: ['md'] },
-  { title: '编号', key: 'rule_id', width: 158 },
+  { title: '序号', key: 'index', width: 52, align: 'center' as const, responsive: ['md'] },
+  { title: '编号', key: 'rule_id', width: 142 },
   { title: '规则名称', key: 'name' },
   ...(hasReleaseScope.value
-    ? [{ title: '发布范围', key: 'release_scope', width: 108, responsive: ['lg'] }]
+    ? [{ title: '发布范围', key: 'release_scope', width: 92, responsive: ['lg'] }]
     : []),
-  { title: '适用文书', key: 'applicable_documents', width: 140, responsive: ['lg'] },
+  { title: '适用文书', key: 'applicable_documents', width: 116, responsive: ['lg'] },
   ...(props.ruleSetKey === 'luxian_0609_qc_v1'
-    ? [{ title: '执行状态', key: 'execution_status', width: 118, responsive: ['lg'] }]
+    ? [{ title: '执行状态', key: 'execution_status', width: 96, responsive: ['lg'] }]
     : []),
 ])
 

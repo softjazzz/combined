@@ -1,5 +1,5 @@
 <template>
-  <main
+  <section
     class="mq-page rule-validation-page"
     data-testid="rule-validation-detail"
   >
@@ -665,7 +665,7 @@
       @close="approvalOpen = false"
       @done="onApprovalDone"
     />
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">

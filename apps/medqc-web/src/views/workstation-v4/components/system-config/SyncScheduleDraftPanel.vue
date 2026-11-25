@@ -55,7 +55,7 @@
     <a-drawer
       :open="Boolean(editing)"
       title="禁用计划草稿"
-      :width="640"
+      width="min(640px, 100vw)"
       :mask-closable="!locked"
       :keyboard="!locked"
       :closable="!locked"

@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page report-page">
+  <section class="mq-page report-page" aria-label="病案首页统计分析">
     <header class="page-head mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -40,18 +40,20 @@
           placeholder="全部医生"
         />
       </div>
-      <div class="field mq-field">
+      <div class="field field--datetime mq-field">
         <label for="fp-from">质控时间起</label
         ><input id="fp-from" v-model="draft.analyzed_from" class="mq-input" type="datetime-local" />
       </div>
-      <div class="field mq-field">
+      <div class="field field--datetime mq-field">
         <label for="fp-to">质控时间止</label
         ><input id="fp-to" v-model="draft.analyzed_to" class="mq-input" type="datetime-local" />
       </div>
-      <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
-        <MqIcon name="search" :size="16" />查询
-      </button>
-      <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+      <div class="filter-actions">
+        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+          <MqIcon name="search" :size="16" />查询
+        </button>
+        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+      </div>
     </section>
 
     <div v-if="loading" class="status" role="status">正在读取病案首页统计…</div>
@@ -59,6 +61,45 @@
       <MqIcon name="issue" :size="18" />{{ loadError }}
     </div>
     <template v-else-if="report">
+      <section
+        v-if="isZeroCaseReport"
+        class="empty-guide mq-card"
+        role="status"
+        data-testid="frontpage-empty-guide"
+      >
+        <div class="empty-guide__copy">
+          <MqIcon name="issue" :size="18" />
+          <div>
+            <p class="empty-guide__title">
+              {{
+                hasActiveFilters
+                  ? '当前筛选条件下暂无病案首页或编码质控结果（0 份）'
+                  : '当前范围内暂无已核验病例身份的首页或编码质控结果（0 份）'
+              }}
+            </p>
+            <p class="empty-guide__desc">
+              {{
+                hasActiveFilters
+                  ? '可清空科室、主治医师或放宽质控时间范围后重新查询。'
+                  : '请先在病案首页质控工作台完成首页质控或编码质控分析，或点击刷新同步最新统计。'
+              }}
+            </p>
+          </div>
+        </div>
+        <div class="empty-guide__actions">
+          <button
+            v-if="hasActiveFilters"
+            class="mq-btn mq-btn--primary"
+            type="button"
+            @click="resetFilters"
+          >
+            重置筛选条件
+          </button>
+          <button v-else class="mq-btn" type="button" :disabled="loading" @click="loadReport">
+            刷新数据
+          </button>
+        </div>
+      </section>
       <section class="overview" aria-label="总览">
         <h2>总览</h2>
         <div class="metrics">
@@ -96,7 +137,7 @@
           </div>
         </div>
         <template v-if="currentSource">
-          <div class="distribution-grid">
+          <div class="distribution-grid distribution-grid--two">
             <div class="data-panel mq-card">
               <h3>严重度</h3>
               <div
@@ -151,15 +192,15 @@
             <span>{{ report.department_rows.length }} 个科室</span>
           </div>
           <div class="table-scroll">
-            <table class="mq-table">
+            <table class="mq-table mq-table--sticky-first">
               <thead>
                 <tr>
-                  <th>科室</th>
-                  <th>病案数</th>
-                  <th>问题病案数</th>
-                  <th>问题病案率</th>
-                  <th>非编码缺陷</th>
-                  <th>编码缺陷</th>
+                  <th scope="col">科室</th>
+                  <th scope="col" class="col-compact">病案数</th>
+                  <th scope="col" class="col-compact">问题病案数</th>
+                  <th scope="col" class="col-compact">问题病案率</th>
+                  <th scope="col" class="col-compact">非编码缺陷</th>
+                  <th scope="col" class="col-compact">编码缺陷</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,7 +326,7 @@
         </button>
       </div>
     </a-drawer>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -438,6 +479,17 @@ watch(drawerOpen, (open) => {
   }
 })
 
+const isZeroCaseReport = computed(
+  () => report.value !== null && report.value.kpis.case_total === 0,
+)
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.value.department ||
+      filters.value.doctor ||
+      filters.value.analyzed_from ||
+      filters.value.analyzed_to,
+  ),
+)
 const currentSource = computed(
   () => report.value?.sources.find((item) => item.source_key === activeSource.value) ?? null,
 )

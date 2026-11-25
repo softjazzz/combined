@@ -1,5 +1,5 @@
 <template>
-  <main
+  <section
     class="mq-page rule-validation-page"
     data-testid="rule-validation-list"
   >
@@ -30,15 +30,20 @@
           aria-label="规则范围"
         >
           <button
-            v-for="tab in scopeTabs"
+            v-for="(tab, index) in scopeTabs"
+            :id="`rv-scope-tab-${tab.key}`"
             :key="tab.key"
+            ref="scopeTabRefs"
             type="button"
             role="tab"
             class="mq-segmented__item"
             :class="{ 'is-active': scope === tab.key }"
             :aria-selected="scope === tab.key"
+            :aria-controls="`rv-scope-panel-${tab.key}`"
+            :tabindex="scope === tab.key ? 0 : -1"
             :data-testid="`scope-${tab.key}`"
             @click="scope = tab.key"
+            @keydown="handleScopeTabKeydown($event, index)"
           >
             {{ tab.label }}
           </button>
@@ -104,7 +109,13 @@
       </article>
     </section>
 
-    <section class="mq-card mq-card--padded rv-table-card">
+    <section
+      :id="`rv-scope-panel-${scope}`"
+      class="mq-card mq-card--padded rv-table-card"
+      role="tabpanel"
+      :aria-labelledby="`rv-scope-tab-${scope}`"
+      tabindex="0"
+    >
       <div class="rv-toolbar">
         <div
           class="rv-chips"
@@ -117,6 +128,7 @@
             type="button"
             class="rv-chip"
             :class="{ 'is-active': familyFilter === family }"
+            :aria-pressed="familyFilter === family"
             @click="familyFilter = family"
           >
             {{ family || '全部规则族' }}
@@ -209,7 +221,7 @@
         </div>
       </a-spin>
     </section>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -251,9 +263,22 @@ function parseRuleSetKey(value: unknown): string {
 }
 
 const scope = ref<Scope>(parseScope(route.query.scope))
+const scopeTabRefs = ref<HTMLButtonElement[]>([])
 const familyFilter = ref(readQueryText(route.query.family))
 const keyword = ref(readQueryText(route.query.keyword))
 const ruleSetKey = ref(parseRuleSetKey(route.query.ruleSetKey))
+
+function handleScopeTabKeydown(event: KeyboardEvent, index: number) {
+  let nextIndex = -1
+  if (event.key === 'ArrowRight') nextIndex = (index + 1) % scopeTabs.length
+  else if (event.key === 'ArrowLeft') nextIndex = (index - 1 + scopeTabs.length) % scopeTabs.length
+  else if (event.key === 'Home') nextIndex = 0
+  else if (event.key === 'End') nextIndex = scopeTabs.length - 1
+  if (nextIndex < 0) return
+  event.preventDefault()
+  scope.value = scopeTabs[nextIndex].key
+  scopeTabRefs.value[nextIndex]?.focus()
+}
 let loadSequence = 0
 let loadAbortController: AbortController | null = null
 let isApplyingRouteQuery = false

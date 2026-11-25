@@ -1,5 +1,6 @@
 .accounts-panel {
   min-width: 0;
+  max-width: 100%;
 }
 .accounts-sections { margin-bottom: 24px; }
 .accounts-head,
@@ -33,7 +34,11 @@
   min-width: 140px;
 }
 .accounts-table {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .accounts-table table {
   min-width: 1040px;

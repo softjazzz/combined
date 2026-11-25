@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page report-page special-report">
+  <section class="mq-page report-page special-report" aria-label="特殊病历报表">
     <header class="page-head mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -277,22 +277,22 @@
         </p>
         <div v-else-if="defects" class="table-panel mq-inset">
           <div class="table-scroll">
-            <table class="mq-table">
+            <table class="mq-table mq-table--sticky-first">
               <thead>
                 <tr>
-                  <th>缺陷名称</th>
-                  <th>提醒等级</th>
-                  <th>大类</th>
-                  <th>类型</th>
-                  <th>文书</th>
-                  <th>单否</th>
-                  <th class="num">数量</th>
-                  <th class="num">占比</th>
+                  <th scope="col" class="col-id">缺陷名称</th>
+                  <th scope="col" class="col-compact">提醒等级</th>
+                  <th scope="col" class="col-compact">大类</th>
+                  <th scope="col" class="col-compact">类型</th>
+                  <th scope="col" class="col-compact">文书</th>
+                  <th scope="col" class="col-compact">单否</th>
+                  <th scope="col" class="num col-compact">数量</th>
+                  <th scope="col" class="num col-compact">占比</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="item in defects.items" :key="defectKey(item)">
-                  <td>
+                  <td class="col-id">
                     <button type="button" class="link" @click="drill({ rule_id: item.rule_id })">
                       {{ item.name }}
                     </button>
@@ -361,16 +361,16 @@
         </p>
         <div v-else-if="records" class="table-panel mq-inset">
           <div class="table-scroll">
-            <table class="mq-table">
+            <table class="mq-table mq-table--sticky-first">
               <thead>
                 <tr>
-                  <th>病例身份</th>
-                  <th>科室</th>
-                  <th>出院日期</th>
-                  <th>类型事实</th>
-                  <th>报表专用分 / 等级</th>
-                  <th v-if="!confirmedResultsOnly">标准版本</th>
-                  <th>历史分 / 等级</th>
+                  <th scope="col" class="col-id">病例身份</th>
+                  <th scope="col" class="col-compact">科室</th>
+                  <th scope="col" class="col-compact">出院日期</th>
+                  <th scope="col" class="col-compact">类型事实</th>
+                  <th scope="col" class="col-compact">报表专用分 / 等级</th>
+                  <th v-if="!confirmedResultsOnly" scope="col" class="col-compact">标准版本</th>
+                  <th scope="col" class="col-compact">历史分 / 等级</th>
                 </tr>
               </thead>
               <tbody>
@@ -378,7 +378,7 @@
                   v-for="row in records.items"
                   :key="`${row.institute_id}:${row.patient_id}:${row.visit_id}`"
                 >
-                  <td>
+                  <td class="col-id">
                     <strong>{{ row.patient_name || '未登记姓名' }}</strong
                     ><small class="mq-mono"
                       >{{ row.institute_id }} / {{ row.patient_id }} / {{ row.visit_id }}</small
@@ -444,7 +444,7 @@
       @close="configOpen = false"
       @saved="configurationSaved"
     />
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">

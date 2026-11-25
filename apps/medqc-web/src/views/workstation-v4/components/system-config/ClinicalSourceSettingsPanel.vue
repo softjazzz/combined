@@ -13,13 +13,18 @@
     </div>
     <p
       v-if="loading"
+      class="source-notice source-notice--status"
       role="status"
     >
       正在读取数据源设置…
     </p>
     <p
       v-if="notice"
-      role="status"
+      :class="[
+        'source-notice',
+        noticeTone === 'error' ? 'source-notice--error' : 'source-notice--status',
+      ]"
+      :role="noticeTone === 'error' ? 'alert' : 'status'"
     >
       {{ notice }}
     </p>
@@ -110,6 +115,7 @@ const settings = ref<ClinicalSourceSettings | null>(null)
 const loading = ref(false)
 const busy = ref(false)
 const notice = ref('')
+const noticeTone = ref<'status' | 'error'>('status')
 let disposed = false
 let requestSeq = 0
 let activeController: AbortController | null = null
@@ -126,8 +132,10 @@ async function load() {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     settings.value = loaded
     notice.value = ''
+    noticeTone.value = 'status'
   } catch {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    noticeTone.value = 'error'
     notice.value = '无法读取数据源配置，请稍后重试'
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
@@ -148,9 +156,11 @@ async function save() {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     settings.value = saved
     resetClinicalSourceOptionsCache()
+    noticeTone.value = 'status'
     notice.value = '设置已保存，已有任务继续使用创建时的来源'
   } catch {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    noticeTone.value = 'error'
     notice.value = '保存失败，请检查来源、部署凭据，或重新读取后再保存'
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
@@ -172,12 +182,15 @@ async function check() {
     if (!report.ok) {
       const failures = report.dependencies.filter((row) => !['structure_ready', 'rows_present', 'zero_rows'].includes(row.status)
         && (row.required || row.status !== 'table_missing'))
+      noticeTone.value = 'error'
       notice.value = `只读预检未通过：${failures.length ? failures.map((row) => `${row.table} (${row.status})`).join('、') : '账号权限或只读事务不符合要求'}`
       return
     }
+    noticeTone.value = 'status'
     notice.value = 'CDM完整依赖只读检查通过；发布就绪仍待确认，未保存配置'
   } catch {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    noticeTone.value = 'error'
     notice.value = 'CDM检查未通过，请核对连接、只读权限和同步表结构；未切换来源'
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
@@ -199,6 +212,25 @@ onBeforeUnmount(() => {
 .clinical-source-settings {
   margin-bottom: 20px;
 }
+.source-notice {
+  margin: 12px 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: var(--mq-font-13, 13px);
+  line-height: 1.5;
+  font-weight: 500;
+}
+.source-notice--status {
+  border: 1px solid var(--mq-info-border, rgba(10, 108, 255, 0.16));
+  background: var(--mq-info-bg, rgba(10, 108, 255, 0.08));
+  color: var(--mq-info-text, #0a5fd6);
+}
+.source-notice--error {
+  border: 1px solid var(--mq-danger-border, rgba(255, 59, 48, 0.22));
+  background: var(--mq-danger-bg, rgba(255, 59, 48, 0.1));
+  color: var(--mq-danger-text, #c41c30);
+  font-weight: 600;
+}
 .source-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -210,7 +242,7 @@ label {
   flex-direction: column;
   gap: 8px;
   font-size: 13px;
-  color: #475569;
+  color: var(--mq-text-secondary, #515154);
 }
 input:not([type='checkbox']),
 select {
@@ -219,7 +251,14 @@ select {
   border: 1px solid #e2e8f0;
   border-radius: 8px;
   background: white;
-  color: #0f172a;
+  color: var(--mq-text-primary, #1d1d1f);
+}
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--mq-brand-600, #0a6cff);
+  outline-offset: 2px;
+  border-color: var(--mq-brand-600, #0a6cff);
+  box-shadow: 0 0 0 3px rgba(10, 108, 255, 0.14);
 }
 .source-toggle {
   flex-direction: row;
