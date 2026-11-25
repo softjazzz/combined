@@ -2481,7 +2481,6 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
     """手动与定时共用接纳owner；定时来源不是HTTP输入字段。"""
     institute_scope: Optional[str] = None
     if scheduled_origin is None:
-        _reject_restricted_demo_account(current_user, "演示账号禁止创建四川规则批量任务")
         if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES):
             raise HTTPException(status_code=403, detail="当前账号无权创建四川规则批量任务")
         from ..services.saved_result_access import saved_result_institute_scope
@@ -2491,6 +2490,7 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         )
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.diagnostic_capture:
+        _reject_restricted_demo_account(current_user, "演示账号禁止采集排障诊断包")
         if not set(current_user.get("roles", [])).intersection({"admin", "super_admin"}):
             raise HTTPException(403, "仅管理员可采集完整排障包")
         if payload.rule_set_key != LUXIAN_0609_RULE_SET_KEY or len(payload.record_refs or []) != 1:
@@ -3688,7 +3688,6 @@ async def cancel_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    _reject_restricted_demo_account(current_user, "演示账号禁止取消批量任务")
     workspace = _sichuan_workspace_service()
     job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
