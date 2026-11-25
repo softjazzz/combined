@@ -579,10 +579,10 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 9px 14px;
-  border: 1px solid color-mix(in srgb, var(--mq-brand-600) 20%, var(--mq-border));
+  padding: 10px 14px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
   border-radius: 10px;
-  background: color-mix(in srgb, var(--mq-brand-600) 4%, var(--mq-bg-surface));
+  background: #f8fafc;
   color: var(--mq-text-primary);
   font-family: 'Microsoft YaHei UI', 'PingFang SC', 'Segoe UI', sans-serif;
   transition:
@@ -591,13 +591,13 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status--success {
-  border-color: color-mix(in srgb, var(--mq-success-icon) 26%, var(--mq-border));
-  background: color-mix(in srgb, var(--mq-success-icon) 5%, var(--mq-bg-surface));
+  border-color: rgba(226, 232, 240, 0.95);
+  background: #f8fafc;
 }
 
 .record-pool-qc-status--danger {
-  border-color: color-mix(in srgb, var(--mq-danger-icon) 28%, var(--mq-border));
-  background: color-mix(in srgb, var(--mq-danger-icon) 4.5%, var(--mq-bg-surface));
+  border-color: rgba(254, 202, 202, 0.85);
+  background: #fffafa;
 }
 
 .record-pool-qc-status__bar {
