@@ -128,11 +128,18 @@ def _resolve_actor(
     if not (roles & set(allowed_roles)):
         raise HTTPException(status_code=403, detail=denied_detail)
 
-    is_global = bool(roles & _GLOBAL_ROLES)
-    institute_id = row.get("institute_id") if has_institute else None
-    if not is_global:
-        if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
+    raw_inst = row.get("institute_id") if has_institute else None
+    if isinstance(raw_inst, str) and raw_inst and not raw_inst.strip():
+        if "sync_admin" not in roles:
             raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
+    actor_institute_id = raw_inst.strip() if isinstance(raw_inst, str) else ""
+    is_global = ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor_institute_id
+    )
+    if not is_global:
+        if not isinstance(raw_inst, str) or not raw_inst.strip() or raw_inst != raw_inst.strip():
+            raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
+        institute_id = raw_inst
     else:
         institute_id = None
 
@@ -762,7 +769,8 @@ async def assign_task(
     if not actor["is_global"]:
         assignee_ids = [str(a.get("user_id") or "").strip() for a in assignees if a.get("user_id")]
         assignee_insts = _lookup_user_institutes(assignee_ids)
-        for uid, u_inst in assignee_insts.items():
+        for uid in assignee_ids:
+            u_inst = assignee_insts.get(uid)
             if u_inst != actor["institute_id"]:
                 raise HTTPException(status_code=403, detail=f"不能将任务分配给其他机构的人员: {uid}")
 
@@ -984,9 +992,10 @@ async def re_analyze_task(
                     )
                 except Exception as rec_exc:
                     logger.warning("更新任务病历重分析结果失败（非阻塞）: %s", rec_exc)
-        except Exception as e:
+        except Exception:
             failed_count += 1
-            started.append({"record_id": rid, "status": "failed", "error": str(e)})
+            logger.warning("任务 %s 病历 %s 重新质控失败", task_id, rid, exc_info=True)
+            started.append({"record_id": rid, "status": "failed", "error": "质控评估失败"})
 
     total_records = len(record_entries)
     progress = round(succeeded_count * 100.0 / total_records, 1) if total_records else 0.0

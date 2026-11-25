@@ -171,7 +171,8 @@ def test_smart_upload_task_failure_is_reported(client, monkeypatch, tmp_path):
     status = _wait_for_status(client, task_id, headers, "failed")
     assert status["status"] == "failed"
     assert status["finished_at"] is not None
-    assert "boom" in status["error_message"]
+    assert "文件处理失败" in status["error_message"]
+    assert "boom" not in status["error_message"]
 
     result_resp = client.get(f"/api/v1/drg/smart-upload/tasks/{task_id}/result", headers=headers)
     assert result_resp.status_code == 409

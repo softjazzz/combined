@@ -81,7 +81,7 @@ def _make_persistent_user_sqlite(tmp_path: Path):
                     email="admin@example.com",
                     password_hash="x",
                     display_name="管理员",
-                    institute_id="INST_A",
+                    institute_id=None,
                     department="质控科",
                     role="admin",
                     roles_json=json.dumps(["admin"]),
@@ -162,7 +162,7 @@ class TestSemanticRulesAuthzAndExport:
         fake_sb.table.return_value.select.return_value.limit.return_value.execute.return_value = fake_resp
         monkeypatch.setattr(semantic_rules, "get_supabase", lambda: fake_sb)
 
-        app = _make_app(semantic_rules.router, {"id": "u1", "roles": ["doctor"]})
+        app = _make_app(semantic_rules.router, {"id": "u1", "roles": ["qc_manager"]})
         with TestClient(app) as client:
             resp = client.get("/api/v1/semantic-rules/export")
 
@@ -190,16 +190,18 @@ class TestSemanticRulesAuthzAndExport:
             assert client.post("/api/v1/semantic-rules/custom", json={"name": "x"}).status_code == 403
             assert client.post("/api/v1/semantic-rules/ops/normalize-docs").status_code == 403
 
-        # qc_manager 允许写，但禁止删除（删除限 admin）
+        # qc_manager 禁止写/删（全局规则写/删均限全局管理员）
         qcm_app = _make_app(semantic_rules.router, {"id": "u-qcm", "roles": ["qc_manager"]})
         with TestClient(qcm_app) as client:
-            assert client.post("/api/v1/semantic-rules", json={"name": "x"}).status_code == 200
-            assert client.put("/api/v1/semantic-rules/r-1", json={"name": "y"}).status_code == 200
+            assert client.post("/api/v1/semantic-rules", json={"name": "x"}).status_code == 403
+            assert client.put("/api/v1/semantic-rules/r-1", json={"name": "y"}).status_code == 403
             assert client.delete("/api/v1/semantic-rules/r-1").status_code == 403
 
-        # admin 允许删除
+        # 全局 admin 允许写/删
         admin_app = _make_app(semantic_rules.router, {"id": "u-admin", "roles": ["admin"]})
         with TestClient(admin_app) as client:
+            assert client.post("/api/v1/semantic-rules", json={"name": "x"}).status_code == 200
+            assert client.put("/api/v1/semantic-rules/r-1", json={"name": "y"}).status_code == 200
             assert client.delete("/api/v1/semantic-rules/r-1").status_code == 200
 
 
@@ -209,7 +211,7 @@ class TestSemanticRulesAuthzAndExport:
 
 
 class TestScoringConfigAuthzAndDbGrade:
-    def test_put_scoring_config_requires_admin_or_qc_manager(self, monkeypatch):
+    def test_put_scoring_config_requires_global_admin(self, monkeypatch):
         fake_sb = MagicMock()
         monkeypatch.setattr(scoring_config, "get_supabase", lambda: fake_sb)
         monkeypatch.setattr(scoring_config, "async_execute", AsyncMock(return_value=MagicMock(data=[])))
@@ -220,6 +222,20 @@ class TestScoringConfigAuthzAndDbGrade:
 
         qcm_app = _make_app(scoring_config.router, {"id": "u-qcm", "roles": ["qc_manager"]})
         with TestClient(qcm_app) as client:
+            assert client.put("/api/v1/scoring-config", json={"pass_score": 65}).status_code == 403
+
+        bound_admin_app = _make_app(
+            scoring_config.router,
+            {"id": "u-bound-adm", "roles": ["admin"], "institute_id": "H-A"},
+        )
+        with TestClient(bound_admin_app) as client:
+            assert client.put("/api/v1/scoring-config", json={"pass_score": 65}).status_code == 403
+
+        global_admin_app = _make_app(
+            scoring_config.router,
+            {"id": "u-global-adm", "roles": ["admin"], "institute_id": ""},
+        )
+        with TestClient(global_admin_app) as client:
             resp = client.put("/api/v1/scoring-config", json={"pass_score": 65})
             assert resp.status_code == 200
             assert resp.json()["data"]["pass_score"] == 65
@@ -273,11 +289,12 @@ class TestScoringRulesAuthzAndExportHeader:
 
         qcm_app = _make_app(scoring_rules.router, {"id": "u-qcm", "roles": ["qc_manager"]})
         with TestClient(qcm_app) as client:
-            assert client.post("/api/v1/scoring-rules", json={"name": "r"}).status_code == 200
+            assert client.post("/api/v1/scoring-rules", json={"name": "r"}).status_code == 403
             assert client.delete("/api/v1/scoring-rules/sr-1").status_code == 403
 
         admin_app = _make_app(scoring_rules.router, {"id": "u-admin", "roles": ["admin"]})
         with TestClient(admin_app) as client:
+            assert client.post("/api/v1/scoring-rules", json={"name": "r"}).status_code == 200
             assert client.delete("/api/v1/scoring-rules/sr-1").status_code == 200
 
     def test_export_scoring_rules_uses_rfc5987_ascii_content_disposition(self, monkeypatch):
@@ -304,7 +321,7 @@ class TestScoringRulesAuthzAndExportHeader:
             ),
         )
 
-        app = _make_app(scoring_rules.router, {"id": "u-doc", "roles": ["doctor"]})
+        app = _make_app(scoring_rules.router, {"id": "u-qcm", "roles": ["qc_manager"]})
         with TestClient(app) as client:
             resp = client.get("/api/v1/scoring-rules/export")
 

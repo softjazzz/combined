@@ -15,7 +15,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ _SETTINGS_LOCK = threading.RLock()
 router = APIRouter(
     prefix="/api/v1/qc/settings",
     tags=["QC Settings"],
-    dependencies=[Depends(require_roles(*_SYSTEM_CONFIG_ROLES))],
+    dependencies=[Depends(require_global_system_admin)],
 )
 
 # 配置文件路径
@@ -111,7 +111,7 @@ def _save_settings(settings: QCSettingsModel) -> None:
 
 @router.get("", response_model=QCSettingsResponse)
 async def get_qc_settings(
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     """获取当前质控引擎配置"""
     del _admin_user
@@ -131,7 +131,7 @@ class QCSettingsUpdateRequest(BaseModel):
 @router.put("", response_model=QCSettingsResponse)
 async def update_qc_settings(
     req: QCSettingsUpdateRequest,
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     """更新质控引擎配置（部分更新）"""
     del _admin_user
@@ -154,7 +154,7 @@ async def update_qc_settings(
 
 @router.post("/reset", response_model=QCSettingsResponse)
 async def reset_qc_settings(
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     """重置质控引擎配置为默认值"""
     del _admin_user

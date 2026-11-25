@@ -84,7 +84,7 @@ async def get_staff_work_analysis(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
     as_of: str | None = Query(None),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
     _require_full_scope(current_user)
     filters = _filter_kwargs(
@@ -121,7 +121,7 @@ async def export_staff_work_analysis(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
     as_of: str | None = Query(None),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
     _require_full_scope(current_user)
     filters = _filter_kwargs(
@@ -186,7 +186,7 @@ async def get_staff_work_details(
     start_date: str | None = Query(None),
     end_date: str | None = Query(None),
     as_of: str | None = Query(None),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
     _require_full_scope(current_user)
     filters = _filter_kwargs(

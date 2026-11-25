@@ -20,6 +20,7 @@ from ..database.models.v36_reports import (
 )
 from .appeal_manual_target_service import _history_details, _identity, _scene, _text
 from .defect_rectification_service import RectificationError, _person
+from .report_institute_scope import authorized_institute
 from .manual_defect_review_service import _manual_scope, _task_identity
 from .performance_ranking_service import HOSPITAL_TIMEZONE, RankingWindow
 from .qc_workspace.canonical_result_store import (
@@ -196,17 +197,32 @@ class ManualQualityReportService:
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             roles = actor["roles"]
-            if not roles & {"admin", "qc_manager", "qc_staff"}:
+            if not roles & {"admin", "super_admin", "qc_manager", "qc_staff"}:
                 raise RectificationError("仅质控人员可读取人工质控报表", 403)
-            if "admin" not in roles:
-                if not actor["institute_id"] or (
-                    institute_id and institute_id != actor["institute_id"]
+            if self.person is _person and roles & {"admin", "super_admin", "qc_manager"}:
+                allowed_institute = authorized_institute(session, actor_id)
+            else:
+                actor_institute = actor.get("institute_id")
+                is_global = ("sync_admin" in roles) or (
+                    bool(roles & {"admin", "super_admin"}) and not actor_institute
+                )
+                if is_global:
+                    allowed_institute = None
+                elif (
+                    not isinstance(actor_institute, str)
+                    or not actor_institute.strip()
+                    or actor_institute != actor_institute.strip()
                 ):
+                    raise RectificationError("账号缺少可信机构范围", 403)
+                else:
+                    allowed_institute = actor_institute
+            if allowed_institute is not None:
+                if institute_id and institute_id != allowed_institute:
                     raise RectificationError("无权读取该机构报表", 403)
-                institute_id = actor["institute_id"]
+                institute_id = allowed_institute
             if department and not institute_id:
                 raise RectificationError("科室筛选须同时指定机构")
-            self_only = "admin" not in roles and "qc_manager" not in roles
+            self_only = not bool(roles & {"admin", "super_admin", "qc_manager"})
             if self_only and creator_id and creator_id != actor_id:
                 raise RectificationError("仅可读取本人录入的人工缺陷", 403)
             if self_only:

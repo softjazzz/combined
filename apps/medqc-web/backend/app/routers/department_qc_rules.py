@@ -3,6 +3,8 @@
 实现科室级规则的 CRUD 操作、发布、变更历史查询等功能
 """
 
+import logging
+import re
 import uuid
 from datetime import datetime
 from typing import List, Dict, Any, Optional
@@ -33,51 +35,120 @@ from ..core.permissions import (
 )
 
 router = APIRouter(prefix="/api/v1/qc/rules/department", tags=["department-qc-rules"])
+logger = logging.getLogger(__name__)
 
 _GLOBAL_RULE_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
+_DEMO_FULL_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_OR_FILTER_UNSAFE_RE = re.compile(r"[,().*%_\\\"\']+")
 
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
 
+def _sanitize_or_keyword(keyword: str) -> str:
+    """移除 PostgREST .or_() 语法敏感字符，防止通过逗号/括号/点号注入额外过滤条件。"""
+    return _OR_FILTER_UNSAFE_RE.sub("", str(keyword or "").strip())
+
+
 def _user_roles(current_user: dict) -> set[str]:
     roles = set(effective_roles((current_user or {}).get("roles")))
     single = str((current_user or {}).get("role") or "").strip()
     if single:
         roles.update(effective_roles([single]))
-    return roles
+    return {r.strip().lower() for r in roles if isinstance(r, str) and r.strip()}
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_user_roles(current_user).intersection(_DEMO_FULL_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail=detail)
 
 
 def _resolve_qc_manager_scope(current_user: dict) -> tuple[bool, str, str, str]:
     """解析用户的院区/科室作用域。
 
     返回 `(is_global, institute_id, department_id, department_name)`。
+    仅 `sync_admin` 或无绑定 `institute_id` 的 `admin`/`super_admin` 放行全局；
+    绑定了 `institute_id` 的 `admin`/`super_admin` 强制按本院隔离。
     """
     roles = _user_roles(current_user)
-    if roles & _GLOBAL_RULE_ROLES:
-        return True, "", "", ""
-
     user_id = str((current_user or {}).get("id") or (current_user or {}).get("user_id") or "").strip()
     user_inst = str((current_user or {}).get("institute_id") or "").strip()
     user_dept_id = str((current_user or {}).get("department_id") or "").strip()
     user_dept_name = str((current_user or {}).get("department") or "").strip()
 
-    # 若持久账号库可用，优先以持久账号记录为准，不信任请求覆盖
+    # 若持久账号库可用且存在该账号，以持久账号记录为准，不信任请求覆盖
     if user_id:
         try:
-            from ..database.connection import SessionLocal
-            from ..services.defect_rectification_service import _person
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
 
-            if SessionLocal is not None:
-                with SessionLocal() as session:
-                    actor = _person(session, user_id)
-                if actor["roles"] & _GLOBAL_RULE_ROLES:
-                    return True, "", "", ""
-                user_inst = str(actor.get("institute_id") or "").strip()
-                user_dept_name = str(actor.get("department") or "").strip()
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        has_dept = "department" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                            + (", department" if has_dept else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": user_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False, "", "", ""
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False, "", "", ""
+                            roles = {r.strip().lower() for r in p_roles if isinstance(r, str) and r.strip()}
+                            user_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            user_dept_name = str((row.get("department") if has_dept else "") or "").strip()
         except Exception:
             pass
+
+    is_global = ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not user_inst
+    )
+    if is_global:
+        return True, "", "", ""
+
+    # 绑定院区的 admin/super_admin 按院区强制隔离，可管理本院内各科室规则
+    if roles & {"admin", "super_admin"}:
+        return False, user_inst, "", ""
 
     return False, user_inst, user_dept_id, user_dept_name
 
@@ -199,6 +270,7 @@ async def create_department_rule(
     1. 覆盖全局规则：提供 base_rule_id，创建科室覆盖规则
     2. 创建新规则：不提供 base_rule_id，创建科室特有规则
     """
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建科室规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(
@@ -309,10 +381,11 @@ async def create_department_rule(
     
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("创建科室规则失败")
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"创建科室规则失败: {str(e)}"
+            detail="创建科室规则失败，请稍后重试"
         )
 
 
@@ -329,6 +402,7 @@ async def update_department_rule(
     
     只能更新科室规则（scope='department'），不能更新全局规则
     """
+    _reject_restricted_demo_account(current_user, "演示账号禁止更新科室规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(
@@ -427,10 +501,11 @@ async def update_department_rule(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("更新科室规则失败 rule_id=%s", rule_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"更新科室规则失败: {str(e)}"
+            detail="更新科室规则失败，请稍后重试"
         )
 
 
@@ -447,6 +522,7 @@ async def delete_department_rule(
     只有管理员可以删除规则
     只能删除科室规则（scope='department'），不能删除全局规则
     """
+    _reject_restricted_demo_account(current_user, "演示账号禁止删除科室规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(
@@ -462,7 +538,7 @@ async def delete_department_rule(
         # 验证规则是否存在且为科室规则
         rule_check = await async_execute(
             sb.table('qc_rules')
-            .select('id, scope')
+            .select('*')
             .eq('id', rule_id)
             .single()
         )
@@ -479,6 +555,14 @@ async def delete_department_rule(
                 detail="只能删除科室规则"
             )
 
+        # 非全局管理员/质控管理员必须校验院区/科室归属
+        await _enforce_qc_manager_department_scope(
+            sb,
+            current_user,
+            rule_check.data.get('department_id'),
+            rule_row=rule_check.data,
+        )
+
         # 删除规则
         await async_execute(
             sb.table('qc_rules').delete().eq('id', rule_id)
@@ -488,10 +572,11 @@ async def delete_department_rule(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("删除科室规则失败 rule_id=%s", rule_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"删除科室规则失败: {str(e)}"
+            detail="删除科室规则失败，请稍后重试"
         )
 
 
@@ -508,6 +593,7 @@ async def publish_department_rule(
 
     将草稿状态的规则发布为正式规则
     """
+    _reject_restricted_demo_account(current_user, "演示账号禁止发布科室规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(
@@ -591,10 +677,11 @@ async def publish_department_rule(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("发布科室规则失败 rule_id=%s", rule_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"发布科室规则失败: {str(e)}"
+            detail="发布科室规则失败，请稍后重试"
         )
 
 
@@ -668,10 +755,11 @@ async def get_rule_change_history(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("获取变更历史失败 rule_id=%s", rule_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取变更历史失败: {str(e)}"
+            detail="获取变更历史失败，请稍后重试"
         )
 
 
@@ -769,10 +857,11 @@ async def get_applicable_rules(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("获取适用规则失败 department_id=%s", department_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取适用规则失败: {str(e)}"
+            detail="获取适用规则失败，请稍后重试"
         )
 
 
@@ -860,13 +949,23 @@ async def list_department_rules(
         if override_action:
             query = query.eq('override_action', override_action)
 
-        # 关键词搜索
-        if keyword:
+        # 关键词搜索（转义 PostgREST .or_() 语法敏感字符防过滤注入）
+        if keyword is not None and str(keyword).strip():
+            safe_keyword = _sanitize_or_keyword(keyword)
+            if not safe_keyword:
+                return paginated_response(
+                    items=[],
+                    total=0,
+                    page=page,
+                    page_size=limit,
+                    message="获取科室规则列表成功",
+                    trace_id=get_trace_id(request),
+                )
             if hasattr(query, 'or_'):
                 query = query.or_(
-                    f"name.ilike.%{keyword}%,"
-                    f"description.ilike.%{keyword}%,"
-                    f"rule_code.ilike.%{keyword}%"
+                    f"name.ilike.%{safe_keyword}%,"
+                    f"description.ilike.%{safe_keyword}%,"
+                    f"rule_code.ilike.%{safe_keyword}%"
                 )
 
         # 分页
@@ -893,10 +992,11 @@ async def list_department_rules(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("获取科室规则列表失败")
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取科室规则列表失败: {str(e)}"
+            detail="获取科室规则列表失败，请稍后重试"
         )
 
 
@@ -952,9 +1052,10 @@ async def get_department_rule(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("获取科室规则详情失败 rule_id=%s", rule_id)
         raise HTTPException(
             status_code=StatusCode.INTERNAL_SERVER_ERROR,
-            detail=f"获取科室规则详情失败: {str(e)}"
+            detail="获取科室规则详情失败，请稍后重试"
         )
 

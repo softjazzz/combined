@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
+from ..core.roles import effective_roles
 from ..core.security import get_current_user, require_roles
 from ..services.product_activation import require_product_activation
 from ..services.rule_validation import (
@@ -22,8 +23,106 @@ from ..services.rule_validation import (
 router = APIRouter(
     prefix="/api/v1/qc/rule-validation",
     tags=["规则验收"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[Depends(require_roles("admin", "qc_manager", "super_admin"))],
 )
+
+_DEMO_FULL_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+
+
+def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not isinstance(current_user, dict):
+        return set()
+    roles = set(effective_roles(current_user.get("roles")))
+    single = str(current_user.get("role") or "").strip()
+    if single:
+        roles.update(effective_roles([single]))
+    return {r.strip().lower() for r in roles if isinstance(r, str) and r.strip()}
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行规则验收写操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许执行该操作",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=403, detail=detail)
 
 
 class CaseAnswerRequest(BaseModel):
@@ -209,6 +308,8 @@ async def list_candidate_cases(request: Request, rule_id: str,
 @router.put("/rules/{rule_id}/cases/{item_id}")
 async def upsert_case_answer(request: Request, rule_id: str, item_id: str, payload: CaseAnswerRequest,
                              current_user: Dict[str, Any] = Depends(get_current_user)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止修改规则验收预期")
+    _require_global_admin(current_user, "仅全局管理员可维护全平台规则验收预期")
     try:
         answer = _service().upsert_answer(rule_id, item_id, revision=payload.revision,
                                           expected_status=payload.expected_status,
@@ -222,6 +323,8 @@ async def upsert_case_answer(request: Request, rule_id: str, item_id: str, paylo
 @router.delete("/rules/{rule_id}/cases/{item_id}")
 async def remove_case_answer(request: Request, rule_id: str, item_id: str, revision: int,
                              current_user: Dict[str, Any] = Depends(get_current_user)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止删除规则验收预期")
+    _require_global_admin(current_user, "仅全局管理员可维护全平台规则验收预期")
     try:
         _service().remove_answer(rule_id, item_id, revision=revision)
     except (LookupError, ValueError) as exc:
@@ -233,6 +336,7 @@ async def remove_case_answer(request: Request, rule_id: str, item_id: str, revis
 async def start_run(request: Request, rule_id: str, payload: RunRequest,
                     current_user: Dict[str, Any] = Depends(get_current_user),
                     activation: Dict[str, Any] = Depends(require_product_activation)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止发起规则验收运行")
     from . import qc_sample_pools as pools_api
     from ..services.custom_qc_sample_pool_service import CUSTOMER_TEST_POOL_ID
     service = _service()
@@ -286,6 +390,7 @@ async def get_run(request: Request, run_id: str, current_user: Dict[str, Any] = 
 @router.post("/runs/{run_id}/cases/{item_id}/reviews")
 async def review_case(request: Request, run_id: str, item_id: str, payload: CaseReviewRequest,
                       current_user: Dict[str, Any] = Depends(get_current_user)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止提交规则验收复核")
     service = _service()
     try:
         run = service.get_run(run_id)
@@ -300,12 +405,16 @@ async def review_case(request: Request, run_id: str, item_id: str, payload: Case
 @router.post("/rules/{rule_id}/conclusion")
 async def conclude(request: Request, rule_id: str, payload: ConclusionRequest,
                    current_user: Dict[str, Any] = Depends(get_current_user)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止提交规则验收结论")
     service = _service()
     try:
         run = service.get_run(payload.run_id)
         if run["rule_id"] != rule_id:
             raise LookupError("运行不属于该规则")
-        latest = service.list_runs(rule_id)[0]
+        runs = service.list_runs(rule_id)
+        if not runs:
+            raise LookupError("该规则尚无验收运行记录")
+        latest = runs[0]
         if latest["id"] != run["id"]:
             raise RuleValidationConflict("只能对最新一次运行下结论")
         rows = await _run_rows(request, run, current_user)
@@ -319,6 +428,8 @@ async def conclude(request: Request, rule_id: str, payload: ConclusionRequest,
 @router.post("/rules/{rule_id}/approval")
 async def approve(request: Request, rule_id: str, payload: ApprovalRequest,
                   current_user: Dict[str, Any] = Depends(get_current_user)):
+    _reject_restricted_demo_account(current_user, "演示账号禁止批准规则上线")
+    _require_global_admin(current_user, "仅全局管理员可批准全局规则上线")
     try:
         event = _service().approve(rule_id, decision=payload.decision, note=payload.note, user=_user(current_user))
     except (LookupError, ValueError) as exc:

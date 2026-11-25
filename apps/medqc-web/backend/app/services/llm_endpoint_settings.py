@@ -12,12 +12,19 @@ import ipaddress
 import json
 import os
 from pathlib import Path
+import socket
 import tempfile
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
+from ..core.http import (
+    _BLOCKED_LOOPBACK_HOSTS,
+    _BLOCKED_METADATA_HOSTS,
+    is_unsafe_ssrf_ip,
+    parse_ip_literal,
+)
 from .llm_dispatch.provider_profiles import ProviderConfigurationError
 
 PROVIDERS = {
@@ -35,11 +42,53 @@ class EndpointSettingsError(ProviderConfigurationError):
         self.status = status
 
 
-def _is_link_local_host(hostname: str) -> bool:
+def _is_outbound_allowlisted(hostname: str) -> bool:
     try:
-        return ipaddress.ip_address(hostname).is_link_local
-    except ValueError:
+        from ..core.settings import get_settings
+
+        allow = [
+            str(h).strip().lower().rstrip(".")
+            for h in (getattr(get_settings(), "OUTBOUND_ALLOWLIST", None) or [])
+            if str(h).strip()
+        ]
+    except Exception:
+        allow = []
+    host = str(hostname or "").strip().lower().rstrip(".")
+    if not host:
         return False
+    for entry in allow:
+        if host == entry:
+            return True
+        if "." in entry and parse_ip_literal(entry) is None and host.endswith("." + entry):
+            return True
+    return False
+
+
+def _is_unsafe_endpoint_host(hostname: str) -> bool:
+    """拒绝回环、私网、link-local、云元数据、保留段、IPv4-mapped IPv6 及 DNS 解析至内网的地址。"""
+    host = str(hostname or "").strip().lower()
+    stripped = host.rstrip(".")
+    if not stripped:
+        return True
+    if _is_outbound_allowlisted(stripped):
+        return False
+    if stripped in _BLOCKED_LOOPBACK_HOSTS or stripped.endswith(".localhost"):
+        return True
+    if stripped in _BLOCKED_METADATA_HOSTS:
+        return True
+    literal_ip = parse_ip_literal(host)
+    if literal_ip is not None:
+        return is_unsafe_ssrf_ip(literal_ip)
+    try:
+        infos = socket.getaddrinfo(stripped, None)
+    except OSError:
+        # 离线单测域名（如 new.test）无法解析时不误杀，实际外呼由 core/http.py 二次拦截
+        return False
+    for _family, _, _, _, sockaddr in infos:
+        ip_obj = parse_ip_literal(sockaddr[0])
+        if ip_obj is None or is_unsafe_ssrf_ip(ip_obj):
+            return True
+    return False
 
 
 def _endpoint_origin(value: str) -> tuple[str, str, int | None]:
@@ -73,14 +122,14 @@ class EndpointUpdate(BaseModel):
         try:
             parsed = urlsplit(value)
             valid = (parsed.scheme in {"http", "https"} and parsed.hostname
-                     and not _is_link_local_host(parsed.hostname)
+                     and not _is_unsafe_endpoint_host(parsed.hostname)
                      and not parsed.username and not parsed.password
                      and not parsed.query and not parsed.fragment and parsed.port != 0
                      and not any(ch.isspace() or ord(ch) < 32 for ch in value))
         except ValueError:
             valid = False
         if not valid:
-            raise ValueError("仅允许不含凭据、查询参数和片段的 HTTP(S) 地址")
+            raise ValueError("仅允许不含凭据、查询参数和片段且非内网/保留地址的 HTTP(S) 地址")
         return value
 
 

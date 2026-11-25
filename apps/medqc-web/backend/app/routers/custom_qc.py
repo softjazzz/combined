@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 from starlette.concurrency import run_in_threadpool
 
 from ..core.response import get_trace_id, success_response
+from ..core.roles import effective_roles
 from ..core.security import get_current_user, require_roles
 from ..services.custom_qc_service import (
     create_custom_qc_service,
@@ -250,10 +251,132 @@ def _wrong_workspace_batch_owner(job: Mapping[str, Any]) -> bool:
     )
 
 
-async def _resolve_workspace_institute_scope(current_user: Dict[str, Any]) -> Optional[str]:
-    from ..services.saved_result_access import saved_result_institute_scope
+_DEMO_FULL_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
 
-    return await run_in_threadpool(saved_result_institute_scope, _current_user_id(current_user))
+
+def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not isinstance(current_user, dict):
+        return set()
+    roles = set(effective_roles(current_user.get("roles")))
+    single = str(current_user.get("role") or "").strip()
+    if single:
+        roles.update(effective_roles([single]))
+    return {r.strip().lower() for r in roles if isinstance(r, str) and r.strip()}
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = _current_user_id(current_user)
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许发布全局自定义规则",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _resolve_workspace_institute_scope_sync(current_user: Dict[str, Any]) -> Optional[str]:
+    from ..services import saved_result_access
+    from ..services.defect_rectification_service import RectificationError
+    from ..services.report_institute_scope import authorized_report_institute
+
+    actor_id = _current_user_id(current_user)
+    roles = _extract_user_roles(current_user)
+    institute_scope = saved_result_access.saved_result_institute_scope(actor_id)
+    if institute_scope is None and "sync_admin" not in roles:
+        raw_inst = current_user.get("institute_id")
+        if isinstance(raw_inst, str) and raw_inst.strip():
+            return raw_inst.strip()
+        if (
+            getattr(saved_result_access.saved_result_institute_scope, "__module__", "")
+            == saved_result_access.__name__
+        ):
+            try:
+                return authorized_report_institute(actor_id)
+            except RectificationError as exc:
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+            except Exception:
+                raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+    return institute_scope
+
+
+async def _resolve_workspace_institute_scope(current_user: Dict[str, Any]) -> Optional[str]:
+    return await run_in_threadpool(_resolve_workspace_institute_scope_sync, current_user)
 
 
 def _workspace_job_belongs_to_institute_scope(
@@ -734,7 +857,12 @@ async def _run_workspace_batch_job(job_id: str) -> None:
 
 
 @router.post("/prompt/generate")
-async def generate_prompt(request: Request, payload: PromptGenerateRequest):
+async def generate_prompt(
+    request: Request,
+    payload: PromptGenerateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    _reject_restricted_demo_account(current_user, "演示账号禁止生成自定义质控 Prompt")
     trace_id = get_trace_id(request)
     with llm_observation_context(
         business_scene="custom_qc_prompt_generation",
@@ -759,8 +887,10 @@ async def generate_prompt(request: Request, payload: PromptGenerateRequest):
 async def test_custom_qc_single(
     request: Request,
     payload: CustomQCTestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
     qc_service: SichuanQCService = Depends(get_custom_qc_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行自定义质控试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
     ensure_record_medical_text([record.model_dump() for record in payload.records])
@@ -797,8 +927,10 @@ async def test_custom_qc_single(
 async def test_custom_qc_batch(
     request: Request,
     payload: CustomQCTestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
     qc_service: SichuanQCService = Depends(get_custom_qc_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行自定义质控批量试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
     record_dicts = [record.model_dump() for record in payload.records]
@@ -919,6 +1051,7 @@ async def create_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建规则草稿")
     draft = workspace.create_draft(
         created_by=_current_user_id(current_user),
         payload=payload.model_dump(),
@@ -938,6 +1071,7 @@ async def update_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止修改规则草稿")
     updated = workspace.update_draft(
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
@@ -959,6 +1093,7 @@ async def delete_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止删除规则草稿")
     ok = workspace.delete_draft(
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
@@ -979,6 +1114,7 @@ async def generate_workspace_draft_prompt(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止生成规则 Prompt")
     draft = workspace.get_draft(draft_id=draft_id, created_by=_current_user_id(current_user))
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
@@ -1029,6 +1165,8 @@ async def publish_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止发布全局规则")
+    _require_global_admin(current_user, "仅全局管理员允许发布全局自定义规则")
     try:
         result = workspace.publish_draft(
             draft_id=draft_id,
@@ -1230,6 +1368,7 @@ async def test_workspace_single(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行工作台单病历试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
@@ -1298,6 +1437,7 @@ async def test_workspace_batch(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行工作台批量试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
@@ -1408,6 +1548,7 @@ async def create_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建批量质控任务")
     from ..services.saved_result_access import check_saved_result_institute
 
     created_by = _current_user_id(current_user)
@@ -1631,6 +1772,7 @@ async def cancel_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止取消批量质控任务")
     institute_scope = await _resolve_workspace_institute_scope(current_user)
     existing = await run_in_threadpool(
         workspace.get_batch_job,
@@ -1663,6 +1805,7 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止重试批量质控任务")
     existing = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,

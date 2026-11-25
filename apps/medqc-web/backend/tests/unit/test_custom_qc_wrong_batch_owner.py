@@ -46,7 +46,7 @@ def storage(monkeypatch):
                 username="tester",
                 display_name="管理员",
                 role="admin",
-                institute_id="H1",
+                institute_id=None,
                 is_active=True,
             )
         )

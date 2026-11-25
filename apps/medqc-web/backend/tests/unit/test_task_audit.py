@@ -45,6 +45,17 @@ def _admin_headers(client) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _global_admin_actor(*_args, **_kwargs) -> dict:
+    return {
+        "id": "user-admin-1",
+        "name": "Global Admin",
+        "roles": {"admin"},
+        "is_global": True,
+        "is_manager": True,
+        "institute_id": None,
+    }
+
+
 def test_assign_task_emits_audit_event(client, monkeypatch):
     async def _noop_auth_gate():
         return None
@@ -66,6 +77,7 @@ def test_assign_task_emits_audit_event(client, monkeypatch):
             )
         return _DummyResp(data=[{"ok": True}])
 
+    monkeypatch.setattr("app.routers.tasks._resolve_actor", _global_admin_actor)
     monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
     monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
     monkeypatch.setattr(
@@ -106,6 +118,7 @@ def test_delete_task_emits_audit_event(client, monkeypatch):
     async def _fake_async_execute(_query):
         return _DummyResp(data=[{"ok": True}])
 
+    monkeypatch.setattr("app.routers.tasks._resolve_actor", _global_admin_actor)
     monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
     monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
     monkeypatch.setattr(

@@ -96,6 +96,7 @@ async def login_options(request: Request):
 
 @router.post("/login")
 async def login(request: Request, login_data: LoginRequest):
+    enforce_rate_limit(request, bucket="auth_login", max_requests=10, window_seconds=60)
     settings = get_settings()
     account = _normalize_account(login_data.account)
     user = _find_user_by_account(account)
@@ -189,21 +190,29 @@ async def update_profile(    request: Request,profile_data: UserUpdate, current_
 
 
 @router.put("/password")
-async def update_password(    request: Request,
+async def update_password(
+    request: Request,
     new_password: str = Form(...),
-    current_password: str = Form(None),
+    current_password: str = Form(...),
     current_user: dict = Depends(get_current_user),
 ):
     user = current_user
-    if current_password and not verify_password(current_password, user["password_hash"]):
+    if not current_password or not current_password.strip():
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码不能为空")
+    if not new_password or not new_password.strip():
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="新密码不能为空")
+    if len(new_password.encode("utf-8")) > 72:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="新密码长度不能超过 72 字节")
+    stored_hash = str(user.get("password_hash") or "")
+    if not stored_hash or not verify_password(current_password, stored_hash):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="当前密码错误")
     try:
         updated_user = update_user_password(
             user_id=str(user.get("id") or ""),
             password_hash=get_password_hash(new_password),
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码格式无效") from None
     if updated_user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="用户不存在")
     return success_response(data={}, message="密码修改成功", trace_id=get_trace_id(request))
@@ -256,6 +265,7 @@ async def forgot_password(
     request: Request,
     email: EmailStr | None = Form(default=None),
 ):
+    enforce_rate_limit(request, bucket="auth_forgot_password", max_requests=5, window_seconds=60)
     target_email = str(email or "").strip().lower()
     if not target_email:
         try:
@@ -265,17 +275,14 @@ async def forgot_password(
         except Exception:
             target_email = ""
     user = resolve_auth_store_user_by_subject(target_email)
-    data = {}
     if user:
-        reset_token = create_password_reset_token(user["email"])
-        # 受控内网模式：非 production 直接回传 token，便于联调/自动化测试
-        if get_settings().ENV.lower() != "production":
-            data = {"reset_token": reset_token}
+        # 仅在服务端签发令牌，永不在 HTTP 响应中回传明文 reset_token（防未认证接管与邮箱枚举）
+        create_password_reset_token(user["email"])
         logger.info("auth.forgot_password.issued email=%s", user["email"])
     else:
         logger.info("auth.forgot_password.request email=%s", target_email)
-    # 返回成功以避免账户枚举
-    return success_response(data=data, message="如果邮箱存在，重置密码邮件已发送", trace_id=get_trace_id(request))
+    # 统一返回中立成功提示以避免账户枚举
+    return success_response(data={}, message="如果邮箱存在，重置密码邮件已发送", trace_id=get_trace_id(request))
 
 
 @router.post("/reset-password")
@@ -284,6 +291,7 @@ async def reset_password(
     token: str | None = Form(default=None),
     new_password: str | None = Form(default=None),
 ):
+    enforce_rate_limit(request, bucket="auth_reset_password", max_requests=10, window_seconds=60)
     token_value = token
     password_value = new_password
     if not token_value or not password_value:
@@ -294,13 +302,10 @@ async def reset_password(
                 password_value = password_value or str(body.get("new_password") or "")
         except Exception:
             pass
-    if not token_value or not password_value:
+    if not token_value or not password_value or not password_value.strip():
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="token 和 new_password 不能为空")
-
-    settings = get_settings()
-    if settings.ENV.lower() != "production" and token_value == "some-reset-token":
-        logger.info("auth.reset_password.compat_placeholder token accepted in non-production")
-        return success_response(data={}, message="密码重置成功", trace_id=get_trace_id(request))
+    if len(password_value.encode("utf-8")) > 72:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="新密码长度不能超过 72 字节")
 
     email, jti = verify_password_reset_token(token_value)
     if not consume_password_reset_jti(jti):
@@ -314,8 +319,8 @@ async def reset_password(
             user_id=str(user.get("id") or ""),
             password_hash=get_password_hash(password_value),
         )
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="密码格式无效") from None
     if updated_user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效的重置令牌")
     logger.info("auth.reset_password.success email=%s", email)

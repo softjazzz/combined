@@ -25,15 +25,23 @@ def saved_result_institute_scope(actor_id: str) -> str | None:
             raise RuntimeError("account_store_unavailable")
         with SessionLocal() as session:
             actor = _person(session, actor_id.strip())
-        # 与既有报表的 admin/sync_admin 全局范围一致，保留本入口原有 super_admin。
-        if actor["roles"] & {"admin", "sync_admin", "super_admin"}:
-            return None
-        if "qc_manager" not in actor["roles"]:
-            raise HTTPException(403, "无权读取质控结果")
-        scope = actor["institute_id"]
-        if not isinstance(scope, str) or not scope.strip() or scope != scope.strip():
+        roles = set(actor["roles"])
+        raw_inst = actor.get("institute_id")
+        if isinstance(raw_inst, str) and raw_inst and not raw_inst.strip():
+            if "sync_admin" in roles:
+                return None
             raise HTTPException(403, "账号缺少可信机构范围")
-        return scope
+        actor_institute_id = raw_inst.strip() if isinstance(raw_inst, str) else ""
+        # 统一全局视角条件：仅 sync_admin 或未绑定院区的 admin/super_admin 具备全局视角。
+        if ("sync_admin" in roles) or (
+            bool(roles & {"admin", "super_admin"}) and not actor_institute_id
+        ):
+            return None
+        if not (roles & {"admin", "super_admin", "qc_manager"}):
+            raise HTTPException(403, "无权读取质控结果")
+        if not isinstance(raw_inst, str) or not raw_inst.strip() or raw_inst != raw_inst.strip():
+            raise HTTPException(403, "账号缺少可信机构范围")
+        return raw_inst
     except RectificationError:
         raise HTTPException(403, "账号或机构权限无效") from None
     except HTTPException:

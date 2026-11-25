@@ -68,6 +68,7 @@ def list_plans(request: Request, context=Depends(authorized)):
 @router.post("")
 def create_plan(payload: PlanInput, context=Depends(authorized)):
     store, actor = context
+    service.assert_plan_institute_scope(store, actor, payload.institute_id)
     definition = service.validate_definition(store, actor, payload)
     try:
         plan_id = store.save(actor, definition, datetime.now(timezone.utc))
@@ -86,6 +87,7 @@ class PlanUpdate(BaseModel):
 @router.put("/{plan_id}")
 def update_plan(plan_id: UUID, payload: PlanUpdate, context=Depends(authorized)):
     store, actor = context
+    service.assert_plan_institute_scope(store, actor, payload.definition.institute_id)
     definition = service.validate_definition(store, actor, payload.definition)
     try:
         store.save(

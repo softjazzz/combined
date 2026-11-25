@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..database.connection import SessionLocal
 from .defect_rectification_service import RectificationError, _person
+from .report_institute_scope import authorized_institute
 from .medical_core_system_catalog import CORE_SYSTEM_IDS, CORE_SYSTEMS
 from .record_quality_report_service import (
     MAX_REPORT_CASES,
@@ -94,15 +95,11 @@ class CoreSystemReportService:
         if start and end and start > end:
             raise RecordQualityReportInvalid("完成时间起不能晚于止")
         with self.session_factory() as session:
-            actor = _person(session, actor_id)
-        if not actor["roles"] & {"admin", "qc_manager"}:
-            raise RectificationError("无权读取制度专题报表", 403)
-        if "admin" not in actor["roles"]:
-            if not actor["institute_id"] or (
-                institute_id and institute_id != actor["institute_id"]
-            ):
+            allowed_institute = authorized_institute(session, actor_id)
+        if allowed_institute is not None:
+            if institute_id and institute_id != allowed_institute:
                 raise RectificationError("无权读取其他机构", 403)
-            institute_id = actor["institute_id"]
+            institute_id = allowed_institute
         if department and not institute_id:
             raise RecordQualityReportInvalid("科室筛选须同时指定机构")
         records = self.scope_loader(

@@ -137,7 +137,11 @@ async def surgery_procedure_catalog(
     source: str = Query(default="", description="等级口径来源"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "qc_staff", "super_admin")
+    ),
 ):
+    del current_user
     """分页查询质控引擎正在使用的手术/操作分级目录。"""
 
     catalog = load_surgery_procedure_catalog()
@@ -1160,6 +1164,91 @@ def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
     return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
 
 
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _can_view_raw_llm_output(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    """复核持久账号全局管理员身份：仅 sync_admin 或未绑定 institute_id 的 admin/super_admin。"""
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = _current_user_id(current_user)
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许执行该操作",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
 def _can_review_batch_job(current_user: Optional[Dict[str, Any]]) -> bool:
     if not current_user:
         return False
@@ -1684,6 +1773,7 @@ async def evaluate_fast(
     - plan_c: 方案C - 平衡版（提取【检查要点】+【判定逻辑】）
     """
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行快速质控试跑")
         scoped_qc_service = _request_scoped_qc_service(
             qc_service,
             current_user=current_user,
@@ -1702,8 +1792,9 @@ async def evaluate_fast(
         return result
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"快速质控评估失败: {e}")
+    except Exception:
+        logger.exception("快速质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="快速质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate")
@@ -1714,6 +1805,7 @@ async def evaluate(
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行质控试跑")
         scoped_qc_service = _request_scoped_qc_service(
             qc_service,
             current_user=current_user,
@@ -1886,8 +1978,9 @@ async def evaluate(
             return response
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省质控评估失败: {e}")
+    except Exception:
+        logger.exception("四川省质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="四川省质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate-bundle")
@@ -1900,6 +1993,7 @@ async def evaluate_bundle(
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行质控试跑")
         from ..services.saved_result_access import (
             check_saved_result_institute,
             saved_result_institute_scope,
@@ -1951,8 +2045,9 @@ async def evaluate_bundle(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"bundle 质控评估失败: {exc}")
+    except Exception:
+        logger.exception("bundle 质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="bundle 质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate-rule-for-visit")
@@ -1965,6 +2060,7 @@ async def evaluate_rule_for_visit(
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行规则试跑")
         from ..services.saved_result_access import (
             check_saved_result_institute,
             saved_result_institute_scope,
@@ -2005,17 +2101,22 @@ async def evaluate_rule_for_visit(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"规则级 visit 质控失败: {exc}")
+    except Exception:
+        logger.exception("规则级 visit 质控失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="规则级 visit 质控失败，请稍后重试")
 
 
 @router.post("/evaluate/batch")
 async def evaluate_batch(
     request: Request,
     req: SichuanBatchRequest,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行批量质控试跑")
         _enforce_sc_source_guard(
             qc_service,
             context="evaluate_batch",
@@ -2087,8 +2188,11 @@ async def evaluate_batch(
             "status": "success",
         }
         return response
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省批量质控评估失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("四川省批量质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="四川省批量质控评估失败，请稍后重试")
 
 
 def _sichuan_workspace_service(*, readonly: bool = False) -> CustomQCWorkspaceService:
@@ -2372,6 +2476,7 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
     """手动与定时共用接纳owner；定时来源不是HTTP输入字段。"""
     institute_scope: Optional[str] = None
     if scheduled_origin is None:
+        _reject_restricted_demo_account(current_user, "演示账号禁止创建四川规则批量任务")
         if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES):
             raise HTTPException(status_code=403, detail="当前账号无权创建四川规则批量任务")
         from ..services.saved_result_access import saved_result_institute_scope
@@ -3543,6 +3648,7 @@ async def cancel_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止取消批量任务")
     workspace = _sichuan_workspace_service()
     job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
@@ -3560,6 +3666,7 @@ async def retry_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止重试批量任务")
     workspace = _sichuan_workspace_service()
     existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(existing):
@@ -3761,6 +3868,7 @@ async def save_qc_result(
     req: SaveQCResultRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止保存质控结果")
     try:
         base_dir = _saved_qc_results_directory()
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -3795,8 +3903,11 @@ async def save_qc_result(
             message="质控结果保存成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"保存质控结果失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("保存质控结果失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="保存质控结果失败，请稍后重试")
 
 
 @router.get("/results/history")
@@ -4034,7 +4145,11 @@ async def rules(
     document_types: Optional[str] = Query(default=None, description="逗号分隔的文书类型（中文）"),
     grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回"),
     rule_set_key: Optional[str] = Query(default=None, description="规则集 key"),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "qc_staff", "super_admin")
+    ),
 ):
+    del current_user
     """
     返回四川省质控规则。
     优先从 Supabase 的 `qc_rules` 表读取；如果未配置或查询失败，则回退到内置示例规则。
@@ -4397,9 +4512,13 @@ def _load_single_test_rule(qc_service: SichuanQCService, rule_id: str) -> tuple[
 async def test_rule(
     request: Request,
     req: TestRuleRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    qc_service: SichuanQCService = Depends(get_qc_service),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
 ):
     """测试单条质控规则的有效性和正确性"""
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行规则试跑")
     try:
         target_rule, is_luxian_wrapper = _load_single_test_rule(qc_service, req.rule_id)
         if target_rule is None:
@@ -4425,8 +4544,12 @@ async def test_rule(
             }
         )
 
-        # 统一的响应结构，确保前端字段兼容
-        metadata = engine_result.get("metadata", {}) or {}
+        # 统一的响应结构，确保前端字段兼容；非调试角色脱敏 llm_raw_output
+        can_view_raw = _can_view_raw_llm_output(current_user)
+        raw_metadata = engine_result.get("metadata", {}) or {}
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        if not can_view_raw:
+            metadata.pop("llm_raw_output", None)
         response_data = {
             "rule_id": engine_result.get("rule_id"),
             "rule_name": engine_result.get("rule_name"),
@@ -4436,7 +4559,7 @@ async def test_rule(
             "evidence": engine_result.get("evidence", ""),
             "suggestion": engine_result.get("suggestion", ""),
             "confidence": engine_result.get("confidence", 0.7),
-            "llm_raw_output": engine_result.get("llm_raw_output"),
+            "llm_raw_output": engine_result.get("llm_raw_output") if can_view_raw else None,
             "status": engine_result.get("status"),
             "applicability": engine_result.get("applicability"),
             "not_applicable": not engine_result.get("applicability", {}).get("is_applicable", True),
@@ -4453,12 +4576,11 @@ async def test_rule(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("规则测试失败 rule_id=%s", req.rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则测试失败: {str(e)}",
+            error="规则测试失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4481,10 +4603,14 @@ class RuleRegistryBootstrapRequest(BaseModel):
 async def get_rule_source(
     request: Request,
     qc_service: SichuanQCService = Depends(get_qc_service),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
 ):
     """
     获取当前四川规则来源与版本摘要（PG 治理表 / JSON 回退）。
     """
+    del current_user
     try:
         overview = qc_service.get_rule_source_overview()
         return success_response(
@@ -4492,10 +4618,11 @@ async def get_rule_source(
             message="获取规则来源成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取规则来源失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取规则来源失败: {str(e)}",
+            error="获取规则来源失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4505,13 +4632,14 @@ async def check_rule_consistency(
     request: Request,
     include_custom_rules: bool = Query(default=True),
     sample_limit: int = Query(default=100, ge=10, le=500),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     发布前后规则一致性校验：
     对比治理表 active 规则与本地基线 JSON（SC + 可选 LX/LXE）。
     """
+    _require_global_admin(admin_user, "仅全局管理员可校验全局规则一致性")
     try:
         result = qc_service.check_rule_registry_consistency(
             include_custom_rules=bool(include_custom_rules),
@@ -4522,10 +4650,11 @@ async def check_rule_consistency(
             message="规则一致性校验完成",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("规则一致性校验失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则一致性校验失败: {str(e)}",
+            error="规则一致性校验失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4534,12 +4663,14 @@ async def check_rule_consistency(
 async def bootstrap_rules_to_registry(
     request: Request,
     req: RuleRegistryBootstrapRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     将本地 JSON 规则（SC + LX/LXE）增量导入治理表（幂等）。
     """
+    _reject_restricted_demo_account(admin_user, "演示账号禁止导入全局规则治理表")
+    _require_global_admin(admin_user, "仅全局管理员可导入全局规则治理表")
     try:
         result = await qc_service.bootstrap_rule_registry(
             operator=_current_user_id(admin_user),
@@ -4550,10 +4681,11 @@ async def bootstrap_rules_to_registry(
             message="规则导入治理表完成",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("规则导入治理表失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则导入治理表失败: {str(e)}",
+            error="规则导入治理表失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4563,9 +4695,10 @@ async def list_rule_versions(
     request: Request,
     rule_id: str,
     limit: int = Query(default=20, ge=1, le=200),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则版本")
     try:
         versions = qc_service.list_rule_versions(rule_id=rule_id, limit=limit)
         return success_response(
@@ -4577,10 +4710,11 @@ async def list_rule_versions(
             message="获取规则版本成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取规则版本失败: {str(e)}",
+            error="获取规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4590,9 +4724,10 @@ async def list_rule_publish_history(
     request: Request,
     rule_id: str,
     limit: int = Query(default=50, ge=1, le=500),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则发布历史")
     try:
         history = qc_service.list_rule_publish_history(rule_id=rule_id, limit=limit)
         return success_response(
@@ -4604,10 +4739,11 @@ async def list_rule_publish_history(
             message="获取发布历史成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取发布历史失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取发布历史失败: {str(e)}",
+            error="获取发布历史失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4617,9 +4753,11 @@ async def publish_rule_version(
     request: Request,
     rule_id: str,
     req: RuleVersionActionRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _reject_restricted_demo_account(admin_user, "演示账号禁止发布全局规则版本")
+    _require_global_admin(admin_user, "仅全局管理员可发布全局规则版本")
     try:
         ok = qc_service.publish_rule_version(
             rule_id=rule_id,
@@ -4636,10 +4774,11 @@ async def publish_rule_version(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("发布规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"发布规则版本失败: {str(e)}",
+            error="发布规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4649,9 +4788,11 @@ async def rollback_rule_version(
     request: Request,
     rule_id: str,
     req: RuleVersionActionRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _reject_restricted_demo_account(admin_user, "演示账号禁止回滚全局规则版本")
+    _require_global_admin(admin_user, "仅全局管理员可回滚全局规则版本")
     try:
         ok = qc_service.rollback_rule_version(
             rule_id=rule_id,
@@ -4668,10 +4809,11 @@ async def rollback_rule_version(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("回滚规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"回滚规则版本失败: {str(e)}",
+            error="回滚规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4680,19 +4822,20 @@ async def rollback_rule_version(
 async def get_rule_prompt(
     request: Request,
     rule_id: str,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     """
-    获取规则的提示词（仅系统管理员）
+    获取规则的提示词（仅全局系统管理员）
 
     Args:
         rule_id: 规则ID（如 "SC-010"）
-        admin_user: 管理员用户（由 require_admin 依赖注入）
+        admin_user: 全局管理员用户
 
     Returns:
         规则的提示词（自定义或默认）
     """
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则提示词")
     try:
         # 获取规则
         rule = qc_service.get_rule_by_id(rule_id)
@@ -4774,12 +4917,11 @@ async def get_rule_prompt(
 
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("获取提示词失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取提示词失败: {str(e)}",
+            error="获取提示词失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4789,20 +4931,22 @@ async def update_rule_prompt(
     request: Request,
     rule_id: str,
     req: UpdatePromptRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     """
-    更新规则的自定义提示词（仅系统管理员）
+    更新规则的自定义提示词（仅全局系统管理员）
 
     Args:
         rule_id: 规则ID
         req: 包含 custom_prompt 的请求体（None 表示恢复默认）
-        admin_user: 管理员用户
+        admin_user: 全局管理员用户
 
     Returns:
         更新结果
     """
+    _reject_restricted_demo_account(admin_user, "演示账号禁止修改全局规则提示词")
+    _require_global_admin(admin_user, "仅全局管理员可修改全局规则提示词")
     try:
         # 更新提示词
         success = qc_service.update_rule_prompt(
@@ -4830,12 +4974,11 @@ async def update_rule_prompt(
 
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("更新提示词失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"更新提示词失败: {str(e)}",
+            error="更新提示词失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4862,7 +5005,8 @@ async def reload_llm_config(
     Returns:
         重新加载结果
     """
-    del system_config_user
+    _reject_restricted_demo_account(system_config_user, "演示账号禁止重载 LLM 配置")
+    _require_global_admin(system_config_user, "仅全局管理员可重载全局 LLM 配置")
     try:
         qc_service = await get_qc_service()
         success = await qc_service.reload_config(config_name, user_id)
@@ -4887,27 +5031,34 @@ async def reload_llm_config(
         else:
             return error_response(
                 code=ErrorCode.INTERNAL_ERROR,
-                message="LLM 配置重新加载失败",
+                error="LLM 配置重新加载失败",
                 trace_id=get_trace_id(request)
             )
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("重新加载配置失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"重新加载配置失败: {str(e)}",
+            error="重新加载配置失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
 
 @router.get("/current-config")
-async def get_current_config(request: Request):
+async def get_current_config(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "sync_admin", "super_admin")
+    ),
+):
     """
-    获取当前使用的 LLM 配置信息
+    获取当前使用的 LLM 配置信息（仅全局管理员）
 
     Returns:
         当前配置信息
     """
+    _require_global_admin(current_user, "仅全局管理员可查看当前 LLM 配置")
     try:
         qc_service = await get_qc_service()
         return success_response(
@@ -4921,9 +5072,12 @@ async def get_current_config(request: Request):
             message="获取当前配置成功",
             trace_id=get_trace_id(request)
         )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("获取当前配置失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取当前配置失败: {str(e)}",
+            error="获取当前配置失败，请稍后重试",
             trace_id=get_trace_id(request)
         )

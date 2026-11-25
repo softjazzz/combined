@@ -8,13 +8,13 @@
 from fastapi import APIRouter, Query, BackgroundTasks, Depends, HTTPException, Request, status
 from typing import Optional
 from ..core.audit import audit_event
-from ..core.security import require_admin
+from ..core.security import require_global_system_admin
 from ..core.response import success_response, error_response, get_trace_id
 
 router = APIRouter(
     prefix="/api/system",
     tags=["系统配置"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[Depends(require_global_system_admin)],
 )
 
 def _reject_legacy_write_endpoint(path: str):

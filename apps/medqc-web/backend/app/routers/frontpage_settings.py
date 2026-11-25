@@ -9,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin, require_roles
 from ..services.frontpage_settings import (
     FrontpageExtractionSettings,
     load_frontpage_settings,
@@ -54,12 +54,19 @@ async def get_frontpage_settings():
 
 
 @router.put("", response_model=FrontpageSettingsResponse)
-async def put_frontpage_settings(payload: FrontpageSettingsUpdateRequest):
+async def put_frontpage_settings(
+    payload: FrontpageSettingsUpdateRequest,
+    _admin_user: dict = Depends(require_global_system_admin),
+):
+    del _admin_user
     updated = update_frontpage_settings(payload.model_dump(exclude_none=True))
     return FrontpageSettingsResponse(settings=updated, source="file")
 
 
 @router.post("/reset", response_model=FrontpageSettingsResponse)
-async def post_frontpage_settings_reset():
+async def post_frontpage_settings_reset(
+    _admin_user: dict = Depends(require_global_system_admin),
+):
+    del _admin_user
     settings = reset_frontpage_settings()
     return FrontpageSettingsResponse(settings=settings, source="default")

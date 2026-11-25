@@ -438,7 +438,7 @@ def test_system_config_roles_can_manage_custom_models(client, monkeypatch, tmp_p
         assert deleted.status_code == 200
 
 
-def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, monkeypatch, tmp_path):
+def test_qc_manager_cannot_manage_llm_or_write_global_frontpage_settings(client, monkeypatch, tmp_path):
     _override_user(client, ["qc_manager"])
     monkeypatch.setattr(
         "app.services.frontpage_settings.CONFIG_PATH",
@@ -452,6 +452,13 @@ def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, 
             "model_code": "forbidden-qc-manager",
         },
     ).status_code == 403
+    assert client.get("/api/v1/frontpage/settings").status_code == 200
+    assert client.put(
+        "/api/v1/frontpage/settings",
+        json={"demo_hide_threshold": 2},
+    ).status_code == 403
+
+    _override_user(client, ["sync_admin"])
     assert client.put(
         "/api/v1/frontpage/settings",
         json={"demo_hide_threshold": 2},

@@ -4,9 +4,14 @@ import asyncio
 import json
 import logging
 import os
+from pathlib import Path
 import queue
+import re
+import shutil
 import threading
+import time
 import uuid
+import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -18,10 +23,15 @@ from fastapi import HTTPException
 from . import async_job_store
 from .field_mapper import suggest_field_mapping
 from .llm_observability import llm_observation_context
+from .medical_records.detail_service import inspect_institute_scope
 from .multi_file_processor import MultiFileProcessor
 
 logger = logging.getLogger(__name__)
 SMART_UPLOAD_JOB_TYPE = "smart_upload_parse"
+FILE_ID_PATTERN = re.compile(r"^[a-f0-9]{8}\Z")
+OWNER_META_FILENAME = ".owner.json"
+SMART_UPLOAD_TEMP_TTL_SECONDS = int(os.getenv("SMART_UPLOAD_TEMP_TTL_SECONDS", "3600"))
+_SAFE_GENERIC_ERROR = "文件处理失败，请检查文件格式后重试"
 
 
 def _utc_now_iso() -> str:
@@ -34,7 +44,42 @@ def _format_error_detail(detail: Any) -> str:
     try:
         return json.dumps(detail, ensure_ascii=False)
     except Exception:
-        return str(detail)
+        return _SAFE_GENERIC_ERROR
+
+
+def validate_file_id(file_id: str) -> str:
+    if not isinstance(file_id, str) or not FILE_ID_PATTERN.fullmatch(file_id):
+        raise HTTPException(status_code=400, detail="无效的文件 ID")
+    return file_id
+
+
+def sanitize_upload_filename(filename: Optional[str], default: str = "upload.xlsx") -> str:
+    raw = str(filename or "").replace("\\", "/")
+    base = os.path.basename(raw)
+    cleaned = re.sub(r"[\x00-\x1f\x7f]", "", base).strip()
+    if not cleaned or cleaned in {".", ".."} or "/" in cleaned or "\\" in cleaned:
+        return default
+    return cleaned
+
+
+def _resolve_actor_id(current_user: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(current_user, dict):
+        return ""
+    return str(
+        current_user.get("id")
+        or current_user.get("user_id")
+        or current_user.get("email")
+        or ""
+    ).strip()
+
+
+def _resolve_actor_scope(current_user: Optional[Dict[str, Any]]) -> tuple[bool, Optional[str]]:
+    scope = inspect_institute_scope(current_user)
+    if scope.kind == "global":
+        return True, None
+    if scope.kind == "institute" and scope.institute_id:
+        return False, scope.institute_id
+    raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
 
 
 class SmartUploadCancelledError(Exception):
@@ -49,6 +94,8 @@ class SmartUploadTaskRecord:
     file_path: str
     file_dir: str
     file_ext: str
+    requested_by: str = ""
+    institute_id: str = ""
     status: str = "pending"
     progress: int = 0
     created_at: str = field(default_factory=_utc_now_iso)
@@ -85,13 +132,223 @@ class SmartUploadAsyncService:
         self._restore_active_tasks()
 
     # ------------------------------------------------------------------
+    # Path / Ownership / Cleanup helpers
+    # ------------------------------------------------------------------
+
+    def resolve_safe_file_dir(self, file_id: str, *, base_dir: Optional[str] = None) -> Path:
+        validated = validate_file_id(file_id)
+        root = Path(base_dir or self.upload_dir).resolve()
+        candidate = root / validated
+        if candidate.is_symlink():
+            raise HTTPException(status_code=400, detail="无效的文件 ID")
+        resolved = candidate.resolve()
+        if not resolved.is_relative_to(root) or resolved == root:
+            raise HTTPException(status_code=400, detail="无效的文件 ID")
+        return resolved
+
+    def cleanup_file_dir(self, file_dir: Optional[str], *, base_dir: Optional[str] = None) -> bool:
+        if not file_dir:
+            return False
+        try:
+            root = Path(base_dir or self.upload_dir).resolve()
+            raw_target = Path(file_dir)
+            if raw_target.is_symlink():
+                return False
+            resolved = raw_target.resolve()
+            if not resolved.is_relative_to(root) or resolved == root:
+                return False
+            if not resolved.exists():
+                return False
+            shutil.rmtree(resolved, ignore_errors=True)
+            return not resolved.exists()
+        except Exception:
+            logger.warning("[SmartUpload] cleanup_file_dir failed", exc_info=True)
+            return False
+
+    def cleanup_file_id(self, file_id: str, *, base_dir: Optional[str] = None) -> bool:
+        target = self.resolve_safe_file_dir(file_id, base_dir=base_dir)
+        return self.cleanup_file_dir(str(target), base_dir=base_dir)
+
+    def cleanup_expired_uploads(
+        self,
+        *,
+        ttl_seconds: Optional[int] = None,
+        base_dir: Optional[str] = None,
+    ) -> int:
+        ttl = SMART_UPLOAD_TEMP_TTL_SECONDS if ttl_seconds is None else int(ttl_seconds)
+        if ttl < 0:
+            return 0
+        root = Path(base_dir or self.upload_dir).resolve()
+        if not root.exists():
+            return 0
+
+        with self._lock:
+            active_file_ids = {
+                rec.file_id
+                for rec in self._tasks.values()
+                if rec.status in {"pending", "running"}
+            }
+
+        now = time.time()
+        cleaned = 0
+        for entry in root.iterdir():
+            if entry.is_symlink() or not entry.is_dir():
+                continue
+            if not FILE_ID_PATTERN.fullmatch(entry.name):
+                continue
+            if entry.name in active_file_ids:
+                continue
+            try:
+                age = now - entry.stat().st_mtime
+            except OSError:
+                continue
+            if age >= ttl:
+                if self.cleanup_file_dir(str(entry), base_dir=str(root)):
+                    cleaned += 1
+        return cleaned
+
+    def _write_owner_metadata(self, file_dir: Path, *, requested_by: str, institute_id: str, task_id: str) -> None:
+        meta_path = (file_dir / OWNER_META_FILENAME).resolve()
+        if not meta_path.is_relative_to(file_dir.resolve()):
+            raise HTTPException(status_code=400, detail="无效的上传路径")
+        payload = {
+            "requested_by": requested_by,
+            "institute_id": institute_id,
+            "task_id": task_id,
+            "created_at": _utc_now_iso(),
+        }
+        with open(meta_path, "w", encoding="utf-8") as mf:
+            json.dump(payload, mf, ensure_ascii=False)
+
+    def _read_owner_metadata(self, file_dir: Path) -> Optional[Dict[str, str]]:
+        meta_path = file_dir / OWNER_META_FILENAME
+        if not meta_path.exists() or meta_path.is_symlink():
+            return None
+        resolved = meta_path.resolve()
+        if not resolved.is_relative_to(file_dir.resolve()):
+            return None
+        try:
+            with open(resolved, "r", encoding="utf-8") as mf:
+                data = json.load(mf)
+            if isinstance(data, dict):
+                return {
+                    "requested_by": str(data.get("requested_by") or "").strip(),
+                    "institute_id": str(data.get("institute_id") or "").strip(),
+                }
+        except Exception:
+            return None
+        return None
+
+    def _find_owner_for_file_id(self, file_id: str, *, base_dir: Optional[str] = None) -> Optional[Dict[str, str]]:
+        file_dir = self.resolve_safe_file_dir(file_id, base_dir=base_dir)
+        meta = self._read_owner_metadata(file_dir)
+        if meta is not None:
+            return meta
+        with self._lock:
+            for rec in self._tasks.values():
+                if rec.file_id == file_id:
+                    return {
+                        "requested_by": rec.requested_by,
+                        "institute_id": rec.institute_id,
+                    }
+        try:
+            rows = async_job_store.list_jobs(job_type=SMART_UPLOAD_JOB_TYPE, limit=500).get("items", [])
+            for row in rows:
+                payload = row.get("payload") or {}
+                if str(payload.get("file_id") or "") == file_id:
+                    return {
+                        "requested_by": str(row.get("requested_by") or payload.get("requested_by") or "").strip(),
+                        "institute_id": str(payload.get("institute_id") or "").strip(),
+                    }
+        except Exception:
+            pass
+        return None
+
+    def assert_owner_access(
+        self,
+        *,
+        current_user: Dict[str, Any],
+        requested_by: str,
+        institute_id: str,
+    ) -> None:
+        is_global, actor_institute = _resolve_actor_scope(current_user)
+        if is_global:
+            return
+        actor_id = _resolve_actor_id(current_user)
+        if not actor_id:
+            raise HTTPException(status_code=403, detail="缺少可信账号身份")
+        if not institute_id or institute_id != actor_institute:
+            raise HTTPException(status_code=403, detail="无权访问其他机构的上传任务或文件")
+        if not requested_by or requested_by != actor_id:
+            raise HTTPException(status_code=403, detail="无权访问他人的上传任务或文件")
+
+    def assert_file_access(
+        self,
+        file_id: str,
+        current_user: Dict[str, Any],
+        *,
+        base_dir: Optional[str] = None,
+        allow_missing_dir: bool = False,
+    ) -> Path:
+        file_dir = self.resolve_safe_file_dir(file_id, base_dir=base_dir)
+        is_global, _actor_institute = _resolve_actor_scope(current_user)
+        if not file_dir.exists():
+            if allow_missing_dir:
+                owner = self._find_owner_for_file_id(file_id, base_dir=base_dir)
+                if owner is not None and not is_global:
+                    self.assert_owner_access(
+                        current_user=current_user,
+                        requested_by=owner.get("requested_by", ""),
+                        institute_id=owner.get("institute_id", ""),
+                    )
+                return file_dir
+            raise HTTPException(status_code=404, detail="文件不存在")
+
+        if is_global:
+            return file_dir
+
+        owner = self._find_owner_for_file_id(file_id, base_dir=base_dir)
+        if owner is None:
+            raise HTTPException(status_code=403, detail="文件缺少可信归属信息")
+        self.assert_owner_access(
+            current_user=current_user,
+            requested_by=owner.get("requested_by", ""),
+            institute_id=owner.get("institute_id", ""),
+        )
+        return file_dir
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def submit_upload(self, *, filename: str, content: bytes, current_user: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        record = self._create_record(filename=filename, content=content)
-        requested_by = str((current_user or {}).get("id") or (current_user or {}).get("email") or "system")
-        requested_by_name = str((current_user or {}).get("display_name") or (current_user or {}).get("email") or requested_by)
+    def submit_upload(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        current_user: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        is_global, actor_institute = _resolve_actor_scope(current_user) if current_user is not None else (True, None)
+        del is_global
+        requested_by = _resolve_actor_id(current_user) or "system"
+        requested_by_name = str(
+            (current_user or {}).get("display_name")
+            or (current_user or {}).get("email")
+            or requested_by
+        )
+        institute_id = actor_institute or ""
+
+        try:
+            self.cleanup_expired_uploads()
+        except Exception:
+            pass
+
+        record = self._create_record(
+            filename=filename,
+            content=content,
+            requested_by=requested_by,
+            institute_id=institute_id,
+        )
         async_job_store.create_job(
             job_id=record.task_id,
             job_type=SMART_UPLOAD_JOB_TYPE,
@@ -106,32 +363,78 @@ class SmartUploadAsyncService:
                 "file_path": record.file_path,
                 "file_dir": record.file_dir,
                 "file_ext": record.file_ext,
+                "requested_by": record.requested_by,
+                "institute_id": record.institute_id,
                 "cancel_requested": False,
             },
         )
         self._enqueue(record.task_id)
-        return self.get_task_status(record.task_id)
+        return self.get_task_status(record.task_id, current_user=current_user)
 
-    def process_upload_sync(self, *, filename: str, content: bytes) -> Dict[str, Any]:
-        record = self._create_record(filename=filename, content=content)
+    def process_upload_sync(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        current_user: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        _is_global, actor_institute = _resolve_actor_scope(current_user) if current_user is not None else (True, None)
+        requested_by = _resolve_actor_id(current_user) or "system"
+        institute_id = actor_institute or ""
+
+        try:
+            self.cleanup_expired_uploads()
+        except Exception:
+            pass
+
+        record = self._create_record(
+            filename=filename,
+            content=content,
+            requested_by=requested_by,
+            institute_id=institute_id,
+        )
         self._execute_task(record.task_id)
         with self._lock:
             stored = self._tasks.get(record.task_id)
             if stored is None:
+                self.cleanup_file_dir(record.file_dir)
                 raise HTTPException(status_code=500, detail="同步任务不存在")
             if stored.status != "succeeded" or stored.result is None:
+                self.cleanup_file_dir(stored.file_dir)
                 raise HTTPException(
                     status_code=400,
-                    detail=f"文件处理失败: {stored.error_message or '任务执行失败'}",
+                    detail=stored.error_message or _SAFE_GENERIC_ERROR,
                 )
             return dict(stored.result)
 
-    def get_task_status(self, task_id: str) -> Dict[str, Any]:
+    def get_task_status(
+        self,
+        task_id: str,
+        *,
+        current_user: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         record = self._get_record(task_id)
+        if current_user is not None:
+            self.assert_owner_access(
+                current_user=current_user,
+                requested_by=record.requested_by,
+                institute_id=record.institute_id,
+            )
         return self._snapshot(record)
 
-    def get_task_result(self, task_id: str) -> Dict[str, Any]:
+    def get_task_result(
+        self,
+        task_id: str,
+        *,
+        current_user: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         record = self._get_record(task_id)
+        if current_user is not None:
+            self.assert_owner_access(
+                current_user=current_user,
+                requested_by=record.requested_by,
+                institute_id=record.institute_id,
+            )
         if record.status != "succeeded":
             raise HTTPException(
                 status_code=409,
@@ -139,7 +442,12 @@ class SmartUploadAsyncService:
             )
         return self._get_task_result_payload(task_id)
 
-    def cancel_task(self, task_id: str) -> Dict[str, Any]:
+    def cancel_task(
+        self,
+        task_id: str,
+        *,
+        current_user: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         with self._lock:
             record = self._tasks.get(task_id)
             if record is None:
@@ -148,6 +456,13 @@ class SmartUploadAsyncService:
                     self._tasks[task_id] = record
             if record is None:
                 raise HTTPException(status_code=404, detail="任务不存在")
+
+            if current_user is not None:
+                self.assert_owner_access(
+                    current_user=current_user,
+                    requested_by=record.requested_by,
+                    institute_id=record.institute_id,
+                )
 
             if record.status in {"succeeded", "failed", "cancelled"}:
                 raise HTTPException(status_code=409, detail="任务已结束，无法取消")
@@ -159,6 +474,7 @@ class SmartUploadAsyncService:
                 record.finished_at = _utc_now_iso()
                 record.error_message = "任务已取消"
                 self._persist_record(record, event_type="cancelled", message="task cancelled before execution")
+                self.cleanup_file_dir(record.file_dir)
                 return self._snapshot(record)
 
             record.cancel_requested = True
@@ -181,24 +497,41 @@ class SmartUploadAsyncService:
     # Task lifecycle
     # ------------------------------------------------------------------
 
-    def _create_record(self, *, filename: str, content: bytes) -> SmartUploadTaskRecord:
-        file_id = str(uuid.uuid4())[:8]
+    def _create_record(
+        self,
+        *,
+        filename: str,
+        content: bytes,
+        requested_by: str = "system",
+        institute_id: str = "",
+    ) -> SmartUploadTaskRecord:
+        file_id = uuid.uuid4().hex[:8]
         task_id = uuid.uuid4().hex
-        safe_filename = os.path.basename(filename or "unknown")
+        safe_filename = sanitize_upload_filename(filename, default="upload.xlsx")
         file_ext = os.path.splitext(safe_filename)[1].lower()
-        file_dir = os.path.join(self.upload_dir, file_id)
-        os.makedirs(file_dir, exist_ok=True)
-        file_path = os.path.join(file_dir, safe_filename)
-        with open(file_path, "wb") as f:
+        file_dir_path = self.resolve_safe_file_dir(file_id)
+        file_dir_path.mkdir(parents=True, exist_ok=True)
+        file_path_obj = (file_dir_path / safe_filename).resolve()
+        if not file_path_obj.is_relative_to(file_dir_path):
+            raise HTTPException(status_code=400, detail="非法文件名")
+        with open(file_path_obj, "wb") as f:
             f.write(content)
+        self._write_owner_metadata(
+            file_dir_path,
+            requested_by=requested_by,
+            institute_id=institute_id,
+            task_id=task_id,
+        )
 
         record = SmartUploadTaskRecord(
             task_id=task_id,
             file_id=file_id,
             filename=safe_filename,
-            file_path=file_path,
-            file_dir=file_dir,
+            file_path=str(file_path_obj),
+            file_dir=str(file_dir_path),
             file_ext=file_ext,
+            requested_by=requested_by,
+            institute_id=institute_id,
         )
         with self._lock:
             self._tasks[task_id] = record
@@ -257,11 +590,18 @@ class SmartUploadAsyncService:
                     return
                 record.status = "cancelled"
                 record.finished_at = _utc_now_iso()
-                record.error_message = str(exc)
+                record.error_message = str(exc) or "任务已取消"
                 if record.progress < 100:
                     record.progress = min(record.progress, 99)
-                self._persist_record(record, event_type="cancelled", message=str(exc))
+                self._persist_record(record, event_type="cancelled", message=record.error_message)
+                file_dir = record.file_dir
+            self.cleanup_file_dir(file_dir)
         except HTTPException as exc:
+            safe_msg = (
+                _format_error_detail(exc.detail)
+                if exc.status_code < 500
+                else _SAFE_GENERIC_ERROR
+            )
             with self._lock:
                 record = self._tasks.get(task_id)
                 if record is None:
@@ -269,9 +609,11 @@ class SmartUploadAsyncService:
                 record.status = "failed"
                 record.finished_at = _utc_now_iso()
                 record.progress = min(max(record.progress, 1), 99)
-                record.error_message = _format_error_detail(exc.detail)
+                record.error_message = safe_msg
                 self._persist_record(record, event_type="failed", message=record.error_message)
-        except Exception as exc:
+                file_dir = record.file_dir
+            self.cleanup_file_dir(file_dir)
+        except Exception:
             logger.exception("[SmartUpload] task %s failed", task_id)
             with self._lock:
                 record = self._tasks.get(task_id)
@@ -280,8 +622,10 @@ class SmartUploadAsyncService:
                 record.status = "failed"
                 record.finished_at = _utc_now_iso()
                 record.progress = min(max(record.progress, 1), 99)
-                record.error_message = str(exc)
+                record.error_message = _SAFE_GENERIC_ERROR
                 self._persist_record(record, event_type="failed", message=record.error_message)
+                file_dir = record.file_dir
+            self.cleanup_file_dir(file_dir)
 
     # ------------------------------------------------------------------
     # Processing
@@ -334,7 +678,12 @@ class SmartUploadAsyncService:
         ext = record.file_ext
         if ext == ".zip":
             processor = MultiFileProcessor(record.file_dir)
-            excel_files = processor.extract_zip(record.file_path, record.file_dir)
+            try:
+                excel_files = processor.extract_zip(record.file_path, record.file_dir)
+            except zipfile.BadZipFile:
+                raise HTTPException(status_code=400, detail="无效的 ZIP 压缩包") from None
+            except ValueError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from None
             if not excel_files:
                 raise HTTPException(status_code=400, detail="ZIP 包中未找到 Excel 文件")
             return excel_files
@@ -342,9 +691,11 @@ class SmartUploadAsyncService:
         if ext == ".csv":
             try:
                 df_csv = pd.read_csv(record.file_path, encoding="utf-8-sig")
-            except Exception as exc:
-                raise HTTPException(status_code=400, detail=f"CSV 解析失败: {exc}") from exc
-            xlsx_path = os.path.join(record.file_dir, record.filename.rsplit(".", 1)[0] + ".xlsx")
+            except Exception:
+                logger.warning("[SmartUpload] CSV parse failed for task=%s", record.task_id, exc_info=True)
+                raise HTTPException(status_code=400, detail="CSV 文件解析失败，请检查文件编码与格式") from None
+            stem = record.filename.rsplit(".", 1)[0] if "." in record.filename else record.filename
+            xlsx_path = os.path.join(record.file_dir, f"{stem}.xlsx")
             df_csv.to_excel(xlsx_path, index=False)
             return [xlsx_path]
 
@@ -484,6 +835,8 @@ class SmartUploadAsyncService:
                 "file_path": record.file_path,
                 "file_dir": record.file_dir,
                 "file_ext": record.file_ext,
+                "requested_by": record.requested_by,
+                "institute_id": record.institute_id,
                 "cancel_requested": record.cancel_requested,
             },
             result_summary=record.result if record.result is not None else None,
@@ -509,6 +862,8 @@ class SmartUploadAsyncService:
             file_path=str(payload.get("file_path") or ""),
             file_dir=str(payload.get("file_dir") or ""),
             file_ext=str(payload.get("file_ext") or ""),
+            requested_by=str(row.get("requested_by") or payload.get("requested_by") or "").strip(),
+            institute_id=str(payload.get("institute_id") or "").strip(),
             status=self._store_status_to_runtime(str(row.get("status") or "queued")),
             progress=int(float(row.get("progress_pct") or 0)),
             created_at=str(row.get("created_at") or _utc_now_iso()),

@@ -23,6 +23,8 @@ from ..document_assembly import assemble_document, build_document_select_columns
 from .errors import MedicalRecordsNotFoundError, MedicalRecordsStorageError
 from .shared import DOC_TYPES, build_concat_text
 
+from ...core.roles import effective_roles
+
 _GLOBAL_INSTITUTE_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
 
 
@@ -38,7 +40,28 @@ def _normalize_user_roles(current_user: Optional[dict[str, Any]]) -> set[str]:
     single_role = str(current_user.get("role") or "").strip().lower()
     if single_role:
         roles.add(single_role)
-    return roles
+    return set(effective_roles(list(roles)))
+
+
+def _resolve_scope_from_roles_and_institute(
+    roles: set[str],
+    raw_inst: Any,
+) -> ResolvedInstituteScope:
+    """统一全局视角条件：仅 sync_admin 或未绑定院区的 admin/super_admin 具备全局视角。"""
+    if isinstance(raw_inst, str) and raw_inst and not raw_inst.strip():
+        if "sync_admin" in roles:
+            return ResolvedInstituteScope(kind="global", institute_id=None)
+        return ResolvedInstituteScope(kind="missing", institute_id=None)
+
+    actor_institute_id = raw_inst.strip() if isinstance(raw_inst, str) else ""
+    if ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor_institute_id
+    ):
+        return ResolvedInstituteScope(kind="global", institute_id=None)
+
+    if isinstance(raw_inst, str) and raw_inst.strip() and raw_inst == raw_inst.strip():
+        return ResolvedInstituteScope(kind="institute", institute_id=raw_inst)
+    return ResolvedInstituteScope(kind="missing", institute_id=None)
 
 
 @dataclass(frozen=True)
@@ -50,7 +73,7 @@ class ResolvedInstituteScope:
 
 
 def inspect_institute_scope(current_user: Optional[dict[str, Any]]) -> ResolvedInstituteScope:
-    """解析账号机构范围，严禁把未绑定机构的非全局账号混同为全局权限。"""
+    """解析账号机构范围，严禁把未绑定机构的非全局账号或绑定院区的 admin 混同为全局权限。"""
     from ...database import connection as db_connection
     from ..defect_rectification_service import RectificationError, _person
 
@@ -62,12 +85,10 @@ def inspect_institute_scope(current_user: Optional[dict[str, Any]]) -> ResolvedI
         try:
             with session_factory() as session:
                 person = _person(session, actor_id)
-            if person["roles"] & _GLOBAL_INSTITUTE_ROLES:
-                return ResolvedInstituteScope(kind="global", institute_id=None)
-            inst = person.get("institute_id")
-            if isinstance(inst, str) and inst.strip() and inst == inst.strip():
-                return ResolvedInstituteScope(kind="institute", institute_id=inst)
-            return ResolvedInstituteScope(kind="missing", institute_id=None)
+            return _resolve_scope_from_roles_and_institute(
+                set(person["roles"]),
+                person.get("institute_id"),
+            )
         except RectificationError:
             # 单元测试未写入 sys_users 时的兼容回退：继续检查调用方主体。
             pass
@@ -79,12 +100,8 @@ def inspect_institute_scope(current_user: Optional[dict[str, Any]]) -> ResolvedI
             raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
 
     roles = _normalize_user_roles(current_user)
-    if roles & _GLOBAL_INSTITUTE_ROLES:
-        return ResolvedInstituteScope(kind="global", institute_id=None)
     fallback_inst = (current_user or {}).get("institute_id")
-    if isinstance(fallback_inst, str) and fallback_inst.strip() and fallback_inst == fallback_inst.strip():
-        return ResolvedInstituteScope(kind="institute", institute_id=fallback_inst)
-    return ResolvedInstituteScope(kind="missing", institute_id=None)
+    return _resolve_scope_from_roles_and_institute(roles, fallback_inst)
 
 
 def resolve_non_global_institute_scope(current_user: Optional[dict[str, Any]]) -> Optional[str]:

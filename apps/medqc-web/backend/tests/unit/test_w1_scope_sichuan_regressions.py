@@ -66,7 +66,7 @@ def _make_persistent_db(monkeypatch):
     with sessions.begin() as session:
         session.add_all(
             [
-                SysUser(id="u-admin", username="admin", display_name="管理员", role="admin", institute_id="H1", is_active=True),
+                SysUser(id="u-admin", username="admin", display_name="管理员", role="admin", institute_id=None, is_active=True),
                 SysUser(id="u-sync", username="sync_admin", display_name="同步管理员", role="sync_admin", institute_id="H1", is_active=True),
                 SysUser(id="u-mgr-h1", username="mgr_h1", display_name="H1质控主管", role="qc_manager", institute_id="H1", is_active=True),
                 SysUser(id="u-mgr-h2", username="mgr_h2", display_name="H2质控主管", role="qc_manager", institute_id="H2", is_active=True),
@@ -180,7 +180,7 @@ def test_qc_sichuan_p1_b4_no_global_client_mutation_and_admin_only_override(pers
     assert fake_service.client.max_tokens == 512
 
     # 管理员覆写仅作用于本次请求浅拷贝，全局单例保持原值
-    current["user"] = _user_dict("u-admin", "admin", "H1")
+    current["user"] = _user_dict("u-admin", "admin")
     r_admin_fast = client.post(
         "/api/v1/qc/sichuan/evaluate-fast",
         json={"document_id": "D1", "document_content": "正文", "model": "ab-model"},
@@ -353,7 +353,7 @@ def test_qc_sichuan_p0_4_batch_jobs_and_shared_pool_and_export_institute_scope(p
     assert resolved_h1 is not None and resolved_h1["id"] == "job-h1"
     # 全局 admin 可读任意共享样本池任务
     resolved_admin = qc_sichuan._resolve_shared_sample_pool_latest_job(
-        workspace=ws, job_id="job-h2", current_user=_user_dict("u-admin", "admin", "H1")
+        workspace=ws, job_id="job-h2", current_user=_user_dict("u-admin", "admin")
     )
     assert resolved_admin is not None and resolved_admin["id"] == "job-h2"
 
@@ -449,7 +449,7 @@ def test_qc_sichuan_p2_e2_history_end_date_inclusive_and_stats_hardening(persist
 
     # /stats 仅限管理员，且不暴露 api_endpoint 和假 optimization_achievements
     assert client.get("/api/v1/qc/sichuan/stats").status_code == 403
-    current["user"] = _user_dict("u-admin", "admin", "H1")
+    current["user"] = _user_dict("u-admin", "admin")
     stats_resp = client.get("/api/v1/qc/sichuan/stats")
     assert stats_resp.status_code == 200
     body = stats_resp.json()
@@ -812,7 +812,7 @@ def test_p1_b1_p2_b1_workstation_scope_and_snapshot_collision(persistent_db, mon
     assert client.get("/api/v1/workstation/frontpage-qc/V-COLLIDE/snapshot", params={"institute_id": "H2"}).status_code == 403
 
     # 全局 admin 传裸重号 visit_id（跨院冲突）-> fail-closed 409
-    current["user"] = _user_dict("u-admin", "admin", "H1")
+    current["user"] = _user_dict("u-admin", "admin")
     assert client.get("/api/v1/workstation/frontpage-qc/V-COLLIDE/snapshot").status_code == 409
     # 提供完整三坐标 -> 200
     assert client.get(
@@ -882,7 +882,7 @@ def test_qc_sample_pools_p1_b1_institute_isolation_and_manual_sheet_confinement(
     ).status_code == 403
 
     # admin 路径穿越读取允许目录外文件 -> 403
-    current["user"] = _user_dict("u-admin", "admin", "H1")
+    current["user"] = _user_dict("u-admin", "admin")
     assert client.post(
         "/api/v1/qc/sample-pools/import-manual-sheet",
         json={"pool_name": "穿越", "source_file": str(outside_file)},
@@ -915,7 +915,7 @@ def test_qc_sample_pools_p2_f3_import_upload_enforces_size_limit_and_cleans_temp
 
     app = FastAPI()
     app.include_router(qc_sample_pools.router)
-    app.dependency_overrides[get_current_user] = lambda: _user_dict("u-admin", "admin", "H1")
+    app.dependency_overrides[get_current_user] = lambda: _user_dict("u-admin", "admin")
     client = TestClient(app)
 
     # 1) 超过上限 -> 413 且无文件留盘

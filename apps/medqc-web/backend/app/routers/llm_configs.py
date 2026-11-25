@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from ..storage.memory import llm_configs
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id, StatusCode
-from ..core.security import get_optional_user, require_roles
+from ..core.security import is_global_system_admin_principal, require_global_system_admin
 from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
     LLMConfigLoader,
@@ -407,13 +407,29 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
         return _save_in_memory()
 
 
+def _assert_allowed_target_user_id(target_user_id: Optional[str], current_user: dict) -> None:
+    if target_user_id is None or not str(target_user_id).strip():
+        return
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if str(target_user_id).strip() == actor_id:
+        return
+    if not is_global_system_admin_principal(
+        _extract_roles(current_user),
+        current_user.get("institute_id"),
+    ):
+        raise HTTPException(
+            status_code=StatusCode.FORBIDDEN,
+            detail="禁止非全局管理员访问或修改其他用户的模型配置",
+        )
+
+
 @router.get("/configs")
 async def list_configs(
     request: Request,
     user_id: Optional[str] = Query(default=None),
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
-    del system_config_user
+    _assert_allowed_target_user_id(user_id, system_config_user)
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
@@ -453,9 +469,9 @@ async def get_config_by_name(
     request: Request,
     config_name: str,
     user_id: Optional[str] = Query(default=None),
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
-    del system_config_user
+    _assert_allowed_target_user_id(user_id, system_config_user)
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
@@ -490,24 +506,27 @@ async def get_config_by_name(
 async def save_config(
     request: Request,
     payload: Dict[str, Any],
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
-    del admin_user
+    _assert_allowed_target_user_id(payload.get("user_id"), admin_user)
     result = await _save_config_internal(payload, request)
-    return success_response(data=result, trace_id=get_trace_id(request))
+    return success_response(data=_project_config_row(result), trace_id=get_trace_id(request))
 
 
 @router.get("/configs/default/summary")
 async def get_default_summary(
     request: Request,
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+    current_user: Dict[str, Any] = Depends(require_global_system_admin),
 ):
     runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
     runtime = runtime or {}
     custom_params = runtime.get("custom_parameters") or {}
     execution_concurrency = concurrency_from_custom_parameters(custom_params)
     source = str(runtime.get("source") or "env")
-    readonly = not _extract_roles(current_user).intersection(_SYSTEM_CONFIG_ROLES)
+    readonly = not is_global_system_admin_principal(
+        _extract_roles(current_user),
+        current_user.get("institute_id"),
+    )
     return success_response(
         data={
             "provider_code": str(runtime.get("provider_code") or get_default_provider_code()),
@@ -532,7 +551,7 @@ async def get_default_summary(
 @router.post("/configs/default/reset")
 async def reset_default_config(
     request: Request,
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
     del admin_user
     default_provider = get_default_provider_code()
@@ -575,7 +594,7 @@ async def reset_default_config(
 async def test_config(
     request: Request,
     payload: Dict[str, Any],
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
     del system_config_user
     try:

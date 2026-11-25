@@ -1,16 +1,132 @@
+import logging
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from inspect import isawaitable
 from ..core.supabase_client import get_supabase
 from ..core.response import success_response, paginated_response, get_trace_id, StatusCode
+from ..core.roles import effective_roles
 from ..core.security import get_current_user, require_roles
 from datetime import datetime
 
 router = APIRouter(prefix="/api/v1/semantic-rules", tags=["semantic-rules"])
+logger = logging.getLogger(__name__)
 
 
 # 移除内置占位规则，保持为空。
 _rules: list[dict[str, Any]] = []
+
+_DEMO_FULL_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_PROMPT_VISIBLE_ROLES = frozenset({"admin", "super_admin", "sync_admin", "developer"})
+
+
+def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not isinstance(current_user, dict):
+        return set()
+    roles = set(effective_roles(current_user.get("roles")))
+    single = str(current_user.get("role") or "").strip()
+    if single:
+        roles.update(effective_roles([single]))
+    return {r.strip().lower() for r in roles if isinstance(r, str) and r.strip()}
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail=detail)
+
+
+def _can_view_prompt_template(current_user: Optional[Dict[str, Any]]) -> bool:
+    if _is_restricted_demo_account(current_user):
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_PROMPT_VISIBLE_ROLES))
+
+
+def _trim_prompt_for_user(rule: Dict[str, Any], current_user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if _can_view_prompt_template(current_user):
+        return rule
+    trimmed = dict(rule)
+    trimmed.pop("prompt_template", None)
+    return trimmed
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许修改语义规则",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail=detail)
 
 
 async def _exec_query(query):
@@ -63,7 +179,7 @@ async def get_all(
     page_size: int = Query(default=50, ge=1, le=200),
     sort_by: str = Query(default="updated_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
     """返回语义规则定义（含筛选/排序/分页）。
     - 数据源：Supabase `qc_rules`（若不可用则返回空数组）。
@@ -233,7 +349,7 @@ async def get_all(
         total = len(filtered)
         start = (page - 1) * page_size
         end = start + page_size
-        page_items = filtered[start:end]
+        page_items = [_trim_prompt_for_user(item, current_user) for item in filtered[start:end]]
 
         return _build_rules_list_response(
             items=page_items,
@@ -243,8 +359,7 @@ async def get_all(
             trace_id=get_trace_id(request),
         )
     except Exception as e:
-        import logging as _log
-        _log.getLogger(__name__).warning(f"[semantic_rules] 查询 qc_rules 失败: {e}")
+        logger.warning("[semantic_rules] 查询 qc_rules 失败: %s", e)
         return _build_rules_list_response(
             items=[],
             total=0,
@@ -255,28 +370,33 @@ async def get_all(
 
 
 @router.get("/stats")
-async def stats(request: Request, current_user: dict = Depends(get_current_user)):
-    try:
-        return success_response(
-            data={
-                "stats": {
-                    "total_executions": 0,
-                    "successful_executions": 0,
-                    "failed_executions": 0,
-                    "total_tokens": 0,
-                    "total_time": 0.0,
-                    "success_rate": 0.0,
-                    "avg_execution_time": 0.0,
-                }
-            },
-            trace_id=get_trace_id(request)
-        )
-    except Exception as e:
-        raise
+async def stats(
+    request: Request,
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
+):
+    del current_user
+    return success_response(
+        data={
+            "stats": {
+                "total_executions": 0,
+                "successful_executions": 0,
+                "failed_executions": 0,
+                "total_tokens": 0,
+                "total_time": 0.0,
+                "success_rate": 0.0,
+                "avg_execution_time": 0.0,
+            }
+        },
+        trace_id=get_trace_id(request)
+    )
 
 
 @router.get("/validate-llm")
-async def validate_llm(request: Request, current_user: dict = Depends(get_current_user)):
+async def validate_llm(
+    request: Request,
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
+):
+    del current_user
     """检测 LLM 连接状态。
     - 若 Supabase 中存在激活的 provider 或 model，则认为具备真实配置，显示为非 Mock。
     - 若查询失败或没有配置，则返回 Mock 模式。
@@ -314,7 +434,10 @@ async def validate_llm(request: Request, current_user: dict = Depends(get_curren
 
 
 @router.get("/export")
-async def export_rules(request: Request, current_user: dict = Depends(get_current_user)):
+async def export_rules(
+    request: Request,
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
+):
     sb = get_supabase()
     if sb is None:
         # 与列表接口保持一致，返回空
@@ -325,22 +448,48 @@ async def export_rules(request: Request, current_user: dict = Depends(get_curren
     try:
         resp = await _exec_query(sb.table("qc_rules").select("*").limit(2000))
         records = resp.data or []
-        rules = [_normalize_from_db(r) for r in records]
+        rules = [_trim_prompt_for_user(_normalize_from_db(r), current_user) for r in records]
         return success_response(
             data={"rules": rules, "count": len(rules)},
             message="导出成功",
             trace_id=get_trace_id(request)
         )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导出规则失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("[semantic_rules] 导出规则失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="导出规则失败，请稍后重试")
 
 
 @router.get("/{rule_id}")
-async def get_rule(request: Request, rule_id: str, current_user: dict = Depends(get_current_user)):
-    for r in _rules:
-        if r["rule_id"] == rule_id:
-            return success_response(data={"rule": r}, trace_id=get_trace_id(request))
-    raise HTTPException(status_code=StatusCode.NOT_FOUND, detail=f"规则 {rule_id} 不存在")
+async def get_rule(
+    request: Request,
+    rule_id: str,
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
+):
+    sb = get_supabase()
+    if sb is None:
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
+
+    found_rows: list[dict[str, Any]] = []
+    try:
+        resp = await _exec_query(sb.table("qc_rules").select("*").eq("id", rule_id).limit(1))
+        found_rows = list(getattr(resp, "data", None) or [])
+    except Exception:
+        found_rows = []
+
+    if not found_rows:
+        try:
+            resp2 = await _exec_query(sb.table("qc_rules").select("*").eq("rule_code", rule_id).limit(1))
+            found_rows = list(getattr(resp2, "data", None) or [])
+        except Exception:
+            found_rows = []
+
+    if not found_rows:
+        raise HTTPException(status_code=StatusCode.NOT_FOUND, detail=f"规则 {rule_id} 不存在")
+
+    rule = _trim_prompt_for_user(_normalize_from_db(found_rows[0]), current_user)
+    return success_response(data={"rule": rule}, trace_id=get_trace_id(request))
 
 
 @router.post("/{rule_id}/execute")
@@ -348,8 +497,9 @@ async def execute(
     request: Request,
     rule_id: str,
     payload: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行语义规则试跑")
     content = (payload.get("input_data") or {}).get("content", "")
     compliant = len(content) > 0
     return success_response(
@@ -374,8 +524,9 @@ async def execute(
 async def batch_execute(
     request: Request,
     payload: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "qc_manager", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止批量试跑语义规则")
     rule_ids: List[str] = payload.get("rule_ids", [])
     input_data = payload.get("input_data", {})
     results = []
@@ -401,8 +552,10 @@ async def batch_execute(
 async def custom(
     request: Request,
     payload: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建自定义语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许创建自定义语义规则")
     rid = f"SR-{len(_rules)+1:03d}"
     rule = {"rule_id": rid, **payload}
     _rules.append(rule)
@@ -418,12 +571,14 @@ async def custom(
 def _normalize_from_db(r: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "rule_id": r.get("id") or r.get("rule_code") or r.get("rule_id") or "",
+        "rule_code": r.get("rule_code") or "",
         "rule_name": r.get("name") or r.get("rule_name") or "未命名规则",
         "description": r.get("description") or r.get("desc") or "",
         "category": r.get("category") or r.get("rule_category") or "基础",
         "defect_level": r.get("defect_level") or r.get("severity") or "minor",
         "deduction_score": r.get("deduction_score") or r.get("score_deduction") or 0,
         "is_veto_defect": bool(r.get("is_veto_defect") or False),
+        "is_enabled": bool((r.get("is_enabled") is True) or (r.get("is_active") is True)),
         "complexity": r.get("complexity") or r.get("rule_complexity") or "medium",
         "system_role": "医疗质控专家",
         "task_description": "按规则检查内容",
@@ -438,8 +593,10 @@ def _normalize_from_db(r: Dict[str, Any]) -> Dict[str, Any]:
 async def create_rule(
     request: Request,
     payload: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许创建语义规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -453,8 +610,11 @@ async def create_rule(
             message="规则创建成功",
             trace_id=get_trace_id(request)
         )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"创建规则失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("[semantic_rules] 创建规则失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="创建规则失败，请稍后重试")
 
 
 @router.put("/{rule_id}")
@@ -462,8 +622,10 @@ async def update_rule(
     request: Request,
     rule_id: str,
     payload: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止更新语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许更新语义规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -501,16 +663,19 @@ async def update_rule(
         )
     except HTTPException:
         raise
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"更新规则失败: {e}")
+    except Exception:  # noqa: BLE001
+        logger.exception("[semantic_rules] 更新规则失败 rule_id=%s", rule_id)
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="更新规则失败，请稍后重试")
 
 
 @router.delete("/{rule_id}")
 async def delete_rule(
     request: Request,
     rule_id: str,
-    current_user: dict = Depends(require_roles("admin")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止删除语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许删除语义规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -529,16 +694,19 @@ async def delete_rule(
         )
     except HTTPException:
         raise
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"删除规则失败: {e}")
+    except Exception:  # noqa: BLE001
+        logger.exception("[semantic_rules] 删除规则失败 rule_id=%s", rule_id)
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="删除规则失败，请稍后重试")
 
 
 @router.post("/import")
 async def import_rules(
     request: Request,
     body: Dict[str, Any],
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止导入语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许导入语义规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")
@@ -741,8 +909,11 @@ async def import_rules(
             message=f"导入完成：插入{inserted}条，更新{updated}条，错误{errors}条",
             trace_id=get_trace_id(request)
         )
-    except Exception as e:  # noqa: BLE001
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"导入规则失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:  # noqa: BLE001
+        logger.exception("[semantic_rules] 导入规则失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="导入规则失败，请稍后重试")
 
 
 # ------------------------- Utilities: 文书类型细粒度映射/推断 -------------------------
@@ -928,13 +1099,15 @@ def _infer_docs_from_rule_name(rule_name: str) -> list[str]:
 async def normalize_documents(
     request: Request,
     dry_run: bool = Query(default=True),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin")),
 ):
     """将规则的文书类型从粗粒度(inpatient/outpatient/emergency)批量归一为细粒度中文。
     - 优先保留已存在的细粒度中文 `check_logic.applicable_documents`
     - 否则：按 `rule_code` 精确映射；若无，基于名称关键词推断
     - 结果写回 `check_logic.applicable_documents`
     """
+    _reject_restricted_demo_account(current_user, "演示账号禁止规范化语义规则")
+    _require_global_admin(current_user, "仅全局管理员允许规范化语义规则")
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="Supabase 未配置")

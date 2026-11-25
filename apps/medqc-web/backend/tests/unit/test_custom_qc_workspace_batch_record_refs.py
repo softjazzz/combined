@@ -31,7 +31,7 @@ def _persistent_admin_actor(monkeypatch):
                 username="qc-user",
                 display_name="管理员",
                 role="admin",
-                institute_id="HOSP-A",
+                institute_id=None,
                 is_active=True,
             )
         )

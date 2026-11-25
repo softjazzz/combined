@@ -4,7 +4,7 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core.response import StatusCode, get_trace_id, success_response
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 from ..storage.memory import llm_configs
 from .llm_configs import _project_config_row
 
@@ -29,7 +29,7 @@ _ALLOWED_CREATE_FIELDS = _ALLOWED_UPDATE_FIELDS | frozenset({"id"})
 router = APIRouter(
     prefix="/api/v1/qc",
     tags=["qc-llm-configs"],
-    dependencies=[Depends(require_roles(*_SYSTEM_CONFIG_ROLES))],
+    dependencies=[Depends(require_global_system_admin)],
 )
 
 
@@ -60,7 +60,7 @@ def _project_safe_copy(row: Dict[str, Any]) -> Dict[str, Any]:
 
 @router.get("/llm-configs")
 async def list_configs(
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
     with _LLM_CONFIGS_LOCK:
@@ -72,7 +72,7 @@ async def list_configs(
 async def create_config(
     request: Request,
     payload: Dict[str, Any],
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
     sanitized = _sanitize_payload(payload, allowed_fields=_ALLOWED_CREATE_FIELDS)
@@ -91,7 +91,7 @@ async def update_config(
     request: Request,
     config_id: str,
     payload: Dict[str, Any],
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
     sanitized = _sanitize_payload(payload, allowed_fields=_ALLOWED_UPDATE_FIELDS)
@@ -110,7 +110,7 @@ async def update_config(
 async def delete_config(
     request: Request,
     config_id: str,
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
     with _LLM_CONFIGS_LOCK:
@@ -124,7 +124,7 @@ async def delete_config(
 async def test_config(
     request: Request,
     config_id: str,
-    _admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
     with _LLM_CONFIGS_LOCK:

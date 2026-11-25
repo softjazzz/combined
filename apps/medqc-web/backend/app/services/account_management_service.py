@@ -81,7 +81,7 @@ class AccountManagementService:
             raise RectificationError("仅可管理本机构账号", 403)
 
     def _scoped_institute(self, actor):
-        if "sync_admin" in _persistent_roles(actor["role"], actor["roles_json"]):
+        if _persistent_roles(actor["role"], actor["roles_json"]) & {"sync_admin", "super_admin"}:
             return None
         return actor["institute_id"]
 
@@ -245,6 +245,35 @@ class AccountManagementService:
                 or data["department"] != row["department"]
             ):
                 raise RectificationError("不能变更自身授权范围、角色或停用自身", 409)
+            was_active_admin = bool(row["is_active"]) and (
+                "admin" in _effective_persistent_roles(row["role"], row["roles_json"])
+            )
+            remains_active_admin_in_same_institute = (
+                bool(data["is_active"])
+                and ("admin" in roles)
+                and (data["institute_id"] == row["institute_id"])
+            )
+            if was_active_admin and not remains_active_admin_in_same_institute:
+                old_inst = row["institute_id"]
+                inst_filter = (
+                    table.c.institute_id == old_inst
+                    if old_inst
+                    else or_(table.c.institute_id.is_(None), table.c.institute_id == "")
+                )
+                other_candidates = session.execute(
+                    select(table.c.id, table.c.role, table.c.roles_json).where(
+                        table.c.id != user_id,
+                        table.c.is_active == True,  # noqa: E712
+                        inst_filter,
+                    )
+                ).mappings()
+                has_other_active_admin = any(
+                    "admin" in _effective_persistent_roles(cand["role"], cand["roles_json"])
+                    and registration_is_approved(session, table, cand["id"])
+                    for cand in other_candidates
+                )
+                if not has_other_active_admin:
+                    raise RectificationError("禁止停用、降权或迁出本机构最后一个活跃管理员", 409)
             session.execute(
                 table.update()
                 .where(table.c.id == user_id)

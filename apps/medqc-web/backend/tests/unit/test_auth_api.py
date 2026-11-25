@@ -390,7 +390,7 @@ class TestAuthAPI:
         assert_response_success(response, 200)
 
     def test_reset_password(self, client):
-        """测试重置密码"""
+        """测试重置密码：拒绝伪造占位令牌 some-reset-token"""
         response = client.post(
             "/api/v1/auth/reset-password",
             data={
@@ -398,10 +398,8 @@ class TestAuthAPI:
                 "new_password": "NewPassword123!"
             }
         )
-        
-        assert_response_success(response, 200)
-        data = response.json()
-        assert "密码重置成功" in data["message"]
+
+        assert response.status_code == 401
 
     @pytest.mark.parametrize("email,password,expected_status", [
         ("valid@example.com", "ValidPass123!", 200),

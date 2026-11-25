@@ -30,7 +30,12 @@ except Exception:  # pragma: no cover - 防御性兜底
     PGOperationalError = tuple()  # type: ignore[assignment]
 
 from ..core.audit import audit_event
-from ..core.security import get_current_user
+from ..core.http import validate_db_target_host
+from ..core.security import (
+    get_current_user,
+    is_global_system_admin_principal,
+    verify_global_system_admin,
+)
 from ..services.product_activation import require_product_activation
 from ..core.rate_limit import enforce_rate_limit
 from ..core.response import success_response, get_trace_id
@@ -191,13 +196,7 @@ def require_sync_read_access(current_user: dict = Depends(get_current_user)) -> 
 
 
 def require_sync_write_access(current_user: dict = Depends(get_current_user)) -> dict:
-    roles = _extract_roles(current_user)
-    if not roles.intersection({"admin", "sync_admin", "super_admin"}):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="数据同步写入权限不足（仅 admin / sync_admin / super_admin 可操作）",
-        )
-    return current_user
+    return verify_global_system_admin(current_user)
 
 
 def require_sync_trigger_access(current_user: dict = Depends(get_current_user)) -> dict:
@@ -239,12 +238,13 @@ def _resolve_auto_qc_workflow_token(req: TriggerRequest) -> str:
 
 
 def _assert_qc_manager_one_click_request(req: TriggerRequest, current_user: dict) -> None:
-    """限制质控科仅能执行预设的一键同步并质控，不赋予同步配置权限。"""
+    """限制质控科及非全局管理员仅能执行预设的一键同步并质控，不赋予全局同步配置权限。"""
 
     roles = _extract_roles(current_user)
-    if roles.intersection({"admin", "sync_admin", "super_admin"}):
+    if is_global_system_admin_principal(roles, current_user.get("institute_id")):
+        verify_global_system_admin(current_user)
         return
-    if "qc_manager" not in roles:
+    if not roles.intersection({"qc_manager", "admin"}):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="数据同步操作权限不足")
     if req.auto_qc_after_sync is not True:
         raise HTTPException(
@@ -703,11 +703,17 @@ async def update_pg_config(
         current = load_db_config()
         incoming = update.model_dump(exclude_none=True)
 
+        if "remote_host" in incoming:
+            incoming["remote_host"] = validate_db_target_host(
+                incoming["remote_host"],
+                allowlist_env="SYNC_PG_HOST_ALLOWLIST",
+            )
+
         if "remote_port" in incoming:
             incoming["remote_port"] = str(incoming["remote_port"])
 
         remote_password = incoming.get("remote_password")
-        if remote_password is not None and remote_password == "":
+        if remote_password is not None and remote_password.strip() in {"", "***"}:
             incoming.pop("remote_password", None)
             remote_password = None
 

@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock, MagicMock, patch
 from fastapi.testclient import TestClient
 
+from app.core import security as security_module
+from app.core.security import create_access_token
 from app.main import create_app
 from app.schemas.qc import RuleScope, RuleStatus, OverrideAction
 
@@ -22,36 +24,77 @@ client = TestClient(app)
 # 测试辅助函数
 # ============================================================================
 
-def get_auth_headers(email: str = "admin@medqc.com", password: str = "admin888") -> dict:
-    """获取认证头"""
-    response = client.post(
-        "/api/v1/auth/login",
-        json={"email": email, "password": password}
+def _make_auth_headers(monkeypatch, principal: dict) -> dict:
+    """为单元测试构造有效 Bearer Token 并注入测试主体，避免依赖本地库绑定院区种子账号。"""
+    monkeypatch.setattr(
+        security_module,
+        "resolve_user_by_subject",
+        lambda sub: dict(principal) if sub == principal["email"] else None,
     )
-    if response.status_code == 200:
-        token = response.json().get("access_token")
-        if token:
-            return {"Authorization": f"Bearer {token}"}
-    # 如果登录失败，返回空头（测试会失败，但不会崩溃）
-    return {}
+    token = create_access_token({"sub": principal["email"]})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture
-def admin_headers():
-    """Admin 用户认证头"""
-    return get_auth_headers("admin@medqc.com", "admin888")
+def admin_headers(monkeypatch):
+    """无绑定院区的全局 Admin 用户认证头"""
+    return _make_auth_headers(
+        monkeypatch,
+        {
+            "id": "dept-rules-global-admin",
+            "email": "dept-global-admin@medqc.com",
+            "username": "dept-global-admin@medqc.com",
+            "display_name": "Global Admin",
+            "name": "Global Admin",
+            "role": "admin",
+            "roles": ["admin"],
+            "institute_id": None,
+            "is_demo_account": False,
+            "is_active": True,
+        },
+    )
 
 
 @pytest.fixture
-def qc_manager_headers():
+def qc_manager_headers(monkeypatch):
     """QC Manager 用户认证头"""
-    return get_auth_headers("qc@medqc.com", "qc123456")
+    return _make_auth_headers(
+        monkeypatch,
+        {
+            "id": "dept-rules-qc-manager",
+            "email": "dept-qc-manager@medqc.com",
+            "username": "dept-qc-manager@medqc.com",
+            "display_name": "QC Manager",
+            "name": "QC Manager",
+            "role": "qc_manager",
+            "roles": ["qc_manager"],
+            "institute_id": "INST-TEST",
+            "department_id": "DEPT-TEST",
+            "department": "测试科室",
+            "is_demo_account": False,
+            "is_active": True,
+        },
+    )
 
 
 @pytest.fixture
-def doctor_headers():
+def doctor_headers(monkeypatch):
     """Doctor 用户认证头"""
-    return get_auth_headers("doctor@medqc.com", "doctor123")
+    return _make_auth_headers(
+        monkeypatch,
+        {
+            "id": "dept-rules-doctor",
+            "email": "dept-doctor@medqc.com",
+            "username": "dept-doctor@medqc.com",
+            "display_name": "Doctor",
+            "name": "Doctor",
+            "role": "doctor",
+            "roles": ["doctor"],
+            "institute_id": "INST-TEST",
+            "is_demo_account": False,
+            "is_active": True,
+        },
+    )
 
 
 @pytest.fixture

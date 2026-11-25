@@ -11,6 +11,7 @@ from ..database import clinical_connection
 from ..database.connection import SessionLocal
 from .clinical_read import clinical_read_schema
 from .defect_rectification_service import RectificationError, _person
+from .report_institute_scope import authorized_institute
 
 COORDINATES = ("institute_id", "patient_id", "visit_id")
 TYPES = {
@@ -100,10 +101,8 @@ def authorize(session, actor_id, institute_id):
     ):
         raise SpecialReportInvalid("必须填写有效机构ID")
     institute_id = institute_id.strip()
-    actor = _person(session, actor_id)
-    if not actor["roles"] & {"admin", "qc_manager"}:
-        raise RectificationError("无权读取特殊病历报表", 403)
-    if "admin" not in actor["roles"] and actor["institute_id"] != institute_id:
+    allowed_institute = authorized_institute(session, actor_id)
+    if allowed_institute is not None and allowed_institute != institute_id:
         raise RectificationError("无权访问其他机构", 403)
     return institute_id
 

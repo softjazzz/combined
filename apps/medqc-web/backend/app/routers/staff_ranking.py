@@ -105,11 +105,18 @@ def _resolve_ranking_actor(
     if not (roles & set(allowed_roles)):
         raise HTTPException(status_code=403, detail=denied_detail)
 
-    is_global = bool(roles & _GLOBAL_ROLES)
-    institute_id = row.get("institute_id") if has_institute else None
+    raw_institute = row.get("institute_id") if has_institute else None
+    is_global = ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not raw_institute
+    )
     if not is_global:
-        if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
+        if (
+            not isinstance(raw_institute, str)
+            or not raw_institute.strip()
+            or raw_institute != raw_institute.strip()
+        ):
             raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
+        institute_id = raw_institute
     else:
         institute_id = None
 
