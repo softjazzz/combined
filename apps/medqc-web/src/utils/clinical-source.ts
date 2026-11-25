@@ -2,15 +2,21 @@ import type { ClinicalSourceId, ClinicalSourceMode } from '@/api/clinicalSources
 
 let activeClinicalSourceMode: ClinicalSourceMode = 'fixed_donghua_cdm'
 let activeCompatClinicalSource: ClinicalSourceId = 'legacy_pg'
+let clinicalSourceModeInitialized = false
 
 function isClinicalSourceId(value: string | null | undefined): value is ClinicalSourceId {
   return value === 'legacy_pg' || value === 'independent_cdm'
+}
+
+export function isClinicalSourceModeInitialized(): boolean {
+  return clinicalSourceModeInitialized
 }
 
 export function setClinicalSourceMode(
   mode?: ClinicalSourceMode,
   activeSource?: ClinicalSourceId,
 ): void {
+  clinicalSourceModeInitialized = true
   activeClinicalSourceMode = mode === 'legacy_compat' ? 'legacy_compat' : 'fixed_donghua_cdm'
   if (activeClinicalSourceMode === 'legacy_compat' && isClinicalSourceId(activeSource)) {
     activeCompatClinicalSource = activeSource
@@ -18,6 +24,7 @@ export function setClinicalSourceMode(
 }
 
 export function resetClinicalSourceMode(): void {
+  clinicalSourceModeInitialized = false
   activeClinicalSourceMode = 'fixed_donghua_cdm'
   activeCompatClinicalSource = 'legacy_pg'
 }

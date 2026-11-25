@@ -196,6 +196,7 @@ import MqIcon from '@/components/icons/MqIcon.vue'
 import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { ApiService } from '@/services/apiService'
+import { ensureClinicalSourceModeInitialized } from '@/api/clinicalSources'
 import { useAuthStore } from '@/stores/auth'
 import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
 import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
@@ -308,6 +309,7 @@ watch(
       syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
     }
     fetchedUnreadForSessionKey = sessionKey
+    void ensureClinicalSourceModeInitialized()
     void fetchMessageUnreadCount(sessionKey)
   },
   { immediate: true },

@@ -1,4 +1,5 @@
 import { ApiService } from '@/services/apiService'
+import { ensureClinicalSourceModeInitialized } from '@/api/clinicalSources'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
 export type QcResultFeedbackType = 'correct' | 'incorrect' | 'note'
@@ -181,6 +182,7 @@ export async function getQcResultFeedbackDemo(params: {
 export async function listQcResultFeedbackDemo(
   limit = 200,
 ): Promise<QcResultFeedbackApiResult<QcResultFeedbackRecord[]>> {
+  await ensureClinicalSourceModeInitialized()
   const result = await request<unknown>(
     {
       method: 'GET',
@@ -201,6 +203,7 @@ export async function saveQcResultFeedbackDemo(params: {
   ruleId: string
   input: SaveQcResultFeedbackInput
 }): Promise<QcResultFeedbackApiResult<QcResultFeedbackRecord>> {
+  await ensureClinicalSourceModeInitialized()
   const result = await request<unknown>(
     {
       method: 'PUT',
