@@ -5,18 +5,19 @@
     data-testid="qc-review-preview"
   >
     <header class="preview-heading">
-      <ClipboardCheck :size="18" />
-      <h2>复核预览</h2>
-      <div
-        v-if="row && ready && !loading && !loadError"
-        class="preview-heading-actions"
-      >
-        <QcDiagnosticExport
-          v-if="loadedResult && !confirmedResultsOnly"
-          :items="loadedResult.items"
-          :context="diagnosticContext"
-        />
-        <div class="preview-primary-action">
+      <div class="preview-heading-main">
+        <div class="preview-heading-title">
+          <ClipboardCheck
+            :size="17"
+            class="preview-heading-icon"
+            aria-hidden="true"
+          />
+          <h2>复核预览</h2>
+        </div>
+        <div
+          v-if="row && ready && !loading && !loadError"
+          class="preview-primary-action"
+        >
           <button
             type="button"
             class="full-result-button"
@@ -24,17 +25,26 @@
           >
             <span class="full-result-label">
               <FileText
-                :size="17"
+                :size="14"
                 aria-hidden="true"
               />
               查看完整质控结果
             </span>
             <ArrowRight
-              :size="16"
+              :size="14"
               aria-hidden="true"
             />
           </button>
         </div>
+      </div>
+      <div
+        v-if="row && ready && !loading && !loadError && loadedResult && !confirmedResultsOnly"
+        class="preview-heading-actions"
+      >
+        <QcDiagnosticExport
+          :items="loadedResult.items"
+          :context="diagnosticContext"
+        />
       </div>
     </header>
     <div
@@ -481,14 +491,40 @@ onBeforeUnmount(() => {
 }
 .preview-heading {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  padding: 18px 20px;
+  padding: 16px 18px 12px;
+}
+.preview-heading-main {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.preview-heading-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.preview-heading-icon {
+  flex-shrink: 0;
 }
 .preview-heading h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 1.3;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.preview-primary-action {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .preview-heading-actions {
   display: flex;
@@ -496,7 +532,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
+  width: 100%;
 }
 .patient-context {
   margin: 0 16px 16px;
@@ -728,19 +764,22 @@ summary {
   font-size: 12px;
 }
 .full-result-button {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 14px;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 12px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: #eaf2fc;
   color: #245788;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.2;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background-color 160ms ease;
 }
@@ -750,10 +789,14 @@ summary {
 .full-result-label {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 5px;
+  white-space: nowrap;
 }
+.full-result-label > svg,
 .full-result-button > svg {
   flex-shrink: 0;
+}
+.full-result-button > svg {
   color: #527da7;
 }
 button:focus-visible,

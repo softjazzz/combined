@@ -59,7 +59,7 @@
           type="button"
           class="qc-result-analysis__query"
           :disabled="loading"
-          @click="void queryAnalysis()"
+          @click="void queryAnalysis({ force: true })"
         >
           <Search
             :size="15"
@@ -114,7 +114,7 @@
       </div>
       <button
         type="button"
-        @click="void queryAnalysis()"
+        @click="void queryAnalysis({ force: true })"
       >
         重试
       </button>
@@ -501,7 +501,7 @@
 
 <script setup lang="ts">
 import { DatePicker as ADatePicker } from 'ant-design-vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   ChevronDown,
   ChevronRight,
@@ -552,6 +552,9 @@ const cachedDepartments = ref<string[]>([])
 const recordPage = ref(1)
 const recordPageSize = 20
 let activeRequest = 0
+let isMounted = false
+let inFlightSignature = ''
+let inFlightPromise: Promise<void> | null = null
 
 function extractDepartmentsFromPayload(nextPayload: LuxianQcResultAnalysisPayload | null): string[] {
   if (!nextPayload) return []
@@ -642,7 +645,7 @@ function statusLabel(status: LuxianQcAnalysisStatus): string {
   )
 }
 
-async function queryAnalysis(options: { resetRule?: boolean; preservePage?: boolean } = {}) {
+async function queryAnalysis(options: { resetRule?: boolean; preservePage?: boolean; force?: boolean } = {}) {
   if (options.resetRule) selectedRuleId.value = ''
   if (!options.preservePage) recordPage.value = 1
   if (
@@ -652,46 +655,60 @@ async function queryAnalysis(options: { resetRule?: boolean; preservePage?: bool
   ) {
     activeStatus.value = 'all'
   }
+  const queryParams = {
+    carePhase: props.carePhase,
+    department: department.value,
+    doctor: doctor.value,
+    ruleId: selectedRuleId.value,
+    resultStatus: activeStatus.value === 'all' ? undefined : activeStatus.value,
+    completedFrom: completedFrom.value,
+    completedTo: completedTo.value,
+    page: recordPage.value,
+    pageSize: recordPageSize,
+  }
+  const signature = JSON.stringify(queryParams)
+  if (!options.force && inFlightPromise && inFlightSignature === signature) {
+    return inFlightPromise
+  }
   const request = ++activeRequest
   loading.value = true
   error.value = ''
-  try {
-    const nextPayload = await getLuxianQcResultAnalysis({
-      carePhase: props.carePhase,
-      department: department.value,
-      doctor: doctor.value,
-      ruleId: selectedRuleId.value,
-      resultStatus: activeStatus.value === 'all' ? undefined : activeStatus.value,
-      completedFrom: completedFrom.value,
-      completedTo: completedTo.value,
-      page: recordPage.value,
-      pageSize: recordPageSize,
-    })
-    if (request !== activeRequest) return
-    payload.value = nextPayload
-    const incomingDepts = extractDepartmentsFromPayload(nextPayload)
-    if (incomingDepts.length > 0) {
-      cachedDepartments.value = [...new Set([...cachedDepartments.value, ...incomingDepts])].sort(
-        (a, b) => a.localeCompare(b, 'zh-CN'),
-      )
+  inFlightSignature = signature
+  const runPromise = (async () => {
+    try {
+      const nextPayload = await getLuxianQcResultAnalysis(queryParams)
+      if (request !== activeRequest) return
+      payload.value = nextPayload
+      const incomingDepts = extractDepartmentsFromPayload(nextPayload)
+      if (incomingDepts.length > 0) {
+        cachedDepartments.value = [...new Set([...cachedDepartments.value, ...incomingDepts])].sort(
+          (a, b) => a.localeCompare(b, 'zh-CN'),
+        )
+      }
+      if (nextPayload.record_page?.page && nextPayload.record_page.page >= 1) {
+        recordPage.value = nextPayload.record_page.page
+      }
+      if (selectedRuleId.value && !nextPayload.selected_rule) selectedRuleId.value = ''
+      if (
+        expandedRuleId.value &&
+        !nextPayload.rule_distribution.some((item) => item.rule_id === expandedRuleId.value)
+      ) {
+        expandedRuleId.value = ''
+      }
+    } catch (reason) {
+      if (request !== activeRequest) return
+      error.value = reason instanceof Error ? reason.message : '请稍后重试'
+      payload.value = null
+    } finally {
+      if (request === activeRequest) {
+        loading.value = false
+        inFlightSignature = ''
+        inFlightPromise = null
+      }
     }
-    if (nextPayload.record_page?.page && nextPayload.record_page.page >= 1) {
-      recordPage.value = nextPayload.record_page.page
-    }
-    if (selectedRuleId.value && !nextPayload.selected_rule) selectedRuleId.value = ''
-    if (
-      expandedRuleId.value &&
-      !nextPayload.rule_distribution.some((item) => item.rule_id === expandedRuleId.value)
-    ) {
-      expandedRuleId.value = ''
-    }
-  } catch (reason) {
-    if (request !== activeRequest) return
-    error.value = reason instanceof Error ? reason.message : '请稍后重试'
-    payload.value = null
-  } finally {
-    if (request === activeRequest) loading.value = false
-  }
+  })()
+  inFlightPromise = runPromise
+  return runPromise
 }
 
 async function changeRecordPage(nextPage: number) {
@@ -709,6 +726,7 @@ async function selectStatus(status: StatusNavigatorKey) {
 }
 
 watch(confirmedResultsOnly, (confirmedOnly) => {
+  if (!isMounted) return
   if (
     confirmedOnly &&
     activeStatus.value !== 'all' &&
@@ -757,14 +775,24 @@ async function resetFilters() {
 
 watch(
   () => props.carePhase,
-  async () => {
+  async (nextPhase, prevPhase) => {
+    if (nextPhase === prevPhase) return
     cachedDepartments.value = []
+    if (!isMounted) return
     await resetFilters()
   },
 )
 
 onMounted(() => {
+  isMounted = true
   void queryAnalysis()
+})
+
+onBeforeUnmount(() => {
+  isMounted = false
+  activeRequest += 1
+  inFlightSignature = ''
+  inFlightPromise = null
 })
 </script>
 

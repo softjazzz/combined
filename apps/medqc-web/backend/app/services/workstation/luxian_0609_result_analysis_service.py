@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 from ...services import custom_qc_workspace_service as _workspace_module
 from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ...services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from ...services.medical_records.query_service import normalize_department_name
 
 _ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE = CustomQCWorkspaceService
 _RESULT_ANALYSIS_CACHE_LOCK = RLock()
@@ -67,6 +68,11 @@ def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
     return str(value).strip()
+
+
+def _normalized_department(value: Any, default: str = "") -> str:
+    normalized = normalize_department_name(value)
+    return normalized or default
 
 
 def _identity_from_record(record: Mapping[str, Any]) -> tuple[str, str, str] | None:
@@ -173,7 +179,7 @@ def _load_single_db_workstation_records(
         _workstation_discharge_summary_subquery,
     )
 
-    normalized_department = _safe_text(department) or None
+    normalized_department = _normalized_department(department) or None
     normalized_institute_id = _safe_text(institute_id) or None
     is_unassigned_dept = normalized_department == "未分科室"
 
@@ -232,7 +238,7 @@ def _load_single_db_workstation_records(
             "patient_id": _safe_text(row.patient_id),
             "visit_id": _safe_text(row.visit_id),
             "patient_name": _safe_text(row.patient_name),
-            "department": _safe_text(row.department, "未分科室") or "未分科室",
+            "department": _normalized_department(row.department, "未分科室"),
             "attending_physician": _safe_text(
                 row.attending_physician,
                 "未登记主治医师",
@@ -265,10 +271,10 @@ def _load_single_db_workstation_records(
             continue
         if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
             continue
-        dept_label = _safe_text(
+        dept_label = _normalized_department(
             record.discharge_dept_name or record.admission_dept_name,
             "未分科室",
-        ) or "未分科室"
+        )
         if is_unassigned_dept and dept_label != "未分科室":
             continue
         records.append(
@@ -301,7 +307,7 @@ def _load_independent_workstation_records(
     from ...database import clinical_connection
     from ...services import clinical_case_catalog as catalog_service
 
-    normalized_department = _safe_text(department) or None
+    normalized_department = _normalized_department(department) or None
     normalized_doctor = _safe_text(doctor) or None
     normalized_institute_id = _safe_text(institute_id) or None
 
@@ -383,7 +389,7 @@ def _load_independent_workstation_records(
             "patient_id": _safe_text(row.get("patient_id")),
             "visit_id": _safe_text(row.get("visit_id")),
             "patient_name": _safe_text(row.get("name")),
-            "department": _safe_text(row.get("department"), "未分科室") or "未分科室",
+            "department": _normalized_department(row.get("department"), "未分科室"),
             "attending_physician": _safe_text(
                 row.get("doctor"),
                 "未登记主治医师",
@@ -470,16 +476,23 @@ def _project_lightweight_result(raw_projection: Any) -> dict[str, Any] | None:
     if not isinstance(raw_projection, Mapping):
         return None
     status = _normalized_status(raw_projection.get("status"))
+    execution_status = _normalized_status(raw_projection.get("execution_status"))
     if status != "ready":
-        return {"status": status}
+        projected_non_ready: dict[str, Any] = {"status": status}
+        if execution_status:
+            projected_non_ready["execution_status"] = execution_status
+        return projected_non_ready
     completed_at = _safe_text(raw_projection.get("completed_at"))
     raw_items = raw_projection.get("items")
     if not isinstance(raw_items, list):
-        return {
+        projected_empty: dict[str, Any] = {
             "status": status,
             "completed_at": completed_at,
             "items": None,
         }
+        if execution_status:
+            projected_empty["execution_status"] = execution_status
+        return projected_empty
     projected_items: list[dict[str, str] | None] = []
     for raw_item in raw_items:
         if not isinstance(raw_item, Mapping):
@@ -491,15 +504,20 @@ def _project_lightweight_result(raw_projection: Any) -> dict[str, Any] | None:
                 "status": _normalized_status(raw_item.get("status")),
             }
         )
-    return {
+    projected_ready: dict[str, Any] = {
         "status": status,
         "completed_at": completed_at,
         "items": projected_items,
     }
+    if execution_status:
+        projected_ready["execution_status"] = execution_status
+    return projected_ready
 
 
 def _clone_lightweight_result(projected: Mapping[str, Any]) -> dict[str, Any]:
     cloned: dict[str, Any] = {"status": projected.get("status", "")}
+    if "execution_status" in projected:
+        cloned["execution_status"] = projected["execution_status"]
     if "completed_at" in projected:
         cloned["completed_at"] = projected["completed_at"]
     if "items" in projected:
@@ -701,7 +719,7 @@ class Luxian0609ResultAnalysisService:
         if not 1 <= page_size <= 100:
             raise ValueError("page_size 必须在 1 到 100 之间")
 
-        normalized_department = _safe_text(department) or None
+        normalized_department = _normalized_department(department) or None
         normalized_doctor = _safe_text(doctor) or None
         normalized_institute_id = _safe_text(institute_id) or None
         loader_kwargs: dict[str, Any] = {
@@ -715,7 +733,10 @@ class Luxian0609ResultAnalysisService:
             loader_kwargs["case_scope"] = case_scope
         scope_records = self._record_scope_loader(**loader_kwargs)
         records_by_identity = {
-            identity: record
+            identity: {
+                **record,
+                "department": _normalized_department(record.get("department"), "未分科室"),
+            }
             for record in scope_records
             if (identity := _identity_from_record(record)) is not None
             and (normalized_institute_id is None or identity[0] == normalized_institute_id)
@@ -735,6 +756,7 @@ class Luxian0609ResultAnalysisService:
         base_items: list[dict[str, Any]] = []
         unavailable_result_total = 0
         ready_record_identities: set[tuple[str, str, str]] = set()
+        partial_failed_record_identities: set[tuple[str, str, str]] = set()
         for identity, record in records_by_identity.items():
             projection = projections.get(identity)
             if projection is None:
@@ -743,9 +765,10 @@ class Luxian0609ResultAnalysisService:
                 unavailable_result_total += 1
                 continue
             projection_status = _normalized_status(projection.get("status"))
+            execution_status = _normalized_status(projection.get("execution_status"))
             if projection_status == "not_run":
                 continue
-            if projection_status != "ready":
+            if projection_status != "ready" or execution_status == "failed":
                 unavailable_result_total += 1
                 continue
             completed_at_text = _safe_text(projection.get("completed_at"))
@@ -783,7 +806,10 @@ class Luxian0609ResultAnalysisService:
             if not normalized_items:
                 unavailable_result_total += 1
                 continue
-            ready_record_identities.add(identity)
+            if execution_status == "partial_failed":
+                partial_failed_record_identities.add(identity)
+            else:
+                ready_record_identities.add(identity)
             for item in normalized_items:
                 base_items.append(
                     {
@@ -836,6 +862,11 @@ class Luxian0609ResultAnalysisService:
                 "scoped_record_total": len(records_by_identity),
                 "ready_record_total": len(ready_record_identities),
                 "unavailable_result_total": unavailable_result_total,
+                **(
+                    {"partial_failed_record_total": len(partial_failed_record_identities)}
+                    if partial_failed_record_identities
+                    else {}
+                ),
             },
             "status_distribution": [
                 {"status": status, "count": status_counts[status]}
@@ -871,7 +902,7 @@ class Luxian0609ResultAnalysisService:
             status = item["status"]
             if status in _ISSUE_STATUSES:
                 bucket[f"{status}_count"] += 1
-            bucket["department_items"][_safe_text(item["record"].get("department"), "未分科室")].append(item)
+            bucket["department_items"][_normalized_department(item["record"].get("department"), "未分科室")].append(item)
 
         result: list[dict[str, Any]] = []
         for bucket in per_rule.values():
@@ -981,7 +1012,7 @@ class Luxian0609ResultAnalysisService:
                     "patient_id": identity[1],
                     "visit_id": identity[2],
                     "patient_name": _safe_text(record.get("patient_name")),
-                    "department": _safe_text(record.get("department"), "未分科室") or "未分科室",
+                    "department": _normalized_department(record.get("department"), "未分科室"),
                     "attending_physician": _safe_text(
                         record.get("attending_physician"),
                         "未登记主治医师",

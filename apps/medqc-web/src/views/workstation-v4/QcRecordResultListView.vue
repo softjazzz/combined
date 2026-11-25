@@ -25,7 +25,7 @@
             data-testid="qc-result-view-records"
             :class="{ 'is-active': activeView === 'records' }"
             :aria-pressed="activeView === 'records'"
-            @click="activeView = 'records'"
+            @click="setActiveView('records')"
           >
             病历结果
           </button>
@@ -37,7 +37,7 @@
             :aria-pressed="activeView === 'analysis'"
             :disabled="!sourceId || sourceId === 'independent_cdm'"
             :title="!sourceId ? '正在加载数据源…' : sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
-            @click="activeView = 'analysis'"
+            @click="setActiveView('analysis')"
           >
             结果分析
           </button>
@@ -340,7 +340,7 @@
           </footer>
         </div>
         <QcRecordReviewPreview
-          :key="`${sourceId || 'pending'}:${carePhase}`"
+          :key="`${resolvedSourceEpoch}:${carePhase}`"
           :care-phase="carePhase"
           :row="previewRow"
           :refresh-key="previewRefreshKey"
@@ -351,7 +351,7 @@
 
     <QcRecordResultAnalysisPanel
       v-else
-      :key="`${sourceId}:${analysisRefreshKey}`"
+      :key="`${resolvedSourceEpoch}:${analysisRefreshKey}`"
       :care-phase="carePhase"
       @open-result="handleOpenAnalysisResult"
     />
@@ -446,8 +446,12 @@ const selectedQcRecordRefs = computed(() =>
 )
 const activeView = ref<'records' | 'analysis'>('records')
 const analysisRefreshKey = ref(0)
+const resolvedSourceEpoch = ref(0)
 const pendingDeepLinkKey = ref('')
 let deepLinkGeneration = 0
+let hasInitialMountFetch = false
+let lastRequestedCarePhase: QcRecordCarePhase | null = null
+let lastResolvedSourceId = ''
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
@@ -852,15 +856,29 @@ function updateDateRange(value: unknown) {
   applyFilters()
 }
 
+function setActiveView(nextView: 'records' | 'analysis') {
+  if (nextView === 'analysis' && (!sourceId.value || sourceId.value === 'independent_cdm')) {
+    return
+  }
+  if (activeView.value === nextView) return
+  activeView.value = nextView
+}
+
 watch(sourceId, (nextSourceId) => {
   if (nextSourceId === 'independent_cdm') {
     activeView.value = 'records'
   }
+  if (!nextSourceId) return
+  if (lastResolvedSourceId && lastResolvedSourceId !== nextSourceId) {
+    resolvedSourceEpoch.value += 1
+  }
+  lastResolvedSourceId = nextSourceId
 })
 
 watch(
   () => props.carePhase,
-  (carePhase) => {
+  (carePhase, previousCarePhase) => {
+    if (carePhase === previousCarePhase) return
     ++manualRefreshSequence
     cancelPendingDeepLink()
     medicalRecordFocus.value = null
@@ -879,6 +897,8 @@ watch(
     currentPage.value = 1
     activeView.value = 'records'
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
+    if (!hasInitialMountFetch) return
+    lastRequestedCarePhase = carePhase
     const prevHospFilter = hospFilter?.value
     selectHospFilter(carePhase)
     if (prevHospFilter === carePhase) {
@@ -900,7 +920,15 @@ onBeforeUnmount(() => {
 })
 
 onMounted(async () => {
+  hasInitialMountFetch = true
+  lastRequestedCarePhase = props.carePhase
+  if (sourceId.value) {
+    lastResolvedSourceId = sourceId.value
+  }
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
+  if (hospFilter && hospFilter.value !== props.carePhase) {
+    hospFilter.value = props.carePhase
+  }
   const requestedRecordKey = routeQueryText('record_key')
   const requestedVisitId = routeQueryText('visit_id')
   if (requestedRecordKey) {

@@ -337,18 +337,22 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
             predicates.append(tuple_(*[source.c[k] for k in KEYS]).in_(case_scope.case_refs))
     if analytics_identities is not None:
         predicates.append(_identity_in_predicate(source, analytics_identities))
-    normalized_dept = str(dept or "").strip()
+    from .medical_records.query_service import (
+        _normalize_department_sql_expr,
+        normalize_department_name,
+    )
+    normalized_dept = normalize_department_name(dept)
     if normalized_dept:
         if normalized_dept == "未分科室":
             predicates.append(
                 or_(
                     source.c.department.is_(None),
                     func.trim(source.c.department) == "",
-                    source.c.department == "未分科室",
+                    _normalize_department_sql_expr(source.c.department) == "未分科室",
                 )
             )
         else:
-            predicates.append(source.c.department == normalized_dept)
+            predicates.append(_normalize_department_sql_expr(source.c.department) == normalized_dept)
     normalized_doctor = str(doctor or "").strip()
     if normalized_doctor:
         predicates.append(source.c.doctor == normalized_doctor)
@@ -425,8 +429,9 @@ def schedule_options(*, scope, institute_id=None):
             institutes = connection.execute(select(source.c.institute_id).where(*predicates).distinct()).scalars().all()
             departments = connection.execute(select(source.c.department).where(
                 *predicates, source.c.institute_id == institute_id).distinct()).scalars().all() if institute_id else []
+        from .medical_records.query_service import normalize_department_name
         return {"institutes": sorted(institutes),
-                "departments": sorted({value for value in departments if value})}
+                "departments": sorted({normalize_department_name(value) for value in departments if normalize_department_name(value)})}
     except (PipelineError, HTTPException):
         raise
     except Exception as error:
@@ -534,6 +539,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
             filtered_rows = []
             department_counts: Counter = Counter()
             doctor_counts: Counter = Counter()
+            from .medical_records.query_service import normalize_department_name
             if qc_summary_mode == "deferred":
                 if not normalized_dept and not normalized_doctor:
                     # 延迟摘要模式不读取全量三键，直接按 (department, doctor) 聚合总数与筛选项。
@@ -550,7 +556,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                     for row in facet_rows:
                         cnt = int(row["cnt"])
                         total += cnt
-                        department_counts[str(row["department"] or "").strip() or "未分科室"] += cnt
+                        department_counts[normalize_department_name(row["department"]) or "未分科室"] += cnt
                         doc_name = str(row["doctor"] or "").strip()
                         if doc_name:
                             doctor_counts[doc_name] += cnt
@@ -572,7 +578,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                             .group_by(source.c.department)
                         ).mappings().all()
                         for row in dept_rows:
-                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                            department_counts[normalize_department_name(row["department"]) or "未分科室"] += int(row["cnt"])
                     elif normalized_doctor and not normalized_dept:
                         dept_rows = connection.execute(
                             select(source.c.department, func.count().label("cnt"))
@@ -581,7 +587,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                         ).mappings().all()
                         total = sum(int(row["cnt"]) for row in dept_rows)
                         for row in dept_rows:
-                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                            department_counts[normalize_department_name(row["department"]) or "未分科室"] += int(row["cnt"])
                         doctor_rows = connection.execute(
                             select(source.c.doctor, func.count().label("cnt"))
                             .where(*doctor_facet_predicates)
@@ -603,7 +609,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                             .group_by(source.c.department)
                         ).mappings().all()
                         for row in dept_rows:
-                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                            department_counts[normalize_department_name(row["department"]) or "未分科室"] += int(row["cnt"])
                         doctor_rows = connection.execute(
                             select(source.c.doctor, func.count().label("cnt"))
                             .where(*doctor_facet_predicates)
@@ -652,10 +658,10 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                             .group_by(source.c.department)
                         ).mappings().all()
                         for row in dept_rows:
-                            department_counts[str(row["department"] or "").strip() or "未分科室"] += int(row["cnt"])
+                            department_counts[normalize_department_name(row["department"]) or "未分科室"] += int(row["cnt"])
                     else:
                         for row in filtered_rows:
-                            department_counts[str(row["department"] or "").strip() or "未分科室"] += 1
+                            department_counts[normalize_department_name(row["department"]) or "未分科室"] += 1
                     if doctor_facet_predicates is not None:
                         doctor_rows = connection.execute(
                             select(source.c.doctor, func.count().label("cnt"))
@@ -708,7 +714,7 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 "instituteId": row["institute_id"], "patientId": row["patient_id"],
                 "sourceId": "independent_cdm", "name": row["name"] or "未返回", "sex": row["sex"] or "",
                 "age": row["age"] or "", "bedNo": row["bed"] or "", "insurance": row["insurance"] or "",
-                "department": row["department"] or "未分科室", "doctor": row["doctor"] or "未返回",
+                "department": normalize_department_name(row["department"]) or "未分科室", "doctor": row["doctor"] or "未返回",
                 "admissionDate": admission.isoformat() if admission else "", "dischargeDate": discharge.isoformat() if discharge else "",
                 "admissionPrecision": "datetime" if isinstance(admission, datetime) else "date" if admission else "unknown",
                 "dischargePrecision": "datetime" if isinstance(discharge, datetime) else "date" if discharge else "unknown",

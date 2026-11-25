@@ -148,7 +148,9 @@ def test_result_analysis_loader_passes_include_latest_partial_true(monkeypatch):
             session_factory=_FakeSession,
         )
         payload = svc.get_analysis(care_phase="inpatient")
-        assert payload["kpis"]["ready_record_total"] == 1
+        assert payload["kpis"]["ready_record_total"] == 0
+        assert payload["kpis"]["partial_failed_record_total"] == 1
+        assert payload["record_page"]["total"] == 1
         assert len(captured_calls) == 1
         assert captured_calls[0]["include_latest_partial"] is True
         assert captured_calls[0]["include_items"] is True

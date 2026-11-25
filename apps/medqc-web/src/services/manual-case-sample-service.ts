@@ -22,11 +22,66 @@ import type {
 import { deduplicateMedicalDocumentSections } from '@/views/workstation-v4/customer-sample-validation/medicalDocumentDisplay'
 import { normalizeFrontpageDisplay } from '@/views/workstation-v4/customer-sample-validation/frontpageDisplay'
 
+export const HISTORICAL_SNAPSHOT_FALLBACK_NOTICE =
+  '该历史质控轮次未保留冻结原文快照，当前已自动展示病历最新文书用于核对。'
+
+export type EditableMedicalRecordDocumentsResponse = EditableMedicalRecordDocumentsResult & {
+  material_source_fallback?: boolean
+  material_source_fallback_reason?: string
+  material_source_view?: string
+  material_source_notice?: string
+}
+
 type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+  status?: number
+  errorCode?: string
   errorType?: 'timeout' | 'network' | 'server' | 'unknown'
+}
+
+const EDITABLE_DOCUMENT_ERROR_MESSAGES: Record<string, string> = {
+  historical_material_snapshot_not_retained:
+    '该历史质控轮次未保留冻结原文快照，当前已回退展示病历最新文书。',
+  historical_material_snapshot_unavailable:
+    '历史病历原文快照暂不可用，请稍后重试或查看当前最新病历文书。',
+  historical_and_current_material_views_conflict:
+    '历史快照与当前病历视图参数冲突，请重新打开病历原文。',
+  clinical_source_read_unavailable: '临床数据源暂不可用，请稍后重试。',
+  clinical_source_job_not_found: '未找到对应的质控任务记录。',
+  clinical_source_job_case_mismatch: '该质控任务与当前病历身份不匹配，已停止读取。',
+}
+
+export function localizeEditableDocumentErrorMessage(rawMessage: string, fallback: string): string {
+  const normalized = String(rawMessage || '').trim()
+  if (!normalized) return fallback
+  const direct = EDITABLE_DOCUMENT_ERROR_MESSAGES[normalized]
+  if (direct) return direct
+  for (const [code, localized] of Object.entries(EDITABLE_DOCUMENT_ERROR_MESSAGES)) {
+    if (normalized.includes(code)) return localized
+  }
+  return normalized
+}
+
+function extractHttpStatus(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') return undefined
+  const response = (error as { response?: { status?: unknown } }).response
+  return typeof response?.status === 'number' ? response.status : undefined
+}
+
+function extractRawErrorCode(error: unknown): string {
+  if (!error || typeof error !== 'object') return ''
+  const data = (error as { response?: { data?: unknown } }).response?.data
+  if (typeof data === 'string' && data.trim()) return data.trim()
+  if (data && typeof data === 'object') {
+    const record = data as Record<string, unknown>
+    for (const key of ['detail', 'code', 'error', 'message']) {
+      const value = record[key]
+      if (typeof value === 'string' && value.trim()) return value.trim()
+    }
+  }
+  return ''
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -185,7 +240,7 @@ function readDocumentSections(source: Record<string, unknown>) {
 function normalizeEditableDocumentsResponse(
   value: unknown,
   options: { includeSummaries?: boolean; includeClinicalSurgery?: boolean } = {},
-): EditableMedicalRecordDocumentsResult {
+): EditableMedicalRecordDocumentsResponse {
   const payload =
     value && typeof value === 'object' && 'data' in value
       ? (value as { data?: unknown }).data
@@ -407,6 +462,12 @@ function normalizeEditableDocumentsResponse(
         (Boolean(item.content.trim()) ||
           ((options.includeSummaries === true || item.clinical_surgery_version) && item.has_content === true)),
     )
+  const materialSourceFallback = candidate.material_source_fallback === true
+  const materialSourceFallbackReason = readStringField(candidate, [
+    'material_source_fallback_reason',
+  ])
+  const materialSourceView = readStringField(candidate, ['material_source_view'])
+  const materialSourceNotice = readStringField(candidate, ['material_source_notice'])
   return {
     current_record:
       candidate.current_record && typeof candidate.current_record === 'object'
@@ -428,9 +489,15 @@ function normalizeEditableDocumentsResponse(
     empty_reason: readStringField(candidate, [
       'empty_reason',
     ]) as EditableMedicalRecordDocumentsResult['empty_reason'],
+    ...(materialSourceFallback ? { material_source_fallback: true } : {}),
+    ...(materialSourceFallbackReason
+      ? { material_source_fallback_reason: materialSourceFallbackReason }
+      : {}),
+    ...(materialSourceView ? { material_source_view: materialSourceView } : {}),
+    ...(materialSourceNotice ? { material_source_notice: materialSourceNotice } : {}),
     documents,
     raw: payload,
-  }
+  } satisfies EditableMedicalRecordDocumentsResponse
 }
 
 function readEditableOrderDetails(
@@ -570,35 +637,44 @@ type EditableDocumentRequestParams = {
   source_view?: 'saved' | 'current'
   document_scope?: 'clinical' | 'orders'
   include_clinical_surgery?: boolean
+  fallback_to_current?: boolean
+  skipErrorToast?: boolean
 }
 
 export async function getEditableMedicalRecordDocuments(
   visitId: string,
   params?: EditableDocumentRequestParams,
-) {
+): Promise<ServiceResult<EditableMedicalRecordDocumentsResponse>> {
+  const { skipErrorToast, ...queryParams } = params || {}
   try {
     const response = await ApiService.requestRaw<unknown>({
       method: 'GET',
       url: `/api/v1/emr/${encodeURIComponent(visitId)}/documents`,
       timeout: EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS,
+      ...(skipErrorToast || queryParams.fallback_to_current ? { skipErrorToast: true } : {}),
       params: {
-        ...(params || {}),
-        visit_id: params?.visit_id || visitId,
+        ...queryParams,
+        visit_id: queryParams.visit_id || visitId,
       },
     })
     return {
       success: true,
       data: normalizeEditableDocumentsResponse(response.data, {
-        includeSummaries: params?.view === 'summary',
-        includeClinicalSurgery: params?.source_view === 'current' && params.include_clinical_surgery,
+        includeSummaries: queryParams.view === 'summary',
+        includeClinicalSurgery:
+          queryParams.source_view === 'current' && queryParams.include_clinical_surgery,
       }),
-    } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
+    } satisfies ServiceResult<EditableMedicalRecordDocumentsResponse>
   } catch (error) {
+    const rawMessage = toErrorMessage(error, '读取病历文书失败')
+    const errorCode = extractRawErrorCode(error)
     return {
       success: false,
-      message: toErrorMessage(error, '读取病历文书失败'),
+      message: localizeEditableDocumentErrorMessage(rawMessage, '读取病历文书失败'),
+      ...(errorCode ? { errorCode } : {}),
+      status: extractHttpStatus(error),
       errorType: classifyRequestError(error),
-    } satisfies ServiceResult<EditableMedicalRecordDocumentsResult>
+    } satisfies ServiceResult<EditableMedicalRecordDocumentsResponse>
   }
 }
 
@@ -606,15 +682,17 @@ export async function getEditableMedicalRecordDocument(
   visitId: string,
   summary: EditableMedicalRecordDocument,
   params?: Omit<EditableDocumentRequestParams, 'view' | 'document_scope'>,
-) {
+): Promise<ServiceResult<EditableMedicalRecordDocument>> {
+  const { skipErrorToast, ...queryParams } = params || {}
   try {
     const response = await ApiService.requestRaw<unknown>({
       method: 'GET',
       url: `/api/v1/emr/${encodeURIComponent(visitId)}/render`,
       timeout: EDITABLE_MEDICAL_RECORD_DOCUMENTS_TIMEOUT_MS,
+      ...(skipErrorToast || queryParams.fallback_to_current ? { skipErrorToast: true } : {}),
       params: {
-        ...(params || {}),
-        visit_id: params?.visit_id || visitId,
+        ...queryParams,
+        visit_id: queryParams.visit_id || visitId,
         execution_domain: summary.execution_domain,
         doc_type: summary.document_type,
         doc_id: summary.source_document_id || summary.key,
@@ -649,9 +727,13 @@ export async function getEditableMedicalRecordDocument(
       data: normalizeEditableDocumentRender(response.data, summary),
     } satisfies ServiceResult<EditableMedicalRecordDocument>
   } catch (error) {
+    const rawMessage = toErrorMessage(error, '读取病历文书正文失败')
+    const errorCode = extractRawErrorCode(error)
     return {
       success: false,
-      message: toErrorMessage(error, '读取病历文书正文失败'),
+      message: localizeEditableDocumentErrorMessage(rawMessage, '读取病历文书正文失败'),
+      ...(errorCode ? { errorCode } : {}),
+      status: extractHttpStatus(error),
       errorType: classifyRequestError(error),
     } satisfies ServiceResult<EditableMedicalRecordDocument>
   }

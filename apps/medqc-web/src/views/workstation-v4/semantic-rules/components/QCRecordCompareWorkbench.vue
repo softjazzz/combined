@@ -13,11 +13,13 @@
         <span>{{
           documentOnly
             ? '选择文书查看完整内容'
-            : lazyResultDocuments
-              ? '按本次质控保存的原文核对'
-              : sourceView === 'current'
-                ? '当前病历可能已更新，质控结果仍为执行时结果'
-                : '点击质控结果，核对对应文书与证据片段'
+            : fallbackToCurrentActive
+              ? '历史快照未保留，当前已自动展示病历最新文书用于核对'
+              : lazyResultDocuments
+                ? '按本次质控保存的原文核对'
+                : sourceView === 'current'
+                  ? '当前病历可能已更新，质控结果仍为执行时结果'
+                  : '点击质控结果，核对对应文书与证据片段'
         }}</span>
       </div>
       <div
@@ -46,6 +48,15 @@
         </button>
       </div>
     </header>
+
+    <div
+      v-if="fallbackToCurrentActive && fallbackNotice && !documentOnly"
+      class="record-compare-fallback-banner"
+      data-testid="record-compare-fallback-notice"
+      role="status"
+    >
+      {{ fallbackNotice }}
+    </div>
 
     <div class="record-compare-grid">
       <ReadonlyMedicalDocumentDirectory
@@ -564,6 +575,8 @@ let orderRequest: Promise<void> | undefined
 let documentSelectionSequence = 0
 const loadError = ref('')
 const contentLoadError = ref('')
+const fallbackToCurrentActive = ref(false)
+const fallbackNotice = ref('')
 const contentLoadingKey = ref('')
 const selectedDocumentKey = ref('')
 const selectedIssueKey = ref('')
@@ -984,6 +997,55 @@ function replaceDocument(document: EditableMedicalRecordDocument) {
   )
 }
 
+const DEFAULT_HISTORICAL_FALLBACK_NOTICE =
+  '该历史质控轮次未保留冻结原文快照，当前已自动展示病历最新文书用于核对。'
+
+function localizeDocumentError(rawMessage: string | undefined, fallback: string): string {
+  const text = String(rawMessage || '').trim()
+  if (!text) return fallback
+  if (text.includes('historical_material_snapshot_not_retained')) {
+    return DEFAULT_HISTORICAL_FALLBACK_NOTICE
+  }
+  if (text.includes('historical_material_snapshot_unavailable')) {
+    return '历史病历原文快照暂不可用，请稍后重试或查看当前最新病历文书。'
+  }
+  if (text.includes('historical_and_current_material_views_conflict')) {
+    return '历史快照与当前病历视图参数冲突，请重新打开病历原文。'
+  }
+  return text
+}
+
+function isHistoricalSnapshotNotRetained(result: {
+  success?: boolean
+  status?: number
+  errorCode?: string
+  message?: string
+}): boolean {
+  if (result.success) return false
+  const code = String(result.errorCode || '').trim()
+  const message = String(result.message || '').trim()
+  if (code === 'historical_material_snapshot_not_retained') return true
+  if (message.includes('historical_material_snapshot_not_retained')) return true
+  if (result.status === 409 && message.includes('冻结原文快照')) return true
+  return false
+}
+
+function applyMaterialFallbackMetadata(data: unknown) {
+  if (!data || typeof data !== 'object') return
+  const candidate = data as {
+    material_source_fallback?: unknown
+    material_source_notice?: unknown
+  }
+  if (candidate.material_source_fallback === true) {
+    fallbackToCurrentActive.value = true
+    const notice =
+      typeof candidate.material_source_notice === 'string' && candidate.material_source_notice.trim()
+        ? candidate.material_source_notice.trim()
+        : DEFAULT_HISTORICAL_FALLBACK_NOTICE
+    fallbackNotice.value = notice
+  }
+}
+
 async function ensureDocumentLoaded(
   documentKey: string,
   renderOverride?: { sourceDocumentId: string; sourceRef?: string },
@@ -1023,22 +1085,46 @@ async function ensureDocumentLoaded(
         : props.lazyResultDocuments
           ? { ...summary, source_document_id: summary.key }
           : summary
-      request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
-        ...(props.jobId ? { job_id: props.jobId } : {}),
-        ...(props.sourceView === 'saved' && props.jobId && props.recordRef
-          ? { record_ref: props.recordRef }
-          : {}),
-        institute_id: String(props.instituteId || '').trim() || undefined,
-        patient_id: String(props.patientId || '').trim() || undefined,
-        visit_id: String(props.visitId || '').trim(),
-      })
+      const useHistoricalFallback = Boolean(
+        props.lazyResultDocuments && props.jobId && props.sourceView !== 'current',
+      )
+      request = (async () => {
+        const initialResult = await getEditableMedicalRecordDocument(props.visitId, renderSummary, {
+          ...(props.jobId ? { job_id: props.jobId } : {}),
+          ...(props.sourceView === 'saved' && props.jobId && props.recordRef
+            ? { record_ref: props.recordRef }
+            : {}),
+          ...(useHistoricalFallback ? { fallback_to_current: true } : {}),
+          institute_id: String(props.instituteId || '').trim() || undefined,
+          patient_id: String(props.patientId || '').trim() || undefined,
+          visit_id: String(props.visitId || '').trim(),
+        })
+        if (!initialResult.success && props.jobId && isHistoricalSnapshotNotRetained(initialResult)) {
+          const fallbackResult = await getEditableMedicalRecordDocument(
+            props.visitId,
+            renderSummary,
+            {
+              source_view: 'current',
+              institute_id: String(props.instituteId || '').trim() || undefined,
+              patient_id: String(props.patientId || '').trim() || undefined,
+              visit_id: String(props.visitId || '').trim(),
+            },
+          )
+          if (fallbackResult.success) {
+            fallbackToCurrentActive.value = true
+            fallbackNotice.value = fallbackNotice.value || DEFAULT_HISTORICAL_FALLBACK_NOTICE
+          }
+          return fallbackResult
+        }
+        return initialResult
+      })()
       documentRequests.set(requestKey, request)
     }
     const result = await request
     if (generation !== loadGeneration) return null
     if (!result.success || !result.data) {
       if (selectedDocumentKey.value === documentKey) {
-        contentLoadError.value = result.message || '读取当前文书失败'
+        contentLoadError.value = localizeDocumentError(result.message, '读取当前文书失败')
       }
       return null
     }
@@ -1453,7 +1539,7 @@ function loadOrders() {
   ordersLoadState.value = 'loading'
   orderRequest = (async () => {
     try {
-      const result = await getEditableMedicalRecordDocuments(visitId, {
+      let result = await getEditableMedicalRecordDocuments(visitId, {
         institute_id: props.instituteId,
         patient_id: props.patientId,
         visit_id: visitId,
@@ -1461,12 +1547,39 @@ function loadOrders() {
         record_ref: props.recordRef || undefined,
         view: 'summary',
         document_scope: 'orders',
+        ...(props.jobId && props.sourceView !== 'current' ? { fallback_to_current: true } : {}),
       })
       if (generation !== loadGeneration) return
+      if (!result.success && props.jobId && isHistoricalSnapshotNotRetained(result)) {
+        const currentResult = await getEditableMedicalRecordDocuments(visitId, {
+          institute_id: props.instituteId,
+          patient_id: props.patientId,
+          visit_id: visitId,
+          view: 'full',
+          source_view: 'current',
+        })
+        if (generation !== loadGeneration) return
+        if (currentResult.success && currentResult.data) {
+          fallbackToCurrentActive.value = true
+          fallbackNotice.value = fallbackNotice.value || DEFAULT_HISTORICAL_FALLBACK_NOTICE
+          result = {
+            ...currentResult,
+            data: {
+              ...currentResult.data,
+              documents: currentResult.data.documents.filter((document) =>
+                isMedicalOrderDocument(document),
+              ),
+            },
+          }
+        } else {
+          result = currentResult
+        }
+      }
       if (!result.success || !result.data) {
         ordersLoadState.value = 'failed'
         return
       }
+      applyMaterialFallbackMetadata(result.data)
       documents.value = [
         ...documents.value,
         ...result.data.documents.filter((document) => document.enabled !== false),
@@ -1508,6 +1621,8 @@ async function loadDocuments() {
   locationState.value = 'idle'
   loadError.value = ''
   contentLoadError.value = ''
+  fallbackToCurrentActive.value = false
+  fallbackNotice.value = ''
   contentLoadingKey.value = ''
   documentRequests.clear()
   loading.value = false
@@ -1524,7 +1639,10 @@ async function loadDocuments() {
   }
   loading.value = true
   try {
-    const result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
+    const useHistoricalFallback = Boolean(
+      props.lazyResultDocuments && jobId && props.sourceView !== 'current',
+    )
+    let result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
       // 文书 Bundle 仍以三坐标读取；job/record_ref 仅用于结果归属，不可替代病历身份。
       institute_id: String(props.instituteId || '').trim() || undefined,
       patient_id: String(props.patientId || '').trim() || undefined,
@@ -1533,6 +1651,7 @@ async function loadDocuments() {
         ? {
             job_id: jobId,
             ...(recordRef ? { record_ref: recordRef } : {}),
+            ...(useHistoricalFallback ? { fallback_to_current: true } : {}),
           }
         : {}),
       ...(props.sourceView === 'current'
@@ -1543,13 +1662,36 @@ async function loadDocuments() {
           }),
     })
     if (generation !== loadGeneration) return
+    let clientFullFallbackLoaded = false
+    if (
+      !result.success &&
+      jobId &&
+      props.sourceView !== 'current' &&
+      isHistoricalSnapshotNotRetained(result)
+    ) {
+      const currentFallback = await getEditableMedicalRecordDocuments(visitId || recordRef, {
+        institute_id: String(props.instituteId || '').trim() || undefined,
+        patient_id: String(props.patientId || '').trim() || undefined,
+        visit_id: visitId,
+        view: 'full',
+        source_view: 'current',
+      })
+      if (generation !== loadGeneration) return
+      if (currentFallback.success && currentFallback.data) {
+        fallbackToCurrentActive.value = true
+        fallbackNotice.value = DEFAULT_HISTORICAL_FALLBACK_NOTICE
+        clientFullFallbackLoaded = true
+      }
+      result = currentFallback
+    }
     loading.value = false
     if (!result.success || !result.data) {
-      loadError.value = result.message || '读取病历文书失败'
+      loadError.value = localizeDocumentError(result.message, '读取病历文书失败')
       return
     }
+    applyMaterialFallbackMetadata(result.data)
     documents.value = result.data.documents.filter((document) => document.enabled !== false)
-    if (props.lazyResultDocuments) {
+    if (props.lazyResultDocuments && !clientFullFallbackLoaded) {
       ordersLoadState.value = 'deferred'
       const defaultKey = findAdmissionDocument()?.key || resolveDefaultDocumentKey()
       if (defaultKey) await selectDocument(defaultKey)
@@ -1646,6 +1788,14 @@ onBeforeUnmount(() => {
 .record-column-head span {
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
+}
+.record-compare-fallback-banner {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.18);
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 18px;
 }
 .record-compare-grid {
   /* 抽屉内可用高度不足时允许收缩，避免固定 560px 留出无效空白。 */

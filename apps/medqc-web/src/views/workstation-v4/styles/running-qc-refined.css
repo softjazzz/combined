@@ -589,15 +589,20 @@
 .running-qc-apple :deep(.preview-primary-action) {
   padding: 0;
   margin-left: auto;
+  flex-shrink: 0;
 }
 .running-qc-apple :deep(.preview-primary-action:empty) {
   display: none;
 }
 .running-qc-apple :deep(.preview-primary-action .full-result-button) {
   width: auto;
-  min-height: 34px;
-  padding: 6px 12px;
+  min-height: 32px;
+  padding: 5px 11px;
+  gap: 5px;
   font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  flex-shrink: 0;
   background: var(--mq-brand-600);
   color: var(--mq-bg-surface);
   box-shadow: 0 2px 6px rgba(10, 108, 255, 0.16);
@@ -609,13 +614,35 @@
   background: var(--mq-brand-700);
 }
 
-/* 复核预览：标题与入口同层，患者资料融入背景，问题独立成卡。 */
+/* 复核预览：标题与入口同行不折行，患者资料融入背景，问题独立成卡。 */
 .running-qc-apple :deep(.preview-heading) {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: stretch;
   gap: 8px;
-  padding: 18px 16px 12px;
+  padding: 16px 16px 12px;
+}
+.running-qc-apple :deep(.preview-heading-main) {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.running-qc-apple :deep(.preview-heading-title) {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.running-qc-apple :deep(.preview-heading h2) {
+  font-size: 16px;
+  line-height: 1.3;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .running-qc-apple :deep(.patient-context) {
   margin: 0 16px 8px;
@@ -937,6 +964,7 @@
   gap: 16px;
   margin: 0;
   padding: 0;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -946,6 +974,8 @@
 }
 
 .running-qc-apple .qc-record-result-list-view__toolbar {
+  position: relative;
+  z-index: 25;
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
@@ -954,6 +984,7 @@
   gap: 10px;
   margin: 0;
   padding: 0;
+  overflow: visible;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -1094,9 +1125,10 @@
 }
 
 .running-qc-apple .qc-record-result-list-view__export-options {
+  z-index: 40;
   right: 0;
   left: auto;
-  max-width: calc(100vw - 32px);
+  max-width: min(260px, calc(100vw - 32px));
   border: 1px solid var(--mq-glass-border);
   border-radius: 14px;
   background: var(--mq-glass-bg-strong);
@@ -1117,7 +1149,7 @@
 /* 左列表 + 右预览：两张玻璃卡 */
 .running-qc-apple .review-workbench-split {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 380px;
+  grid-template-columns: minmax(0, 1fr) 360px;
   align-items: start;
   gap: 16px;
   margin: 0;
@@ -1170,6 +1202,54 @@
   font-weight: 600;
 }
 
+/* 紧凑复核表格：消除 760px 最小宽撑爆容器，让 1280/1366/1440 下操作列完整可视 */
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table) {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th),
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(n)) {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-heading),
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-cell),
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(1)) {
+  width: 36px;
+  max-width: 36px !important;
+  padding-left: 6px;
+  padding-right: 4px !important;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(2)) {
+  width: auto;
+  min-width: 0;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(3)) {
+  width: 104px;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(4)) {
+  width: 138px;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(5)) {
+  width: 124px;
+}
+
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-heading),
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-cell),
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(6)) {
+  width: 148px;
+  padding-left: 6px;
+  padding-right: 6px;
+  white-space: nowrap;
+}
+
 .running-qc-apple :deep(.qc-record-result-table__table thead th) {
   background: color-mix(in srgb, var(--mq-neutral-text) 3%, var(--mq-bg-surface));
   color: var(--mq-text-tertiary);
@@ -1203,9 +1283,12 @@
   font-size: var(--mq-font-12);
 }
 
+.running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(5)),
 .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-cell) {
   overflow: hidden;
-  font-size: 12.5px;
+  padding-left: 6px;
+  padding-right: 6px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -1231,11 +1314,11 @@
 }
 
 .running-qc-apple :deep(.preview-heading) {
-  padding: 20px 20px 12px;
+  padding: 16px 18px 12px;
 }
 
 .running-qc-apple :deep(.patient-context) {
-  margin: 0 20px 8px;
+  margin: 0 18px 8px;
 }
 
 .running-qc-apple :deep(.preview-item) {
@@ -1251,6 +1334,7 @@
   background: var(--mq-brand-gradient);
   box-shadow: var(--mq-brand-shadow);
   color: var(--mq-bg-surface);
+  white-space: nowrap;
 }
 
 .running-qc-apple :deep(.preview-primary-action .full-result-button:hover),
@@ -1265,9 +1349,257 @@
   font-size: var(--mq-font-12);
 }
 
-@media (max-width: 1280px) {
+/* 1480px 及以下工具栏操作区折至第二行左侧：导出菜单改为向左对齐向右展开，避免被左侧边栏裁切 */
+@media (max-width: 1480px) {
+  .running-qc-apple .qc-record-result-list-view__export-options {
+    left: 0;
+    right: auto;
+    max-width: min(260px, calc(100vw - 32px));
+  }
+}
+
+@media (min-width: 1320px) and (max-width: 1480px) {
+  :global(.ws-shell--collapsed) .running-qc-apple .qc-record-result-list-view__export-options {
+    right: 0;
+    left: auto;
+  }
+}
+
+/* 1440×900 办公屏：收敛留白与右栏宽，确保操作列完整可见、不横向溢出 */
+@media (max-width: 1440px) {
+  .running-qc-refined.running-qc-apple {
+    gap: 14px;
+    padding: 8px 16px 28px;
+  }
+
   .running-qc-apple .review-workbench-split {
     grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 12px;
+  }
+
+  .running-qc-apple .review-workbench-list {
+    padding: 14px 10px 8px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(n)) {
+    padding-left: 7px;
+    padding-right: 7px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-heading),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-cell),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(1)) {
+    width: 34px;
+    max-width: 34px !important;
+    padding-left: 6px;
+    padding-right: 4px !important;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(3)) {
+    width: 104px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(4)) {
+    width: 130px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(5)) {
+    width: 120px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-heading),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-cell),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(6)) {
+    width: 146px;
+    padding-left: 5px;
+    padding-right: 6px;
+  }
+
+  .running-qc-apple :deep(.preview-heading) {
+    padding: 14px 14px 10px;
+  }
+
+  .running-qc-apple :deep(.patient-context) {
+    margin: 0 14px 8px;
+  }
+
+  .running-qc-apple :deep(.preview-results) {
+    padding: 0 12px 12px;
+  }
+}
+
+/* 1366×860 办公屏 */
+@media (max-width: 1380px) {
+  .running-qc-refined.running-qc-apple {
+    padding: 8px 14px 24px;
+  }
+
+  .running-qc-apple .review-workbench-split {
+    grid-template-columns: minmax(0, 1fr) 308px;
+    gap: 12px;
+  }
+
+  .running-qc-apple .review-workbench-list {
+    padding: 12px 8px 8px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(n)) {
+    padding-left: 6px;
+    padding-right: 6px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(3)) {
+    width: 96px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(4)) {
+    width: 122px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(5)) {
+    width: 116px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(5)),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-cell) {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-heading),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-cell),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(6)) {
+    width: 144px;
+    padding-left: 4px;
+    padding-right: 5px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table__view-button) {
+    padding: 0 7px;
+  }
+
+  .running-qc-apple :deep(.preview-heading h2) {
+    font-size: 15px;
+  }
+
+  .running-qc-apple :deep(.preview-primary-action .full-result-button) {
+    min-height: 30px;
+    padding: 4px 10px;
+  }
+}
+
+/* 1280×800 办公屏 */
+@media (max-width: 1300px) {
+  .running-qc-refined.running-qc-apple {
+    padding: 8px 12px 24px;
+  }
+
+  .running-qc-apple .review-workbench-split {
+    grid-template-columns: minmax(0, 1fr) 296px;
+    gap: 10px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(n)) {
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-heading),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__selection-cell),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(1)) {
+    width: 34px;
+    max-width: 34px !important;
+    padding-left: 4px;
+    padding-right: 2px !important;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__patient-cell) {
+    gap: 6px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__avatar) {
+    width: 22px;
+    height: 22px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(3)) {
+    width: 88px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__department) {
+    font-size: 12.5px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(4)) {
+    width: 108px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__summary-item) {
+    font-size: 12.5px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(5)) {
+    width: 112px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__row > td:nth-child(5)),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__latest-qc-cell) {
+    padding-left: 4px;
+    padding-right: 4px;
+    font-size: 12px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-heading),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__action-cell),
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table th:nth-child(6)) {
+    width: 144px;
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table__view-button) {
+    height: 25px;
+    padding: 0 7px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table__view-button + .qc-record-result-table__view-button) {
+    margin-left: 3px;
+  }
+
+  .running-qc-apple :deep(.preview-heading) {
+    padding: 14px 12px 10px;
+  }
+
+  .running-qc-apple :deep(.preview-heading-main) {
+    gap: 6px;
+  }
+
+  .running-qc-apple :deep(.preview-heading-title) {
+    gap: 5px;
+  }
+
+  .running-qc-apple :deep(.preview-primary-action .full-result-button) {
+    min-height: 30px;
+    padding: 4px 9px;
+    gap: 4px;
+  }
+
+  .running-qc-apple :deep(.preview-primary-action .full-result-label) {
+    gap: 4px;
+  }
+
+  .running-qc-apple :deep(.patient-context) {
+    margin: 0 12px 8px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .running-qc-apple .qc-record-result-list-view__export-options {
+    right: 0;
+    left: auto;
   }
 }
 
@@ -1296,6 +1628,10 @@
   .running-qc-refined.running-qc-apple {
     padding: 16px;
     gap: 14px;
+  }
+
+  .running-qc-apple :deep(.qc-record-result-table--compact-review .qc-record-result-table__table) {
+    min-width: 620px;
   }
 
   .running-qc-apple .qc-record-result-list-view__header.mq-page-head {

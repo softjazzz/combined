@@ -1,24 +1,36 @@
 <template>
   <div class="qc-run-selected-control">
-    <button
-      class="qc-run-selected-control__trigger"
-      type="button"
-      data-testid="run-selected-qc-trigger"
-      :disabled="isBusy || isSourcePending || normalizedRecordRefs.length === 0"
-      @click="startSelectedQc"
+    <Popconfirm
+      :open="confirmOpen"
+      :title="confirmTitle"
+      ok-text="开始质控"
+      cancel-text="取消"
+      placement="bottomRight"
+      overlay-class-name="qc-run-selected-control__popconfirm"
+      :disabled="isTriggerDisabled"
+      @update:open="handleConfirmOpenChange"
+      @confirm="confirmSelectedQc"
+      @cancel="cancelSelectedQc"
     >
-      <Play
-        :size="15"
-        aria-hidden="true"
-      />
-      质控所选
-      <span
-        v-if="selectedCount > 0"
-        class="qc-run-selected-control__count"
+      <button
+        class="qc-run-selected-control__trigger"
+        type="button"
+        data-testid="run-selected-qc-trigger"
+        :disabled="isTriggerDisabled"
       >
-        {{ selectedCount }}
-      </span>
-    </button>
+        <Play
+          :size="15"
+          aria-hidden="true"
+        />
+        质控所选
+        <span
+          v-if="selectedCount > 0"
+          class="qc-run-selected-control__count"
+        >
+          {{ selectedCount }}
+        </span>
+      </button>
+    </Popconfirm>
 
     <Teleport
       v-if="statusTarget"
@@ -86,6 +98,7 @@
 </template>
 
 <script setup lang="ts">
+import { Popconfirm } from 'ant-design-vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { LoaderCircle, Play, TriangleAlert } from 'lucide-vue-next'
 
@@ -130,6 +143,7 @@ const authStore = useAuthStore()
 const POLL_INTERVAL_MS = 3000
 const MAX_POLL_FAILURES = 3
 const state = ref<RunState>('idle')
+const confirmOpen = ref(false)
 const progressMessage = ref('')
 const frozenRecordRefs = ref<SelectedQcRecordRef[]>([])
 const taskJob = ref<SichuanBatchJob | null>(null)
@@ -144,7 +158,27 @@ const scene = computed<'running' | 'final'>(() =>
 const isSourcePending = computed(() => props.sourceId === '')
 const isBusy = computed(() => state.value === 'creating' || state.value === 'running')
 const normalizedRecordRefs = computed(() => normalizeRecordRefs(props.recordRefs))
+const confirmRecordCount = computed(() => normalizedRecordRefs.value.length)
+const isTriggerDisabled = computed(
+  () => isBusy.value || isSourcePending.value || normalizedRecordRefs.value.length === 0,
+)
+const confirmTitle = computed(
+  () => `将对已勾选的 ${confirmRecordCount.value} 份病历执行质控，是否继续？`,
+)
 const statusTarget = computed(() => String(props.statusTarget || '').trim())
+
+function handleConfirmOpenChange(nextOpen: boolean) {
+  confirmOpen.value = nextOpen && !isTriggerDisabled.value
+}
+
+function cancelSelectedQc() {
+  confirmOpen.value = false
+}
+
+function confirmSelectedQc() {
+  confirmOpen.value = false
+  void startSelectedQc()
+}
 
 function normalizeRecordRefs(values: SelectedQcRecordRef[]): SelectedQcRecordRef[] {
   const unique = new Map<string, SelectedQcRecordRef>()
@@ -314,6 +348,7 @@ function resetForScopeChange() {
   sessionGeneration += 1
   clearPollTimer()
   pollFailures = 0
+  confirmOpen.value = false
   state.value = 'idle'
   progressMessage.value = ''
   frozenRecordRefs.value = []
@@ -340,6 +375,10 @@ function restorePersistedJob() {
     clearPersistedJob(key)
   }
 }
+
+watch(isTriggerDisabled, (disabled) => {
+  if (disabled) confirmOpen.value = false
+})
 
 watch(
   () => [props.carePhase, props.sourceId] as const,

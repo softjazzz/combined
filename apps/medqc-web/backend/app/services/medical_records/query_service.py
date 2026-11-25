@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional
 import weakref
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import DateTime, String, and_, case, cast, exists, func, inspect as sa_inspect, or_, text, tuple_
+from sqlalchemy import DateTime, String, and_, case, cast, column, exists, func, inspect as sa_inspect, or_, select, table, text, tuple_
 from sqlalchemy.orm import Session
 
 from ..case_identity import CaseRef
@@ -333,15 +333,31 @@ def _escape_like_pattern(value: str) -> str:
     )
 
 
+def normalize_department_name(value: Any) -> str:
+    """规范化科室名称：去除首尾空白（含全角空格），统一半角括号为全角中文括号。"""
+    raw = str(value or "").strip().strip("\u3000").strip()
+    if not raw:
+        return ""
+    return raw.replace("(", "（").replace(")", "）")
+
+
+def _normalize_department_sql_expr(expr):
+    return func.replace(
+        func.replace(func.trim(expr), "(", "（"),
+        ")",
+        "）",
+    )
+
+
 def _department_filter_condition(dept_expr, dept: str):
-    normalized_dept = str(dept or "").strip()
+    normalized_dept = normalize_department_name(dept)
     if normalized_dept == "未分科室":
         return or_(
             dept_expr.is_(None),
             func.trim(dept_expr) == "",
-            dept_expr == "未分科室",
+            _normalize_department_sql_expr(dept_expr) == "未分科室",
         )
-    return dept_expr == normalized_dept
+    return _normalize_department_sql_expr(dept_expr) == normalized_dept
 
 
 def _workstation_keyword_condition(keyword: Optional[str]):
@@ -377,14 +393,14 @@ def _indexed_record_matches_case_scope(record: SimpleNamespace, case_scope) -> b
         return True
     if scope_institute and scope_doctor is not None and scope_department is not None:
         expected_doctor = str(scope_doctor).strip()
-        expected_department = str(scope_department).strip()
+        expected_department = normalize_department_name(scope_department)
         if not expected_doctor or not expected_department:
             return False
-        rec_dept = str(
+        rec_dept = normalize_department_name(
             getattr(record, "discharge_dept_name", None)
             or getattr(record, "admission_dept_name", None)
             or ""
-        ).strip()
+        )
         rec_doctor = str(getattr(record, "attending_physician_sign", None) or "").strip()
         return (
             identity[0] == scope_institute
@@ -482,16 +498,27 @@ def get_departments(*, case_scope=None) -> list[str]:
     if configured():
         from ..clinical_case_catalog import workstation
         result = workstation(case_scope=case_scope, page_size=1, qc_projection_loader=lambda _: {})
-        return [item["name"] for item in result["departments"]]
-    if case_scope is not None:
+        raw_depts = [item["name"] for item in result["departments"]]
+    elif case_scope is not None:
         if hasattr(case_scope, "department") and getattr(case_scope, "department", None):
-            return [case_scope.department]
-        if hasattr(case_scope, "institute_id") and getattr(case_scope, "institute_id", None):
+            raw_depts = [case_scope.department]
+        elif hasattr(case_scope, "institute_id") and getattr(case_scope, "institute_id", None):
             from .detail_service import list_departments_for_institute
-            return list_departments_for_institute(case_scope.institute_id)
-        return []
-    repo = get_repository()
-    return repo.list_departments()
+            raw_depts = list_departments_for_institute(case_scope.institute_id)
+        else:
+            raw_depts = []
+    else:
+        repo = get_repository()
+        raw_depts = repo.list_departments()
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for dept in raw_depts:
+        name = normalize_department_name(dept)
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    return normalized
 
 
 def _load_indexed_registration_records(
@@ -627,7 +654,12 @@ def _load_indexed_registration_records(
                     getattr(discharge, "dept_name", None)
                     or value("discharge_dept_name")
                 ),
-                admission_datetime=value("admission_datetime"),
+                admission_datetime=value(
+                    "admission_datetime",
+                    "record_datetime",
+                    "record_time",
+                    "submit_datetime",
+                ),
                 discharge_datetime=(
                     getattr(discharge, "discharge_time", None)
                     or value("discharge_datetime")
@@ -695,9 +727,11 @@ def _filter_indexed_registration_records(
             )
         ):
             continue
-        department = str(record.discharge_dept_name or record.admission_dept_name or "").strip()
+        department = normalize_department_name(
+            record.discharge_dept_name or record.admission_dept_name or ""
+        )
         if dept:
-            normalized_dept = str(dept).strip()
+            normalized_dept = normalize_department_name(dept)
             if normalized_dept == "未分科室":
                 if department and department != "未分科室":
                     continue
@@ -769,12 +803,16 @@ def _serialize_real_workstation_record(
     discharge_summary_map: dict[str, dict[str, Any]],
     latest_qc_summary_map: dict[tuple[str, str, str], dict[str, Any]],
     hospitalization_projection_map: dict[tuple[str, str, str], dict[str, Any]],
+    admission_fallback_map: dict[str, datetime] | None = None,
 ) -> dict[str, Any]:
     key = _workstation_record_key(record.institute_id, record.patient_id, record.visit_id)
     if not key:
         return {}
     discharge_summary = discharge_summary_map.get(key) or {}
-    resolved_admission_datetime = _parse_datetime_value(record.admission_datetime)
+    resolved_admission_datetime = (
+        _parse_datetime_value(record.admission_datetime)
+        or _parse_datetime_value((admission_fallback_map or {}).get(key))
+    )
     resolved_discharge_datetime = (
         _parse_datetime_value(discharge_summary.get("discharge_time"))
         or _parse_datetime_value(record.discharge_datetime)
@@ -783,7 +821,7 @@ def _serialize_real_workstation_record(
         discharge_summary.get("has_discharge_record")
         or getattr(record, "_has_discharge_record", False)
     )
-    resolved_dept_name = (
+    resolved_dept_name = normalize_department_name(
         discharge_summary.get("dept_name")
         or record.discharge_dept_name
         or record.admission_dept_name
@@ -1159,6 +1197,182 @@ def _clone_discharge_record_columns(
     return {name: dict(meta) for name, meta in columns.items()}
 
 
+def _inspect_clinical_table_columns(
+    session, table_name: str
+) -> tuple[str | None, set[str]]:
+    bind = session.get_bind()
+    if bind is None:
+        return None, set()
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    schema = clinical_read_schema()
+    if dialect_name == "postgresql":
+        target_schema = schema or "public"
+        rows = session.execute(
+            text(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = :table_name
+                  AND table_schema = :source_schema
+                """
+            ),
+            {"table_name": table_name, "source_schema": target_schema},
+        ).scalars().all()
+        return (target_schema if rows else None), {str(col) for col in rows}
+    inspector = sa_inspect(bind)
+    candidate_schemas = [schema, None] if schema else [None]
+    for candidate_schema in candidate_schemas:
+        if inspector.has_table(table_name, schema=candidate_schema):
+            cols = {
+                str(col["name"])
+                for col in inspector.get_columns(table_name, schema=candidate_schema)
+            }
+            return candidate_schema, cols
+    return None, set()
+
+
+def _load_workstation_admission_fallback_map(
+    session,
+    records: Iterable[Any],
+) -> dict[str, datetime]:
+    """为缺少首页 admission_datetime 的病历从入院登记/入院记录文书时间回填兜底入院时间。"""
+    missing_keys: set[str] = set()
+    missing_visit_ids: list[str] = []
+    seen_visit_ids: set[str] = set()
+    for record in records:
+        if _parse_datetime_value(getattr(record, "admission_datetime", None)) is not None:
+            continue
+        key = _workstation_record_key(
+            getattr(record, "institute_id", None),
+            getattr(record, "patient_id", None),
+            getattr(record, "visit_id", None),
+        )
+        if not key:
+            continue
+        missing_keys.add(key)
+        vid = str(getattr(record, "visit_id", None) or "").strip()
+        if vid and vid not in seen_visit_ids:
+            seen_visit_ids.add(vid)
+            missing_visit_ids.append(vid)
+    if not missing_keys or not missing_visit_ids:
+        return {}
+
+    fallback_map: dict[str, datetime] = {}
+
+    def _pick_earlier(current: datetime | None, candidate: datetime) -> datetime:
+        if current is None:
+            return candidate
+        cur_cmp = _workstation_comparable_datetime(current) or current
+        cand_cmp = _workstation_comparable_datetime(candidate) or candidate
+        return candidate if cand_cmp < cur_cmp else current
+
+    reg_schema, reg_cols = _inspect_clinical_table_columns(
+        session, InpatRegistration.__table__.name
+    )
+    if {"institute_id", "patient_id", "visit_id", "admission_datetime"}.issubset(reg_cols):
+        reg_tbl = table(
+            InpatRegistration.__table__.name,
+            column("institute_id"),
+            column("patient_id"),
+            column("visit_id"),
+            column("admission_datetime"),
+            schema=reg_schema,
+        )
+        reg_rows = session.execute(
+            select(
+                reg_tbl.c.institute_id,
+                reg_tbl.c.patient_id,
+                reg_tbl.c.visit_id,
+                reg_tbl.c.admission_datetime,
+            ).where(
+                reg_tbl.c.visit_id.in_(missing_visit_ids),
+                reg_tbl.c.admission_datetime.is_not(None),
+            )
+        ).mappings().all()
+        for row in reg_rows:
+            key = _workstation_record_key(
+                row.get("institute_id"), row.get("patient_id"), row.get("visit_id")
+            )
+            if key not in missing_keys:
+                continue
+            parsed = _parse_datetime_value(row.get("admission_datetime"))
+            if parsed is not None:
+                fallback_map[key] = _pick_earlier(fallback_map.get(key), parsed)
+
+    remaining_keys = missing_keys - set(fallback_map)
+    if not remaining_keys:
+        return fallback_map
+
+    remaining_visit_ids = list(
+        dict.fromkeys(
+            str(getattr(record, "visit_id", None) or "").strip()
+            for record in records
+            if _workstation_record_key(
+                getattr(record, "institute_id", None),
+                getattr(record, "patient_id", None),
+                getattr(record, "visit_id", None),
+            )
+            in remaining_keys
+            and str(getattr(record, "visit_id", None) or "").strip()
+        )
+    )
+    adm_schema, adm_cols = _inspect_clinical_table_columns(
+        session, AdmissionRecord.__table__.name
+    )
+    time_candidates = tuple(
+        col_name
+        for col_name in (
+            "admission_datetime",
+            "record_datetime",
+            "record_time",
+            "submit_datetime",
+        )
+        if col_name in adm_cols
+    )
+    if (
+        remaining_visit_ids
+        and {"institute_id", "patient_id", "visit_id"}.issubset(adm_cols)
+        and time_candidates
+    ):
+        adm_tbl = table(
+            AdmissionRecord.__table__.name,
+            column("institute_id"),
+            column("patient_id"),
+            column("visit_id"),
+            *(column(col_name) for col_name in time_candidates),
+            schema=adm_schema,
+        )
+        adm_rows = session.execute(
+            select(
+                adm_tbl.c.institute_id,
+                adm_tbl.c.patient_id,
+                adm_tbl.c.visit_id,
+                *(adm_tbl.c[col_name] for col_name in time_candidates),
+            ).where(adm_tbl.c.visit_id.in_(remaining_visit_ids))
+        ).mappings().all()
+        best_by_key: dict[str, tuple[int, datetime]] = {}
+        for row in adm_rows:
+            key = _workstation_record_key(
+                row.get("institute_id"), row.get("patient_id"), row.get("visit_id")
+            )
+            if key not in remaining_keys:
+                continue
+            for priority, col_name in enumerate(time_candidates):
+                parsed = _parse_datetime_value(row.get(col_name))
+                if parsed is None:
+                    continue
+                existing = best_by_key.get(key)
+                if existing is None or priority < existing[0]:
+                    best_by_key[key] = (priority, parsed)
+                elif priority == existing[0]:
+                    best_by_key[key] = (priority, _pick_earlier(existing[1], parsed))
+                break
+        for key, (_priority, dt) in best_by_key.items():
+            fallback_map[key] = dt
+
+    return fallback_map
+
+
 def _workstation_discharge_record_columns(session) -> dict[str, dict[str, Any]] | None:
     bind = session.get_bind()
     dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
@@ -1301,10 +1515,12 @@ def _workstation_discharge_join_condition(discharge_summary):
 def _workstation_department_expr(discharge_summary=None):
     department_candidates = []
     if discharge_summary is not None:
-        department_candidates.append(func.nullif(func.trim(discharge_summary.c.dept_name), ""))
+        department_candidates.append(
+            func.nullif(_normalize_department_sql_expr(discharge_summary.c.dept_name), "")
+        )
     department_candidates.extend([
-        func.nullif(func.trim(MedicalRecordFrontpage.discharge_dept_name), ""),
-        func.nullif(func.trim(MedicalRecordFrontpage.admission_dept_name), ""),
+        func.nullif(_normalize_department_sql_expr(MedicalRecordFrontpage.discharge_dept_name), ""),
+        func.nullif(_normalize_department_sql_expr(MedicalRecordFrontpage.admission_dept_name), ""),
         "",
     ])
     return func.coalesce(
@@ -1942,6 +2158,7 @@ def get_workstation_data(
                 }
 
         bed_map: dict[str, str] = {}
+        admission_fallback_map: dict[str, datetime] = {}
         if records:
             beds = clinical_query(
                 session,
@@ -1956,6 +2173,7 @@ def get_workstation_data(
                 key = _workstation_record_key(b.institute_id, b.patient_id, b.visit_id)
                 if key:
                     bed_map[key] = b.bed_no
+            admission_fallback_map = _load_workstation_admission_fallback_map(session, records)
 
         dept_expr = _workstation_department_expr(discharge_summary).label("dept_name")
         dept_stats_base_query = clinical_query(
@@ -2011,7 +2229,7 @@ def get_workstation_data(
                 in analytics_matching_identities
             ]
         indexed_department_totals = Counter(
-            str(row.discharge_dept_name or row.admission_dept_name or "")
+            normalize_department_name(row.discharge_dept_name or row.admission_dept_name or "")
             for row in indexed_department_records
         )
 
@@ -2162,11 +2380,17 @@ def get_workstation_data(
         departments = [{"name": "全部科室", "total": sum(d.total for d in dept_stats), "warningCount": 0}]
         dept_warning_counts: dict[str, int] = {}
         dept_total_map: dict[str, int] = {}
+        has_empty_dept_bucket = False
         for d in dept_stats:
-            dept_name = d.dept_name or ""
-            dept_total_map[dept_name] = int(d.total)
+            dept_name = normalize_department_name(d.dept_name or "")
+            if not dept_name:
+                has_empty_dept_bucket = True
+            dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + int(d.total)
         for dept_name, count in indexed_department_totals.items():
-            dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + int(count)
+            normalized_dept_name = normalize_department_name(dept_name)
+            dept_total_map[normalized_dept_name] = (
+                dept_total_map.get(normalized_dept_name, 0) + int(count)
+            )
 
         real_items = []
         for record in records:
@@ -2178,6 +2402,7 @@ def get_workstation_data(
                 discharge_summary_map,
                 latest_qc_summary_map,
                 hospitalization_projection_map,
+                admission_fallback_map=admission_fallback_map,
             )
             if not item:
                 continue
@@ -2188,23 +2413,20 @@ def get_workstation_data(
             real_items.append(item)
 
         for demo in visible_demos:
-            dept_name = demo.get("department") or ""
+            dept_name = normalize_department_name(demo.get("department") or "")
             dept_total_map[dept_name] = dept_total_map.get(dept_name, 0) + 1
 
-        for d in sorted(dept_stats, key=lambda x: x.total, reverse=True):
-            dept_name = d.dept_name or ""
+        for dept_name, total in sorted(
+            dept_total_map.items(),
+            key=lambda x: (-x[1], x[0]),
+        ):
+            if not dept_name and not has_empty_dept_bucket:
+                continue
             departments.append({
                 "name": dept_name,
-                "total": dept_total_map.get(dept_name, d.total),
+                "total": total,
                 "warningCount": dept_warning_counts.get(dept_name, 0),
             })
-
-        for dept_name, total in sorted(dept_total_map.items(), key=lambda x: x[1], reverse=True):
-            if not dept_name:
-                continue
-            if any(item["name"] == dept_name for item in departments):
-                continue
-            departments.append({"name": dept_name, "total": total, "warningCount": 0})
 
         total_count = total_real_filtered + demo_count
         departments[0]["total"] = int(dept_total_count) + demo_count

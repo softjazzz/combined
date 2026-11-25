@@ -41,6 +41,61 @@ router = APIRouter(
     ],
 )
 logger = logging.getLogger(__name__)
+_MATERIAL_FALLBACK_REASON = "historical_material_snapshot_not_retained"
+_MATERIAL_FALLBACK_NOTICE = (
+    "该历史质控轮次未保留冻结原文快照，当前已自动展示病历最新文书用于核对。"
+)
+
+
+def _filter_documents_by_scope(
+    documents: List[Dict[str, Any]],
+    document_scope: Optional[str],
+) -> List[Dict[str, Any]]:
+    if document_scope is None:
+        return [dict(document) for document in documents]
+    return [
+        dict(document)
+        for document in documents
+        if (document.get("group_key") == "orders") == (document_scope == "orders")
+    ]
+
+
+def _attach_material_fallback_metadata(
+    payload: Dict[str, Any],
+    reason: str = _MATERIAL_FALLBACK_REASON,
+) -> Dict[str, Any]:
+    return {
+        **payload,
+        "material_source_fallback": True,
+        "material_source_fallback_reason": reason or _MATERIAL_FALLBACK_REASON,
+        "material_source_view": "current",
+        "material_source_notice": _MATERIAL_FALLBACK_NOTICE,
+    }
+
+
+def _load_current_documents_for_fallback(
+    record_id: str,
+    institute_id: Optional[str],
+    patient_id: Optional[str],
+    visit_id: Optional[str],
+) -> Optional[Dict[str, Any]]:
+    current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
+    if current is not None:
+        return current
+    identity = {
+        "institute_id": str(institute_id or "").strip(),
+        "patient_id": str(patient_id or "").strip(),
+        "visit_id": _resolve_bundle_visit_id(record_id, visit_id),
+    }
+    if not all(identity.values()):
+        return None
+    try:
+        return load_current_documents(**identity, include_exam_evidence_coordinates=True)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning("回退读取当前病历文书失败: error_type=%s", type(exc).__name__)
+        raise HTTPException(503, "clinical_source_read_unavailable") from None
 
 
 def _resolve_bundle_visit_id(record_id: str, visit_id: Optional[str]) -> str:
@@ -128,11 +183,17 @@ def _load_documents_from_bundle(
     institute_id: Optional[str],
     patient_id: Optional[str],
     visit_id: Optional[str],
+    allow_current_fallback: bool = False,
 ) -> Dict[str, Any]:
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         return _project_customer_safe_source_refs(_frozen_documents_payload(frozen))
+    if allow_current_fallback:
+        current = _load_current_documents_for_fallback(record_id, institute_id, patient_id, visit_id)
+        if current is not None:
+            return _attach_material_fallback_metadata(_project_customer_safe_source_refs(current))
+        return _build_empty_documents_payload("missing_bundle_identity")
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
     if current is not None:
         return _project_customer_safe_source_refs(current)
@@ -167,22 +228,31 @@ def _load_document_summaries_from_bundle(
     visit_id: Optional[str],
     execution_domain: Optional[str] = None,
     document_scope: Optional[str] = None,
+    allow_current_fallback: bool = False,
 ) -> Dict[str, Any]:
     frozen = case_material.current()
     if frozen is not None:
         case_material.identity_check(frozen, (str(institute_id or "").strip(), str(patient_id or "").strip(), _resolve_bundle_visit_id(record_id, visit_id)))
         payload = frozen["documents"]
-        documents = [
-            dict(document) for document in payload["documents"]
-            if document_scope is None
-            or (document.get("group_key") == "orders") == (document_scope == "orders")
-        ]
+        documents = _filter_documents_by_scope(list(payload["documents"]), document_scope)
         if document_scope != "orders":
             restore_frozen_exam_evidence_coordinates(documents, frozen.get("tables") or {})
         return _project_customer_safe_source_refs(summarize_frozen_documents(
             documents=documents, execution_domain=execution_domain,
             daily_material_status=payload.get("daily_material_status"),
             primary_material_status=payload.get("primary_material_status")))
+    if allow_current_fallback:
+        current = _load_current_documents_for_fallback(record_id, institute_id, patient_id, visit_id)
+        if current is None:
+            return _build_empty_documents_payload("missing_bundle_identity")
+        documents = _filter_documents_by_scope(list(current.get("documents") or []), document_scope)
+        payload = _project_customer_safe_source_refs(summarize_frozen_documents(
+            documents=documents,
+            execution_domain=execution_domain,
+            daily_material_status=current.get("daily_material_status"),
+            primary_material_status=current.get("primary_material_status"),
+        ))
+        return _attach_material_fallback_metadata(payload)
     if document_scope is not None:
         raise HTTPException(409, "historical_material_snapshot_not_retained")
     current = _load_live_cdm_documents(record_id, institute_id, patient_id, visit_id)
@@ -370,6 +440,7 @@ async def get_record_documents(
     source_view: str = Query("saved", pattern="^(saved|current)$", description="当前病历或已保存文书"),
     document_scope: Optional[str] = Query(None, pattern="^(clinical|orders)$", description="历史文书目录中的非医嘱或医嘱"),
     include_clinical_surgery: bool = False,
+    fallback_to_current: bool = Query(False, description="历史快照未保留时是否平滑回退至当前病历文书"),
     execution_domain: Optional[str] = Query(
         None,
         description="摘要优先加载的文书领域；仅 view=summary 时生效",
@@ -377,6 +448,8 @@ async def get_record_documents(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """获取病历文书列表（BundleOnly）。"""
+    from ..services.validation_material_source import is_material_copy
+
     own_identity = getattr(request.state, "doctor_case_identity", None)
     verified_history_material: Optional[Dict[str, Any]] = None
     if own_identity:
@@ -428,6 +501,20 @@ async def get_record_documents(
             raise HTTPException(status_code=503, detail="文书更新失败，请稍后重试；本次未展示旧文书。") from exc
         payload = _project_customer_safe_source_refs(payload)
         return success_response(data=payload, message="已读取当前病历文书", trace_id=get_trace_id(request))
+    request_fallback = bool(getattr(request.state, "material_source_fallback", False))
+    allow_current_fallback = bool(
+        request_fallback
+        or (
+            fallback_to_current
+            and source_view == "saved"
+            and verified_history_material is None
+            and case_material.current() is None
+            and not is_material_copy(
+                str(patient_id or "").strip(),
+                _resolve_bundle_visit_id(record_id, visit_id),
+            )
+        )
+    )
     loader = _load_document_summaries_from_bundle if view == "summary" else _load_documents_from_bundle
     loader_kwargs = {
         "record_id": record_id,
@@ -439,6 +526,8 @@ async def get_record_documents(
         loader_kwargs["execution_domain"] = execution_domain
         if document_scope is not None:
             loader_kwargs["document_scope"] = document_scope
+    if allow_current_fallback:
+        loader_kwargs["allow_current_fallback"] = True
     payload = await run_in_threadpool(
         _run_with_verified_history_context,
         request,
@@ -446,6 +535,11 @@ async def get_record_documents(
         loader,
         **loader_kwargs,
     )
+    if request_fallback and not payload.get("material_source_fallback"):
+        payload = _attach_material_fallback_metadata(
+            payload,
+            str(getattr(request.state, "material_source_fallback_reason", "") or _MATERIAL_FALLBACK_REASON),
+        )
     documents = list(payload.get("documents") or [])
     return success_response(
         data=payload,
@@ -466,9 +560,12 @@ async def render_document(
     execution_domain: str = Query("", description="目录返回的文书领域"),
     source_view: str = "saved",
     clinical_surgery_version: str | None = Query(None, pattern="^[a-f0-9]{64}$"),
+    fallback_to_current: bool = Query(False, description="历史快照未保留时是否平滑回退至当前病历文书"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """获取文书内容 + 结构化渲染块 + 缺陷标注（BundleOnly）。"""
+    from ..services.validation_material_source import is_material_copy
+
     own_identity = getattr(request.state, "doctor_case_identity", None)
     inst_scope: Optional[str] = None
     verified_history_material: Optional[Dict[str, Any]] = None
@@ -519,9 +616,28 @@ async def render_document(
         }, message="获取手术记录成功", trace_id=get_trace_id(request))
     current = None
     active_material = case_material.current() or verified_history_material
+    request_fallback = bool(getattr(request.state, "material_source_fallback", False))
+    use_current_fallback = bool(
+        active_material is None
+        and (
+            request_fallback
+            or (
+                fallback_to_current
+                and source_view == "saved"
+                and not is_material_copy(
+                    str(patient_id or "").strip(),
+                    _resolve_bundle_visit_id(record_id, visit_id),
+                )
+            )
+        )
+    )
     if active_material is None:
-        current = await run_in_threadpool(
-            _load_live_cdm_documents, record_id, institute_id, patient_id, visit_id)
+        if use_current_fallback:
+            current = await run_in_threadpool(
+                _load_current_documents_for_fallback, record_id, institute_id, patient_id, visit_id)
+        else:
+            current = await run_in_threadpool(
+                _load_live_cdm_documents, record_id, institute_id, patient_id, visit_id)
     if current is not None:
         current = _project_customer_safe_source_refs(current)
         selected = _pick_live_document(
@@ -604,21 +720,27 @@ async def render_document(
             is_historical_view=is_historical_view,
         )
 
+    render_data = {
+        "layout_version": layout_version,
+        "content": content,
+        "content_type": content_type,
+        "defect_annotations": annotations,
+        "metadata": metadata,
+        "documents_tree": list(documents_payload.get("documents_tree") or []),
+        "render_blocks": render_blocks,
+        "highlight_anchors": highlight_anchors,
+        "empty_reason": empty_reason,
+        "total_annotations": len(annotations),
+        # loaded / no_result / unavailable：unavailable 表示读取失败，前端需提示而不是当作“无缺陷”
+        "annotation_status": annotation_status,
+    }
+    if use_current_fallback:
+        render_data = _attach_material_fallback_metadata(
+            render_data,
+            str(getattr(request.state, "material_source_fallback_reason", "") or _MATERIAL_FALLBACK_REASON),
+        )
     return success_response(
-        data={
-            "layout_version": layout_version,
-            "content": content,
-            "content_type": content_type,
-            "defect_annotations": annotations,
-            "metadata": metadata,
-            "documents_tree": list(documents_payload.get("documents_tree") or []),
-            "render_blocks": render_blocks,
-            "highlight_anchors": highlight_anchors,
-            "empty_reason": empty_reason,
-            "total_annotations": len(annotations),
-            # loaded / no_result / unavailable：unavailable 表示读取失败，前端需提示而不是当作“无缺陷”
-            "annotation_status": annotation_status,
-        },
+        data=render_data,
         message="获取文书渲染数据成功",
         trace_id=get_trace_id(request),
     )

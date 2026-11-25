@@ -336,20 +336,39 @@ def prepare_request(request: Request) -> None:
         raise HTTPException(503, "clinical_source_configuration_invalid") from None
 
 
+def _query_flag_enabled(request: Request, name: str) -> bool:
+    raw = str(request.query_params.get(name) or "").strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
 async def bind_request(request: Request):
     from . import case_material_snapshot as materials
+    from .validation_material_source import is_material_copy
     with clinical.selected(getattr(request.state, "clinical_source", legacy_snapshot())):
         frozen = None
+        request.state.material_source_fallback = False
+        request.state.material_source_fallback_reason = ""
         root_job = getattr(request.state, "material_root_job_id", "")
         if root_job:
             identity = tuple(request.query_params.get(key) or request.path_params.get(key) or "" for key in ("institute_id", "patient_id", "visit_id"))
+            allow_fallback = (
+                _query_flag_enabled(request, "fallback_to_current")
+                and not is_material_copy(identity[1], identity[2])
+            )
             try:
                 frozen = getattr(request.state, "verified_history_material", None)
                 if frozen is None:
                     frozen = materials.load(root_job, identity)
                 if frozen is None:
-                    raise HTTPException(409, "historical_material_snapshot_not_retained")
-                if request.query_params.get("source_view") == "current":
+                    if not allow_fallback:
+                        raise HTTPException(409, "historical_material_snapshot_not_retained")
+                    if request.query_params.get("source_view") == "current":
+                        raise HTTPException(409, "historical_and_current_material_views_conflict")
+                    request.state.material_source_fallback = True
+                    request.state.material_source_fallback_reason = (
+                        "historical_material_snapshot_not_retained"
+                    )
+                elif request.query_params.get("source_view") == "current":
                     raise HTTPException(409, "historical_and_current_material_views_conflict")
             except materials.MaterialSnapshotError:
                 raise HTTPException(409, "historical_material_snapshot_unavailable") from None
