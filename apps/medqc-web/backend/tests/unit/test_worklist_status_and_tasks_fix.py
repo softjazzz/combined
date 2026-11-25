@@ -844,3 +844,32 @@ async def test_batch_jobs_endpoint_direct_python_call_keeps_default_false(monkey
     )
     assert len(captured) == 1
     assert "exclude_validation" not in captured[0]
+
+
+def test_list_batch_jobs_exclude_validation_only_aggregates_requested_page(
+    monkeypatch, batch_jobs_store
+):
+    service, _ = batch_jobs_store
+    aggregated_ids: list[str] = []
+    original_aggregate = service._aggregate_parent_job
+
+    def tracked_aggregate(session, job, *, include_items=False):
+        aggregated_ids.append(str(job.get("id") or ""))
+        return original_aggregate(session, job, include_items=include_items)
+
+    monkeypatch.setattr(service, "_aggregate_parent_job", tracked_aggregate)
+
+    page1 = service.list_batch_jobs(
+        created_by="u-1", page=1, page_size=1, exclude_validation=True
+    )
+    assert page1.total == 2
+    assert [item["id"] for item in page1.items] == ["pool-job-2"]
+    assert aggregated_ids == ["pool-job-2"]
+
+    aggregated_ids.clear()
+    page2 = service.list_batch_jobs(
+        created_by="u-1", page=2, page_size=1, exclude_validation=True
+    )
+    assert page2.total == 2
+    assert [item["id"] for item in page2.items] == ["pool-job-1"]
+    assert aggregated_ids == ["pool-job-1"]

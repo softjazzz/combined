@@ -4094,27 +4094,65 @@ class CustomQCWorkspaceService:
                 executor_value in {"program", "llm"}
                 or cache_hit is not None
                 or institute_scope is not None
-                or bool(exclude_validation)
             )
 
             if not enable_runtime_filter:
-                total = int(
-                    session.execute(
-                        select(func.count()).select_from(self._batch_job_table).where(where_clause)
-                    ).scalar()
-                    or 0
-                )
-                rows = (
-                    session.execute(
-                        select(self._batch_job_table)
-                        .where(where_clause)
-                        .order_by(desc(self._batch_job_table.c.created_at))
-                        .offset(max(page - 1, 0) * page_size)
-                        .limit(page_size)
+                offset = max(page - 1, 0) * page_size
+                if not exclude_validation:
+                    total = int(
+                        session.execute(
+                            select(func.count()).select_from(self._batch_job_table).where(where_clause)
+                        ).scalar()
+                        or 0
                     )
-                    .mappings()
-                    .all()
-                )
+                    rows = (
+                        session.execute(
+                            select(self._batch_job_table)
+                            .where(where_clause)
+                            .order_by(desc(self._batch_job_table.c.created_at))
+                            .offset(offset)
+                            .limit(page_size)
+                        )
+                        .mappings()
+                        .all()
+                    )
+                else:
+                    candidate_rows = (
+                        session.execute(
+                            select(
+                                self._batch_job_table.c.id,
+                                self._batch_job_table.c.filters_json,
+                            )
+                            .where(where_clause)
+                            .order_by(desc(self._batch_job_table.c.created_at))
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    matched_job_ids = [
+                        str(row["id"])
+                        for row in candidate_rows
+                        if not is_sample_validation_batch_job(
+                            _safe_json_loads(row.get("filters_json"), {})
+                        )
+                    ]
+                    total = len(matched_job_ids)
+                    page_job_ids = matched_job_ids[offset : offset + page_size]
+                    if not page_job_ids:
+                        return WorkspaceBatchJobListResult(
+                            items=[], total=total, page=page, page_size=page_size
+                        )
+                    fetched_rows = (
+                        session.execute(
+                            select(self._batch_job_table).where(
+                                self._batch_job_table.c.id.in_(page_job_ids)
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    row_by_id = {str(row["id"]): row for row in fetched_rows}
+                    rows = [row_by_id[jid] for jid in page_job_ids if jid in row_by_id]
                 items = [
                     self._aggregate_parent_job(
                         session,
@@ -4125,23 +4163,51 @@ class CustomQCWorkspaceService:
                 ]
                 return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
-            rows = (
-                session.execute(
-                    select(self._batch_job_table)
-                    .where(where_clause)
-                    .order_by(desc(self._batch_job_table.c.created_at))
-                )
-                .mappings()
-                .all()
-            )
             if exclude_validation:
-                rows = [
-                    row
-                    for row in rows
+                candidate_rows = (
+                    session.execute(
+                        select(
+                            self._batch_job_table.c.id,
+                            self._batch_job_table.c.filters_json,
+                        )
+                        .where(where_clause)
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
+                matched_job_ids = [
+                    str(row["id"])
+                    for row in candidate_rows
                     if not is_sample_validation_batch_job(
                         _safe_json_loads(row.get("filters_json"), {})
                     )
                 ]
+                if not matched_job_ids:
+                    return WorkspaceBatchJobListResult(
+                        items=[], total=0, page=page, page_size=page_size
+                    )
+                fetched_rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .where(self._batch_job_table.c.id.in_(matched_job_ids))
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
+                row_by_id = {str(row["id"]): row for row in fetched_rows}
+                rows = [row_by_id[jid] for jid in matched_job_ids if jid in row_by_id]
+            else:
+                rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .where(where_clause)
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
             all_items = [
                 self._aggregate_parent_job(
                     session,
