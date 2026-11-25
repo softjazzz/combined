@@ -31,7 +31,11 @@
         </div>
       </header>
 
-      <dl class="fpqc-preview__facts">
+      <div
+        class="fpqc-preview__body"
+        data-testid="fpqc-preview-body"
+      >
+        <dl class="fpqc-preview__facts">
         <div>
           <dt>科室</dt>
           <dd>{{ record.department || result?.department || '—' }}</dd>
@@ -309,6 +313,7 @@
           </details>
         </template>
       </template>
+      </div>
     </template>
   </aside>
 </template>

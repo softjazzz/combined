@@ -19,7 +19,7 @@
   /* 文字：三级均 >= 4.5:1；disabled 只用于占位符与禁用态 */
   --mq-text-primary: #1d1d1f;
   --mq-text-secondary: #515154;
-  --mq-text-tertiary: #6e6e73;
+  --mq-text-tertiary: #59595e;
   --mq-text-disabled: #9a9da4;
   --mq-diagnostic-help-text: rgb(100 116 139);
 
@@ -45,16 +45,16 @@
     0 16px 40px rgba(10, 55, 115, 0.1);
   --mq-float-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.05), 0 2px 8px rgba(10, 55, 115, 0.1);
 
-  /* 语义色：text 用于文字，icon 用于图标/进度，bg/border 用于底色块；只用于数据状态 */
-  --mq-success-text: #1e9e47;
+  /* 语义色：text 用于文字（在各自底色上均达到 WCAG AA >= 4.5:1），icon 用于图标/进度，bg/border 用于底色块；只用于数据状态 */
+  --mq-success-text: #147344;
   --mq-success-icon: #34c759;
   --mq-success-bg: rgba(52, 199, 89, 0.12);
   --mq-success-border: rgba(52, 199, 89, 0.24);
-  --mq-warning-text: #c25e00;
+  --mq-warning-text: #9a4a00;
   --mq-warning-icon: #ff9500;
   --mq-warning-bg: rgba(255, 149, 0, 0.1);
   --mq-warning-border: rgba(255, 149, 0, 0.22);
-  --mq-danger-text: #e0263a;
+  --mq-danger-text: #c41c30;
   --mq-danger-icon: #ff3b30;
   --mq-danger-bg: rgba(255, 59, 48, 0.1);
   --mq-danger-border: rgba(255, 59, 48, 0.22);

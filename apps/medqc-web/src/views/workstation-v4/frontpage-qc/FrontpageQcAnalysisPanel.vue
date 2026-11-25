@@ -136,6 +136,7 @@
                       v-if="isDrillableDepartment(item.department)"
                       type="button"
                       class="fpqc-analysis__link"
+                      :title="item.department"
                       data-testid="fpqc-drill-department"
                       @click="emit('drill-department', item.department.trim())"
                     >

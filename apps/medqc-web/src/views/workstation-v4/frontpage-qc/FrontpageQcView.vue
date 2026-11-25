@@ -1,6 +1,7 @@
 <template>
-  <main
+  <section
     class="mq-page fpqc-page"
+    aria-label="首页质控"
     data-testid="frontpage-qc-view"
   >
     <section class="mq-page-head">
@@ -144,8 +145,9 @@
         >
         <select
           v-model="draft.department"
-          class="fpqc-toolbar__control"
+          class="fpqc-toolbar__control fpqc-toolbar__dept"
           aria-label="科室筛选"
+          :title="draft.department || '全部科室'"
         >
           <option value="">
             全部科室
@@ -300,18 +302,27 @@
 
     <p
       v-if="dateRangeError"
-      class="fpqc-page__notice"
+      class="fpqc-page__notice fpqc-page__notice--error"
       role="alert"
       data-testid="fpqc-date-error"
-      style="color: var(--mq-danger-text);"
     >
       {{ dateRangeError }}
     </p>
 
     <p
+      v-if="noticeError"
+      class="fpqc-page__notice fpqc-page__notice--error"
+      role="alert"
+      data-testid="fpqc-page-error"
+    >
+      {{ noticeError }}
+    </p>
+
+    <p
       v-if="notice"
-      class="fpqc-page__notice"
+      class="fpqc-page__notice fpqc-page__notice--status"
       role="status"
+      data-testid="fpqc-page-notice"
     >
       {{ notice }}
     </p>
@@ -476,7 +487,7 @@
         </div>
       </div>
     </Modal>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -617,6 +628,7 @@ const loading = ref(false)
 const listBusy = computed(() => loading.value || scopeChanging.value)
 const loadError = ref('')
 const notice = ref('')
+const noticeError = ref('')
 const exporting = ref(false)
 const auth = useAuthStore()
 const { confirmedResultsOnly } = useQcResultVisibility()
@@ -941,6 +953,9 @@ async function loadFilterOptions(
     if (!alive || seq !== filterSeq || controller.signal.aborted) return null
     departments.value = data.departments
     homeInstitute.value = data.home_institute
+    if (noticeError.value === '读取筛选项失败，请重试') {
+      noticeError.value = ''
+    }
     if (pruneApplied) {
       let appliedChanged = false
       if (draft.department && !departments.value.includes(draft.department)) draft.department = ''
@@ -969,7 +984,8 @@ async function loadFilterOptions(
   } catch (error) {
     if (!alive || seq !== filterSeq || controller.signal.aborted || isFrontpageQcAbortError(error)) return null
     departments.value = []
-    notice.value = '读取筛选项失败，请重试'
+    notice.value = ''
+    noticeError.value = '读取筛选项失败，请重试'
     return null
   } finally {
     if (filterController === controller) filterController = null
@@ -1164,17 +1180,20 @@ function runSelected() {
   const refs = selectedRefList()
   if (!refs.length) return
   notice.value = ''
+  noticeError.value = ''
   void start({ record_refs: refs })
 }
 
 function runOne(ref: FrontpageQcRef) {
   notice.value = ''
+  noticeError.value = ''
   void start({ record_refs: [ref] })
 }
 
 function runFiltered() {
   confirmOpen.value = false
   notice.value = ''
+  noticeError.value = ''
   void start({
     data_scope: applied.data_scope,
     department: applied.department,
@@ -1186,6 +1205,7 @@ function runFiltered() {
 
 function handleRunFinished(finished: FrontpageQcRun) {
   if (finished.status === 'completed' || finished.status === 'completed_with_errors') {
+    noticeError.value = ''
     notice.value = `首页质控完成：${finished.success_count} 份已出结果${finished.issue_records ? `，其中 ${finished.issue_records} 份有扣分问题` : ''}`
   }
   clearSelection()
@@ -1203,6 +1223,7 @@ async function exportWith(body: Parameters<typeof exportFrontpageQcRecords>[0], 
   exportController = controller
   exporting.value = true
   notice.value = ''
+  noticeError.value = ''
   try {
     const blob = await exportFrontpageQcRecords(frozenBody, { signal: controller.signal })
     if (!current() || controller.signal.aborted) return
@@ -1210,7 +1231,7 @@ async function exportWith(body: Parameters<typeof exportFrontpageQcRecords>[0], 
     notice.value = '已开始下载'
   } catch (error) {
     if (current() && !controller.signal.aborted && !isFrontpageQcAbortError(error)) {
-      notice.value = error instanceof Error ? error.message : '导出失败'
+      noticeError.value = error instanceof Error ? error.message : '导出失败'
     }
   } finally {
     if (exportController === controller) exportController = null

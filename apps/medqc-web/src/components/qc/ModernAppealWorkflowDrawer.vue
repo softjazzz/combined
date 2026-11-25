@@ -36,6 +36,7 @@
           </span>
         </label>
         <button
+          type="submit"
           class="mq-btn mq-btn--primary"
           :disabled="saving || uncertain || reason.trim().length < 10"
         >
@@ -60,7 +61,7 @@
             <option v-for="(label, key) in labels" :key="key" :value="key">{{ label }}</option>
           </select></label
         >
-        <button class="mq-btn" :disabled="saving || loading" @click="refresh">
+        <button type="button" class="mq-btn" :disabled="saving || loading" @click="refresh">
           <MqIcon name="sync" :size="16" />刷新核对
         </button>
       </div>
@@ -70,7 +71,7 @@
       <template v-else>
         <ul class="appeal-list">
           <li v-for="item in items" :key="item.id">
-            <button class="appeal-row" :disabled="saving" @click="show(item.id)">
+            <button type="button" class="appeal-row" :disabled="saving" @click="show(item.id)">
               <span
                 >{{ item.scene === 'running' ? '运行' : '终末' }} ·
                 {{ item.target_kind === 'canonical_defect' ? '自动' : '人工' }} ·
@@ -87,9 +88,16 @@
         </ul>
         <p v-if="!error && !items.length">没有符合条件的申诉</p>
         <nav v-if="total" class="appeal-toolbar" aria-label="申诉分页">
-          <button class="mq-btn" :disabled="page === 1 || saving" @click="move(-1)">上一页</button>
+          <button type="button" class="mq-btn" :disabled="page === 1 || saving" @click="move(-1)">
+            上一页
+          </button>
           <span>第 {{ page }} 页 / {{ total }} 条</span>
-          <button class="mq-btn" :disabled="page * 10 >= total || saving" @click="move(1)">
+          <button
+            type="button"
+            class="mq-btn"
+            :disabled="page * 10 >= total || saving"
+            @click="move(1)"
+          >
             下一页
           </button>
         </nav>
@@ -127,6 +135,7 @@
             <button
               v-for="operation in operations"
               :key="operation.value"
+              type="button"
               class="mq-btn"
               :class="{ 'mq-btn--primary': operation.value === 'approve' }"
               :disabled="saving || uncertain || comment.trim().length < 10"
@@ -222,8 +231,8 @@ const statusClass = (status: AppealState) =>
     reviewing: 'mq-status--info',
     approved: 'mq-status--success',
     rejected: 'mq-status--danger',
-    withdrawn: 'mq-status--neutral',
-    superseded: 'mq-status--neutral',
+    withdrawn: '',
+    superseded: '',
   })[status]
 const items = ref<ModernAppeal[]>([]),
   selected = ref<AppealDetail | null>(null)
@@ -403,7 +412,7 @@ onUnmounted(reset)
 .appeal-row {
   display: grid;
   gap: 6px;
-  padding: 12px 0;
+  padding: 12px 4px;
   border: 0;
   border-bottom: 1px solid var(--mq-border);
   background: transparent;
@@ -412,6 +421,13 @@ onUnmounted(reset)
   width: 100%;
   cursor: pointer;
   overflow-wrap: anywhere;
+}
+.appeal-row:hover {
+  background: var(--mq-bg-muted);
+}
+.appeal-row:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
 }
 .appeal-detail {
   border-top: 1px solid var(--mq-border);
@@ -424,16 +440,22 @@ onUnmounted(reset)
   overflow-wrap: anywhere;
 }
 .appeal-error {
-  color: var(--mq-danger);
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
 }
 .appeal-time {
   display: block;
-  color: var(--mq-text-muted);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 .appeal-field-hint {
   display: block;
-  color: var(--mq-text-muted);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 </style>

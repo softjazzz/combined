@@ -12,23 +12,35 @@
       <div class="workflow-toolbar">
         <div class="mq-segmented" role="tablist" aria-label="人工缺陷工作">
           <button
+            id="manual-defect-tab-entry"
+            ref="entryTabRef"
+            type="button"
             class="mq-segmented__item"
             role="tab"
             :aria-selected="tab === 'entry'"
+            aria-controls="manual-defect-panel-entry"
+            :tabindex="tab === 'entry' ? 0 : -1"
             :class="{ 'is-active': tab === 'entry' }"
             :disabled="saving || !!pending"
             @click="switchTab('entry')"
+            @keydown="handleTabKeydown"
           >
             受领病例录入
           </button>
           <button
             v-if="canReview"
+            id="manual-defect-tab-review"
+            ref="reviewTabRef"
+            type="button"
             class="mq-segmented__item"
             role="tab"
             :aria-selected="tab === 'review'"
+            aria-controls="manual-defect-panel-review"
+            :tabindex="tab === 'review' ? 0 : -1"
             :class="{ 'is-active': tab === 'review' }"
             :disabled="saving || !!pending"
             @click="switchTab('review')"
+            @keydown="handleTabKeydown"
           >
             待审核 {{ count ?? '未知' }}
           </button>
@@ -41,14 +53,22 @@
             <option value="final">终末</option>
           </select>
         </label>
-        <button class="mq-btn" :disabled="busy || saving || !!pending" @click="reload()">
+        <button type="button" class="mq-btn" :disabled="busy || saving || !!pending" @click="reload()">
           <MqIcon name="sync" :size="16" />刷新
         </button>
       </div>
       <p v-if="error" class="workflow-error" role="alert">{{ error }}</p>
       <p v-if="notice" role="status">{{ notice }}</p>
       <p v-if="busy" role="status">正在核对人工缺陷…</p>
-      <template v-else-if="tab === 'entry'">
+      <div
+        id="manual-defect-panel-entry"
+        role="tabpanel"
+        aria-labelledby="manual-defect-tab-entry"
+        class="workflow-panel"
+        :hidden="tab !== 'entry'"
+        :tabindex="tab === 'entry' ? 0 : -1"
+      >
+        <template v-if="!busy && tab === 'entry'">
         <label class="mq-field"
           ><span class="mq-field__label">本人受领病例</span>
           <select
@@ -72,6 +92,7 @@
         <p v-if="!contexts.length">没有可录入的受领任务病历</p>
         <nav v-if="page > 1 || moreContexts" aria-label="受领病例分页" class="workflow-actions">
           <button
+            type="button"
             class="mq-btn"
             :disabled="page === 1 || saving || !!pending"
             @click="movePage(-1)"
@@ -80,6 +101,7 @@
           </button>
           <span>第 {{ page }} 页</span
           ><button
+            type="button"
             class="mq-btn"
             :disabled="!moreContexts || saving || !!pending"
             @click="movePage(1)"
@@ -173,6 +195,7 @@
           </ul>
           <button
             v-if="own.length < ownTotal"
+            type="button"
             class="mq-btn"
             :disabled="ownBusy"
             @click="loadOwn(true)"
@@ -180,8 +203,18 @@
             加载更多
           </button>
         </template>
-      </template>
-      <template v-else>
+        </template>
+      </div>
+      <div
+        v-if="canReview"
+        id="manual-defect-panel-review"
+        role="tabpanel"
+        aria-labelledby="manual-defect-tab-review"
+        class="workflow-panel"
+        :hidden="tab !== 'review'"
+        :tabindex="tab === 'review' ? 0 : -1"
+      >
+        <template v-if="!busy && tab === 'review'">
         <label class="mq-field"
           ><span class="mq-field__label">审核状态</span
           ><select v-model="status" class="mq-input" :disabled="saving" @change="query">
@@ -211,6 +244,7 @@
               <p v-if="self(item)">本人录入的缺陷不能自审</p>
               <div class="workflow-actions">
                 <button
+                  type="button"
                   class="mq-btn mq-btn--primary"
                   :disabled="saving || self(item)"
                   @click="decide(item, 'approved')"
@@ -218,6 +252,7 @@
                   审核通过
                 </button>
                 <button
+                  type="button"
                   class="mq-btn"
                   :disabled="saving || self(item) || !reasons[item.id]?.trim()"
                   @click="decide(item, 'rejected')"
@@ -230,11 +265,12 @@
           <li v-if="total === 0">没有匹配的人工缺陷</li>
         </ul>
         <nav aria-label="人工审核分页" class="workflow-actions">
-          <button class="mq-btn" :disabled="page === 1 || saving" @click="movePage(-1)">
+          <button type="button" class="mq-btn" :disabled="page === 1 || saving" @click="movePage(-1)">
             上一页
           </button>
           <span>第 {{ page }} 页</span
           ><button
+            type="button"
             class="mq-btn"
             :disabled="total === null || page * 20 >= total || saving"
             @click="movePage(1)"
@@ -242,7 +278,8 @@
             下一页
           </button>
         </nav>
-      </template>
+        </template>
+      </div>
     </section>
   </a-drawer>
 </template>
@@ -375,11 +412,38 @@ async function reload() {
     if (token === generation) busy.value = false
   }
 }
+const entryTabRef = ref<HTMLButtonElement | null>(null)
+const reviewTabRef = ref<HTMLButtonElement | null>(null)
+
 function switchTab(value: 'entry' | 'review') {
   tab.value = value
   page.value = 1
   notice.value = ''
   void reload()
+}
+function handleTabKeydown(event: KeyboardEvent) {
+  if (saving.value || !!pending.value) return
+  const tabs: Array<'entry' | 'review'> = canReview.value ? ['entry', 'review'] : ['entry']
+  if (tabs.length < 2) return
+  const currentIndex = tabs.indexOf(tab.value)
+  let nextIndex: number | null = null
+  if (event.key === 'ArrowRight') {
+    nextIndex = (currentIndex + 1) % tabs.length
+  } else if (event.key === 'ArrowLeft') {
+    nextIndex = (currentIndex - 1 + tabs.length) % tabs.length
+  } else if (event.key === 'Home') {
+    nextIndex = 0
+  } else if (event.key === 'End') {
+    nextIndex = tabs.length - 1
+  }
+  if (nextIndex === null) return
+  event.preventDefault()
+  const nextTab = tabs[nextIndex]
+  if (nextTab !== tab.value) {
+    switchTab(nextTab)
+  }
+  const targetEl = nextTab === 'entry' ? entryTabRef.value : reviewTabRef.value
+  targetEl?.focus()
 }
 function selectContext() {
   Object.assign(draft, defaults())
@@ -519,11 +583,15 @@ onUnmounted(() => {
 </script>
 <style scoped>
 .manual-workflow,
-.workflow-form {
+.workflow-form,
+.workflow-panel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 16px;
   min-width: 0;
+}
+.workflow-panel[hidden] {
+  display: none;
 }
 .workflow-toolbar,
 .workflow-actions {

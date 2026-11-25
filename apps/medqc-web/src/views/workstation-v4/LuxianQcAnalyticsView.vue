@@ -34,18 +34,21 @@
               v-model:value="dateRange"
               show-time
               value-format="YYYY-MM-DDTHH:mm:ss"
+              aria-label="质控完成时间范围"
             />
             <a-select
               v-if="!isDepartmentReport"
               v-model:value="department"
               allow-clear
               placeholder="全部科室"
+              aria-label="筛选科室"
               :options="departmentOptions"
             />
             <a-input
               v-model:value="jobId"
               allow-clear
               placeholder="已完成任务 ID（可选）"
+              aria-label="已完成任务 ID"
             />
             <a-button
               type="primary"
@@ -73,8 +76,8 @@
           data-testid="analytics-scope"
         >
           <div class="analytics-scope-copy">
-            <span>按质控完成时间</span><i />
-            <span>{{ payload.scope.department || '全部科室' }}</span><i />
+            <span>按质控完成时间</span><i aria-hidden="true" />
+            <span>{{ payload.scope.department || '全部科室' }}</span><i aria-hidden="true" />
             <span>泸县0609终末质控</span>
             <small>版本 {{ payload.scope.rule_set_version }}</small>
           </div>
@@ -99,6 +102,7 @@
         v-if="error"
         class="analytics-notice analytics-surface"
         data-testid="analytics-error"
+        role="alert"
       >
         <div>
           <strong>统计范围暂时无法加载</strong>
@@ -142,7 +146,7 @@
             data-testid="analytics-kpi"
           >
             <span>{{ card.label }}</span>
-            <strong>{{ card.value }}</strong>
+            <strong>{{ card.value.toLocaleString() }}</strong>
           </article>
         </section>
 
@@ -169,16 +173,21 @@
               <div class="conclusion-layout">
                 <div
                   class="status-ring"
+                  role="img"
+                  :aria-label="statusRingAriaLabel"
                   :style="{ background: statusRingBackground }"
                 >
-                  <span><strong>{{ primaryConcernTotal }}</strong><small>需重点关注</small></span>
+                  <span aria-hidden="true"><strong>{{ primaryConcernTotal.toLocaleString() }}</strong><small>需重点关注</small></span>
                 </div>
                 <ul class="status-legend">
                   <li
                     v-for="item in statusItems"
                     :key="item.status"
                   >
-                    <i :style="{ background: item.color }" />
+                    <i
+                      aria-hidden="true"
+                      :style="{ background: item.color }"
+                    />
                     <span>{{ item.label }}</span>
                     <strong>{{ item.count.toLocaleString() }}</strong>
                   </li>
@@ -204,14 +213,18 @@
                 v-if="hasTrend"
                 class="rhythm-chart"
                 data-testid="analytics-trend"
+                role="img"
+                :aria-label="trendChartAriaLabel"
               >
                 <div
                   v-for="item in completionSeries"
                   :key="item.bucket"
                   class="rhythm-bar"
                 >
-                  <span>{{ item.completed_event_total }}</span>
-                  <i :style="{ height: `${trendPercent(item.completed_event_total)}%` }" />
+                  <span>{{ item.completed_event_total.toLocaleString() }}</span>
+                  <div class="rhythm-bar-track">
+                    <i :style="{ height: `${trendPercent(item.completed_event_total)}%` }" />
+                  </div>
                   <small>{{ item.bucket.slice(5) }}</small>
                 </div>
               </div>
@@ -254,8 +267,15 @@
                   @click="openDepartmentReport(item.department)"
                 >
                   <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="department-name">{{ item.department }}</span>
-                  <span class="department-track">
+                  <span
+                    class="department-name"
+                    :title="item.department"
+                  >{{ item.department }}</span>
+                  <span
+                    class="department-track"
+                    role="img"
+                    :aria-label="riskBarAriaLabel(item.department, item)"
+                  >
                     <i
                       v-if="item.primaryNonCompliant"
                       class="bar-danger"
@@ -278,7 +298,7 @@
                       }"
                     />
                   </span>
-                  <strong>{{ item.problemTotal }}</strong>
+                  <strong>{{ item.problemTotal.toLocaleString() }}</strong>
                 </button>
               </div>
               <a-empty
@@ -290,6 +310,7 @@
 
             <article
               class="analytics-surface analytics-panel analytics-physician-panel"
+              :class="{ 'is-full-span': isDepartmentReport }"
               data-testid="analytics-physician-chart"
             >
               <header class="panel-heading">
@@ -312,8 +333,15 @@
                   ]"
                 >
                   <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="physician-name">{{ item.physician }}</span>
-                  <span class="department-track">
+                  <span
+                    class="physician-name"
+                    :title="item.physician"
+                  >{{ item.physician }}</span>
+                  <span
+                    class="department-track"
+                    role="img"
+                    :aria-label="riskBarAriaLabel(item.physician, item)"
+                  >
                     <i
                       v-if="item.primaryNonCompliant"
                       class="bar-danger"
@@ -334,7 +362,7 @@
                       }"
                     />
                   </span>
-                  <strong>{{ item.problemTotal }}</strong>
+                  <strong>{{ item.problemTotal.toLocaleString() }}</strong>
                 </div>
               </div>
               <a-empty
@@ -373,13 +401,22 @@
                       <small>{{ item.rule_id }}</small>
                       <strong>{{ item.rule_name }}</strong>
                       <span class="rule-breakdown">
-                        <em v-if="item.non_compliant_count">确定 {{ item.non_compliant_count }}</em>
-                        <em v-if="!confirmedResultsOnly && item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
-                        <em v-if="!confirmedResultsOnly && item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
+                        <em
+                          v-if="item.non_compliant_count"
+                          class="is-danger"
+                        >确定 {{ item.non_compliant_count.toLocaleString() }}</em>
+                        <em
+                          v-if="!confirmedResultsOnly && item.data_gap_count"
+                          class="is-warning"
+                        >待核实 {{ item.data_gap_count.toLocaleString() }}</em>
+                        <em
+                          v-if="!confirmedResultsOnly && item.uncertain_count"
+                          class="is-neutral"
+                        >待判断 {{ item.uncertain_count.toLocaleString() }}</em>
                       </span>
                     </span>
                     <span class="rule-count">
-                      <strong>{{ ruleConcernTotal(item) }}</strong>
+                      <strong>{{ ruleConcernTotal(item).toLocaleString() }}</strong>
                       <small>问题结果</small>
                     </span>
                   </button>
@@ -658,7 +695,15 @@ const departmentItems = computed(() =>
     .slice(0, 8),
 )
 const departmentMax = computed(() =>
-  Math.max(1, ...departmentItems.value.map((item) => item.problemTotal)),
+  Math.max(
+    1,
+    ...departmentItems.value.map((item) =>
+      Math.max(
+        item.problemTotal,
+        item.primaryNonCompliant + item.primaryDataGap + item.primaryUncertain,
+      ),
+    ),
+  ),
 )
 const physicianItems = computed(() =>
   (payload.value?.physician_distribution || [])
@@ -677,7 +722,15 @@ const physicianItems = computed(() =>
     .slice(0, 8),
 )
 const physicianMax = computed(() =>
-  Math.max(1, ...physicianItems.value.map((item) => item.problemTotal)),
+  Math.max(
+    1,
+    ...physicianItems.value.map((item) =>
+      Math.max(
+        item.problemTotal,
+        item.primaryNonCompliant + item.primaryDataGap + item.primaryUncertain,
+      ),
+    ),
+  ),
 )
 const ruleItems = computed(() =>
   [...(payload.value?.rule_distribution || [])]
@@ -694,6 +747,20 @@ const ruleItems = computed(() =>
 )
 const completionSeries = computed(() => payload.value?.completion_time_series || [])
 const hasTrend = computed(() => completionSeries.value.length >= 2)
+const statusRingAriaLabel = computed(() => {
+  if (!statusTotal.value) return '质控结论分布：暂无有效结论'
+  const breakdown = statusItems.value
+    .map((item) => `${item.label} ${item.count.toLocaleString()} 条`)
+    .join('，')
+  return `质控结论分布：共 ${statusTotal.value.toLocaleString()} 条有效结论，需重点关注 ${primaryConcernTotal.value.toLocaleString()} 条；${breakdown}`
+})
+const trendChartAriaLabel = computed(() => {
+  if (!completionSeries.value.length) return '近期质控完成量趋势：暂无连续时间序列'
+  const summary = completionSeries.value
+    .map((item) => `${item.bucket} 完成 ${item.completed_event_total.toLocaleString()} 次`)
+    .join('，')
+  return `近期质控完成量趋势（共 ${completionSeries.value.length} 天）：${summary}`
+})
 const kpiCards = computed(() => {
   const cards = [
     {
@@ -731,11 +798,18 @@ function formatTime(value: string) {
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
 function barPercent(value: number, maximum: number) {
-  return Math.max(0, Math.round((value / maximum) * 100))
+  if (value <= 0 || maximum <= 0) return 0
+  return Math.min(100, Math.floor((value * 10000) / maximum) / 100)
 }
 function trendPercent(value: number) {
   const maximum = Math.max(1, ...completionSeries.value.map((item) => item.completed_event_total))
-  return Math.max(10, Math.round((value / maximum) * 100))
+  return Math.min(100, Math.max(10, Math.round((value / maximum) * 100)))
+}
+function riskBarAriaLabel(name: string, item: ResolvedRiskMetrics) {
+  if (confirmedResultsOnly.value) {
+    return `${name}风险分布：共 ${item.problemTotal.toLocaleString()} 份确定问题病历`
+  }
+  return `${name}风险分布：共 ${item.problemTotal.toLocaleString()} 份问题病历（确定问题 ${item.primaryNonCompliant.toLocaleString()}，资料待核实 ${item.primaryDataGap.toLocaleString()}，待判断 ${item.primaryUncertain.toLocaleString()}）`
 }
 function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
   if (confirmedResultsOnly.value) return item.non_compliant_count
@@ -990,6 +1064,11 @@ onBeforeUnmount(() => {
   justify-content: space-between;
 }
 
+.analytics-heading > div:first-child {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
 .analytics-eyebrow,
 .panel-heading p {
   color: #0a6cff;
@@ -1029,7 +1108,7 @@ onBeforeUnmount(() => {
 }
 
 .analytics-heading p:not(.analytics-eyebrow) {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   margin: 5px 0 0;
 }
@@ -1040,6 +1119,7 @@ onBeforeUnmount(() => {
   flex: 1;
   gap: 8px;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .analytics-toolbar :deep(.ant-picker) {
@@ -1071,7 +1151,7 @@ onBeforeUnmount(() => {
 
 .analytics-scope-copy {
   align-items: center;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   display: flex;
   flex-wrap: wrap;
   font-size: 12px;
@@ -1080,21 +1160,21 @@ onBeforeUnmount(() => {
 }
 
 .analytics-scope-copy i {
-  background: rgba(29, 29, 31, 0.24);
+  background: var(--mq-border-strong, rgba(29, 29, 31, 0.24));
   border-radius: 50%;
   height: 3px;
   width: 3px;
 }
 
 .analytics-scope-copy small {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 500;
 }
 
 .analytics-health-indicator {
   align-items: center;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-secondary);
   display: flex;
   font-size: 11px;
   gap: 7px;
@@ -1102,20 +1182,20 @@ onBeforeUnmount(() => {
 }
 
 .analytics-health-indicator span {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-secondary);
 }
 
 .analytics-health-indicator strong {
-  color: #059669;
+  color: #047857;
   font-weight: 700;
 }
 
 .analytics-health-indicator.has-attention strong {
-  color: #c17a08;
+  color: #9a4a00;
 }
 
 .analytics-health-indicator small {
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
 }
 
 .analytics-notice,
@@ -1136,7 +1216,7 @@ onBeforeUnmount(() => {
 
 .analytics-notice span,
 .analytics-loading span {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   display: block;
   font-size: 13px;
   margin-top: 3px;
@@ -1189,7 +1269,7 @@ onBeforeUnmount(() => {
 }
 
 .analytics-kpi span {
-  color: rgba(29, 29, 31, 0.55);
+  color: var(--mq-text-secondary);
   display: block;
   font-size: 15px;
   font-weight: 600;
@@ -1197,7 +1277,7 @@ onBeforeUnmount(() => {
 }
 
 .analytics-kpi strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   display: block;
   font-size: 28px;
   letter-spacing: -0.03em;
@@ -1214,7 +1294,7 @@ onBeforeUnmount(() => {
 }
 
 .analytics-kpi.is-warning strong {
-  color: #c17a08;
+  color: #9a4a00;
 }
 
 .analytics-overview-grid,
@@ -1251,7 +1331,7 @@ onBeforeUnmount(() => {
 }
 
 .panel-note {
-  color: rgba(29, 29, 31, 0.44);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   line-height: 18px;
   text-align: right;
@@ -1284,7 +1364,7 @@ onBeforeUnmount(() => {
 }
 
 .status-ring span {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   grid-area: 1 / 1;
   position: relative;
   text-align: center;
@@ -1297,7 +1377,7 @@ onBeforeUnmount(() => {
 }
 
 .status-ring strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 26px;
   letter-spacing: -0.04em;
   line-height: 30px;
@@ -1332,7 +1412,7 @@ onBeforeUnmount(() => {
 }
 
 .status-legend span {
-  color: rgba(29, 29, 31, 0.63);
+  color: var(--mq-text-secondary);
 }
 
 .status-legend strong {
@@ -1345,26 +1425,36 @@ onBeforeUnmount(() => {
 }
 
 .rhythm-chart {
-  align-items: end;
+  align-items: stretch;
   display: flex;
   flex: 1;
   gap: 8px;
   height: 170px;
   margin: 20px 0 0;
-  padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px 4px;
 }
 
 .rhythm-bar {
   align-items: center;
   display: flex;
-  flex: 1;
+  flex: 1 0 32px;
   flex-direction: column;
   height: 100%;
-  justify-content: end;
-  min-width: 24px;
+  min-width: 32px;
 }
 
-.rhythm-bar i {
+.rhythm-bar-track {
+  align-items: flex-end;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+}
+
+.rhythm-bar-track i {
   background: #0a6cff;
   border-radius: 6px 6px 2px 2px;
   display: block;
@@ -1375,12 +1465,16 @@ onBeforeUnmount(() => {
 
 .rhythm-bar span,
 .rhythm-bar small {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
+  flex: none;
   font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
 }
 
 .rhythm-bar span {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   margin-bottom: 5px;
 }
@@ -1391,7 +1485,7 @@ onBeforeUnmount(() => {
 
 .rhythm-empty {
   align-items: center;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1400,7 +1494,7 @@ onBeforeUnmount(() => {
 }
 
 .rhythm-empty strong {
-  color: rgba(29, 29, 31, 0.7);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -1424,7 +1518,7 @@ onBeforeUnmount(() => {
   cursor: pointer;
   display: grid;
   gap: 10px;
-  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) 32px;
+  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) minmax(40px, auto);
   padding: 4px 6px;
   text-align: left;
   transition: background 200ms ease;
@@ -1436,7 +1530,7 @@ onBeforeUnmount(() => {
 }
 
 .department-rank {
-  color: rgba(29, 29, 31, 0.34);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1474,9 +1568,15 @@ onBeforeUnmount(() => {
 }
 
 .department-row strong {
-  color: rgba(29, 29, 31, 0.76);
+  color: var(--mq-text-secondary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
+}
+
+.analytics-physician-panel.is-full-span {
+  grid-column: 1 / -1;
 }
 
 .physician-chart {
@@ -1489,12 +1589,12 @@ onBeforeUnmount(() => {
   align-items: center;
   display: grid;
   gap: 10px;
-  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) 32px;
+  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) minmax(40px, auto);
   padding: 4px 6px;
 }
 
 .physician-row.is-unassigned .physician-name {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
 }
 
 .physician-name {
@@ -1505,9 +1605,11 @@ onBeforeUnmount(() => {
 }
 
 .physician-row strong {
-  color: rgba(29, 29, 31, 0.76);
+  color: var(--mq-text-secondary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
 }
 
 .analytics-rule-panel {
@@ -1544,6 +1646,19 @@ onBeforeUnmount(() => {
   background: rgba(10, 108, 255, 0.045);
 }
 
+.department-row:focus-visible,
+.rule-list button:focus-visible,
+.analytics-toolbar :deep(.ant-btn:focus-visible),
+.analytics-notice :deep(.ant-btn:focus-visible) {
+  outline: 2px solid var(--mq-brand-600, #0a6cff);
+  outline-offset: 2px;
+}
+
+.department-row:focus-visible,
+.rule-list button:focus-visible {
+  background: rgba(10, 108, 255, 0.045);
+}
+
 .rule-rank {
   color: #0a6cff;
   font-size: 13px;
@@ -1564,7 +1679,7 @@ onBeforeUnmount(() => {
 
 .rule-copy small,
 .rule-count small {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 10px;
 }
 
@@ -1576,22 +1691,27 @@ onBeforeUnmount(() => {
 }
 
 .rule-breakdown em {
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--mq-neutral-bg, rgba(148, 163, 184, 0.14));
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 10px;
+  color: var(--mq-neutral-text, #4a5468);
+  font-size: 11px;
   font-style: normal;
-  padding: 1px 6px;
+  padding: 1px 7px;
 }
 
-.rule-breakdown em:first-child {
-  background: rgba(239, 68, 68, 0.1);
-  color: #c2410c;
+.rule-breakdown em.is-danger {
+  background: var(--mq-danger-bg, rgba(239, 68, 68, 0.1));
+  color: #b91c1c;
 }
 
-.rule-breakdown em:nth-child(2) {
-  background: rgba(245, 158, 11, 0.12);
-  color: #a16207;
+.rule-breakdown em.is-warning {
+  background: var(--mq-warning-bg, rgba(245, 158, 11, 0.12));
+  color: #9a4a00;
+}
+
+.rule-breakdown em.is-neutral {
+  background: var(--mq-neutral-bg, rgba(148, 163, 184, 0.14));
+  color: var(--mq-neutral-text, #4a5468);
 }
 
 .rule-copy strong {
@@ -1605,110 +1725,16 @@ onBeforeUnmount(() => {
 }
 
 .rule-count strong {
-  color: #c2410c;
+  color: #b91c1c;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .rule-count small {
   margin-top: 1px;
 }
 
-@media (max-width: 1280px) {
-  .analytics-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .analytics-toolbar {
-    justify-content: flex-start;
-    width: 100%;
-  }
-}
-
-@media (max-width: 980px) {
-  .analytics-shell {
-    padding: 16px;
-  }
-
-  .analytics-toolbar,
-  .analytics-context {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .analytics-toolbar :deep(.ant-picker),
-  .analytics-toolbar :deep(.ant-select),
-  .analytics-toolbar :deep(.ant-input-affix-wrapper) {
-    flex: 1 1 180px;
-    min-width: 0;
-  }
-
-  .analytics-health-indicator {
-    justify-content: flex-start;
-    white-space: normal;
-    width: 100%;
-  }
-
-  .analytics-overview-grid,
-  .analytics-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .analytics-command-surface,
-  .analytics-panel {
-    padding: 16px;
-  }
-
-  .analytics-heading h1 {
-    font-size: 23px;
-  }
-
-  .analytics-toolbar > :deep(*) {
-    flex: 1 1 auto;
-  }
-
-  .analytics-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .analytics-kpi:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .analytics-kpi:nth-child(n + 3) {
-    border-top: 1px solid rgba(0, 0, 0, 0.07);
-  }
-
-  .conclusion-layout {
-    gap: 18px;
-  }
-
-  .status-ring {
-    height: 122px;
-    width: 122px;
-  }
-
-  .status-ring::before {
-    height: 88px;
-    width: 88px;
-  }
-
-  .status-ring strong {
-    font-size: 21px;
-  }
-
-  .department-row {
-    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
-  }
-
-  .physician-row {
-    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
-  }
-}
-
-/* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
+/* ===== v7.1 液态玻璃基础覆写（置于所有 @media 之前以保证响应式断点完整生效） ===== */
 .analytics-shell {
   padding: 8px 28px 32px 22px;
   background: transparent;
@@ -1788,6 +1814,10 @@ onBeforeUnmount(() => {
   border-right: 0.5px solid var(--mq-border);
 }
 
+.analytics-kpi:last-child {
+  border-right: 0;
+}
+
 .analytics-kpi::before {
   display: none;
 }
@@ -1814,5 +1844,119 @@ onBeforeUnmount(() => {
 .panel-heading p {
   color: var(--mq-text-tertiary);
   letter-spacing: 0;
+}
+
+@media (max-width: 1440px) {
+  .analytics-toolbar {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 1280px) {
+  .analytics-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .analytics-toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 980px) {
+  .analytics-shell {
+    padding: 16px;
+  }
+
+  .analytics-toolbar,
+  .analytics-context {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .analytics-toolbar :deep(.ant-picker),
+  .analytics-toolbar :deep(.ant-select),
+  .analytics-toolbar :deep(.ant-input-affix-wrapper) {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+
+  .analytics-health-indicator {
+    justify-content: flex-start;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .analytics-overview-grid,
+  .analytics-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-command-surface {
+    padding: 0;
+  }
+
+  .analytics-panel {
+    padding: 16px;
+  }
+
+  .analytics-heading h1 {
+    font-size: 23px;
+  }
+
+  .analytics-toolbar > :deep(*) {
+    flex: 1 1 auto;
+  }
+
+  .analytics-kpis,
+  .analytics-kpis.is-confirmed-only {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analytics-kpi {
+    padding: 14px 16px;
+  }
+
+  .analytics-kpi:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .analytics-kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--mq-border);
+  }
+
+  .analytics-kpi strong,
+  .analytics-kpi.is-brand strong,
+  .analytics-kpi.is-danger strong,
+  .analytics-kpi.is-warning strong {
+    font-size: 28px;
+  }
+
+  .conclusion-layout {
+    gap: 18px;
+  }
+
+  .status-ring {
+    height: 122px;
+    width: 122px;
+  }
+
+  .status-ring::before {
+    height: 88px;
+    width: 88px;
+  }
+
+  .status-ring strong {
+    font-size: 21px;
+  }
+
+  .department-row,
+  .physician-row {
+    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) minmax(40px, auto);
+  }
 }
 </style>

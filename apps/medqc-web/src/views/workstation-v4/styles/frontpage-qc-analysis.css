@@ -39,6 +39,7 @@
 }
 
 .fpqc-analysis__indicator strong {
+  margin-top: auto;
   font-family: var(--mq-font-display);
   font-size: 34px;
   font-weight: 600;
@@ -92,10 +93,10 @@
   grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1fr) auto;
   align-items: center;
   gap: 10px;
-  width: 100%;
+  width: calc(100% + 16px);
   margin: 0 -8px;
   padding: 6px 8px;
-  box-sizing: content-box;
+  box-sizing: border-box;
   border: 0;
   border-radius: 10px;
   background: transparent;
@@ -167,6 +168,10 @@
   overflow: auto;
 }
 
+.fpqc-analysis__table {
+  overflow: visible;
+}
+
 .fpqc-analysis__table thead th {
   position: sticky;
   top: 0;
@@ -176,6 +181,8 @@
 
 .fpqc-analysis__table td,
 .fpqc-analysis__table th {
+  padding-right: 12px;
+  padding-left: 12px;
   white-space: nowrap;
 }
 
@@ -183,6 +190,14 @@
   margin: 0;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
+}
+
+@media (max-width: 1440px) {
+  .fpqc-analysis__table td,
+  .fpqc-analysis__table th {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
 }
 
 @media (max-width: 1280px) {
@@ -196,5 +211,9 @@
 
   .fpqc-analysis__indicator:nth-child(n + 3) {
     border-top: 0.5px solid var(--mq-border);
+  }
+
+  .fpqc-analysis__card {
+    padding: 20px 20px 22px;
   }
 }

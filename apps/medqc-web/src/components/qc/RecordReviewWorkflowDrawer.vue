@@ -70,6 +70,7 @@
             >{{ label }}</option>
           </select></label>
           <button
+            type="button"
             class="mq-btn"
             :disabled="saving || loading"
             @click="refresh"
@@ -87,6 +88,7 @@
       >
         <span class="mq-status">历史记录 · 只读</span>
         <button
+          type="button"
           class="mq-btn"
           :disabled="saving || loading"
           @click="refresh"
@@ -134,6 +136,7 @@
             :key="`${row.envelope_id}-${row.review_id || index}`"
           >
             <button
+              type="button"
               class="review-row"
               :class="{ 'is-selected': selected?.envelope_id === row.envelope_id }"
               :aria-pressed="selected?.envelope_id === row.envelope_id"
@@ -170,12 +173,14 @@
           aria-label="审核分页"
         >
           <button
+            type="button"
             class="mq-btn"
             :disabled="page === 1 || saving"
             @click="move(-1)"
           >
             上一页
           </button><span>第 {{ page }} 页 / {{ total }} 条</span><button
+            type="button"
             class="mq-btn"
             :disabled="page * 10 >= total || saving"
             @click="move(1)"
@@ -255,6 +260,7 @@
           </label>
           <div class="review-actions">
             <button
+              type="button"
               class="mq-btn mq-btn--primary"
               :disabled="saving || uncertain"
               @click="decide('approved')"
@@ -265,6 +271,7 @@
               />
               审核通过
             </button><button
+              type="button"
               class="mq-btn"
               :disabled="saving || uncertain || !reason.trim()"
               @click="decide('doubtful')"

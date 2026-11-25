@@ -1,5 +1,9 @@
 <template>
-  <main class="mq-page message-center" :class="{ 'message-center--reading': mobileReading }">
+  <section
+    class="mq-page message-center"
+    :class="{ 'message-center--reading': mobileReading }"
+    aria-label="消息中心"
+  >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">质控作业 · 消息与反馈</span>
@@ -180,7 +184,7 @@
         </div>
       </article>
     </section>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">

@@ -8,17 +8,18 @@
   padding-top: 20px;
   border-top: 1px solid var(--mq-border);
 }
-header {
+.rectification-todos__header:not(.mq-page-head) {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
-.rectification-heading {
-  margin-right: auto;
+.rectification-todos__actions a.mq-btn {
+  text-decoration: none;
 }
-h2 {
+.rectification-heading__title {
   margin: 0;
   letter-spacing: 0;
 }

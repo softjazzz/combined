@@ -1,46 +1,48 @@
 <template>
   <section v-if="allowed" class="rectification-todos" :class="{ 'mq-page': !scope }">
-    <header :class="{ 'mq-page-head': !scope }">
+    <header class="rectification-todos__header" :class="{ 'mq-page-head': !scope }">
       <div class="rectification-heading mq-page-head__copy">
         <span v-if="!scope" class="mq-page-eyebrow">质控作业 · 整改处理</span>
-        <h2 :class="scope ? 'mq-card__title' : 'mq-page-title'">
+        <h2 class="rectification-heading__title" :class="scope ? 'mq-card__title' : 'mq-page-title'">
           {{ scope ? '该缺陷整改' : '缺陷整改待办' }}
         </h2>
       </div>
-      <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
-        <MqIcon name="task" :size="16" />人工缺陷处理
-      </button>
-      <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
-        <MqIcon name="task" :size="16" />申诉处理
-      </button>
-      <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
-        <MqIcon name="task" :size="16" />病历审核
-      </button>
-      <router-link v-if="!scope && hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
-        <MqIcon name="task" :size="16" />病历沟通
-      </router-link>
-      <router-link
-        v-if="!scope && hasRole('doctor')"
-        class="mq-btn"
-        to="/workstation-v5/worklist?assist=message"
-        >消息面板</router-link
-      >
-      <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
-        >整改状态</label
-      >
-      <a-select
-        :id="scope ? 'defect-rectification-status' : 'rectification-status'"
-        v-model:value="state"
-        :get-popup-container="popupContainer"
-        :options="states"
-        style="width: 130px"
-        @change="changeState"
-      />
-      <a-button :disabled="loading" aria-label="刷新整改待办" @click="load">
-        <template #icon>
-          <MqIcon name="sync" :size="16" />
-        </template>
-      </a-button>
+      <div class="mq-page-head__actions rectification-todos__actions">
+        <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
+          <MqIcon name="task" :size="16" />人工缺陷处理
+        </button>
+        <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
+          <MqIcon name="task" :size="16" />申诉处理
+        </button>
+        <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
+          <MqIcon name="task" :size="16" />病历审核
+        </button>
+        <router-link v-if="!scope && hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
+          <MqIcon name="task" :size="16" />病历沟通
+        </router-link>
+        <router-link
+          v-if="!scope && hasRole('doctor')"
+          class="mq-btn"
+          to="/workstation-v5/worklist?assist=message"
+          >消息面板</router-link
+        >
+        <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
+          >整改状态</label
+        >
+        <a-select
+          :id="scope ? 'defect-rectification-status' : 'rectification-status'"
+          v-model:value="state"
+          :get-popup-container="popupContainer"
+          :options="states"
+          style="width: 130px"
+          @change="changeState"
+        />
+        <a-button :disabled="loading" aria-label="刷新整改待办" @click="load">
+          <template #icon>
+            <MqIcon name="sync" :size="16" />
+          </template>
+        </a-button>
+      </div>
     </header>
     <p v-if="error" class="state-error" role="alert">
       <MqIcon name="issue" :size="16" />{{ error }}
@@ -246,10 +248,10 @@
     role="status"
     aria-label="无权访问缺陷整改待办"
   >
-    <header v-if="!scope" class="mq-page-head">
+    <header v-if="!scope" class="rectification-todos__header mq-page-head">
       <div class="rectification-heading mq-page-head__copy">
         <span class="mq-page-eyebrow">质控作业 · 整改处理</span>
-        <h2 class="mq-page-title">缺陷整改待办</h2>
+        <h2 class="rectification-heading__title mq-page-title">缺陷整改待办</h2>
       </div>
     </header>
     <div class="rectification-empty" :class="{ 'mq-card': !scope }">

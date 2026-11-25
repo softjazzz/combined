@@ -1,6 +1,9 @@
 <template>
-  <main class="mq-page">
-    <a-spin v-if="loading" />
+  <section class="mq-page notification-qc-result" aria-label="质控结果详情">
+    <div v-if="loading" class="notification-qc-result__loading" role="status" aria-live="polite">
+      <a-spin size="large" />
+      <p class="notification-qc-result__loading-text">正在加载质控结果…</p>
+    </div>
     <a-result v-else-if="error" status="warning" title="结果暂不可用" :sub-title="error">
       <template #extra
         ><a-button @click="load">重试</a-button
@@ -24,7 +27,7 @@
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatBatchJobDateTime"
     />
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -288,3 +291,20 @@ onBeforeUnmount(() => {
   generation += 1
 })
 </script>
+
+<style scoped>
+.notification-qc-result__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: min(60dvh, 420px);
+  padding: 48px 24px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-14);
+}
+.notification-qc-result__loading-text {
+  margin: 0;
+}
+</style>

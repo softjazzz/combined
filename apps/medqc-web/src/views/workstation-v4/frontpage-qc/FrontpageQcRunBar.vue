@@ -2,13 +2,18 @@
   <section
     v-if="run || error"
     class="fpqc-run mq-card"
-    role="status"
-    aria-live="polite"
+    aria-label="首页质控任务进度"
     data-testid="fpqc-run-bar"
   >
     <template v-if="run">
       <div class="fpqc-run__main">
-        <span :class="['mq-status', `mq-status--${tone}`]">{{ statusLabel }}</span>
+        <span
+          :class="['mq-status', `mq-status--${tone}`]"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          data-testid="fpqc-run-status"
+        >{{ statusLabel }}</span>
         <strong class="fpqc-run__title">{{ title }}</strong>
         <span class="fpqc-run__counts">
           已处理 {{ run.processed_records }}/{{ run.total_records }} 份
@@ -58,6 +63,7 @@
       <div
         class="fpqc-run__progress"
         role="progressbar"
+        aria-label="首页质控进度"
         :aria-valuenow="percent"
         aria-valuemin="0"
         aria-valuemax="100"
@@ -67,6 +73,7 @@
       <p
         v-if="run.error_message"
         class="fpqc-run__note fpqc-run__note--danger"
+        role="alert"
       >
         {{ run.error_message }}
       </p>
@@ -89,6 +96,7 @@
     <p
       v-if="error"
       class="fpqc-run__note fpqc-run__note--warning"
+      role="alert"
     >
       {{ error }}
     </p>
