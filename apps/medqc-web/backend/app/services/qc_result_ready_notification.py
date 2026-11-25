@@ -5,6 +5,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import MetaData, Table, and_, exists, inspect, select, update
 
+from ..database import connection as db_connection
 from .defect_rectification_service import _effective_persistent_roles
 from .user_scope_owner import user_owner_options
 from .sample_validation_rule_sets import is_workspace_batch_draft_id
@@ -13,9 +14,20 @@ SOURCE = "v5_qc_result_ready"
 ROLES = {"admin", "qc_manager", "qc_staff", "sync_admin", "super_admin"}
 
 
+def _qc_schema(connection) -> str | None:
+    if connection.dialect.name == "sqlite":
+        return None
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
 def result_tables(session):
     connection = session.connection()
-    schema = None if connection.dialect.name == "sqlite" else "qc"
+    schema = _qc_schema(connection)
     inspector = inspect(connection)
     names = ("custom_qc_batch_jobs", "luxian_0609_record_result_envelopes")
     if not all(inspector.has_table(name, schema=schema) for name in names):
@@ -96,7 +108,7 @@ def publish_result_ready(session, *, job_row, jobs, envelopes, now):
 
     # 旧版本库仍可执行原任务，但尚未具备现代消息字段时不启用新能力。
     connection = session.connection()
-    schema = None if connection.dialect.name == "sqlite" else "qc"
+    schema = _qc_schema(connection)
     inspector = inspect(connection)
     if not inspector.has_table("notifications", schema=schema):
         return

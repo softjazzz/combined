@@ -8,6 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification
 from ..database.models.v36_reports import QCAppeal as ReportAppeal
@@ -30,7 +31,23 @@ SOURCE_FIELDS = (
 OPEN = ("pending", "reviewing")
 STALE_CLOSE_ACTIONS = {"supersede", "close_stale"}
 STATES = (*OPEN, "approved", "rejected", "withdrawn", "superseded")
-REVIEWERS = {"admin", "qc_manager"}
+REVIEWERS = {"admin", "super_admin", "qc_manager"}
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+def _is_global_scope(actor) -> bool:
+    roles = actor["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor["institute_id"]
+    )
 
 
 class _OwnerBase(DeclarativeBase):
@@ -39,12 +56,14 @@ class _OwnerBase(DeclarativeBase):
 
 # 复用报表合同但固定表 owner；不能给整个会话套 qc 映射（会污染 CDM 查询）。
 class QCAppeal(_OwnerBase):
-    __table__ = ReportAppeal.__table__.to_metadata(_OwnerBase.metadata, schema="qc")
+    __table__ = ReportAppeal.__table__.to_metadata(
+        _OwnerBase.metadata, schema=_qc_schema()
+    )
 
 
 class QCAppealReview(_OwnerBase):
     __table__ = ReportAppealReview.__table__.to_metadata(
-        _OwnerBase.metadata, schema="qc"
+        _OwnerBase.metadata, schema=_qc_schema()
     )
 
 
@@ -57,7 +76,7 @@ def _view(row):
 
 
 def _authorized(actor, row):
-    if "admin" not in actor["roles"] and (
+    if not _is_global_scope(actor) and (
         not actor["institute_id"] or actor["institute_id"] != row.institute_id
     ):
         raise RectificationError("无权访问该机构申诉", 403)
@@ -181,7 +200,7 @@ class ModernAppealService:
         statement = _modern(statement)
         if not _reviewer(actor) and "doctor" not in actor["roles"]:
             raise RectificationError("仅医生与申诉审核人员可访问", 403)
-        if "admin" not in actor["roles"]:
+        if not _is_global_scope(actor):
             if not actor["institute_id"]:
                 raise RectificationError("账号缺少可信机构", 403)
             statement = statement.where(QCAppeal.institute_id == actor["institute_id"])
@@ -352,7 +371,15 @@ class ModernAppealService:
                     reviewer_name=actor["name"],
                     reviewer_role="doctor"
                     if action == "withdraw"
-                    else ("admin" if "admin" in actor["roles"] else "qc_manager"),
+                    else (
+                        "admin"
+                        if "admin" in actor["roles"]
+                        else (
+                            "super_admin"
+                            if "super_admin" in actor["roles"]
+                            else "qc_manager"
+                        )
+                    ),
                     action=action,
                     comment=comment.strip(),
                     created_at=now,

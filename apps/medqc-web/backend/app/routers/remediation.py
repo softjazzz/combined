@@ -201,8 +201,10 @@ def _resolve_actor(
     if not (roles & set(allowed_roles)):
         raise HTTPException(status_code=StatusCode.FORBIDDEN, detail=denied_detail)
 
-    is_global = bool(roles & _GLOBAL_ROLES)
     institute_id = row.get("institute_id") if has_institute else None
+    is_global = ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not institute_id
+    )
     if not is_global:
         if not isinstance(institute_id, str) or not institute_id.strip() or institute_id != institute_id.strip():
             raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="账号缺少可信机构范围")

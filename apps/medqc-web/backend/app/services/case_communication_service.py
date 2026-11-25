@@ -45,9 +45,20 @@ def _valid_source(source):
         raise RectificationError("病历沟通缺少可信冻结来源", 409)
 
 
+MANAGERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
+
+
+def _is_global_scope(person):
+    roles = person["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not person["institute_id"]
+    )
+
+
 def _manager(person, institute_id):
-    if not person["roles"] & {"admin", "qc_manager", "qc_staff"} or (
-        "admin" not in person["roles"] and person["institute_id"] != institute_id
+    if not person["roles"] & MANAGERS or (
+        not _is_global_scope(person)
+        and (not person["institute_id"] or person["institute_id"] != institute_id)
     ):
         raise RectificationError("无权管理该机构病历沟通", 403)
 

@@ -202,13 +202,18 @@ async def prepare_task_material_request(request: Request) -> None:
 
 
 def prepare_request(request: Request) -> None:
+    cdm_fallback_prefixes = (
+        "/api/v1/workstation",
+        "/api/v1/frontpage-qc",
+        "/api/v1/quality-reports",
+    )
     paths = (
         "/api/medical-records",
         "/api/v1/medical-records",
         "/api/v1/records",
         "/api/v1/emr",
         "/api/v1/qc/sichuan/workspace",
-        "/api/v1/workstation",
+        *cdm_fallback_prefixes,
     )
     # 样本集和其它业务API仍属业务库，不让全局默认改变1026或管理操作。
     path = request.url.path
@@ -282,7 +287,7 @@ def prepare_request(request: Request) -> None:
                 if (header or query) not in (None, INDEPENDENT_CDM):
                     raise PipelineError("ordinary_source_fixed_donghua_cdm",409)
                 if (
-                    path.startswith("/api/v1/workstation")
+                    path.startswith(cdm_fallback_prefixes)
                     and not (header or query)
                     and not settings.cdm.enabled
                 ):
@@ -293,7 +298,7 @@ def prepare_request(request: Request) -> None:
                 default = (
                     settings.default_source
                     if path.endswith("/workstation")
-                    or path.startswith("/api/v1/workstation")
+                    or path.startswith(cdm_fallback_prefixes)
                     or request.method == "POST"
                     else LEGACY_PG
                 )

@@ -121,8 +121,29 @@ def _is_institute_only_scope(case_scope) -> bool:
     )
 
 
+def _identity_in_predicate(source, identities, *, batch_size: int = 300):
+    unique_identities = sorted(
+        {
+            (str(row[0]).strip(), str(row[1]).strip(), str(row[2]).strip())
+            for row in identities
+            if isinstance(row, (tuple, list))
+            and len(row) == 3
+            and all(str(part or "").strip() for part in row)
+        }
+    )
+    if not unique_identities:
+        return literal(False)
+    columns = tuple(source.c[k] for k in KEYS)
+    chunks = [
+        tuple_(*columns).in_(unique_identities[offset : offset + batch_size])
+        for offset in range(0, len(unique_identities), batch_size)
+    ]
+    return chunks[0] if len(chunks) == 1 else or_(*chunks)
+
+
 def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None, end_date=None,
-                date_field="visit", hospital_status="all", case_scope=None, institute_id=None):
+                date_field="visit", hospital_status="all", case_scope=None, institute_id=None,
+                analytics_identities=None):
     predicates = []
     if case_scope is not None:
         case_scope.require_filters(dept, doctor)
@@ -130,6 +151,8 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
             predicates.append(source.c.institute_id == case_scope.institute_id)
         else:
             predicates.append(tuple_(*[source.c[k] for k in KEYS]).in_(case_scope.case_refs))
+    if analytics_identities is not None:
+        predicates.append(_identity_in_predicate(source, analytics_identities))
     normalized_dept = str(dept or "").strip()
     if normalized_dept:
         if normalized_dept == "未分科室":
@@ -237,9 +260,8 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
                 date_field="visit", hospital_status="all", sync_scope="all", inpatient_sort="default",
                 page=1, page_size=50, case_scope=None, qc_projection_loader=None,
                 qc_summary_mode="inline", qc_summary_identities: tuple[CaseRef, ...] | None = None,
-                qc_summary_include_totals: bool = True, **analytics):
-    if any(value for key, value in analytics.items() if key.startswith("analytics_")):
-        raise PipelineError("clinical_source_analytics_filter_not_supported", 422)
+                qc_summary_include_totals: bool = True,
+                analytics_identities=None, business_session_factory=None, **analytics):
     if inpatient_sort not in (None, "default", "longest", "recent"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
     if sync_scope not in (None, "all"):
@@ -247,6 +269,37 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         raise PipelineError("clinical_source_live_status_not_supported", 422)
     if hospital_status not in (None, "all", "inpatient", "discharged", "unknown") or date_field not in (None, "visit", "admission", "discharge", "updated"):
         raise PipelineError("invalid_clinical_catalog_filter", 422)
+    has_analytics_kwargs = any(
+        value for key, value in analytics.items() if key.startswith("analytics_")
+    )
+    if analytics_identities is None and has_analytics_kwargs:
+        if case_scope is not None:
+            case_scope.require_filters(dept, doctor)
+        from .medical_records.query_service import (
+            _validate_analytics_filters,
+            resolve_analytics_matching_identities,
+        )
+        _validate_analytics_filters(
+            analytics_completed_from=analytics.get("analytics_completed_from"),
+            analytics_completed_to=analytics.get("analytics_completed_to"),
+            analytics_result_status=analytics.get("analytics_result_status"),
+            analytics_scope=analytics.get("analytics_scope"),
+        )
+        try:
+            analytics_identities = resolve_analytics_matching_identities(
+                session_factory=business_session_factory,
+                analytics_job_id=analytics.get("analytics_job_id"),
+                analytics_completed_from=analytics.get("analytics_completed_from"),
+                analytics_completed_to=analytics.get("analytics_completed_to"),
+                analytics_rule_id=analytics.get("analytics_rule_id"),
+                analytics_result_status=analytics.get("analytics_result_status"),
+                analytics_scope=analytics.get("analytics_scope"),
+                case_scope=case_scope,
+            )
+        except (PipelineError, HTTPException, ValueError):
+            raise
+        except Exception as error:
+            raise PipelineError("clinical_source_read_unavailable", 503) from error
     page_only = qc_summary_mode == "only" and not qc_summary_include_totals
     if page_only and qc_summary_identities == ():
         if case_scope is not None:
@@ -260,18 +313,18 @@ def workstation(*, dept=None, doctor=None, keyword=None, start_date=None, end_da
         normalized_doctor = str(doctor or "").strip()
         predicates = _predicates(source, dept=dept, doctor=doctor, keyword=keyword,
             start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
-            case_scope=case_scope)
+            case_scope=case_scope, analytics_identities=analytics_identities)
         dept_facet_predicates = (
             _predicates(source, dept=None, doctor=doctor, keyword=keyword,
                 start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
-                case_scope=case_scope)
+                case_scope=case_scope, analytics_identities=analytics_identities)
             if qc_summary_mode != "only" and normalized_dept
             else None
         )
         doctor_facet_predicates = (
             _predicates(source, dept=dept, doctor=None, keyword=keyword,
                 start_date=start_date, end_date=end_date, date_field=date_field, hospital_status=hospital_status,
-                case_scope=case_scope)
+                case_scope=case_scope, analytics_identities=analytics_identities)
             if qc_summary_mode != "only" and normalized_doctor
             else None
         )

@@ -8,6 +8,7 @@ from sqlalchemy import select, text, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import QCDefect, QCDefectHistory
 from ..database.models.v36_reports import QCRecordReview as ReportReview
@@ -28,8 +29,24 @@ SOURCE_FIELDS = (
     "rule_set_version",
 )
 STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
-REVIEWERS = {"admin", "qc_manager", "qc_staff"}
+REVIEWERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
 MAX_CASES = 5000
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+def _is_global_scope(actor) -> bool:
+    roles = actor["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor["institute_id"]
+    )
 
 
 class _OwnerBase(DeclarativeBase):
@@ -37,7 +54,9 @@ class _OwnerBase(DeclarativeBase):
 
 
 class QCRecordReview(_OwnerBase):
-    __table__ = ReportReview.__table__.to_metadata(_OwnerBase.metadata, schema="qc")
+    __table__ = ReportReview.__table__.to_metadata(
+        _OwnerBase.metadata, schema=_qc_schema()
+    )
 
 
 def _source(data):
@@ -67,7 +86,7 @@ def _source(data):
 def _authorized(actor, institute_id):
     if not actor["roles"] & REVIEWERS:
         raise RectificationError("仅持久质控账号可审核病历", 403)
-    if "admin" not in actor["roles"] and (
+    if not _is_global_scope(actor) and (
         not actor["institute_id"] or actor["institute_id"] != institute_id
     ):
         raise RectificationError("无权访问该机构病历审核", 403)
@@ -121,9 +140,10 @@ class _ManualSnapshotReadSession:
 
     def __init__(self, session):
         self.session = session
+        schema = _qc_schema()
         self.options = (
-            {"schema_translate_map": {None: "qc"}}
-            if session.get_bind().dialect.name == "postgresql"
+            {"schema_translate_map": {None: schema}}
+            if schema and session.get_bind().dialect.name == "postgresql"
             else {}
         )
 
@@ -265,7 +285,7 @@ def _candidate_sources(session, actor):
         department=None,
         doctor=None,
         hospital_status="all",
-        institute_id=None if "admin" in actor["roles"] else actor["institute_id"],
+        institute_id=None if _is_global_scope(actor) else actor["institute_id"],
     )
     if len(records) > MAX_CASES:
         raise RectificationError("病历审核范围超过5000份，无法完整核对", 422)
@@ -500,7 +520,7 @@ class RecordReviewWorkflowService:
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             if not actor["roles"] & REVIEWERS or (
-                "admin" not in actor["roles"] and not actor["institute_id"]
+                not _is_global_scope(actor) and not actor["institute_id"]
             ):
                 raise RectificationError("缺少持久质控账号或机构范围", 403)
             sources = self.candidates(session, actor)
@@ -560,7 +580,7 @@ class RecordReviewWorkflowService:
                     QCRecordReview.scene.in_(("running", "final")),
                     QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
                 )
-                if "admin" not in actor["roles"]:
+                if not _is_global_scope(actor):
                     statement = statement.where(
                         QCRecordReview.institute_id == actor["institute_id"]
                     )

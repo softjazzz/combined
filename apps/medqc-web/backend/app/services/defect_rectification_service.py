@@ -14,7 +14,7 @@ from ..database.models.v36_reports import DefectRectificationEvent as Event
 from ..database.models.v36_reports import SysUser
 from .user_scope_owner import user_owner_options
 
-MANAGERS = {"admin", "qc_manager", "qc_staff"}
+MANAGERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
 STATES = {"pending", "submitted", "approved", "rejected"}
 
 
@@ -71,8 +71,15 @@ def _manager(person):
     return bool(person["roles"] & MANAGERS)
 
 
+def _is_global_scope(person):
+    roles = person["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not person["institute_id"]
+    )
+
+
 def _scope(person, institute_id, department, *, assignee_id=None):
-    if "admin" in person["roles"]:
+    if _is_global_scope(person):
         return
     if not person["institute_id"] or person["institute_id"] != institute_id:
         raise RectificationError("无权访问该机构整改", 403)
@@ -440,7 +447,7 @@ class DefectRectificationService:
                 ):
                     raise RectificationError("整改来源必须提供完整八维坐标")
                 conditions.extend(getattr(Task, key) == source[key] for key in keys)
-            if "admin" not in actor["roles"]:
+            if not _is_global_scope(actor):
                 if not actor["institute_id"]:
                     raise RectificationError("账号缺少机构范围", 403)
                 conditions.append(Task.institute_id == actor["institute_id"])

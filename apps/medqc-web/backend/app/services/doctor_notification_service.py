@@ -6,6 +6,7 @@ from uuid import NAMESPACE_URL, uuid5
 from sqlalchemy import MetaData, and_, exists, func, inspect, or_, select, update
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification as Task
 from ..database.models.v36_reports import Notification as ReportNotification
@@ -130,12 +131,25 @@ def _publish_qc_notification(
         )
 
 
+def _qc_schema(connection=None) -> str | None:
+    if connection is not None and connection.dialect.name == "sqlite":
+        return None
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
 class _Base(DeclarativeBase):
     pass
 
 
 class Notification(_Base):
-    __table__ = ReportNotification.__table__.to_metadata(_Base.metadata, schema="qc")
+    __table__ = ReportNotification.__table__.to_metadata(
+        _Base.metadata, schema=_qc_schema()
+    )
 
 
 def publish_doctor_notification(
@@ -226,7 +240,8 @@ class DoctorNotificationService:
         modern = False
         qc_feedback = False
         is_global_admin = (
-            bool(actor["roles"] & GLOBAL_ADMIN_ROLES) and not actor["institute_id"]
+            "sync_admin" in actor["roles"]
+            or (bool(actor["roles"] & GLOBAL_ADMIN_ROLES) and not actor["institute_id"])
         )
         if (
             actor["roles"] & (MANAGERS | GLOBAL_ADMIN_ROLES) and actor["institute_id"]
@@ -344,7 +359,7 @@ class DoctorNotificationService:
             # 沟通表属于独立历史前置；缺表时只拒绝此类消息，不影响既有整改/申诉。
             communication = False
             connection = session.connection()
-            schema = None if connection.dialect.name == "sqlite" else "qc"
+            schema = _qc_schema(connection)
             if inspect(connection).has_table("qc_case_communications", schema=schema):
                 from ..database.models.case_communication import CaseCommunication
 

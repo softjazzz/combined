@@ -24,9 +24,13 @@ from ..services.workstation.worklist_service import default_workstation_aggregat
 from ..services.workstation.luxian_0609_result_analysis_service import (
     default_luxian_0609_result_analysis_service,
 )
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 
 router = APIRouter(prefix="/api/v1/workstation", tags=["workstation"])
 logger = logging.getLogger(__name__)
+_DEMO_PRIVILEGED_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_DEMO_HIDDEN_STATUSES = frozenset({"data_gap", "uncertain"})
+_DEMO_HIDDEN_RECORD_STATUSES = frozenset({"data_gap", "uncertain", "technical_error"})
 
 _WORKSTATION_HOME_ROLES = (
     "admin",
@@ -321,6 +325,221 @@ def _verify_snapshot_result(
     return data
 
 
+def _is_restricted_demo_account(current_user: dict | None) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    roles = {
+        str(role).strip().lower()
+        for role in (current_user.get("roles") or [])
+        if isinstance(role, str) and role.strip()
+    }
+    single_role = current_user.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.add(single_role.strip().lower())
+    if roles & _DEMO_PRIVILEGED_ROLES:
+        return False
+    explicit_flag = current_user.get("is_demo_account")
+    if explicit_flag is False:
+        return False
+    if explicit_flag is True:
+        return True
+    email = str(current_user.get("email") or "").strip().lower()
+    return bool(email and email in DEFAULT_DEMO_USER_EMAILS)
+
+
+def _trim_luxian_analytics_for_demo(data: Any) -> Any:
+    """演示账号只展示确定问题统计，清零非确定计数与数据健康排障数字。"""
+
+    if not isinstance(data, dict):
+        return data
+    trimmed = dict(data)
+    kpis = trimmed.get("kpis")
+    if isinstance(kpis, dict):
+        patched_kpis = dict(kpis)
+        if "records_with_data_gap" in patched_kpis:
+            patched_kpis["records_with_data_gap"] = 0
+        if "canonical_invalid_or_missing_total" in patched_kpis:
+            patched_kpis["canonical_invalid_or_missing_total"] = 0
+        trimmed["kpis"] = patched_kpis
+    data_health = trimmed.get("data_health")
+    if isinstance(data_health, dict):
+        patched_health = dict(data_health)
+        if "canonical_invalid_or_missing_total" in patched_health:
+            patched_health["canonical_invalid_or_missing_total"] = 0
+        trimmed["data_health"] = patched_health
+    status_dist = trimmed.get("status_distribution")
+    if isinstance(status_dist, list):
+        trimmed["status_distribution"] = [
+            {**item, "count": 0}
+            if isinstance(item, dict) and item.get("status") in _DEMO_HIDDEN_STATUSES
+            else item
+            for item in status_dist
+        ]
+    dept_dist = trimmed.get("department_distribution")
+    if isinstance(dept_dist, list):
+        patched_depts = []
+        for item in dept_dist:
+            if not isinstance(item, dict):
+                continue
+            nc_total = int(item.get("non_compliant_record_total") or 0)
+            row = {
+                **item,
+                "data_gap_record_total": 0,
+                "uncertain_record_total": 0,
+            }
+            if "canonical_invalid_or_missing_total" in row:
+                row["canonical_invalid_or_missing_total"] = 0
+            if "problem_record_total" in row:
+                row["problem_record_total"] = nc_total
+            if "primary_non_compliant_record_total" in row:
+                row["primary_non_compliant_record_total"] = nc_total
+            if "primary_data_gap_record_total" in row:
+                row["primary_data_gap_record_total"] = 0
+            if "primary_uncertain_record_total" in row:
+                row["primary_uncertain_record_total"] = 0
+            patched_depts.append(row)
+        patched_depts.sort(
+            key=lambda row: (
+                -int(row.get("non_compliant_record_total") or 0),
+                str(row.get("department") or ""),
+            )
+        )
+        trimmed["department_distribution"] = patched_depts
+    phys_dist = trimmed.get("physician_distribution")
+    if isinstance(phys_dist, list):
+        patched_phys = []
+        for item in phys_dist:
+            if not isinstance(item, dict):
+                continue
+            nc_total = int(item.get("non_compliant_record_total") or 0)
+            row = {
+                **item,
+                "data_gap_record_total": 0,
+                "uncertain_record_total": 0,
+            }
+            if "problem_record_total" in row:
+                row["problem_record_total"] = nc_total
+            if "primary_non_compliant_record_total" in row:
+                row["primary_non_compliant_record_total"] = nc_total
+            if "primary_data_gap_record_total" in row:
+                row["primary_data_gap_record_total"] = 0
+            if "primary_uncertain_record_total" in row:
+                row["primary_uncertain_record_total"] = 0
+            patched_phys.append(row)
+        patched_phys.sort(
+            key=lambda row: (
+                -int(row.get("non_compliant_record_total") or 0),
+                str(row.get("physician") or ""),
+            )
+        )
+        trimmed["physician_distribution"] = patched_phys
+    rule_dist = trimmed.get("rule_distribution")
+    if isinstance(rule_dist, list):
+        patched_rules = []
+        for item in rule_dist:
+            if not isinstance(item, dict):
+                continue
+            nc_count = int(item.get("non_compliant_count") or 0)
+            if nc_count <= 0:
+                continue
+            patched_rules.append(
+                {
+                    **item,
+                    "data_gap_count": 0,
+                    "uncertain_count": 0,
+                }
+            )
+        patched_rules.sort(
+            key=lambda row: (
+                -int(row.get("non_compliant_count") or 0),
+                str(row.get("rule_id") or ""),
+            )
+        )
+        trimmed["rule_distribution"] = patched_rules
+    return trimmed
+
+
+def _trim_result_analysis_rule_for_demo(rule: Any) -> Any:
+    if not isinstance(rule, dict):
+        return rule
+    nc_count = int(rule.get("non_compliant_count") or 0)
+    patched = {
+        **rule,
+        "data_gap_count": 0,
+        "uncertain_count": 0,
+    }
+    if "issue_count" in patched:
+        patched["issue_count"] = nc_count
+    dept_dist = patched.get("department_distribution")
+    if isinstance(dept_dist, list):
+        patched["department_distribution"] = [
+            {**row, "data_gap_count": 0, "uncertain_count": 0}
+            if isinstance(row, dict)
+            else row
+            for row in dept_dist
+        ]
+    return patched
+
+
+def _trim_result_analysis_for_demo(data: Any, *, requested_status: Optional[str] = None) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = dict(data)
+    kpis = trimmed.get("kpis")
+    if isinstance(kpis, dict):
+        patched_kpis = dict(kpis)
+        if "unavailable_result_total" in patched_kpis:
+            patched_kpis["unavailable_result_total"] = 0
+        trimmed["kpis"] = patched_kpis
+    status_dist = trimmed.get("status_distribution")
+    if isinstance(status_dist, list):
+        trimmed["status_distribution"] = [
+            {**item, "count": 0}
+            if isinstance(item, dict) and item.get("status") in _DEMO_HIDDEN_STATUSES
+            else item
+            for item in status_dist
+        ]
+    rule_dist = trimmed.get("rule_distribution")
+    if isinstance(rule_dist, list):
+        trimmed["rule_distribution"] = [
+            _trim_result_analysis_rule_for_demo(item)
+            for item in rule_dist
+            if isinstance(item, dict)
+        ]
+    if isinstance(trimmed.get("selected_rule"), dict):
+        trimmed["selected_rule"] = _trim_result_analysis_rule_for_demo(trimmed["selected_rule"])
+    phys_dist = trimmed.get("physician_distribution")
+    if isinstance(phys_dist, list):
+        trimmed["physician_distribution"] = [
+            {**item, "data_gap_count": 0, "uncertain_count": 0}
+            if isinstance(item, dict)
+            else item
+            for item in phys_dist
+        ]
+    record_page = trimmed.get("record_page")
+    if isinstance(record_page, dict) and isinstance(record_page.get("items"), list):
+        if requested_status in _DEMO_HIDDEN_STATUSES:
+            trimmed["record_page"] = {
+                **record_page,
+                "items": [],
+                **({"total": 0} if "total" in record_page else {}),
+            }
+        else:
+            raw_items = record_page["items"]
+            kept_items = [
+                item
+                for item in raw_items
+                if not (isinstance(item, dict) and item.get("status") in _DEMO_HIDDEN_RECORD_STATUSES)
+            ]
+            if len(kept_items) != len(raw_items):
+                removed = len(raw_items) - len(kept_items)
+                patched_page = {**record_page, "items": kept_items}
+                if isinstance(record_page.get("total"), int):
+                    patched_page["total"] = max(0, record_page["total"] - removed)
+                trimmed["record_page"] = patched_page
+    return trimmed
+
+
 def _raise_workstation_http_error(exc: Exception) -> None:
     if isinstance(exc, ValueError):
         raise HTTPException(status_code=422, detail=str(exc))
@@ -479,6 +698,8 @@ async def get_luxian_0609_analytics(
                 default_workstation_aggregation_service.get_luxian_0609_analytics,
                 **kwargs,
             )
+        if _is_restricted_demo_account(current_user):
+            data = _trim_luxian_analytics_for_demo(data)
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)
@@ -567,6 +788,8 @@ async def get_luxian_0609_result_analysis(
                 default_luxian_0609_result_analysis_service.get_analysis,
                 **kwargs,
             )
+        if _is_restricted_demo_account(current_user):
+            data = _trim_result_analysis_for_demo(data, requested_status=result_status)
         return success_response(data=data, trace_id=get_trace_id(request))
     except Exception as exc:
         _raise_workstation_http_error(exc)

@@ -101,7 +101,7 @@ def _task_actor_id(current_user: dict) -> str:
 async def get_record_quality(
     request: Request,
     params: dict[str, Any] = Depends(_report_params),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
@@ -119,7 +119,7 @@ async def get_record_quality_records(
     drilldown: dict[str, Any] = Depends(_drilldown_params),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
@@ -145,7 +145,7 @@ async def get_record_remediations(
     label: str | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     actor_id = _task_actor_id(current_user)
@@ -173,7 +173,7 @@ async def export_record_remediations(
     request: Request,
     params: dict[str, Any] = Depends(_report_params),
     label: str | None = Query(None),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     actor_id = _task_actor_id(current_user)
@@ -217,7 +217,7 @@ async def export_record_quality(
     drilldown: dict[str, Any] = Depends(_drilldown_params),
     sheet: Literal["departments", "doctors", "records"] = Query(...),
     columns: str | None = Query(None),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
@@ -320,7 +320,7 @@ def _raise_frontpage_error(exc: Exception, action: str) -> None:
 async def get_frontpage_quality(
     request: Request,
     params: dict[str, Any] = Depends(_frontpage_params),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
@@ -340,7 +340,7 @@ async def get_frontpage_quality_records(
     drilldown: dict[str, Any] = Depends(_frontpage_drilldown),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:
@@ -366,7 +366,7 @@ async def export_frontpage_quality(
     params: dict[str, Any] = Depends(_frontpage_params),
     drilldown: dict[str, Any] = Depends(_frontpage_drilldown),
     sheet: Literal["departments", "records"] = Query(...),
-    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+    current_user: dict = Depends(require_roles("admin", "super_admin", "qc_manager")),
 ):
     query = _authorized_params(current_user, params)
     try:

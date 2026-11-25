@@ -70,7 +70,7 @@ async def _call(function, **kwargs):
 def _entry_contexts(actor_id, scene, page):
     with SessionLocal() as session:
         actor = _person(session, actor_id)
-        if not actor["roles"] & {"admin", "qc_manager", "qc_staff"}:
+        if not actor["roles"] & {"admin", "super_admin", "qc_manager", "qc_staff"}:
             raise entry.TaskManualDefectForbidden("仅质控人员可录入")
         statement = (
             select(QCTaskRecord, QCTask)
@@ -82,7 +82,10 @@ def _entry_contexts(actor_id, scene, page):
                 QCTask.scene.in_(["running", "final"]),
             )
         )
-        if "admin" not in actor["roles"]:
+        is_global = ("sync_admin" in actor["roles"]) or (
+            bool(actor["roles"] & {"admin", "super_admin"}) and not actor["institute_id"]
+        )
+        if not is_global:
             if not actor["institute_id"]:
                 raise entry.TaskManualDefectForbidden("账号缺少机构范围")
             statement = statement.where(

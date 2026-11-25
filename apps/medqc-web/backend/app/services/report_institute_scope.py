@@ -7,11 +7,15 @@ def authorized_institute(session, actor_id):
     if not isinstance(actor_id, str) or not actor_id.strip():
         raise RectificationError("缺少可信账号身份", 403)
     person = _person(session, actor_id.strip())
-    if not person["roles"] & {"admin", "qc_manager"}:
+    roles = person["roles"]
+    if not roles & {"admin", "super_admin", "qc_manager"}:
         raise RectificationError("没有质量报表或人工审核权限", 403)
-    if "admin" in person["roles"]:
-        return None
     institute = person["institute_id"]
+    is_global = ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not institute
+    )
+    if is_global:
+        return None
     if (
         not isinstance(institute, str)
         or not institute.strip()

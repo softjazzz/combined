@@ -20,7 +20,9 @@ def resolve_frontpage_access(session, actor_id: str) -> FrontpageAccess:
         {"admin", "sync_admin", "super_admin", "qc_manager", "coder"}
     ):
         raise RectificationError("没有首页质控权限", 403)
-    if roles.intersection({"admin", "sync_admin", "super_admin"}):
+    if ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not person["institute_id"]
+    ):
         return FrontpageAccess(person["id"], None, roles)
     institute = person["institute_id"]
     if (

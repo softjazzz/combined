@@ -1146,8 +1146,186 @@ def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+_DEMO_FULL_RESULT_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
 _QC_SICHUAN_ADMIN_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
 _QC_SICHUAN_OPERATOR_ROLES = frozenset({"admin", "qc_manager", "sync_admin", "super_admin"})
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    """仅对显式 is_demo_account == True 且非 sync_admin/super_admin/developer 的演示账号生效。"""
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
+
+
+def _can_review_batch_job(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not current_user:
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES))
+
+
+def _resolve_batch_job_institute_scope_sync(current_user: Dict[str, Any]) -> Optional[str]:
+    from ..services import saved_result_access
+    from ..services.defect_rectification_service import RectificationError
+    from ..services.report_institute_scope import authorized_report_institute
+
+    actor_id = _current_user_id(current_user)
+    roles = _extract_user_roles(current_user)
+    institute_scope = saved_result_access.saved_result_institute_scope(actor_id)
+    if institute_scope is None and "sync_admin" not in roles:
+        raw_inst = current_user.get("institute_id")
+        if isinstance(raw_inst, str) and raw_inst.strip():
+            return raw_inst.strip()
+        if (
+            getattr(saved_result_access.saved_result_institute_scope, "__module__", "")
+            == saved_result_access.__name__
+        ):
+            try:
+                return authorized_report_institute(actor_id)
+            except RectificationError as exc:
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+            except Exception:
+                raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+    return institute_scope
+
+
+def _is_confirmed_issue_item(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if isinstance(item.get("is_confirmed_issue"), bool):
+        return item["is_confirmed_issue"] is True
+    status = str(
+        item.get("status")
+        or item.get("result_status")
+        or item.get("display_status")
+        or ""
+    ).strip().lower()
+    return status == "non_compliant"
+
+
+def _trim_batch_job_for_demo_account(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """演示账号结果裁剪：仅保留确定问题，剥离非确定项与内部 review_report 排障字段，保持响应 schema 兼容。"""
+    if not isinstance(payload, dict):
+        return payload
+    trimmed = dict(payload)
+    trimmed.pop("review_report", None)
+
+    raw_items = trimmed.get("items")
+    confirmed_items: List[Dict[str, Any]] = []
+    if isinstance(raw_items, list):
+        confirmed_items = [item for item in raw_items if _is_confirmed_issue_item(item)]
+        trimmed["items"] = confirmed_items
+
+    if isinstance(trimmed.get("failed_records"), list):
+        trimmed["failed_records"] = []
+
+    raw_rule_results = trimmed.get("rule_results")
+    if isinstance(raw_rule_results, list):
+        next_rule_results: List[Dict[str, Any]] = []
+        for rr in raw_rule_results:
+            if not isinstance(rr, dict):
+                continue
+            rr_copy = dict(rr)
+            rr_copy.pop("debug", None)
+            if isinstance(rr_copy.get("items"), list):
+                rr_copy["items"] = [
+                    item for item in rr_copy["items"] if _is_confirmed_issue_item(item)
+                ]
+            next_rule_results.append(rr_copy)
+        trimmed["rule_results"] = next_rule_results
+
+    for child_key in ("children", "child_jobs"):
+        raw_children = trimmed.get(child_key)
+        if isinstance(raw_children, list) and raw_children:
+            trimmed[child_key] = [
+                _trim_batch_job_for_demo_account(child)
+                if isinstance(child, dict)
+                else child
+                for child in raw_children
+            ]
+
+    raw_summary = trimmed.get("summary")
+    if isinstance(raw_summary, dict):
+        summary = dict(raw_summary)
+        summary.pop("review_report", None)
+        summary.pop("rule_results", None)
+        summary.pop("failed_rule_ids", None)
+        summary.pop("automatic_failed_rule_retry", None)
+        summary.pop("material_failure", None)
+        summary.pop("semantic_extraction_failures", None)
+        for zero_key in (
+            "uncertain_records",
+            "data_quality_gap_count",
+            "not_applicable_records",
+            "not_executed_records",
+            "rejected_by_system_count",
+            "technical_error_internal_count",
+        ):
+            if zero_key in summary:
+                summary[zero_key] = 0
+
+        if isinstance(raw_items, list) and (raw_items or "result_count" in summary):
+            confirmed_count = len(confirmed_items)
+            confirmed_status_counts = (
+                {"non_compliant": confirmed_count} if confirmed_count > 0 else {}
+            )
+            if raw_items:
+                summary["result_count"] = confirmed_count
+                confirmed_refs = {
+                    str(
+                        item.get("record_ref")
+                        or item.get("record_id")
+                        or item.get("visit_id")
+                        or ""
+                    ).strip()
+                    for item in confirmed_items
+                } - {""}
+                if confirmed_refs or "issue_records" in summary:
+                    summary["issue_records"] = (
+                        len(confirmed_refs)
+                        if confirmed_refs
+                        else (confirmed_count if confirmed_count else 0)
+                    )
+            for count_key in ("status_counts", "status_breakdown", "display_status_counts"):
+                if isinstance(summary.get(count_key), dict):
+                    if raw_items:
+                        summary[count_key] = dict(confirmed_status_counts)
+                    else:
+                        non_compliant_val = int(summary[count_key].get("non_compliant") or 0)
+                        summary[count_key] = (
+                            {"non_compliant": non_compliant_val}
+                            if non_compliant_val > 0
+                            else {}
+                        )
+
+        if isinstance(summary.get("history_issue_summaries"), list):
+            summary["history_issue_summaries"] = [
+                entry
+                for entry in summary["history_issue_summaries"]
+                if isinstance(entry, dict)
+                and str(entry.get("status") or "").strip().lower() == "non_compliant"
+            ]
+
+        stream_state = summary.get("stream_state")
+        if isinstance(stream_state, dict):
+            stream_copy = dict(stream_state)
+            for list_key in ("recent_results", "recent_items", "latest_results"):
+                if isinstance(stream_copy.get(list_key), list):
+                    stream_copy[list_key] = [
+                        entry
+                        for entry in stream_copy[list_key]
+                        if _is_confirmed_issue_item(entry)
+                    ]
+            if isinstance(stream_copy.get("status_counts"), dict):
+                nc = int(stream_copy["status_counts"].get("non_compliant") or 0)
+                stream_copy["status_counts"] = {"non_compliant": nc} if nc > 0 else {}
+            summary["stream_state"] = stream_copy
+
+        trimmed["summary"] = summary
+
+    return trimmed
 
 
 def _request_scoped_qc_service(
@@ -2752,6 +2930,8 @@ async def list_workspace_batch_jobs(
             if _is_workspace_batch_job(item)
         ]
     )
+    if _is_restricted_demo_account(current_user):
+        items = [_trim_batch_job_for_demo_account(item) for item in items]
     return success_response(
         data={
             "items": items,
@@ -2833,6 +3013,8 @@ async def get_workspace_batch_job(
             detail=exc.detail,
             headers={**(exc.headers or {}), BATCH_JOB_STATUS_HEADER: job_status},
         ) from exc
+    if _is_restricted_demo_account(current_user):
+        response_data = _trim_batch_job_for_demo_account(response_data)
     return success_response(
         data=response_data,
         message="获取四川规则批量任务详情成功",
@@ -3294,11 +3476,20 @@ async def review_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权执行批量任务结果复核")
+    if not _can_review_batch_job(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权复核批量任务结果")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
     created_by = _current_user_id(current_user)
     job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权复核其他机构批量任务结果")
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
         job = _hydrate_luxian_canonical_batch_job_or_409(
@@ -3438,10 +3629,19 @@ async def get_workspace_batch_job_debug(
     item_limit: int = Query(30, ge=1, le=200),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权查看批量任务调试快照")
+    if not _can_view_result_trace(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权查看批量任务调试快照")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权查看其他机构批量任务调试快照")
     return success_response(
         data=_build_debug_snapshot(job, rule_job_id=rule_job_id, item_limit=item_limit),
         message="获取批量任务调试快照成功",
@@ -3459,12 +3659,19 @@ async def get_workspace_batch_job_result_trace(
     item_index: Optional[int] = Query(None, ge=0),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权查看诊断追踪")
     if not _can_view_result_trace(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权查看诊断追踪")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权查看其他机构批量任务诊断追踪")
     trace_item = _find_result_trace_item(
         job,
         record_id=record_id,
@@ -3488,12 +3695,12 @@ async def export_workspace_batch_job(
     format: str = Query("xlsx"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权导出批量任务结果")
     if not _can_export_record_results(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
-    from ..services.saved_result_access import saved_result_institute_scope
-
     institute_scope = await run_in_threadpool(
-        saved_result_institute_scope, _current_user_id(current_user)
+        _resolve_batch_job_institute_scope_sync, current_user
     )
     workspace = _sichuan_workspace_service()
     job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))

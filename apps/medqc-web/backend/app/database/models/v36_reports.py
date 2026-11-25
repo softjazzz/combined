@@ -24,6 +24,21 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, deferred
 
+from .. import connection as db_connection
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+_QC_SCHEMA = _qc_schema()
+_QC_FK_PREFIX = f"{_QC_SCHEMA}." if _QC_SCHEMA else ""
+
 
 class ReportBase(DeclarativeBase):
     pass
@@ -840,7 +855,7 @@ class DefectRectification(Base):
             name="uq_rectification_source",
         ),
         Index("ix_rectification_assignee_status", "assignee_id", "status"),
-        {"schema": "qc"},
+        {"schema": _QC_SCHEMA},
     )
 
 
@@ -849,7 +864,9 @@ class DefectRectificationEvent(Base):
 
     id = Column(String(36), primary_key=True)
     rectification_id = Column(
-        String(36), ForeignKey("qc.qc_defect_rectifications.id"), nullable=False
+        String(36),
+        ForeignKey(f"{_QC_FK_PREFIX}qc_defect_rectifications.id"),
+        nullable=False,
     )
     action = Column(String(24), nullable=False)
     actor_id = Column(String(36), nullable=False)
@@ -859,7 +876,7 @@ class DefectRectificationEvent(Base):
     comment = Column(Text, nullable=False)
     recipient_id = Column(String(36), nullable=False)
     related_event_id = Column(
-        String(36), ForeignKey("qc.qc_defect_rectification_events.id")
+        String(36), ForeignKey(f"{_QC_FK_PREFIX}qc_defect_rectification_events.id")
     )
     submission_document_snapshot = deferred(Column(Text))
     created_at = Column(DateTime, nullable=False)
@@ -869,7 +886,7 @@ class DefectRectificationEvent(Base):
         ),
         UniqueConstraint("related_event_id", name="uq_rectification_event_withdrawal"),
         Index("ix_rectification_event_recipient", "recipient_id", "created_at"),
-        {"schema": "qc"},
+        {"schema": _QC_SCHEMA},
     )
 
 

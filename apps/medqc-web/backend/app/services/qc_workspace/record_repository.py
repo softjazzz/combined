@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
 
-from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
+from sqlalchemy import Boolean, String, and_, asc, cast, desc, exists, func, or_, tuple_
 from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, load_only
+from sqlalchemy.sql.expression import FunctionElement
 
 from ...database.models.cdm import (
     AdmissionRecord,
@@ -22,9 +24,52 @@ from ..validation_material_source import is_explicitly_invalid_document_status
 
 CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+_RECORD_REF_BATCH_SIZE = 200
+_FRONTPAGE_METADATA_COLUMNS = (
+    MedicalRecordFrontpage.institute_id,
+    MedicalRecordFrontpage.patient_id,
+    MedicalRecordFrontpage.visit_id,
+    MedicalRecordFrontpage.name,
+    MedicalRecordFrontpage.mr_no,
+    MedicalRecordFrontpage.inpat_no,
+    MedicalRecordFrontpage.discharge_dept_name,
+    MedicalRecordFrontpage.admission_dept_name,
+    MedicalRecordFrontpage.attending_physician_sign,
+    MedicalRecordFrontpage.admission_datetime,
+    MedicalRecordFrontpage.discharge_datetime,
+)
 _UNTRUSTED_PROJECTION_SOURCES = frozenset(
     {"", "inpat_registration", "mr", "source_scope_unmatched"}
 )
+
+
+class _IsIsoDateText(FunctionElement):
+    """可移植 YYYY-MM-DD 格式校验：兼容 PostgreSQL 正则与 SQLite GLOB，空串/脏值不报错。"""
+
+    type = Boolean()
+    inherit_cache = True
+
+
+@compiles(_IsIsoDateText, "postgresql")
+def _compile_is_iso_date_pg(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return f"({compiled} ~ '^[0-9]{{4}}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')"
+
+
+@compiles(_IsIsoDateText, "sqlite")
+def _compile_is_iso_date_sqlite(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return (
+        f"({compiled} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' "
+        f"AND substr({compiled}, 6, 2) BETWEEN '01' AND '12' "
+        f"AND substr({compiled}, 9, 2) BETWEEN '01' AND '31')"
+    )
+
+
+@compiles(_IsIsoDateText)
+def _compile_is_iso_date_default(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return f"({compiled} LIKE '____-__-__')"
 
 
 def _is_fresh_projection_timestamp(verified_at: Any, *, max_age_hours: int = 24) -> bool:
@@ -149,13 +194,16 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
 
 
 def _date_range_condition(column: Any, start: Optional[date], end: Optional[date]):
-    conditions = []
-    date_column = func.date(column)
+    if not start and not end:
+        return None
+    # 避免 PG 上对 varchar 调用 date(varchar) 必 500，同时安全跳过空串/非 YYYY-MM-DD 脏值。
+    date_text = func.substr(func.trim(cast(column, String)), 1, 10)
+    conditions = [date_text.is_not(None), _IsIsoDateText(date_text)]
     if start:
-        conditions.append(date_column >= start)
+        conditions.append(date_text >= start.isoformat())
     if end:
-        conditions.append(date_column <= end)
-    return and_(*conditions) if conditions else None
+        conditions.append(date_text <= end.isoformat())
+    return and_(*conditions)
 
 
 def _record_date_range_condition(
@@ -328,24 +376,21 @@ class RecordRepository:
         if not missing_refs:
             return []
 
-        def exact_clause(model: Any):
-            return or_(
-                *(
-                    and_(
-                        model.institute_id == ref.institute_id,
-                        model.patient_id == ref.patient_id,
-                        model.visit_id == ref.visit_id,
-                    )
-                    for ref in missing_refs
-                )
+        def exact_clause(model: Any, batch: Sequence[CaseRef]):
+            return tuple_(model.institute_id, model.patient_id, model.visit_id).in_(
+                [(ref.institute_id, ref.patient_id, ref.visit_id) for ref in batch]
             )
 
         def source_rows(model: Any, fields: Sequence[str]):
-            query = session.query(model).filter(exact_clause(model))
-            if _metadata_only:
-                # 目录计数/分页只加载元数据；正文仅在选定病例后读取。
-                query = query.options(load_only(*(getattr(model, field) for field in fields)))
-            return query.all()
+            rows: List[Any] = []
+            for start in range(0, len(missing_refs), _RECORD_REF_BATCH_SIZE):
+                batch = missing_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                query = session.query(model).filter(exact_clause(model, batch))
+                if _metadata_only:
+                    # 目录计数/分页只加载元数据；正文仅在选定病例后读取。
+                    query = query.options(load_only(*(getattr(model, field) for field in fields)))
+                rows.extend(query.all())
+            return rows
 
         discharge_rows = source_rows(DischargeRecord, ("institute_id", "patient_id", "visit_id",
             "dept_name", "discharge_date", "discharge_time", "document_status"))
@@ -360,20 +405,24 @@ class RecordRepository:
 
         projection_by_ref: Dict[CaseRef, Any] = {}
         if _load_verified_status and not self._material_schema:
+            projection_rows: List[Any] = []
             try:
-                if hasattr(session, "begin_nested"):
-                    with session.begin_nested():
-                        projection_rows = (
+                for start in range(0, len(missing_refs), _RECORD_REF_BATCH_SIZE):
+                    batch = missing_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                    if hasattr(session, "begin_nested"):
+                        with session.begin_nested():
+                            batch_rows = (
+                                session.query(HospitalizationStatusProjection)
+                                .filter(exact_clause(HospitalizationStatusProjection, batch))
+                                .all()
+                            )
+                    else:
+                        batch_rows = (
                             session.query(HospitalizationStatusProjection)
-                            .filter(exact_clause(HospitalizationStatusProjection))
+                            .filter(exact_clause(HospitalizationStatusProjection, batch))
                             .all()
                         )
-                else:
-                    projection_rows = (
-                        session.query(HospitalizationStatusProjection)
-                        .filter(exact_clause(HospitalizationStatusProjection))
-                        .all()
-                    )
+                    projection_rows.extend(batch_rows)
             except (OperationalError, ProgrammingError):
                 projection_rows = []
             for row in projection_rows:
@@ -546,6 +595,7 @@ class RecordRepository:
         sync_scope: Optional[str] = None,
         institute_id: Optional[str] = None,
         include_test_records: bool = False,
+        _metadata_only: bool = False,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -558,11 +608,11 @@ class RecordRepository:
             AdmissionRecord.dept_name,
         )
         discharge_dt_expr = func.coalesce(
-            # 源库可同时存在 timestamp、date 和 text，先统一类型再取业务时间。
-            cast(InpatRegistration.discharge_datetime, String),
-            cast(MedicalRecordFrontpage.discharge_datetime, String),
-            cast(DischargeRecord.discharge_date, String),
-            cast(DischargeRecord.discharge_time, String),
+            # 源库可同时存在 timestamp、date 和 text，先转文本并剔除空串再取业务时间。
+            func.nullif(func.trim(cast(InpatRegistration.discharge_datetime, String)), ""),
+            func.nullif(func.trim(cast(MedicalRecordFrontpage.discharge_datetime, String)), ""),
+            func.nullif(func.trim(cast(DischargeRecord.discharge_date, String)), ""),
+            func.nullif(func.trim(cast(DischargeRecord.discharge_time, String)), ""),
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
@@ -606,6 +656,8 @@ class RecordRepository:
                 ),
             )
         )
+        if _metadata_only:
+            query = query.options(load_only(*_FRONTPAGE_METADATA_COLUMNS))
         query = query.filter(
             MedicalRecordFrontpage.institute_id.is_not(None),
             MedicalRecordFrontpage.institute_id != "",
@@ -664,15 +716,15 @@ class RecordRepository:
         if record_refs:
             normalized_refs = normalize_case_refs(record_refs)
             query = query.filter(
-                or_(
-                    *(
-                        and_(
-                            MedicalRecordFrontpage.institute_id == ref.institute_id,
-                            MedicalRecordFrontpage.patient_id == ref.patient_id,
-                            MedicalRecordFrontpage.visit_id == ref.visit_id,
-                        )
+                tuple_(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                ).in_(
+                    [
+                        (ref.institute_id, ref.patient_id, ref.visit_id)
                         for ref in normalized_refs
-                    )
+                    ]
                 )
             )
         elif record_ids:
@@ -691,7 +743,7 @@ class RecordRepository:
             query = query.filter(date_condition)
         return query
 
-    def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
+    def _serialize_record_row(self, row: Any, *, _metadata_only: bool = False) -> Dict[str, Any]:
         source_row = row
         effective_discharge_datetime = None
         effective_admission_datetime = None
@@ -764,8 +816,8 @@ class RecordRepository:
             "qc_discharge_datetime": _to_iso_datetime(qc_discharge_selection.value if qc_discharge_selection else None),
             "qc_discharge_horizon_source": qc_discharge_selection.source if qc_discharge_selection else "",
             "qc_discharge_horizon_conflict": bool(qc_discharge_selection and qc_discharge_selection.conflict),
-            "medical_text": _safe_text(source_row.record_content),
-            "medical_text_length": len(_safe_text(source_row.record_content)),
+            "medical_text": "" if _metadata_only else _safe_text(source_row.record_content),
+            "medical_text_length": 0 if _metadata_only else len(_safe_text(source_row.record_content)),
         }
 
     def _list_frontpage_records(
@@ -796,8 +848,11 @@ class RecordRepository:
                 keyword=keyword,
                 institute_id=institute_id,
                 include_test_records=include_test_records,
+                _metadata_only=True,
             )
-            total = int(query.count())
+            total = int(
+                query.with_entities(func.count()).scalar() or 0
+            )
             rows = (
                 query.order_by(
                     desc(MedicalRecordFrontpage.discharge_datetime),
@@ -807,7 +862,7 @@ class RecordRepository:
                 .limit(page_size)
                 .all()
             )
-            items = [self._serialize_record_row(row) for row in rows]
+            items = [self._serialize_record_row(row, _metadata_only=True) for row in rows]
             return WorkspaceListResult(items=items, total=total, page=page, page_size=page_size)
         finally:
             session.close()
@@ -983,11 +1038,85 @@ class RecordRepository:
         if self._frontpage_display:
             session = self._open_session()
             try:
-                rows = self._build_records_query(session, scope=scope, department=department, doctor=doctor,
-                    date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
-                    record_ids=record_ids, record_refs=record_refs, sync_scope=sync_scope,
-                    institute_id=institute_id, include_test_records=effective_include_test).all()
-                return [self._serialize_record_row(row) for row in rows]
+                if record_refs:
+                    normalized_refs = list(normalize_case_refs(record_refs))
+                    if not normalized_refs:
+                        return []
+                    rows: List[Any] = []
+                    for start in range(0, len(normalized_refs), _RECORD_REF_BATCH_SIZE):
+                        batch = normalized_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                        rows.extend(
+                            self._build_records_query(
+                                session,
+                                scope=scope,
+                                department=department,
+                                doctor=doctor,
+                                date_field=date_field,
+                                start_date=start_date,
+                                end_date=end_date,
+                                keyword=keyword,
+                                record_ids=None,
+                                record_refs=batch,
+                                sync_scope=sync_scope,
+                                institute_id=institute_id,
+                                include_test_records=effective_include_test,
+                                _metadata_only=_metadata_only,
+                            ).all()
+                        )
+                    return [
+                        self._serialize_record_row(row, _metadata_only=_metadata_only)
+                        for row in rows
+                    ]
+                if record_ids:
+                    normalized_ids = list(
+                        dict.fromkeys(_safe_text(item) for item in record_ids if _safe_text(item))
+                    )
+                    if len(normalized_ids) > _RECORD_REF_BATCH_SIZE:
+                        rows = []
+                        for start in range(0, len(normalized_ids), _RECORD_REF_BATCH_SIZE):
+                            batch_ids = normalized_ids[start:start + _RECORD_REF_BATCH_SIZE]
+                            rows.extend(
+                                self._build_records_query(
+                                    session,
+                                    scope=scope,
+                                    department=department,
+                                    doctor=doctor,
+                                    date_field=date_field,
+                                    start_date=start_date,
+                                    end_date=end_date,
+                                    keyword=keyword,
+                                    record_ids=batch_ids,
+                                    record_refs=None,
+                                    sync_scope=sync_scope,
+                                    institute_id=institute_id,
+                                    include_test_records=effective_include_test,
+                                    _metadata_only=_metadata_only,
+                                ).all()
+                            )
+                        return [
+                            self._serialize_record_row(row, _metadata_only=_metadata_only)
+                            for row in rows
+                        ]
+                rows = self._build_records_query(
+                    session,
+                    scope=scope,
+                    department=department,
+                    doctor=doctor,
+                    date_field=date_field,
+                    start_date=start_date,
+                    end_date=end_date,
+                    keyword=keyword,
+                    record_ids=record_ids,
+                    record_refs=record_refs,
+                    sync_scope=sync_scope,
+                    institute_id=institute_id,
+                    include_test_records=effective_include_test,
+                    _metadata_only=_metadata_only,
+                ).all()
+                return [
+                    self._serialize_record_row(row, _metadata_only=_metadata_only)
+                    for row in rows
+                ]
             finally:
                 session.close()
         from ...database.clinical_connection import configured

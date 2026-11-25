@@ -284,9 +284,13 @@ async def get_notification_qc_result(
     notification_id: str, request: Request,
     current_user: dict = Depends(get_current_user),
 ):
+    from .qc_sichuan import _is_restricted_demo_account, _trim_batch_job_for_demo_account
+
     data = await _owned_call(
         current_user, service.result_ready, notification_id, _load_ready_batch_result
     )
+    if _is_restricted_demo_account(current_user) and isinstance(data, dict):
+        data = _trim_batch_job_for_demo_account(data)
     return success_response(data=data, trace_id=get_trace_id(request))
 
 

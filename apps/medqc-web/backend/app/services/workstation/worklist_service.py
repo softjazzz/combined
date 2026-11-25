@@ -649,34 +649,57 @@ class WorkstationAggregationService:
                 bucket = completed_at.astimezone(_ASIA_SHANGHAI).date().isoformat()
                 time_buckets[bucket] = time_buckets.get(bucket, 0) + 1
 
-        department_distribution = [
-            {
-                "department": name,
-                "distinct_record_total": len(identities),
-                "non_compliant_record_total": len(department_non_compliant.get(name, set())),
-                "data_gap_record_total": len(department_data_gap.get(name, set())),
-                "uncertain_record_total": len(department_uncertain.get(name, set())),
-                "canonical_invalid_or_missing_total": 0,
-            }
-            for name, identities in department_records.items()
-        ]
+        department_distribution = []
+        for name, identities in department_records.items():
+            nc_set = department_non_compliant.get(name, set())
+            dg_set = department_data_gap.get(name, set())
+            unc_set = department_uncertain.get(name, set())
+            problem_set = nc_set | dg_set | unc_set
+            primary_dg_set = dg_set - nc_set
+            primary_unc_set = unc_set - nc_set - dg_set
+            department_distribution.append(
+                {
+                    "department": name,
+                    "distinct_record_total": len(identities),
+                    "non_compliant_record_total": len(nc_set),
+                    "data_gap_record_total": len(dg_set),
+                    "uncertain_record_total": len(unc_set),
+                    "problem_record_total": len(problem_set),
+                    "primary_non_compliant_record_total": len(nc_set),
+                    "primary_data_gap_record_total": len(primary_dg_set),
+                    "primary_uncertain_record_total": len(primary_unc_set),
+                    "canonical_invalid_or_missing_total": 0,
+                }
+            )
         department_distribution.sort(
             key=lambda item: (
                 -item["non_compliant_record_total"],
                 -item["data_gap_record_total"],
+                -item["uncertain_record_total"],
                 item["department"],
             )
         )
-        physician_distribution = [
-            {
-                "physician": name,
-                "distinct_record_total": len(identities),
-                "non_compliant_record_total": len(physician_non_compliant.get(name, set())),
-                "data_gap_record_total": len(physician_data_gap.get(name, set())),
-                "uncertain_record_total": len(physician_uncertain.get(name, set())),
-            }
-            for name, identities in physician_records.items()
-        ]
+        physician_distribution = []
+        for name, identities in physician_records.items():
+            nc_set = physician_non_compliant.get(name, set())
+            dg_set = physician_data_gap.get(name, set())
+            unc_set = physician_uncertain.get(name, set())
+            problem_set = nc_set | dg_set | unc_set
+            primary_dg_set = dg_set - nc_set
+            primary_unc_set = unc_set - nc_set - dg_set
+            physician_distribution.append(
+                {
+                    "physician": name,
+                    "distinct_record_total": len(identities),
+                    "non_compliant_record_total": len(nc_set),
+                    "data_gap_record_total": len(dg_set),
+                    "uncertain_record_total": len(unc_set),
+                    "problem_record_total": len(problem_set),
+                    "primary_non_compliant_record_total": len(nc_set),
+                    "primary_data_gap_record_total": len(primary_dg_set),
+                    "primary_uncertain_record_total": len(primary_unc_set),
+                }
+            )
         physician_distribution.sort(
             key=lambda item: (
                 -item["non_compliant_record_total"],
@@ -749,14 +772,18 @@ class WorkstationAggregationService:
         self,
         session: Session,
         *,
-        records_by_identity: Mapping[tuple[str, str, str], Mapping[str, Any]],
+        records_by_identity: Optional[Mapping[tuple[str, str, str], Mapping[str, Any]]] = None,
         completed_from: Optional[datetime],
         completed_to: Optional[datetime],
         job_id: Optional[str],
         scoped_filter_active: bool = False,
+        case_scope=None,
+        institute_id: Optional[str] = None,
     ) -> tuple[list[Dict[str, Any]], int]:
         """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
 
+        from ...database import clinical_connection
+        from .. import clinical_sources
         from ..custom_qc_workspace_service import CustomQCWorkspaceService
         from ..qc_workspace.canonical_result_store import (
             CANONICAL_RESULT_DELIVERY_MODE as _CANONICAL_RESULT_DELIVERY_MODE,
@@ -797,6 +824,11 @@ class WorkstationAggregationService:
                 or (completed_from_utc is not None and finished_at < completed_from_utc)
                 or (completed_to_utc is not None and finished_at > completed_to_utc)
             ):
+                continue
+            try:
+                if not clinical_sources.job_matches(dict(source)):
+                    continue
+            except (ValueError, clinical_connection.ClinicalSourceConfigurationError):
                 continue
             record_ids = _json_loads_if_needed(row.get("record_ids_json"))
             raw_record_refs = source.get("record_refs")
@@ -855,6 +887,24 @@ class WorkstationAggregationService:
         if not jobs:
             return [], 0
 
+        scope_institute_id = (
+            _safe_text(institute_id).strip()
+            or (
+                _safe_text(getattr(case_scope, "institute_id", None)).strip()
+                if case_scope is not None
+                else ""
+            )
+            or None
+        )
+        envelope_conditions = [
+            workspace_service._record_result_envelope_table.c.root_job_id.in_(list(jobs)),
+            workspace_service._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+            workspace_service._record_result_envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
+        ]
+        if scope_institute_id is not None:
+            envelope_conditions.append(
+                workspace_service._record_result_envelope_table.c.institute_id == scope_institute_id
+            )
         envelope_rows = session.execute(
             select(
                 workspace_service._record_result_envelope_table.c.root_job_id,
@@ -862,13 +912,7 @@ class WorkstationAggregationService:
                 workspace_service._record_result_envelope_table.c.patient_id,
                 workspace_service._record_result_envelope_table.c.visit_id,
                 workspace_service._record_result_envelope_table.c.envelope_json,
-            ).where(
-                and_(
-                    workspace_service._record_result_envelope_table.c.root_job_id.in_(list(jobs)),
-                    workspace_service._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-                    workspace_service._record_result_envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
-                )
-            )
+            ).where(and_(*envelope_conditions))
         ).mappings().all()
         rows_by_event: Dict[tuple[str, str, str, str], list[Dict[str, Any]]] = {}
         for raw_row in envelope_rows:
@@ -884,27 +928,54 @@ class WorkstationAggregationService:
         for root_job_id, job in jobs.items():
             record_ids = job["record_ids"]
             job_refs = job.get("record_refs") or set()
-            if job_refs:
-                matching_identities = [
-                    identity
-                    for identity in job_refs
-                    if identity in records_by_identity
-                    and (not record_ids or identity[2] in record_ids)
-                ]
-                if not scoped_filter_active:
-                    unresolved_visit_ids = record_ids - {
-                        identity[2] for identity in matching_identities
-                    }
-                    invalid_total += len(unresolved_visit_ids)
+            if records_by_identity is not None:
+                if job_refs:
+                    matching_identities = [
+                        identity
+                        for identity in job_refs
+                        if identity in records_by_identity
+                        and (not record_ids or identity[2] in record_ids)
+                    ]
+                    if not scoped_filter_active:
+                        unresolved_visit_ids = record_ids - {
+                            identity[2] for identity in matching_identities
+                        }
+                        invalid_total += len(unresolved_visit_ids)
+                else:
+                    matching_identities = [
+                        identity for identity in records_by_identity if identity[2] in record_ids
+                    ]
+                    if not scoped_filter_active:
+                        unresolved_visit_ids = record_ids - {
+                            identity[2] for identity in matching_identities
+                        }
+                        invalid_total += len(unresolved_visit_ids)
             else:
-                matching_identities = [
-                    identity for identity in records_by_identity if identity[2] in record_ids
-                ]
-                if not scoped_filter_active:
-                    unresolved_visit_ids = record_ids - {
-                        identity[2] for identity in matching_identities
-                    }
-                    invalid_total += len(unresolved_visit_ids)
+                if job_refs:
+                    matching_identities = [
+                        identity
+                        for identity in job_refs
+                        if not record_ids or identity[2] in record_ids
+                    ]
+                else:
+                    matching_identities = [
+                        ev_key[1:]
+                        for ev_key in rows_by_event
+                        if ev_key[0] == root_job_id
+                        and (not record_ids or ev_key[3] in record_ids)
+                    ]
+                if scope_institute_id is not None:
+                    matching_identities = [
+                        identity
+                        for identity in matching_identities
+                        if identity[0] == scope_institute_id
+                    ]
+                if case_scope is not None:
+                    matching_identities = [
+                        identity
+                        for identity in matching_identities
+                        if _matches_case_scope_identity(identity, case_scope)
+                    ]
             for identity in matching_identities:
                 candidates = rows_by_event.get((root_job_id, *identity), [])
                 if len(candidates) != 1:
@@ -937,7 +1008,7 @@ class WorkstationAggregationService:
                 if not valid:
                     invalid_total += 1
                     continue
-                record = records_by_identity[identity]
+                record = records_by_identity[identity] if records_by_identity is not None else {}
                 events.append(
                     {
                         "root_job_id": root_job_id,

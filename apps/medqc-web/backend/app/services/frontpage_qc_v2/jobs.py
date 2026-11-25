@@ -6,9 +6,11 @@
 from __future__ import annotations
 
 import logging
+from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
 
+from ...database import clinical_connection
 from .adapter import build_frontpage_doc
 from .engine import evaluate_frontpage
 from .loader import FrontpageRef, load_frontpage_raw
@@ -34,6 +36,7 @@ def run_frontpage_qc_job(
     cdm_session_factory: Callable[[], Any],
     record_meta: Optional[RecordMeta] = None,
     cdm_schema: Any = ...,
+    clinical_source: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """执行一个已创建的任务。record_meta 按三坐标提供科室、出院日期等展示字段。"""
     run = store.get_run(run_id)
@@ -49,46 +52,52 @@ def run_frontpage_qc_job(
     processed = success = failed = issue_records = gap_records = 0
     failed_records: List[Dict[str, str]] = []
     cancelled = False
+    source_ctx = (
+        clinical_connection.selected(clinical_source)
+        if clinical_source is not None
+        else nullcontext()
+    )
     try:
-        with cdm_session_factory() as cdm_session:
-            for index, ref in enumerate(refs):
-                if store.is_cancel_requested(run_id):
-                    cancelled = True
-                    break
-                try:
-                    kwargs = {} if cdm_schema is ... else {"schema": cdm_schema}
-                    raw = load_frontpage_raw(cdm_session, ref, **kwargs)
-                    if raw is None:
-                        raise LookupError("未找到病案首页")
-                    outcome = evaluate_frontpage(build_frontpage_doc(raw))
-                    info = meta.get(ref, {})
-                    store.save_outcome(
-                        run_id=run_id,
-                        outcome=outcome,
-                        department=info.get("department") or raw.mr.get("discharge_dept_name") or "",
-                        discharge_date=info.get("discharge_date") or str(raw.mr.get("discharge_datetime") or "")[:10],
-                    )
-                    success += 1
-                    issue_records += 1 if outcome.fail_count else 0
-                    gap_records += 1 if outcome.data_gap_count else 0
-                except Exception as exc:  # noqa: BLE001 - 单份失败记录后继续
-                    failed += 1
-                    rollback = getattr(cdm_session, "rollback", None)
-                    if callable(rollback):
-                        rollback()
-                    if len(failed_records) < _FAILED_SAMPLE_LIMIT:
-                        failed_records.append({**ref.__dict__, "error": type(exc).__name__, "message": str(exc)[:120]})
-                    logger.warning("首页质控单份失败 run=%s error=%s", run_id, type(exc).__name__)
-                processed += 1
-                if processed % PROGRESS_EVERY == 0:
-                    store.update_run(
-                        run_id,
-                        processed_records=processed,
-                        success_count=success,
-                        failed_count=failed,
-                        issue_records=issue_records,
-                        data_gap_records=gap_records,
-                    )
+        with source_ctx:
+            with cdm_session_factory() as cdm_session:
+                for index, ref in enumerate(refs):
+                    if store.is_cancel_requested(run_id):
+                        cancelled = True
+                        break
+                    try:
+                        kwargs = {} if cdm_schema is ... else {"schema": cdm_schema}
+                        raw = load_frontpage_raw(cdm_session, ref, **kwargs)
+                        if raw is None:
+                            raise LookupError("未找到病案首页")
+                        outcome = evaluate_frontpage(build_frontpage_doc(raw))
+                        info = meta.get(ref, {})
+                        store.save_outcome(
+                            run_id=run_id,
+                            outcome=outcome,
+                            department=info.get("department") or raw.mr.get("discharge_dept_name") or "",
+                            discharge_date=info.get("discharge_date") or str(raw.mr.get("discharge_datetime") or "")[:10],
+                        )
+                        success += 1
+                        issue_records += 1 if outcome.fail_count else 0
+                        gap_records += 1 if outcome.data_gap_count else 0
+                    except Exception as exc:  # noqa: BLE001 - 单份失败记录后继续
+                        failed += 1
+                        rollback = getattr(cdm_session, "rollback", None)
+                        if callable(rollback):
+                            rollback()
+                        if len(failed_records) < _FAILED_SAMPLE_LIMIT:
+                            failed_records.append({**ref.__dict__, "error": type(exc).__name__, "message": str(exc)[:120]})
+                        logger.warning("首页质控单份失败 run=%s error=%s", run_id, type(exc).__name__)
+                    processed += 1
+                    if processed % PROGRESS_EVERY == 0:
+                        store.update_run(
+                            run_id,
+                            processed_records=processed,
+                            success_count=success,
+                            failed_count=failed,
+                            issue_records=issue_records,
+                            data_gap_records=gap_records,
+                        )
         if not cancelled and store.is_cancel_requested(run_id):
             cancelled = True
     except Exception as exc:  # noqa: BLE001 - 整体失败要落库，前端才能停止轮询

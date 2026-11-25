@@ -22,6 +22,7 @@ from ..services.medical_records.query_service import (
     get_stats,
     get_workstation_data,
     list_medical_records,
+    parse_analytics_result_statuses,
 )
 from ..services.medical_records.hospitalization_status_service import (
     default_hospitalization_status_service,
@@ -159,19 +160,19 @@ def _workstation_filters(
     analytics_completed_from: Optional[datetime] = Query(None, description="统计下钻完成时间起点"),
     analytics_completed_to: Optional[datetime] = Query(None, description="统计下钻完成时间终点"),
     analytics_rule_id: Optional[str] = Query(None, description="统计下钻规则 ID"),
-    analytics_result_status: Optional[
-        Literal[
-            "non_compliant",
-            "data_gap",
-            "uncertain",
-            "compliant",
-            "not_applicable",
-            "not_executed",
-            "technical_error",
-        ]
-    ] = Query(None, description="统计下钻 Canonical 结果状态"),
+    analytics_result_status: Optional[str] = Query(
+        None,
+        description="统计下钻 Canonical 结果状态（支持逗号分隔多值）",
+    ),
     analytics_scope: Optional[Literal["final"]] = Query(None, description="统计下钻资料范围"),
 ) -> dict[str, Any]:
+    normalized_analytics_result_status: Optional[str] = None
+    if analytics_result_status is not None:
+        try:
+            parsed_statuses = parse_analytics_result_statuses(analytics_result_status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        normalized_analytics_result_status = ",".join(parsed_statuses) if parsed_statuses else None
     return dict(
         dept=dept,
         doctor=doctor,
@@ -186,7 +187,7 @@ def _workstation_filters(
         analytics_completed_from=analytics_completed_from,
         analytics_completed_to=analytics_completed_to,
         analytics_rule_id=analytics_rule_id,
-        analytics_result_status=analytics_result_status,
+        analytics_result_status=normalized_analytics_result_status,
         analytics_scope=analytics_scope,
     )
 

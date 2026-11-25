@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter, OrderedDict
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from datetime import date, datetime, timedelta, timezone
 from threading import RLock
 from types import SimpleNamespace
@@ -35,6 +35,168 @@ from .shared import build_demo_workstation_records, filter_demo_records
 
 
 _ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
+_ANALYTICS_CUSTOMER_STATUSES = frozenset({
+    "non_compliant",
+    "data_gap",
+    "uncertain",
+    "compliant",
+    "not_applicable",
+    "not_executed",
+})
+_VALID_ANALYTICS_RESULT_STATUSES = _ANALYTICS_CUSTOMER_STATUSES | frozenset({"technical_error"})
+
+
+def parse_analytics_result_statuses(value: Optional[str]) -> tuple[str, ...]:
+    raw = str(value or "").strip()
+    if not raw:
+        return ()
+    parts = [part.strip() for part in raw.split(",")]
+    if any(not part or part not in _VALID_ANALYTICS_RESULT_STATUSES for part in parts):
+        raise ValueError("analytics_result_status 无效")
+    return tuple(dict.fromkeys(parts))
+
+
+def _validate_analytics_filters(
+    *,
+    analytics_completed_from: Optional[datetime] = None,
+    analytics_completed_to: Optional[datetime] = None,
+    analytics_result_status: Optional[str] = None,
+    analytics_scope: Optional[str] = None,
+) -> tuple[tuple[str, ...], str]:
+    if (
+        analytics_completed_from
+        and analytics_completed_to
+        and _bound_to_utc(analytics_completed_from) > _bound_to_utc(analytics_completed_to)
+    ):
+        raise ValueError("analytics_completed_from 不能晚于 analytics_completed_to")
+    normalized_statuses = parse_analytics_result_statuses(analytics_result_status)
+    normalized_scope = str(analytics_scope or "").strip()
+    if normalized_scope and normalized_scope != "final":
+        raise ValueError("analytics_scope 无效")
+    return normalized_statuses, normalized_scope
+
+
+def _match_analytics_event_identities(
+    analytics_events: Iterable[Mapping[str, Any]],
+    *,
+    analytics_rule_id: Optional[str] = None,
+    analytics_result_statuses: Iterable[str] = (),
+) -> set[tuple[str, str, str]]:
+    """按统计分析同口径校验 Canonical 事件并返回命中三坐标集合。"""
+
+    from ..luxian_0609_rule_master import load_luxian_0609_rule_master
+    from ..sample_validation_rule_sets import get_luxian_0609_customer_delivery_rule_ids
+
+    rule_entries = tuple(load_luxian_0609_rule_master())
+    all_rule_ids = {entry.rule_id for entry in rule_entries}
+    customer_delivery_rule_ids = frozenset(get_luxian_0609_customer_delivery_rule_ids())
+    target_rule_id = str(analytics_rule_id or "").strip().upper()
+    status_filter = {str(item or "").strip() for item in analytics_result_statuses if str(item or "").strip()}
+    if status_filter and not (status_filter & _ANALYTICS_CUSTOMER_STATUSES):
+        return set()
+
+    seen_event_keys: set[tuple[str, str, str, str]] = set()
+    matching_identities: set[tuple[str, str, str]] = set()
+    for event in analytics_events:
+        if not isinstance(event, Mapping):
+            continue
+        raw_identity = event.get("identity")
+        root_job_id = str(event.get("root_job_id") or "").strip()
+        if not root_job_id or not isinstance(raw_identity, tuple) or len(raw_identity) != 3:
+            continue
+        identity = tuple(str(part or "").strip() for part in raw_identity)
+        if not all(identity):
+            continue
+        event_key = (root_job_id, *identity)
+        if event_key in seen_event_keys:
+            continue
+        raw_items = event.get("items")
+        if not isinstance(raw_items, list):
+            continue
+        delivered_rule_ids: set[str] = set()
+        validated_items: list[tuple[str, str]] = []
+        valid_event = True
+        for item in raw_items:
+            if not isinstance(item, Mapping):
+                valid_event = False
+                break
+            rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+            status = str(item.get("status") or "").strip()
+            if (
+                not rule_id
+                or rule_id not in all_rule_ids
+                or status not in _ANALYTICS_CUSTOMER_STATUSES
+            ):
+                valid_event = False
+                break
+            if rule_id not in customer_delivery_rule_ids:
+                continue
+            if rule_id in delivered_rule_ids:
+                valid_event = False
+                break
+            delivered_rule_ids.add(rule_id)
+            validated_items.append((rule_id, status))
+        if not valid_event:
+            continue
+        seen_event_keys.add(event_key)
+        if any(
+            (not target_rule_id or rule_id == target_rule_id)
+            and (not status_filter or status in status_filter)
+            for rule_id, status in validated_items
+        ):
+            matching_identities.add(identity)
+    return matching_identities
+
+
+def resolve_analytics_matching_identities(
+    *,
+    session_factory: Callable[[], Any] | None = None,
+    analytics_job_id: Optional[str] = None,
+    analytics_completed_from: Optional[datetime] = None,
+    analytics_completed_to: Optional[datetime] = None,
+    analytics_rule_id: Optional[str] = None,
+    analytics_result_status: Optional[str] = None,
+    analytics_scope: Optional[str] = None,
+    case_scope=None,
+) -> frozenset[tuple[str, str, str]]:
+    """基于业务库 Canonical Envelope 计算统计下钻命中的三坐标集合。"""
+
+    normalized_statuses, _ = _validate_analytics_filters(
+        analytics_completed_from=analytics_completed_from,
+        analytics_completed_to=analytics_completed_to,
+        analytics_result_status=analytics_result_status,
+        analytics_scope=analytics_scope,
+    )
+    if normalized_statuses and not (set(normalized_statuses) & _ANALYTICS_CUSTOMER_STATUSES):
+        return frozenset()
+    factory = session_factory
+    if factory is None:
+        from ...database import connection as db_connection
+        factory = getattr(db_connection, "SessionLocal", None)
+    if factory is None:
+        from ..data_pipeline_settings import PipelineError
+        raise PipelineError("clinical_source_read_unavailable", 503)
+
+    from ..workstation.worklist_service import WorkstationAggregationService
+
+    analytics_service = WorkstationAggregationService(session_factory=factory)
+    with factory() as session:
+        analytics_events, _ = analytics_service._load_luxian_0609_analytics_events(
+            session,
+            records_by_identity=None,
+            completed_from=analytics_completed_from,
+            completed_to=analytics_completed_to,
+            job_id=str(analytics_job_id or "").strip() or None,
+            scoped_filter_active=True,
+            case_scope=case_scope,
+        )
+    return frozenset(
+        _match_analytics_event_identities(
+            analytics_events,
+            analytics_rule_id=analytics_rule_id,
+            analytics_result_statuses=normalized_statuses,
+        )
+    )
 
 
 def _session_factory() -> Session:
@@ -1321,17 +1483,46 @@ def get_workstation_data(
         raise ValueError("qc_summary_include_totals=False requires qc_summary_mode=only and explicit identities")
     if qc_summary_identities is not None and qc_summary_mode != "only":
         raise ValueError("qc_summary_identities requires qc_summary_mode=only")
+    normalized_analytics_statuses, normalized_analytics_scope = _validate_analytics_filters(
+        analytics_completed_from=analytics_completed_from,
+        analytics_completed_to=analytics_completed_to,
+        analytics_result_status=analytics_result_status,
+        analytics_scope=analytics_scope,
+    )
+    has_analytics_filter = any(
+        (
+            analytics_job_id,
+            analytics_completed_from,
+            analytics_completed_to,
+            analytics_rule_id,
+            normalized_analytics_statuses,
+            normalized_analytics_scope,
+        )
+    )
     from ...database import clinical_connection
     if clinical_connection.configured():
         from ..clinical_case_catalog import workstation
+        cdm_analytics_identities: frozenset[tuple[str, str, str]] | None = None
+        if has_analytics_filter:
+            if case_scope is not None and hasattr(case_scope, "require_filters"):
+                case_scope.require_filters(dept, doctor)
+            cdm_analytics_identities = resolve_analytics_matching_identities(
+                session_factory=session_factory,
+                analytics_job_id=analytics_job_id,
+                analytics_completed_from=analytics_completed_from,
+                analytics_completed_to=analytics_completed_to,
+                analytics_rule_id=analytics_rule_id,
+                analytics_result_status=",".join(normalized_analytics_statuses) or None,
+                analytics_scope=normalized_analytics_scope or None,
+                case_scope=case_scope,
+            )
         return workstation(dept=dept, doctor=doctor, keyword=keyword, start_date=start_date, end_date=end_date,
             date_field=date_field, hospital_status=hospital_status, sync_scope=sync_scope, inpatient_sort=inpatient_sort,
             page=page, page_size=page_size, case_scope=case_scope, qc_projection_loader=qc_projection_loader,
             qc_summary_mode=qc_summary_mode, qc_summary_identities=qc_summary_identities,
             qc_summary_include_totals=qc_summary_include_totals,
-            analytics_job_id=analytics_job_id, analytics_completed_from=analytics_completed_from,
-            analytics_completed_to=analytics_completed_to, analytics_rule_id=analytics_rule_id,
-            analytics_result_status=analytics_result_status, analytics_scope=analytics_scope)
+            analytics_identities=cdm_analytics_identities,
+            business_session_factory=session_factory)
     session_factory = session_factory or _session_factory
     normalized_hospital_status = str(hospital_status or "all").strip().lower()
     if normalized_hospital_status not in {"all", "inpatient", "discharged", "unknown"}:
@@ -1347,26 +1538,6 @@ def get_workstation_data(
         or normalized_sync_scope == "today_inpatient"
     )
     effective_inpatient_sort = normalized_inpatient_sort if is_inpatient_scope else "default"
-    if (
-        analytics_completed_from
-        and analytics_completed_to
-        and _bound_to_utc(analytics_completed_from) > _bound_to_utc(analytics_completed_to)
-    ):
-        raise ValueError("analytics_completed_from 不能晚于 analytics_completed_to")
-    normalized_analytics_status = str(analytics_result_status or "").strip()
-    if normalized_analytics_status and normalized_analytics_status not in {
-        "non_compliant",
-        "data_gap",
-        "uncertain",
-        "compliant",
-        "not_applicable",
-        "not_executed",
-        "technical_error",
-    }:
-        raise ValueError("analytics_result_status 无效")
-    normalized_analytics_scope = str(analytics_scope or "").strip()
-    if normalized_analytics_scope and normalized_analytics_scope != "final":
-        raise ValueError("analytics_scope 无效")
 
     page_only = qc_summary_mode == "only" and not qc_summary_include_totals
     requested_identity_tuples: tuple[tuple[str, str, str], ...] = ()
@@ -1482,16 +1653,7 @@ def get_workstation_data(
         )
         analytics_matching_identities: set[tuple[str, str, str]] | None = None
         analytics_identity_filter = None
-        if any(
-            (
-                analytics_job_id,
-                analytics_completed_from,
-                analytics_completed_to,
-                analytics_rule_id,
-                normalized_analytics_status,
-                normalized_analytics_scope,
-            )
-        ):
+        if has_analytics_filter:
             from ..workstation.worklist_service import WorkstationAggregationService
 
             if not page_only and (dept or doctor):
@@ -1559,30 +1721,14 @@ def get_workstation_data(
                 completed_from=analytics_completed_from,
                 completed_to=analytics_completed_to,
                 job_id=str(analytics_job_id or "").strip() or None,
+                scoped_filter_active=True,
+                case_scope=case_scope,
             )
-            matching_identities: set[tuple[str, str, str]] = set()
-            if normalized_analytics_status != "technical_error":
-                for event in analytics_events:
-                    identity = event.get("identity")
-                    if not isinstance(identity, tuple) or len(identity) != 3:
-                        continue
-                    matching_items = [
-                        item
-                        for item in event.get("items", [])
-                        if isinstance(item, dict)
-                        and (
-                            not analytics_rule_id
-                            or str(item.get("rule_id") or "").strip().upper()
-                            == str(analytics_rule_id).strip().upper()
-                        )
-                        and (
-                            not normalized_analytics_status
-                            or str(item.get("status") or "").strip()
-                            == normalized_analytics_status
-                        )
-                    ]
-                    if matching_items:
-                        matching_identities.add(identity)
+            matching_identities = _match_analytics_event_identities(
+                analytics_events,
+                analytics_rule_id=analytics_rule_id,
+                analytics_result_statuses=normalized_analytics_statuses,
+            )
             analytics_matching_identities = matching_identities
             analytics_identity_filter = _frontpage_identity_in_condition(sorted(matching_identities))
             q = q.filter(analytics_identity_filter)

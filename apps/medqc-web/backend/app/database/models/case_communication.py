@@ -12,6 +12,21 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase
 
+from .. import connection as db_connection
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+_QC_SCHEMA = _qc_schema()
+_QC_FK_PREFIX = f"{_QC_SCHEMA}." if _QC_SCHEMA else ""
+
 
 class CommunicationBase(DeclarativeBase):
     pass
@@ -35,7 +50,9 @@ class CaseCommunication(CommunicationBase):
     action = Column(String(20), nullable=False)
     content = Column(Text, nullable=False)
     request_id = Column(String(36), nullable=False)
-    related_event_id = Column(String(36), ForeignKey("qc.qc_case_communications.id"))
+    related_event_id = Column(
+        String(36), ForeignKey(f"{_QC_FK_PREFIX}qc_case_communications.id")
+    )
     notification_id = Column(String(36), unique=True)
     created_at = Column(DateTime, nullable=False)
 
@@ -58,5 +75,5 @@ class CaseCommunication(CommunicationBase):
             "visit_id",
             "created_at",
         ),
-        {"schema": "qc"},
+        {"schema": _QC_SCHEMA},
     )

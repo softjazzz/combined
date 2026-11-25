@@ -34,6 +34,7 @@ router = APIRouter(prefix="/api/v1/frontpage-qc", tags=["首页质控V2"])
 
 ALLOWED_ROLES = frozenset({"admin", "super_admin", "qc_manager", "coder"})
 EXPORT_LIMIT = 5000
+_RECORD_REF_BATCH_SIZE = 200
 STALLED_AFTER = timedelta(minutes=10)
 RESULT_ISSUE_FILTERS = ("fail", "hint", "required_missing", "data_gap", "clean")
 RULE_IDS = frozenset(rule.rule_id for rule in RULES)
@@ -71,6 +72,36 @@ def _cdm_session_factory():
     if SessionLocal is None:
         raise HTTPException(503, "数据库未配置")
     return SessionLocal
+
+
+def _clinical_read_session_factory():
+    """构造临床 CDM 只读会话工厂：独立 CDM 启用时走 clinical_connection.get_engine()，否则沿用业务 SessionLocal。"""
+    from sqlalchemy.orm import Session
+    from app.database import clinical_connection
+
+    fallback = _cdm_session_factory()
+
+    def open_session():
+        source_engine = clinical_connection.get_engine()
+        if source_engine is not None:
+            return Session(source_engine)
+        return fallback()
+
+    return open_session
+
+
+def _freeze_clinical_source(request: Optional[Request] = None) -> Optional[Dict[str, Any]]:
+    """冻结当前请求的 clinical_sources 快照，供后台任务线程继续绑定一致的临床数据源。"""
+    from app.database import clinical_connection
+
+    current = clinical_connection.current_selection()
+    if current is not None:
+        return dict(current)
+    if request is not None:
+        state_source = getattr(request.state, "clinical_source", None)
+        if isinstance(state_source, dict):
+            return dict(state_source)
+    return None
 
 
 def get_frontpage_qc_store(user: Dict[str, Any] = Depends(require_frontpage_qc_user)) -> FrontpageQcStore:
@@ -176,7 +207,28 @@ def _collect(
     refs=None,
     institute_id: str = "",
 ) -> List[Dict[str, Any]]:
-    # 显式引用仍受可信机构范围约束。
+    # 显式引用仍受可信机构范围约束；超大批次按 <=200 分批且排除 record_content 全文。
+    if refs is not None:
+        ref_list = list(refs)
+        if not ref_list:
+            return []
+        collected: List[Dict[str, Any]] = []
+        for start in range(0, len(ref_list), _RECORD_REF_BATCH_SIZE):
+            collected.extend(
+                repository.collect_records(
+                    scope="final",
+                    department=department or None,
+                    doctor=None,
+                    date_field="discharge",
+                    start_date=start_date or None,
+                    end_date=end_date or None,
+                    keyword=keyword or None,
+                    record_refs=ref_list[start:start + _RECORD_REF_BATCH_SIZE],
+                    institute_id=institute_id or None,
+                    _metadata_only=True,
+                )
+            )
+        return collected
     return repository.collect_records(
         scope="final",
         department=department or None,
@@ -185,8 +237,9 @@ def _collect(
         start_date=start_date or None,
         end_date=end_date or None,
         keyword=keyword or None,
-        record_refs=refs,
+        record_refs=None,
         institute_id=institute_id or None,
+        _metadata_only=True,
     )
 
 
@@ -278,13 +331,15 @@ async def create_run(
     home_institute: str = Depends(get_home_institute),
 ):
     uid = _user_id(user)
+    if payload.record_refs is not None and len(payload.record_refs) == 0:
+        raise HTTPException(422, "未选择任何待质控病历")
     try:
         active = [_settle_stalled(store, run) for run in store.list_runs(created_by=uid, statuses=RUN_ACTIVE_STATUSES, limit=5)]
         active = [run for run in active if run["status"] in RUN_ACTIVE_STATUSES]
         if active:
             raise HTTPException(409, detail={"message": "已有进行中的首页质控任务，请等待完成或取消后再发起", "run": active[0]})
 
-        if payload.record_refs:
+        if payload.record_refs is not None:
             requested = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
             _check_refs(user, requested)
             records = _check_rows(user, _collect(
@@ -340,13 +395,15 @@ async def create_run(
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
 
+    frozen_source = _freeze_clinical_source(request)
     submit_detached_task(
         "frontpage_qc_v2_run",
         run_frontpage_qc_job,
         run["id"],
         store=store,
-        cdm_session_factory=_cdm_session_factory(),
+        cdm_session_factory=_clinical_read_session_factory(),
         record_meta=meta,
+        clinical_source=frozen_source,
     )
     return _ok(request, run, "首页质控任务已创建")
 
@@ -541,9 +598,14 @@ async def get_record(
 ):
     ref = FrontpageRef(institute_id, patient_id, visit_id)
     _check_refs(_user, [ref])
-    session_factory = _cdm_session_factory()
-    with session_factory() as session:
-        raw = load_frontpage_raw(session, ref)
+    from app.database.clinical_connection import ClinicalSourceConfigurationError
+
+    session_factory = _clinical_read_session_factory()
+    try:
+        with session_factory() as session:
+            raw = load_frontpage_raw(session, ref)
+    except ClinicalSourceConfigurationError:
+        raise HTTPException(503, "临床数据源配置不可用") from None
     if raw is None:
         raise HTTPException(404, "未找到病案首页")
     doc = build_frontpage_doc(raw)
@@ -633,8 +695,10 @@ async def export_records(
     home_institute: str = Depends(get_home_institute),
 ):
     _check_rule_id(payload.rule_id)
+    if payload.record_refs is not None and len(payload.record_refs) == 0:
+        raise HTTPException(422, "未选择任何待导出病历")
     try:
-        if payload.record_refs:
+        if payload.record_refs is not None:
             refs = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
             _check_refs(_user, refs)
             records = _check_rows(_user, _collect(
