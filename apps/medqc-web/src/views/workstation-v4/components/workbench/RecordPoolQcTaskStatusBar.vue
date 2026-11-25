@@ -44,24 +44,6 @@
           {{ stageText }}
         </p>
 
-        <div
-          v-if="isActive && progressPercent !== null"
-          class="record-pool-qc-status__progress-group"
-        >
-          <div
-            class="record-pool-qc-status__progress"
-            :class="{ 'is-indeterminate': progressPercent === 0 }"
-            role="progressbar"
-            aria-label="质控执行进度"
-            :aria-valuenow="progressPercent"
-            :aria-valuemin="0"
-            :aria-valuemax="100"
-          >
-            <span :style="{ width: `${progressPercent}%` }" />
-          </div>
-          <em class="record-pool-qc-status__percent">{{ progressPercent }}<small>%</small></em>
-        </div>
-
         <div class="record-pool-qc-status__metrics">
           <span v-if="ruleProgressText">{{ ruleProgressText }}</span>
           <span v-if="terminalSummary">{{ terminalSummary }}</span>
@@ -113,6 +95,24 @@
           </button>
         </template>
       </div>
+    </div>
+
+    <div
+      v-if="isActive && progressPercent !== null"
+      class="record-pool-qc-status__progress-group"
+    >
+      <div
+        class="record-pool-qc-status__progress"
+        :class="{ 'is-indeterminate': progressPercent === 0 }"
+        role="progressbar"
+        aria-label="质控执行进度"
+        :aria-valuenow="progressPercent"
+        :aria-valuemin="0"
+        :aria-valuemax="100"
+      >
+        <span :style="{ width: `${progressPercent}%` }" />
+      </div>
+      <em class="record-pool-qc-status__percent">{{ progressPercent }}<small>%</small></em>
     </div>
 
     <p
@@ -688,18 +688,18 @@ onBeforeUnmount(() => {
 }
 
 .record-pool-qc-status__progress-group {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  flex: 0 1 180px;
-  min-width: 120px;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
 }
 
 .record-pool-qc-status__progress {
   position: relative;
-  flex: 1 1 112px;
-  min-width: 84px;
-  height: 6px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 7px;
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--mq-brand-600) 13%, var(--mq-bg-surface));
@@ -719,7 +719,7 @@ onBeforeUnmount(() => {
   content: '';
   position: absolute;
   inset: 0;
-  width: 42%;
+  width: 30%;
   border-radius: inherit;
   background: linear-gradient(
     90deg,
@@ -727,11 +727,13 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--mq-brand-600) 52%, transparent) 50%,
     transparent 100%
   );
-  animation: record-pool-qc-shimmer 1.4s ease-in-out infinite;
+  animation: record-pool-qc-shimmer 1.6s ease-in-out infinite;
 }
 
 .record-pool-qc-status__percent {
   flex: 0 0 auto;
+  min-width: 36px;
+  text-align: right;
   color: var(--mq-brand-700);
   font-size: 13px;
   line-height: 18px;
@@ -752,6 +754,7 @@ onBeforeUnmount(() => {
   align-items: center;
   flex-wrap: wrap;
   gap: 4px 12px;
+  margin-left: auto;
   color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 18px;
