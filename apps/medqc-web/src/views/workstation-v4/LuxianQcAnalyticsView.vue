@@ -1,6 +1,9 @@
 <template>
   <div class="analytics-shell custom-scrollbar">
-    <main class="analytics-canvas">
+    <section
+      class="analytics-canvas"
+      aria-label="质控统计分析"
+    >
       <section class="analytics-command-surface">
         <div class="analytics-heading">
           <div
@@ -32,8 +35,9 @@
           >
             <a-range-picker
               v-model:value="dateRange"
-              show-time
-              value-format="YYYY-MM-DDTHH:mm:ss"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              :placeholder="['开始日期', '结束日期']"
               aria-label="质控完成时间范围"
             />
             <a-select
@@ -47,6 +51,7 @@
             <a-input
               v-model:value="jobId"
               allow-clear
+              class="analytics-job-input"
               placeholder="已完成任务 ID（可选）"
               aria-label="已完成任务 ID"
             />
@@ -417,7 +422,14 @@
                     </span>
                     <span class="rule-count">
                       <strong>{{ ruleConcernTotal(item).toLocaleString() }}</strong>
-                      <small>问题结果</small>
+                      <small>{{ hasRuleDistinctRecordCount(item) ? '命中病历' : '问题结果' }}</small>
+                      <small
+                        v-if="hasRuleDistinctRecordCount(item) && ruleEventConcernTotal(item) > 0"
+                        class="rule-event-note"
+                        data-testid="rule-event-count"
+                      >
+                        {{ ruleEventConcernTotal(item).toLocaleString() }} 次事件
+                      </small>
                     </span>
                   </button>
                 </li>
@@ -431,12 +443,12 @@
           </section>
         </template>
       </template>
-    </main>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
@@ -498,6 +510,12 @@ interface AnalyticsPayload {
   rule_distribution: Array<{
     rule_id: string
     rule_name: string
+    distinct_record_count?: number
+    non_compliant_record_count?: number
+    data_gap_record_count?: number
+    uncertain_record_count?: number
+    record_count?: number
+    count?: number
     non_compliant_count: number
     data_gap_count: number
     uncertain_count: number
@@ -510,6 +528,7 @@ interface AnalyticsPayload {
 const DEMO_HIDDEN_STATUSES = new Set<Status>(['data_gap', 'uncertain'])
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 const router = useRouter()
 const route = useRoute()
@@ -521,13 +540,30 @@ const dateRange = ref<[string, string]>()
 const department = ref<string>()
 const jobId = ref('')
 const cachedDepartmentOptions = ref<string[]>([])
-const routeScopeInitialized = ref(false)
+let isMounted = false
+let lastObservedRouteSignature = ''
 let lastSyncedRouteSignature = ''
 
 function cleanDateValue(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed ? trimmed : undefined
+}
+
+function toDatePickerValue(value: unknown): string {
+  const trimmed = cleanDateValue(value)
+  if (!trimmed) return ''
+  const dateMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/)
+  return dateMatch ? dateMatch[1] : trimmed
+}
+
+function toBoundaryDateTime(value: unknown, boundary: 'start' | 'end'): string | undefined {
+  const trimmed = cleanDateValue(value)
+  if (!trimmed) return undefined
+  if (DATE_ONLY_PATTERN.test(trimmed)) {
+    return boundary === 'start' ? `${trimmed}T00:00:00` : `${trimmed}T23:59:59`
+  }
+  return trimmed
 }
 
 function normalizeDepartmentList(values: unknown): string[] {
@@ -737,8 +773,11 @@ const ruleItems = computed(() =>
     .filter((item) => ruleConcernTotal(item) > 0)
     .sort((a, b) =>
       confirmedResultsOnly.value
-        ? b.non_compliant_count - a.non_compliant_count || a.rule_id.localeCompare(b.rule_id)
-        : b.non_compliant_count - a.non_compliant_count ||
+        ? ruleConcernTotal(b) - ruleConcernTotal(a) ||
+          b.non_compliant_count - a.non_compliant_count ||
+          a.rule_id.localeCompare(b.rule_id)
+        : ruleConcernTotal(b) - ruleConcernTotal(a) ||
+          b.non_compliant_count - a.non_compliant_count ||
           b.data_gap_count - a.data_gap_count ||
           b.uncertain_count - a.uncertain_count ||
           a.rule_id.localeCompare(b.rule_id),
@@ -811,9 +850,41 @@ function riskBarAriaLabel(name: string, item: ResolvedRiskMetrics) {
   }
   return `${name}风险分布：共 ${item.problemTotal.toLocaleString()} 份问题病历（确定问题 ${item.primaryNonCompliant.toLocaleString()}，资料待核实 ${item.primaryDataGap.toLocaleString()}，待判断 ${item.primaryUncertain.toLocaleString()}）`
 }
+function ruleEventConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
+  if (confirmedResultsOnly.value) return nonNegativeCount(item.non_compliant_count)
+  return (
+    nonNegativeCount(item.non_compliant_count) +
+    nonNegativeCount(item.data_gap_count) +
+    nonNegativeCount(item.uncertain_count)
+  )
+}
+function hasRuleDistinctRecordCount(item: AnalyticsPayload['rule_distribution'][number]) {
+  if (confirmedResultsOnly.value) {
+    return (
+      item.non_compliant_record_count != null ||
+      item.distinct_record_count != null ||
+      item.record_count != null
+    )
+  }
+  return (
+    item.distinct_record_count != null ||
+    item.record_count != null ||
+    item.count != null
+  )
+}
 function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
-  if (confirmedResultsOnly.value) return item.non_compliant_count
-  return item.non_compliant_count + item.data_gap_count + item.uncertain_count
+  if (confirmedResultsOnly.value) {
+    if (nonNegativeCount(item.non_compliant_count) <= 0 && item.non_compliant_record_count == null) {
+      return 0
+    }
+    const explicit =
+      item.non_compliant_record_count ?? item.distinct_record_count ?? item.record_count
+    if (explicit != null) return nonNegativeCount(explicit)
+    return nonNegativeCount(item.non_compliant_count)
+  }
+  const explicit = item.distinct_record_count ?? item.record_count ?? item.count
+  if (explicit != null) return nonNegativeCount(explicit)
+  return ruleEventConcernTotal(item)
 }
 function querySignature(query: Record<string, unknown>): string {
   const pick = (key: string) => {
@@ -824,15 +895,15 @@ function querySignature(query: Record<string, unknown>): string {
   return [
     pick('view'),
     pick('department'),
-    pick('completed_from'),
-    pick('completed_to'),
+    toBoundaryDateTime(pick('completed_from'), 'start') || '',
+    toBoundaryDateTime(pick('completed_to'), 'end') || '',
     pick('job_id'),
   ].join('|')
 }
 
 function buildSyncedQuery(): Record<string, string | undefined> {
-  const completedFrom = cleanDateValue(dateRange.value?.[0])
-  const completedTo = cleanDateValue(dateRange.value?.[1])
+  const completedFrom = toBoundaryDateTime(dateRange.value?.[0], 'start')
+  const completedTo = toBoundaryDateTime(dateRange.value?.[1], 'end')
   const dept = department.value?.trim() || undefined
   const trimmedJobId = jobId.value.trim() || undefined
   const nextQuery: Record<string, string | undefined> = {}
@@ -851,10 +922,17 @@ async function syncFiltersToRoute() {
   const currentSig = querySignature((route.query || {}) as Record<string, unknown>)
   if (nextSig === currentSig) return
   lastSyncedRouteSignature = nextSig
-  await router.replace({
-    path: route.path || '/workstation-v5/stats',
-    query: nextQuery,
-  })
+  try {
+    await router.replace({
+      path: route.path || '/workstation-v5/stats',
+      query: nextQuery,
+    })
+    await nextTick()
+  } finally {
+    if (lastSyncedRouteSignature === nextSig) {
+      lastSyncedRouteSignature = ''
+    }
+  }
 }
 
 async function handleQuery() {
@@ -884,8 +962,8 @@ function openDepartmentReport(departmentName: string) {
     query: {
       view: 'department',
       department: departmentName,
-      completed_from: cleanDateValue(dateRange.value?.[0]),
-      completed_to: cleanDateValue(dateRange.value?.[1]),
+      completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
       job_id: jobId.value.trim() || undefined,
     },
   })
@@ -895,8 +973,8 @@ function returnToHospitalAnalytics() {
   void router.push({
     path: '/workstation-v5/stats',
     query: {
-      completed_from: cleanDateValue(dateRange.value?.[0]),
-      completed_to: cleanDateValue(dateRange.value?.[1]),
+      completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
       job_id: jobId.value.trim() || undefined,
     },
   })
@@ -920,8 +998,8 @@ function drillDown(filters: {
       source: 'analytics',
       analytics_scope: 'final',
       department: filters.department || department.value,
-      analytics_completed_from: cleanDateValue(dateRange.value?.[0]),
-      analytics_completed_to: cleanDateValue(dateRange.value?.[1]),
+      analytics_completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      analytics_completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
       analytics_job_id: jobId.value.trim() || undefined,
       analytics_rule_id: filters.rule_id,
       analytics_result_status: resultStatus,
@@ -951,8 +1029,8 @@ async function fetchAnalytics() {
   loading.value = true
   error.value = ''
   try {
-    const completedFrom = cleanDateValue(dateRange.value?.[0])
-    const completedTo = cleanDateValue(dateRange.value?.[1])
+    const completedFrom = toBoundaryDateTime(dateRange.value?.[0], 'start')
+    const completedTo = toBoundaryDateTime(dateRange.value?.[1], 'end')
     const selectedDept = department.value?.trim() || undefined
     const response = await ApiService.get<AnalyticsPayload>(
       '/api/v1/workstation/analytics/luxian-0609',
@@ -996,34 +1074,43 @@ async function fetchAnalytics() {
   }
 }
 
+function applyRouteQueryToFilters() {
+  const selectedDepartment = routeQueryText('department')
+  const completedFrom = toDatePickerValue(routeQueryText('completed_from'))
+  const completedTo = toDatePickerValue(routeQueryText('completed_to'))
+  department.value = selectedDepartment || undefined
+  dateRange.value = completedFrom || completedTo ? [completedFrom, completedTo] : undefined
+  jobId.value = routeQueryText('job_id')
+}
+
+lastObservedRouteSignature = querySignature((route.query || {}) as Record<string, unknown>)
+applyRouteQueryToFilters()
+
 watch(
-  () => route.fullPath,
-  () => {
-    const currentSig = querySignature((route.query || {}) as Record<string, unknown>)
-    if (routeScopeInitialized.value && lastSyncedRouteSignature && currentSig === lastSyncedRouteSignature) {
+  () => querySignature((route.query || {}) as Record<string, unknown>),
+  (currentSig) => {
+    if (route.path && !route.path.includes('/stats')) return
+    if (currentSig === lastObservedRouteSignature) return
+    lastObservedRouteSignature = currentSig
+    if (lastSyncedRouteSignature && currentSig === lastSyncedRouteSignature) {
       lastSyncedRouteSignature = ''
       return
     }
     lastSyncedRouteSignature = ''
-    const selectedDepartment = routeQueryText('department')
-    const completedFrom = routeQueryText('completed_from')
-    const completedTo = routeQueryText('completed_to')
-    department.value = selectedDepartment || undefined
-    dateRange.value = completedFrom || completedTo ? [completedFrom, completedTo] : undefined
-    jobId.value = routeQueryText('job_id')
-    if (routeScopeInitialized.value) {
+    applyRouteQueryToFilters()
+    if (isMounted) {
       void fetchAnalytics()
     }
-    routeScopeInitialized.value = true
   },
-  { immediate: true },
 )
 
 onMounted(() => {
+  isMounted = true
   void fetchAnalytics()
 })
 
 onBeforeUnmount(() => {
+  isMounted = false
   ++analyticsRequestSeq
   analyticsAbortController?.abort()
   analyticsAbortController = null
@@ -1060,7 +1147,7 @@ onBeforeUnmount(() => {
 .analytics-heading {
   align-items: center;
   display: flex;
-  gap: 28px;
+  gap: 16px 20px;
   justify-content: space-between;
 }
 
@@ -1123,15 +1210,21 @@ onBeforeUnmount(() => {
 }
 
 .analytics-toolbar :deep(.ant-picker) {
-  min-width: 218px;
+  flex: 0 1 224px;
+  min-width: 210px;
+  max-width: 248px;
 }
 
 .analytics-toolbar :deep(.ant-select) {
-  min-width: 148px;
+  flex: 0 1 152px;
+  min-width: 136px;
+  max-width: 184px;
 }
 
 .analytics-toolbar :deep(.ant-input-affix-wrapper) {
-  min-width: 184px;
+  flex: 0 1 180px;
+  min-width: 164px;
+  max-width: 216px;
 }
 
 .analytics-toolbar :deep(.ant-btn) {
@@ -1734,6 +1827,13 @@ onBeforeUnmount(() => {
   margin-top: 1px;
 }
 
+.rule-count .rule-event-note {
+  color: var(--mq-text-tertiary);
+  font-size: 10px;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
 /* ===== v7.1 液态玻璃基础覆写（置于所有 @media 之前以保证响应式断点完整生效） ===== */
 .analytics-shell {
   padding: 8px 28px 32px 22px;
@@ -1792,10 +1892,30 @@ onBeforeUnmount(() => {
 .analytics-toolbar :deep(.ant-picker),
 .analytics-toolbar :deep(.ant-select-selector),
 .analytics-toolbar :deep(.ant-input-affix-wrapper) {
+  height: 36px;
   border: 1px solid rgba(255, 255, 255, 0.9) !important;
   border-radius: var(--mq-radius-control) !important;
   background: rgba(255, 255, 255, 0.75) !important;
   box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper) {
+  align-items: center;
+  padding: 0 10px;
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper .ant-input),
+.analytics-toolbar :deep(.ant-picker-input > input) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper .ant-input) {
+  height: 100%;
+  padding: 0;
 }
 
 .analytics-toolbar :deep(.ant-btn) {
@@ -1847,8 +1967,16 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 1440px) {
+  .analytics-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
   .analytics-toolbar {
     flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
   }
 }
 
@@ -1881,6 +2009,7 @@ onBeforeUnmount(() => {
   .analytics-toolbar :deep(.ant-input-affix-wrapper) {
     flex: 1 1 180px;
     min-width: 0;
+    max-width: none;
   }
 
   .analytics-health-indicator {

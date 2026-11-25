@@ -153,7 +153,7 @@
             type="datetime-local"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--select mq-field">
           <label for="report-source">质控类型</label
           ><select id="report-source" v-model="draft.defect_source" class="mq-input">
             <option value="all">全部</option>
@@ -512,7 +512,9 @@
         :title="drilldownTitle"
         width="min(900px, 100vw)"
         :root-style="{ zIndex: 1100 }"
+        :keyboard="true"
         destroy-on-close
+        @close="drawerOpen = false"
       >
         <div class="drawer-actions">
           <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
@@ -694,7 +696,7 @@ const reportTab = ref<'quality' | 'core'>(
 )
 const qualityTabRef = ref<HTMLButtonElement | null>(null)
 const coreTabRef = ref<HTMLButtonElement | null>(null)
-const localScene = ref<ReportScene>(queryString(route?.query?.scene) === 'final' ? 'final' : 'running')
+const localScene = ref<ReportScene>(queryString(route?.query?.scene) === 'running' ? 'running' : 'final')
 const authKey = computed(() =>
   JSON.stringify([
     authStore.user?.id,
@@ -1231,7 +1233,14 @@ async function download(sheet: ReportSheet): Promise<void> {
     if (request === exportRequest) exporting.value = null
   }
 }
+function handleDrawerEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && drawerOpen.value) {
+    event.preventDefault()
+    drawerOpen.value = false
+  }
+}
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleDrawerEscape)
   ++reportRequest
   ++recordsRequest
   abortReport()
@@ -1239,6 +1248,7 @@ onBeforeUnmount(() => {
   invalidateExport()
 })
 onMounted(() => {
+  window.addEventListener('keydown', handleDrawerEscape)
   restoreColumns()
   void loadReport()
 })

@@ -138,8 +138,8 @@
             :data-source="visibleItems"
             :columns="columns"
             row-key="id"
+            table-layout="fixed"
             :pagination="false"
-            :scroll="{ x: 1000 }"
           >
             <template #bodyCell="{ column, record, text }">
               <span
@@ -299,6 +299,7 @@ let loadController: AbortController | null = null
 let exportController: AbortController | null = null
 let optionsController: AbortController | null = null
 let lastOptionsWindow = ''
+let pendingOptionsWindow = ''
 
 function abortLoad() {
   loadController?.abort()
@@ -410,15 +411,15 @@ function statusClass(tones: Record<string, Tone>, key: unknown, count?: number) 
   return tone && count !== 0 ? `mq-status--${tone}` : ''
 }
 const columns = [
-  { title: '机构', dataIndex: 'institute_id' },
-  { title: '科室', dataIndex: 'department' },
-  { title: '录入人', dataIndex: 'creator_name' },
-  { title: '任务', dataIndex: 'task_name' },
-  { title: '缺陷', dataIndex: 'rule_name' },
-  { title: '创建日期', dataIndex: 'created_at' },
-  { title: '审核', key: 'review_status' },
-  { title: '整改', key: 'rectification_status' },
-  { title: '操作', key: 'detail' },
+  { title: '机构', dataIndex: 'institute_id', width: 68, ellipsis: true },
+  { title: '科室', dataIndex: 'department', width: 88, ellipsis: true },
+  { title: '录入人', dataIndex: 'creator_name', width: 80, ellipsis: true },
+  { title: '任务', dataIndex: 'task_name', width: 112, ellipsis: true },
+  { title: '缺陷', dataIndex: 'rule_name', ellipsis: true },
+  { title: '创建日期', dataIndex: 'created_at', width: 148, ellipsis: true },
+  { title: '审核', key: 'review_status', width: 88 },
+  { title: '整改', key: 'rectification_status', width: 88 },
+  { title: '操作', key: 'detail', width: 78 },
 ]
 const detailFields: Array<{ key: keyof ManualReportRow; label: string }> = [
   { key: 'id', label: '缺陷 ID' },
@@ -457,7 +458,7 @@ function detailValue(key: keyof ManualReportRow) {
 async function refreshOptionsForDateRange(startDate: string, endDate: string) {
   if (!auth.user?.id || !startDate || !endDate || startDate > endDate) return
   const windowKey = `${startDate}~${endDate}`
-  if (windowKey === lastOptionsWindow) return
+  if (windowKey === lastOptionsWindow || windowKey === pendingOptionsWindow) return
   const request = ++optionsToken
   abortOptions()
   const controller = new AbortController()
@@ -476,10 +477,14 @@ async function refreshOptionsForDateRange(startDate: string, endDate: string) {
   }
 }
 async function loadPage(value = 1) {
+  const currentWindow = `${applied.value.start_date}~${applied.value.end_date}`
   const request = ++token
   ++exportToken
+  ++optionsToken
   abortLoad()
   abortExport()
+  abortOptions()
+  pendingOptionsWindow = currentWindow
   const controller = new AbortController()
   loadController = controller
   loading.value = true
@@ -490,7 +495,7 @@ async function loadPage(value = 1) {
   try {
     const result = await getManualQualityReport(applied.value, value, controller.signal)
     if (request !== token || controller.signal.aborted) return
-    const currentWindow = `${applied.value.start_date}~${applied.value.end_date}`
+    pendingOptionsWindow = ''
     if (
       currentWindow !== lastOptionsWindow ||
       (!applied.value.institute_id && !applied.value.creator_id && !applied.value.task_id) ||
@@ -502,6 +507,7 @@ async function loadPage(value = 1) {
     report.value = result
     page.value = value
   } catch (e) {
+    if (request === token) pendingOptionsWindow = ''
     if (request === token && !controller.signal.aborted) {
       error.value = resolveErrorMessage(e, '人工质控报表不可用')
     }
@@ -563,9 +569,15 @@ watch(
     }
   },
 )
+const authKey = computed(() => {
+  const id = auth.user?.id?.trim()
+  if (!id) return ''
+  const roles = Array.isArray(auth.user?.roles) ? [...auth.user.roles].sort().join(',') : ''
+  return `${id}|${roles}`
+})
 watch(
-  () => [auth.user?.id, auth.user?.roles],
-  () => {
+  authKey,
+  (nextAuthKey) => {
     ++token
     ++exportToken
     ++optionsToken
@@ -573,15 +585,16 @@ watch(
     abortExport()
     abortOptions()
     lastOptionsWindow = ''
+    pendingOptionsWindow = ''
     report.value = null
     selected.value = null
     workflowOpen.value = false
     loading.value = false
     exporting.value = false
     options.value = { institutes: [], departments: [], creators: [], tasks: [] }
-    if (auth.user?.id) void loadPage()
+    if (nextAuthKey) void loadPage()
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 onUnmounted(() => {
   ++token

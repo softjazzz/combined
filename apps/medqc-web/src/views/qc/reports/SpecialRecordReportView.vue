@@ -525,7 +525,8 @@ function initial(): SpecialRecordFilters {
   const date = (value: Date) =>
     `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`
   const start = new Date(today)
-  start.setDate(start.getDate() - 29)
+  // 默认近 365 天（起止差 364 天 <= 后端 366 天上限），确保首屏直接命中本院历史出院特殊病历
+  start.setDate(start.getDate() - 364)
   return {
     institute_id: auth.user?.institute_id || '',
     department: '',

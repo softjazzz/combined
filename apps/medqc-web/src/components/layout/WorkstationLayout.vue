@@ -490,6 +490,7 @@ const handleLogout = async () => {
   -webkit-backdrop-filter: var(--mq-glass-blur);
   backdrop-filter: var(--mq-glass-blur);
   box-shadow: var(--mq-glass-shadow);
+  overflow: hidden;
   transition:
     width 200ms ease,
     flex-basis 200ms ease;
@@ -507,6 +508,8 @@ const handleLogout = async () => {
   flex-shrink: 0;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 4px 14px 8px;
 }
 
@@ -522,6 +525,8 @@ const handleLogout = async () => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   color: var(--mq-text-primary);
   text-decoration: none;
 }
@@ -547,26 +552,36 @@ const handleLogout = async () => {
 
 .ws-brand__copy {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   line-height: 16px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-brand__title {
+  overflow: hidden;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ws-brand__subtitle {
+  overflow: hidden;
   color: var(--mq-text-tertiary);
   font-size: 11px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ws-nav {
   flex: 1 1 0;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 0 2px;
   /* 矮屏时导航需要滚动，保留细滚动条作为可滚动提示，避免末项被无提示地藏起来 */
@@ -584,11 +599,14 @@ const handleLogout = async () => {
 }
 
 .ws-nav__group-label {
+  min-width: 0;
+  overflow: hidden;
   padding: 8px 10px 2px;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   font-weight: 400;
   letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -597,9 +615,11 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   height: 24px;
   margin-top: 8px;
   padding: 0 8px;
+  overflow: hidden;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -609,6 +629,13 @@ const handleLogout = async () => {
   transition:
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.ws-nav__group-toggle > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ws-nav__group-toggle:hover {
@@ -649,9 +676,11 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   height: 30px;
   margin: 0;
   padding: 0 8px;
+  overflow: hidden;
   border-radius: 10px;
   color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
@@ -692,8 +721,11 @@ const handleLogout = async () => {
 }
 
 .ws-nav__label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-sider__toggle {
@@ -727,6 +759,7 @@ const handleLogout = async () => {
   flex-shrink: 0;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   margin-top: 4px;
   padding: 8px 2px 0;
   border-top: 0.5px solid var(--mq-border);
@@ -734,18 +767,25 @@ const handleLogout = async () => {
 
 .ws-sider__build {
   display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   padding-left: 6px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-account {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  padding-right: 4px;
 }
 
 .ws-shell--collapsed .ws-account {
   flex-direction: column-reverse;
   gap: 8px;
+  padding-right: 0;
 }
 
 /* 主区 */
@@ -826,12 +866,14 @@ const handleLogout = async () => {
 
 .ws-user {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-items: center;
   gap: 10px;
   min-width: 0;
   height: 44px;
   padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -847,6 +889,7 @@ const handleLogout = async () => {
 
 .ws-shell--collapsed .ws-user {
   flex: 0 0 auto;
+  width: 36px;
   justify-content: center;
   padding: 0;
 }
@@ -867,15 +910,22 @@ const handleLogout = async () => {
 
 .ws-user__meta {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   line-height: 16px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-user__role {
+  overflow: hidden;
+  max-width: 100%;
   font-size: var(--mq-font-13);
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -976,10 +1026,26 @@ const handleLogout = async () => {
   background: transparent !important;
 }
 
+@keyframes ws-sider-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .ws-sider,
   .ws-nav__item {
     transition: none;
+  }
+
+  .ws-brand__copy,
+  .ws-nav__label,
+  .ws-sider__build,
+  .ws-user__meta {
+    animation: none;
   }
 }
 /* ---------- 侧栏精修：去图标灰块、淡蓝选中、滚动条与折叠箭头按需出现 ---------- */

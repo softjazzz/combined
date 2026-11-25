@@ -20,6 +20,7 @@ from ..services.medical_records.detail_service import (
     enforce_institute_access,
     resolve_non_global_institute_scope,
 )
+from ..services.medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
 from ..services.workstation.worklist_service import default_workstation_aggregation_service
 from ..services.workstation.luxian_0609_result_analysis_service import (
     default_luxian_0609_result_analysis_service,
@@ -55,7 +56,7 @@ _WORKSTATION_WORKLIST_ROLES = (
     "doctor",
     "coder",
 )
-_SYNTHETIC_INSTITUTE_IDS = ("CUSTOMER_TEST",)
+_SYNTHETIC_INSTITUTE_IDS = tuple(sorted(SYNTHETIC_TEST_INSTITUTE_IDS))
 
 
 def _current_user_id(current_user: dict | None) -> Optional[str]:
@@ -442,13 +443,27 @@ def _trim_luxian_analytics_for_demo(data: Any) -> Any:
             nc_count = int(item.get("non_compliant_count") or 0)
             if nc_count <= 0:
                 continue
-            patched_rules.append(
-                {
-                    **item,
-                    "data_gap_count": 0,
-                    "uncertain_count": 0,
-                }
-            )
+            patched_item = {
+                **item,
+                "data_gap_count": 0,
+                "uncertain_count": 0,
+            }
+            if (
+                "distinct_record_count" in item
+                or "non_compliant_record_count" in item
+                or "data_gap_record_count" in item
+                or "uncertain_record_count" in item
+            ):
+                nc_record_count = int(
+                    item.get("non_compliant_record_count")
+                    if item.get("non_compliant_record_count") is not None
+                    else item.get("distinct_record_count") or 0
+                )
+                patched_item["distinct_record_count"] = nc_record_count
+                patched_item["non_compliant_record_count"] = nc_record_count
+                patched_item["data_gap_record_count"] = 0
+                patched_item["uncertain_record_count"] = 0
+            patched_rules.append(patched_item)
         patched_rules.sort(
             key=lambda row: (
                 -int(row.get("non_compliant_count") or 0),
@@ -485,6 +500,7 @@ def _trim_result_analysis_for_demo(data: Any, *, requested_status: Optional[str]
     if not isinstance(data, dict):
         return data
     trimmed = dict(data)
+    hide_requested_status = requested_status in _DEMO_HIDDEN_STATUSES
     kpis = trimmed.get("kpis")
     if isinstance(kpis, dict):
         patched_kpis = dict(kpis)
@@ -501,24 +517,30 @@ def _trim_result_analysis_for_demo(data: Any, *, requested_status: Optional[str]
         ]
     rule_dist = trimmed.get("rule_distribution")
     if isinstance(rule_dist, list):
-        trimmed["rule_distribution"] = [
-            _trim_result_analysis_rule_for_demo(item)
-            for item in rule_dist
-            if isinstance(item, dict)
-        ]
+        if hide_requested_status:
+            trimmed["rule_distribution"] = []
+        else:
+            trimmed["rule_distribution"] = [
+                _trim_result_analysis_rule_for_demo(item)
+                for item in rule_dist
+                if isinstance(item, dict)
+            ]
     if isinstance(trimmed.get("selected_rule"), dict):
         trimmed["selected_rule"] = _trim_result_analysis_rule_for_demo(trimmed["selected_rule"])
     phys_dist = trimmed.get("physician_distribution")
     if isinstance(phys_dist, list):
-        trimmed["physician_distribution"] = [
-            {**item, "data_gap_count": 0, "uncertain_count": 0}
-            if isinstance(item, dict)
-            else item
-            for item in phys_dist
-        ]
+        if hide_requested_status:
+            trimmed["physician_distribution"] = []
+        else:
+            trimmed["physician_distribution"] = [
+                {**item, "data_gap_count": 0, "uncertain_count": 0}
+                if isinstance(item, dict)
+                else item
+                for item in phys_dist
+            ]
     record_page = trimmed.get("record_page")
     if isinstance(record_page, dict) and isinstance(record_page.get("items"), list):
-        if requested_status in _DEMO_HIDDEN_STATUSES:
+        if hide_requested_status:
             trimmed["record_page"] = {
                 **record_page,
                 "items": [],

@@ -1,8 +1,14 @@
 """账号角色的运行时授权语义；不修改账号存储。"""
 from typing import Any
 
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
+
 
 _SUPER_ADMIN_ROLES = ("sync_admin", "super_admin")
+
+
+def is_demo_account_email(email: Any) -> bool:
+    return str(email or "").strip().lower() in DEFAULT_DEMO_USER_EMAILS
 
 
 def effective_roles(value: Any) -> list[str]:
@@ -15,4 +21,14 @@ def effective_roles(value: Any) -> list[str]:
 
 
 def effective_principal(user: dict) -> dict:
-    return {**user, "roles": effective_roles(user.get("roles"))}
+    explicit = user.get("is_demo_account")
+    is_demo = (
+        explicit
+        if isinstance(explicit, bool)
+        else is_demo_account_email(user.get("email"))
+    )
+    return {
+        **user,
+        "roles": effective_roles(user.get("roles")),
+        "is_demo_account": is_demo,
+    }

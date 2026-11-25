@@ -45,10 +45,17 @@
 }
 .field {
   min-width: 148px;
+  max-width: 240px;
   flex: 1 1 172px;
+}
+.field--select {
+  min-width: 148px;
+  max-width: 220px;
+  flex: 0 1 180px;
 }
 .field--datetime {
   min-width: 188px;
+  max-width: 240px;
   flex: 1 1 200px;
 }
 .field label,
@@ -62,6 +69,7 @@
 }
 .scene-field {
   flex: 0 0 auto;
+  max-width: none;
 }
 .status {
   display: flex;
@@ -415,10 +423,17 @@ td small {
   }
   .field {
     min-width: 156px;
+    max-width: 240px;
     flex: 1 1 176px;
+  }
+  .field--select {
+    min-width: 156px;
+    max-width: 220px;
+    flex: 0 1 180px;
   }
   .field--datetime {
     min-width: 192px;
+    max-width: 240px;
     flex: 1 1 208px;
   }
   .distribution-grid {
@@ -446,10 +461,12 @@ td small {
 }
 @media (max-width: 480px) {
   .field,
+  .field--select,
   .field--datetime {
     flex-basis: 100%;
     width: 100%;
     min-width: 0;
+    max-width: none;
   }
   .scene-field {
     flex-basis: auto;

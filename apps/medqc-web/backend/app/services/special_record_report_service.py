@@ -2,22 +2,35 @@
 
 import csv
 import io
+import logging
 import re
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 
+import psycopg2
 from sqlalchemy import select, tuple_
+from sqlalchemy.exc import OperationalError as SAOperationalError
 
 from ..database import clinical_connection
 from ..database.connection import SessionLocal
 from . import record_quality_report_service as base
 from . import special_record_report_source_service as source
 
+logger = logging.getLogger(__name__)
 HOSPITAL_TZ = timezone(timedelta(hours=8))
 MAX_CASES = 5000
 _SHORT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})$")
 _COMPACT_TZ_OFFSET_RE = re.compile(r"([+-]\d{2})(\d{2})$")
 _LOCAL_TIME_CHUNK_SIZE = 500
+_REMOTE_CONNECT_TIMEOUT_SECONDS = 2
+_REMOTE_CONNECTION_ERRORS = (
+    psycopg2.OperationalError,
+    psycopg2.InterfaceError,
+    SAOperationalError,
+    TimeoutError,
+    ConnectionError,
+    OSError,
+)
 
 
 def _to_datetime(value):
@@ -318,6 +331,20 @@ def _load_local_fallback_cohort(
     return rows
 
 
+def _connect_remote_cohort(dsn, **kwargs):
+    timeout = kwargs.get("connect_timeout")
+    try:
+        effective_timeout = (
+            min(int(timeout), _REMOTE_CONNECT_TIMEOUT_SECONDS)
+            if timeout is not None
+            else _REMOTE_CONNECT_TIMEOUT_SECONDS
+        )
+    except (TypeError, ValueError):
+        effective_timeout = _REMOTE_CONNECT_TIMEOUT_SECONDS
+    kwargs["connect_timeout"] = max(1, effective_timeout)
+    return psycopg2.connect(dsn, **kwargs)
+
+
 def load_cohort(*, discharged_from, discharged_to, department, institute_id):
     if clinical_connection.configured():
         return _load_independent_cohort(
@@ -328,7 +355,10 @@ def load_cohort(*, discharged_from, discharged_to, department, institute_id):
         )
     from .case_scope_service import CaseScopeService
 
-    owner = CaseScopeService()
+    try:
+        owner = CaseScopeService(connection_factory=_connect_remote_cohort)
+    except TypeError:
+        owner = CaseScopeService()
     remote_url_loader = getattr(owner, "_remote_url_loader", None)
     if callable(remote_url_loader) and not remote_url_loader():
         return _load_local_fallback_cohort(
@@ -352,8 +382,23 @@ def load_cohort(*, discharged_from, discharged_to, department, institute_id):
                 departments=[department] if department else [],
                 institute_id=institute_id,
             )
+        except _REMOTE_CONNECTION_ERRORS as exc:
+            logger.warning(
+                "special_record_report_remote_cohort_unavailable fallback=local error_type=%s",
+                type(exc).__name__,
+            )
+            return _load_local_fallback_cohort(
+                discharged_from=discharged_from,
+                discharged_to=discharged_to,
+                department=department,
+                institute_id=institute_id,
+            )
         except ValueError as exc:
             if "远端" in str(exc) or "remote" in str(exc).lower():
+                logger.warning(
+                    "special_record_report_remote_cohort_unconfigured fallback=local error_type=%s",
+                    type(exc).__name__,
+                )
                 return _load_local_fallback_cohort(
                     discharged_from=discharged_from,
                     discharged_to=discharged_to,

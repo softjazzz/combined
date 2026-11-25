@@ -19,9 +19,23 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import (
+    MetaData,
+    Table,
+    desc,
+    func,
+    inspect as sa_inspect,
+    nullslast,
+    or_,
+    select,
+    tuple_,
+)
 
-from .report_institute_scope import authorized_report_institute
+from .report_institute_scope import (
+    EXCLUDED_SYNTHETIC_TEST_INSTITUTES,
+    authorized_report_institute,
+    is_excluded_synthetic_institute,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -106,6 +120,291 @@ def _normalize_sql_bound(column: Any, value: datetime | None) -> datetime | None
     )
 
 
+def _resolve_v2_frontpage_tables(session: Any) -> tuple[Table, Table] | None:
+    """解析 v2 首页质控表（frontpage_qc_results / frontpage_qc_findings），兼容 single/split 双模式。"""
+    from ..database import connection as db_connection
+
+    bind = session.get_bind()
+    if bind is None:
+        return None
+    try:
+        inspector = sa_inspect(bind)
+    except Exception:
+        return None
+
+    mode = str(getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single").strip().lower()
+    is_sqlite = getattr(getattr(bind, "dialect", None), "name", None) == "sqlite"
+    if mode == "split":
+        candidate_schemas: tuple[str | None, ...] = ("qc", None) if is_sqlite else ("qc",)
+    else:
+        candidate_schemas = (None, "qc") if is_sqlite else (None,)
+
+    chosen_schema: str | None = None
+    found = False
+    for schema in candidate_schemas:
+        try:
+            if inspector.has_table("frontpage_qc_results", schema=schema) and inspector.has_table(
+                "frontpage_qc_findings", schema=schema
+            ):
+                chosen_schema = schema
+                found = True
+                break
+        except Exception:
+            continue
+    if not found:
+        return None
+
+    metadata = MetaData()
+    fp_results = Table("frontpage_qc_results", metadata, schema=chosen_schema, autoload_with=bind)
+    fp_findings = Table("frontpage_qc_findings", metadata, schema=chosen_schema, autoload_with=bind)
+    required_result_cols = {"id", "institute_id", "patient_id", "visit_id", "created_at"}
+    required_finding_cols = {"id", "result_id", "rule_id", "rule_name", "severity"}
+    if not required_result_cols.issubset(fp_results.c.keys()) or not required_finding_cols.issubset(
+        fp_findings.c.keys()
+    ):
+        return None
+    return fp_results, fp_findings
+
+
+def _load_v2_frontpage_latest_results(
+    session: Any,
+    *,
+    institute_id: str | None = None,
+    analyzed_from: datetime | None = None,
+    analyzed_to: datetime | None = None,
+    normalized_identities: list[tuple[str, str, str]] | None = None,
+    batch_chunk: int = 1000,
+) -> list[dict[str, Any]]:
+    from .modern_case_qc_result_service import _serialize_row
+
+    resolved = _resolve_v2_frontpage_tables(session)
+    if resolved is None:
+        return []
+    fp_results, fp_findings = resolved
+    owner_columns = [
+        fp_results.c.institute_id,
+        fp_results.c.patient_id,
+        fp_results.c.visit_id,
+    ]
+    order_columns: list[Any] = []
+    if "is_latest" in fp_results.c:
+        order_columns.append(nullslast(desc(fp_results.c.is_latest)))
+    order_columns.extend(
+        [
+            nullslast(desc(fp_results.c.created_at)),
+            desc(fp_results.c.id),
+        ]
+    )
+    select_columns = [
+        fp_results.c[name]
+        for name in (
+            "id",
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "score",
+            "grade",
+            "fail_count",
+            "data_gap_count",
+            "ruleset_version",
+            "created_at",
+        )
+        if name in fp_results.c
+    ]
+    lower_bound = _normalize_sql_bound(fp_results.c.created_at, analyzed_from)
+    upper_bound = _normalize_sql_bound(fp_results.c.created_at, analyzed_to)
+
+    def _query_v2_chunk(
+        identity_chunk: list[tuple[str, str, str]] | None,
+    ) -> list[Mapping[str, Any]]:
+        inner_predicates: list[Any] = []
+        if institute_id is not None:
+            inner_predicates.append(fp_results.c.institute_id == institute_id)
+        else:
+            inner_predicates.append(
+                fp_results.c.institute_id.notin_(sorted(EXCLUDED_SYNTHETIC_TEST_INSTITUTES))
+            )
+        if identity_chunk is not None:
+            inner_predicates.append(
+                tuple_(
+                    fp_results.c.institute_id,
+                    fp_results.c.patient_id,
+                    fp_results.c.visit_id,
+                ).in_(identity_chunk)
+            )
+        ranked = (
+            select(
+                *select_columns,
+                func.row_number()
+                .over(partition_by=owner_columns, order_by=order_columns)
+                .label("latest_rank"),
+            )
+            .where(*inner_predicates)
+            .subquery()
+        )
+        outer_predicates = [ranked.c.latest_rank == 1]
+        if lower_bound is not None or upper_bound is not None:
+            outer_predicates.append(ranked.c.created_at.is_not(None))
+        if lower_bound is not None:
+            outer_predicates.append(ranked.c.created_at >= lower_bound)
+        if upper_bound is not None:
+            outer_predicates.append(ranked.c.created_at <= upper_bound)
+        return (
+            session.execute(select(ranked).where(*outer_predicates))
+            .mappings()
+            .all()
+        )
+
+    rows: list[Mapping[str, Any]] = []
+    if normalized_identities is None:
+        rows = _query_v2_chunk(None)
+    else:
+        for chunk in _chunked(normalized_identities, _IN_CHUNK_SIZE):
+            rows.extend(_query_v2_chunk(chunk))
+
+    if not rows:
+        return []
+
+    latest: list[dict[str, Any]] = []
+    distinct_cases: set[tuple[str, str, str]] = set()
+    for row in rows:
+        serialized = _serialize_row(dict(row))
+        inst = _text(serialized.get("institute_id"))
+        pat = _text(serialized.get("patient_id"))
+        vis = _text(serialized.get("visit_id"))
+        if not (inst and pat and vis):
+            continue
+        distinct_cases.add((inst, pat, vis))
+        created_at = serialized.get("created_at")
+        latest.append(
+            {
+                "source_key": FRONTPAGE_SOURCE,
+                "institute_id": inst,
+                "patient_id": pat,
+                "visit_id": vis,
+                "result": {
+                    "id": serialized.get("id"),
+                    "rule_set": serialized.get("ruleset_version") or "frontpage_qc_v2",
+                    "overall_score": serialized.get("score"),
+                    "grade": serialized.get("grade"),
+                    "defect_count": (
+                        int(serialized.get("fail_count") or 0)
+                        + int(serialized.get("data_gap_count") or 0)
+                    ),
+                    "analysis_date": created_at,
+                    "created_at": created_at,
+                },
+                "defects": [],
+            }
+        )
+
+    if not latest or len(distinct_cases) > MAX_REPORT_CASES:
+        return latest
+
+    by_result = {str(item["result"]["id"]): item for item in latest}
+    finding_cols = [
+        fp_findings.c[name]
+        for name in (
+            "id",
+            "result_id",
+            "rule_id",
+            "rule_name",
+            "rule_group",
+            "section",
+            "severity",
+            "verdict",
+            "problem",
+            "reason",
+            "review_status",
+            "created_at",
+        )
+        if name in fp_findings.c
+    ]
+    finding_predicates_base: list[Any] = []
+    if "review_status" in fp_findings.c:
+        finding_predicates_base.append(
+            or_(
+                fp_findings.c.review_status.is_(None),
+                fp_findings.c.review_status != "false_alarm",
+            )
+        )
+    for chunk in _chunked(sorted(by_result), batch_chunk):
+        for row in (
+            session.execute(
+                select(*finding_cols)
+                .where(fp_findings.c.result_id.in_(chunk), *finding_predicates_base)
+                .order_by(fp_findings.c.result_id, fp_findings.c.id)
+            )
+            .mappings()
+            .all()
+        ):
+            data = _serialize_row(dict(row))
+            owner = by_result.get(str(data.get("result_id") or ""))
+            if owner is None:
+                continue
+            rule_code = _text(data.get("rule_id"), "未知规则")
+            owner["defects"].append(
+                {
+                    "id": data.get("id"),
+                    "rule_code": rule_code,
+                    "rule_name": _text(data.get("rule_name"), rule_code),
+                    "description": _text(data.get("problem")),
+                    "severity": _text(data.get("severity"), "未分级"),
+                    "category": _text(
+                        data.get("rule_group") or data.get("section"), "未分类"
+                    ),
+                    "location": _text(data.get("section")),
+                    "suggestion": _text(data.get("reason")),
+                    "status": _text(data.get("review_status"), "pending"),
+                    "verdict": _text(data.get("verdict")),
+                    "created_at": data.get("created_at"),
+                }
+            )
+    return latest
+
+
+def _merge_latest_source_items(
+    legacy_items: list[dict[str, Any]],
+    v2_items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not v2_items:
+        return legacy_items
+    if not legacy_items:
+        return v2_items
+    merged: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    order: list[tuple[str, str, str, str]] = []
+    for item in legacy_items:
+        key = (
+            _text(item.get("source_key")),
+            _text(item.get("institute_id")),
+            _text(item.get("patient_id")),
+            _text(item.get("visit_id")),
+        )
+        merged[key] = item
+        order.append(key)
+    for item in v2_items:
+        key = (
+            _text(item.get("source_key")),
+            _text(item.get("institute_id")),
+            _text(item.get("patient_id")),
+            _text(item.get("visit_id")),
+        )
+        existing = merged.get(key)
+        if existing is None:
+            merged[key] = item
+            order.append(key)
+            continue
+        existing_res = existing.get("result") or {}
+        v2_res = item.get("result") or {}
+        existing_ts = _parse_time(
+            existing_res.get("analysis_date") or existing_res.get("created_at")
+        )
+        v2_ts = _parse_time(v2_res.get("analysis_date") or v2_res.get("created_at"))
+        if existing_ts is None or (v2_ts is not None and v2_ts >= existing_ts):
+            merged[key] = item
+    return [merged[key] for key in order]
+
+
 def _load_pushed_down_latest_results(
     svc: Any,
     source_keys: tuple[str, ...],
@@ -162,6 +461,10 @@ def _load_pushed_down_latest_results(
             ]
             if institute_id is not None:
                 inner_predicates.append(results.c.institute_id == institute_id)
+            else:
+                inner_predicates.append(
+                    results.c.institute_id.notin_(sorted(EXCLUDED_SYNTHETIC_TEST_INSTITUTES))
+                )
             if identity_chunk is not None:
                 inner_predicates.append(
                     tuple_(
@@ -222,41 +525,50 @@ def _load_pushed_down_latest_results(
             )
             latest.append({**owner, "result": _serialize_row(data), "defects": []})
 
-        if not latest or len(distinct_cases) > MAX_REPORT_CASES:
-            return latest
-
-        by_result = {str(item["result"]["id"]): item for item in latest}
-        defects = tables["qc_defects"]
-        result_ids = sorted(by_result)
-        for chunk in _chunked(result_ids, BATCH_CHUNK):
-            for row in (
-                session.execute(
-                    select(
-                        defects.c.result_id.label("owner_result_id"),
-                        *(
-                            defects.c[name].label(f"owner_{name}")
-                            for name in _OWNER_KEYS
-                        ),
-                        *_projection(defects),
+        if latest and len(distinct_cases) <= MAX_REPORT_CASES:
+            by_result = {str(item["result"]["id"]): item for item in latest}
+            defects = tables["qc_defects"]
+            result_ids = sorted(by_result)
+            for chunk in _chunked(result_ids, BATCH_CHUNK):
+                for row in (
+                    session.execute(
+                        select(
+                            defects.c.result_id.label("owner_result_id"),
+                            *(
+                                defects.c[name].label(f"owner_{name}")
+                                for name in _OWNER_KEYS
+                            ),
+                            *_projection(defects),
+                        )
+                        .where(
+                            defects.c.identity_version == 1,
+                            defects.c.result_id.in_(chunk),
+                        )
+                        .order_by(defects.c.result_id, defects.c.id)
                     )
-                    .where(
-                        defects.c.identity_version == 1,
-                        defects.c.result_id.in_(chunk),
-                    )
-                    .order_by(defects.c.result_id, defects.c.id)
-                )
-                .mappings()
-                .all()
-            ):
-                data = dict(row)
-                owner = by_result.get(str(data.pop("owner_result_id")))
-                defect_owner = {
-                    name: data.pop(f"owner_{name}") for name in _OWNER_KEYS
-                }
-                if owner is not None and all(
-                    defect_owner[name] == owner[name] for name in _OWNER_KEYS
+                    .mappings()
+                    .all()
                 ):
-                    owner["defects"].append(_serialize_row(data))
+                    data = dict(row)
+                    owner = by_result.get(str(data.pop("owner_result_id")))
+                    defect_owner = {
+                        name: data.pop(f"owner_{name}") for name in _OWNER_KEYS
+                    }
+                    if owner is not None and all(
+                        defect_owner[name] == owner[name] for name in _OWNER_KEYS
+                    ):
+                        owner["defects"].append(_serialize_row(data))
+
+        if FRONTPAGE_SOURCE in keys and len(distinct_cases) <= MAX_REPORT_CASES:
+            v2_latest = _load_v2_frontpage_latest_results(
+                session,
+                institute_id=institute_id,
+                analyzed_from=analyzed_from,
+                analyzed_to=analyzed_to,
+                normalized_identities=normalized_identities,
+                batch_chunk=BATCH_CHUNK,
+            )
+            latest = _merge_latest_source_items(latest, v2_latest)
         return latest
     except ModernCaseQCResultError:
         raise
@@ -461,6 +773,7 @@ def build_report_context(
             source not in SOURCES
             or not all(identity)
             or (institute is not None and identity[0] != institute)
+            or (institute is None and is_excluded_synthetic_institute(identity[0]))
             or (allowed_identities is not None and identity not in allowed_identities)
         ):
             continue

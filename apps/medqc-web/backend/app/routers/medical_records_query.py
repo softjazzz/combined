@@ -1,5 +1,6 @@
 """病案数据 - 查询子域。"""
 
+import inspect
 import json
 from datetime import date, datetime
 from typing import Annotated, Any, Dict, Literal, Optional
@@ -18,18 +19,22 @@ from ..services.medical_records.detail_service import (
     list_departments_for_institute,
 )
 from ..services.medical_records.query_service import (
+    _validate_analytics_filters,
     get_departments,
     get_stats,
     get_workstation_data,
     list_medical_records,
     parse_analytics_result_statuses,
+    sanitize_analytics_result_statuses_for_demo,
 )
 from ..services.medical_records.hospitalization_status_service import (
     default_hospitalization_status_service,
 )
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
+_DEMO_PRIVILEGED_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
 
 _VERIFY_HOSPITALIZATION_STATUS_ROLES = (
     "admin",
@@ -203,6 +208,62 @@ def _workstation_filters(
     )
 
 
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    roles = {
+        str(role).strip().lower()
+        for role in (current_user.get("roles") or [])
+        if isinstance(role, str) and role.strip()
+    }
+    single_role = current_user.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.add(single_role.strip().lower())
+    if roles & _DEMO_PRIVILEGED_ROLES:
+        return False
+    explicit_flag = current_user.get("is_demo_account")
+    if explicit_flag is False:
+        return False
+    if explicit_flag is True:
+        return True
+    email = str(current_user.get("email") or "").strip().lower()
+    return bool(email and email in DEFAULT_DEMO_USER_EMAILS)
+
+
+def _empty_demo_workstation_payload(parameters: Dict[str, Any]) -> Dict[str, Any]:
+    empty_qc_summary = {
+        "total_records": 0,
+        "ready_records": 0,
+        "not_run_records": 0,
+        "technical_error_records": 0,
+        "status_counts": {},
+        "running_state": "unknown",
+    }
+    if parameters.get("qc_summary_mode") == "only":
+        return {
+            **(
+                {"qc_summary": empty_qc_summary}
+                if parameters.get("qc_summary_include_totals", True)
+                else {}
+            ),
+            "records": [],
+        }
+    return {
+        "departments": [{"name": "全部科室", "total": 0, "warningCount": 0}],
+        "doctors": [{"name": "全部主管医师", "total": 0}],
+        "records": [],
+        "total": 0,
+        "page": int(parameters.get("page") or 1),
+        "pageSize": int(parameters.get("page_size") or 50),
+        "totalPages": 0,
+        **(
+            {}
+            if parameters.get("qc_summary_mode") == "deferred"
+            else {"qc_summary": empty_qc_summary}
+        ),
+    }
+
+
 def _query_workstation(
     request: Request,
     current_user: Optional[Dict[str, Any]] = None,
@@ -210,9 +271,37 @@ def _query_workstation(
 ):
     # CDM 和业务摘要使用同步数据库调用，交由 FastAPI 在线程池执行。
     try:
+        case_scope = _effective_case_scope(request, current_user)
+        call_params = dict(parameters)
+        is_demo = _is_restricted_demo_account(current_user)
+        raw_status = call_params.get("analytics_result_status")
+        if is_demo and raw_status:
+            parsed_statuses, _ = _validate_analytics_filters(
+                analytics_completed_from=call_params.get("analytics_completed_from"),
+                analytics_completed_to=call_params.get("analytics_completed_to"),
+                analytics_result_status=raw_status,
+                analytics_scope=call_params.get("analytics_scope"),
+            )
+            allowed_statuses, emptied_by_demo = sanitize_analytics_result_statuses_for_demo(
+                parsed_statuses,
+                is_demo_account=True,
+            )
+            if emptied_by_demo:
+                return _empty_demo_workstation_payload(call_params)
+            call_params["analytics_result_status"] = ",".join(allowed_statuses)
+        if is_demo:
+            try:
+                sig_params = inspect.signature(get_workstation_data).parameters
+                has_var_kw = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
+                )
+                if "is_demo_account" in sig_params or has_var_kw:
+                    call_params["is_demo_account"] = True
+            except (TypeError, ValueError):
+                pass
         return get_workstation_data(
-            case_scope=_effective_case_scope(request, current_user),
-            **parameters,
+            case_scope=case_scope,
+            **call_params,
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)

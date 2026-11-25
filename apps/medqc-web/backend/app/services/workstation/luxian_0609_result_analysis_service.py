@@ -12,7 +12,10 @@ from zoneinfo import ZoneInfo
 from ...services import custom_qc_workspace_service as _workspace_module
 from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ...services.luxian_0609_rule_master import load_luxian_0609_rule_master
-from ...services.medical_records.query_service import normalize_department_name
+from ...services.medical_records.query_service import (
+    SYNTHETIC_TEST_INSTITUTE_IDS,
+    normalize_department_name,
+)
 
 _ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE = CustomQCWorkspaceService
 _RESULT_ANALYSIS_CACHE_LOCK = RLock()
@@ -195,6 +198,13 @@ def _load_single_db_workstation_records(
         query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
     if normalized_institute_id is not None:
         query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+    elif case_scope is None and hasattr(query, "filter"):
+        query = query.filter(
+            or_(
+                MedicalRecordFrontpage.institute_id.is_(None),
+                MedicalRecordFrontpage.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+            )
+        )
     if discharge_summary is not None:
         query = query.outerjoin(
             discharge_summary,
@@ -270,6 +280,12 @@ def _load_single_db_workstation_records(
         if normalized_institute_id is not None and identity[0] != normalized_institute_id:
             continue
         if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+            continue
+        if (
+            case_scope is None
+            and normalized_institute_id is None
+            and identity[0] in SYNTHETIC_TEST_INSTITUTE_IDS
+        ):
             continue
         dept_label = _normalized_department(
             record.discharge_dept_name or record.admission_dept_name,
@@ -360,6 +376,13 @@ def _load_independent_workstation_records(
         case_scope=effective_case_scope,
         institute_id=effective_institute_id,
     )
+    if effective_case_scope is None and effective_institute_id is None:
+        predicates.append(
+            or_(
+                source.c.institute_id.is_(None),
+                source.c.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+            )
+        )
     if is_unassigned_dept:
         predicates.append(
             or_(
@@ -741,6 +764,11 @@ class Luxian0609ResultAnalysisService:
             if (identity := _identity_from_record(record)) is not None
             and (normalized_institute_id is None or identity[0] == normalized_institute_id)
             and (case_scope is None or _matches_case_scope_identity(identity, case_scope))
+            and (
+                normalized_institute_id is not None
+                or case_scope is not None
+                or identity[0] not in SYNTHETIC_TEST_INSTITUTE_IDS
+            )
         }
         projections = self._result_loader(
             [

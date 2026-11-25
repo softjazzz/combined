@@ -31,11 +31,14 @@ def _trim_special_record_row_for_demo(row: Any) -> Any:
     if not isinstance(row, dict):
         return row
     cleaned = _strip_diagnostic_fields(row)
+    # 前端 SpecialReportRow / SpecialTypeFact 强校验 nullableText（null | string），
+    # 演示态隐藏诊断码时必须保留 reason_code: None（JSON null）而非删键成 undefined。
+    cleaned["reason_code"] = None
     raw_types = cleaned.get("types")
     if isinstance(raw_types, dict):
         cleaned["types"] = {
             key: (
-                {k: v for k, v in value.items() if k != "reason_code"}
+                {**value, "reason_code": None}
                 if isinstance(value, dict)
                 else value
             )

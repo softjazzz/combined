@@ -637,10 +637,10 @@ describe('T1-B4 4. WAI-ARIA Tabs、键盘无障碍与 0 病例空态引导', () 
     expect(topButtons[0]!.attributes('aria-pressed')).toBe('false')
     expect(topButtons[1]!.attributes('aria-pressed')).toBe('true')
 
-    // 4. 0 病例空态上下文引导
+    // 4. 0 病例空态上下文引导（无 URL scene 参数时默认进入终末病历）
     const emptyGuide = wrapper.get('[data-testid="report-empty-guide"]')
     expect(emptyGuide.text()).toContain('0 份')
-    expect(emptyGuide.text()).toContain('切换到终末病历')
+    expect(emptyGuide.text()).toContain('切换到运行病历')
 
     // 带筛选条件时提供“重置筛选条件”按钮
     await wrapper.get('#report-department').setValue('无数据科室')

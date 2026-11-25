@@ -99,9 +99,9 @@
                 :key="option.value"
                 type="button"
                 class="mq-segmented__item"
-                :class="{ 'is-active': draft.period === option.value }"
-                :aria-pressed="draft.period === option.value"
-                @click="draft.period = option.value"
+                :class="{ 'is-active': activeDraftPeriod === option.value }"
+                :aria-pressed="activeDraftPeriod === option.value"
+                @click="selectPeriod(option.value)"
               >
                 {{ option.label }}
               </button>
@@ -582,28 +582,38 @@ const authKey = computed(() => {
   if (!id) return ''
   return `${id}|${[...authStore.userRoles].sort().join(',')}`
 })
+const initialStartDate = /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.start_date))
+  ? queryString(route?.query?.start_date)
+  : ''
+const initialEndDate = /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.end_date))
+  ? queryString(route?.query?.end_date)
+  : ''
 const draft = reactive({
-  period: periodFromQuery(route?.query?.period),
+  period:
+    initialStartDate && initialEndDate ? 'this_month' : periodFromQuery(route?.query?.period),
   departmentKey: departmentKeyFromQuery(route?.query as Record<string, unknown> | undefined),
   task_id: queryString(route?.query?.task_id).trim(),
-  start_date: /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.start_date))
-    ? queryString(route?.query?.start_date)
-    : '',
-  end_date: /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.end_date))
-    ? queryString(route?.query?.end_date)
-    : '',
+  start_date: initialStartDate,
+  end_date: initialEndDate,
 })
+const activeDraftPeriod = computed<StaffAnalysisPeriod | null>(() =>
+  draft.start_date || draft.end_date ? null : draft.period,
+)
+function selectPeriod(value: StaffAnalysisPeriod): void {
+  draft.period = value
+  draft.start_date = ''
+  draft.end_date = ''
+}
 function buildInitialFilters(): StaffAnalysisFilters {
   const deptInst = queryString(route?.query?.institute_id).trim()
   const deptName = queryString(route?.query?.department).trim()
+  const hasCustomRange = Boolean(draft.start_date && draft.end_date)
   return {
-    period: draft.period,
+    period: hasCustomRange ? 'this_month' : draft.period,
     scene: scene.value,
     ...(deptInst && deptName ? { institute_id: deptInst, department: deptName } : {}),
     ...(draft.task_id ? { task_id: draft.task_id } : {}),
-    ...(draft.start_date && draft.end_date
-      ? { start_date: draft.start_date, end_date: draft.end_date }
-      : {}),
+    ...(hasCustomRange ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
   }
 }
 const appliedFilters = ref<StaffAnalysisFilters>(buildInitialFilters())
@@ -733,6 +743,17 @@ function selectedDepartment(): { institute_id: string; department: string } | nu
   }
   return null
 }
+function filtersEqual(left: StaffAnalysisFilters, right: StaffAnalysisFilters): boolean {
+  return (
+    left.period === right.period &&
+    left.scene === right.scene &&
+    (left.institute_id || '') === (right.institute_id || '') &&
+    (left.department || '') === (right.department || '') &&
+    (left.task_id || '') === (right.task_id || '') &&
+    (left.start_date || '') === (right.start_date || '') &&
+    (left.end_date || '') === (right.end_date || '')
+  )
+}
 function makeFilters(): StaffAnalysisFilters | null {
   filterError.value = ''
   if (Boolean(draft.start_date) !== Boolean(draft.end_date)) {
@@ -743,13 +764,18 @@ function makeFilters(): StaffAnalysisFilters | null {
     filterError.value = '开始日期不能晚于结束日期'
     return null
   }
+  const hasCustomRange = Boolean(draft.start_date && draft.end_date)
+  if (hasCustomRange) {
+    // 自定义日期生效时清理过期快捷周期，避免残留 period=last_week 误导状态与 URL
+    draft.period = 'this_month'
+  }
   const department = selectedDepartment()
   return {
-    period: draft.period,
+    period: hasCustomRange ? 'this_month' : draft.period,
     scene: scene.value,
     ...(department || {}),
     ...(draft.task_id ? { task_id: draft.task_id } : {}),
-    ...(draft.start_date ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
+    ...(hasCustomRange ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
   }
 }
 function frozenFilters(filters: StaffAnalysisAppliedFilters): StaffAnalysisFilters {
@@ -785,6 +811,9 @@ function clearAll(): void {
   report.value = null
   errorMessage.value = ''
 }
+let pendingNonSceneKey: string | null = null
+let urlSyncSeq = 0
+let staffNeedsLoad = false
 function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab }): void {
   if (!route || !router || typeof router.replace !== 'function') return
   const nextScene = overrides?.scene ?? scene.value
@@ -810,7 +839,8 @@ function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab 
   }
   nextQuery.scene = nextScene
   if (nextTab !== 'staff') nextQuery.tab = nextTab
-  if (appliedFilters.value.period && appliedFilters.value.period !== 'this_month') {
+  const hasCustomRange = Boolean(appliedFilters.value.start_date && appliedFilters.value.end_date)
+  if (!hasCustomRange && appliedFilters.value.period && appliedFilters.value.period !== 'this_month') {
     nextQuery.period = appliedFilters.value.period
   }
   if (appliedFilters.value.institute_id && appliedFilters.value.department) {
@@ -818,9 +848,9 @@ function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab 
     nextQuery.department = appliedFilters.value.department
   }
   if (appliedFilters.value.task_id) nextQuery.task_id = appliedFilters.value.task_id
-  if (appliedFilters.value.start_date && appliedFilters.value.end_date) {
-    nextQuery.start_date = appliedFilters.value.start_date
-    nextQuery.end_date = appliedFilters.value.end_date
+  if (hasCustomRange) {
+    nextQuery.start_date = appliedFilters.value.start_date!
+    nextQuery.end_date = appliedFilters.value.end_date!
   }
   if (rankMetric.value !== 'record_review_count') nextQuery.rank_metric = rankMetric.value
   const currentEntries = Object.entries(route.query || {})
@@ -829,11 +859,26 @@ function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab 
     .sort(([a], [b]) => a.localeCompare(b))
   const nextEntries = Object.entries(nextQuery).sort(([a], [b]) => a.localeCompare(b))
   if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return
-  void router.replace({ path: route.path, query: nextQuery })
+  const targetNonSceneKey = routeNonSceneKey(nextQuery)
+  const syncSeq = ++urlSyncSeq
+  pendingNonSceneKey = targetNonSceneKey
+  void Promise.resolve(router.replace({ path: route.path, query: nextQuery }))
+    .catch(() => {})
+    .finally(() => {
+      if (syncSeq === urlSyncSeq) {
+        lastNonSceneQueryKey = routeNonSceneKey(route?.query as Record<string, unknown> | undefined)
+        pendingNonSceneKey = null
+      }
+    })
 }
 function setReportTab(tab: ReportTab): void {
+  if (reportTab.value === tab) return
   reportTab.value = tab
   syncUrlQuery({ tab })
+  if (tab === 'staff' && staffNeedsLoad && authKey.value) {
+    staffNeedsLoad = false
+    void loadReport()
+  }
 }
 function onReportTabKeydown(event: KeyboardEvent, current: ReportTab): void {
   const order: ReportTab[] = reportTabs.map((item) => item.value)
@@ -883,6 +928,7 @@ function applyFilters(): void {
   if (!filters) return
   appliedFilters.value = filters
   syncUrlQuery()
+  staffNeedsLoad = false
   void loadReport()
 }
 function resetFilters(): void {
@@ -1067,8 +1113,15 @@ watch(
     const previousScene = previous?.[0]
     appliedFilters.value = { ...appliedFilters.value, scene: nextScene }
     if (previousScene !== undefined && previousScene !== nextScene) filterError.value = ''
-    if (!nextAuth) clearAll()
-    else void loadReport()
+    if (!nextAuth) {
+      staffNeedsLoad = false
+      clearAll()
+    } else if (reportTab.value === 'manual') {
+      staffNeedsLoad = true
+    } else {
+      staffNeedsLoad = false
+      void loadReport()
+    }
   },
   { immediate: true },
 )
@@ -1090,10 +1143,13 @@ watch(
   (nextKey) => {
     if (nextKey === lastNonSceneQueryKey) return
     lastNonSceneQueryKey = nextKey
+    if (pendingNonSceneKey !== null && nextKey === pendingNonSceneKey) {
+      pendingNonSceneKey = null
+      return
+    }
     const q = route?.query as Record<string, unknown> | undefined
     const nextTab: ReportTab = queryString(q?.tab) === 'manual' ? 'manual' : 'staff'
     if (reportTab.value !== nextTab) reportTab.value = nextTab
-    const nextPeriod = periodFromQuery(q?.period)
     const nextDeptKey = departmentKeyFromQuery(q)
     const nextTaskId = queryString(q?.task_id).trim()
     const nextStart = /^\d{4}-\d{2}-\d{2}$/.test(queryString(q?.start_date))
@@ -1102,6 +1158,10 @@ watch(
     const nextEnd = /^\d{4}-\d{2}-\d{2}$/.test(queryString(q?.end_date))
       ? queryString(q?.end_date)
       : ''
+    const hasCustomRange = Boolean(nextStart && nextEnd)
+    const nextPeriod: StaffAnalysisPeriod = hasCustomRange
+      ? 'this_month'
+      : periodFromQuery(q?.period)
     const nextRank = rankMetricFromQuery(q?.rank_metric)
     const nextInst = queryString(q?.institute_id).trim()
     const nextDept = queryString(q?.department).trim()
@@ -1110,11 +1170,10 @@ watch(
       scene: scene.value,
       ...(nextInst && nextDept ? { institute_id: nextInst, department: nextDept } : {}),
       ...(nextTaskId ? { task_id: nextTaskId } : {}),
-      ...(nextStart && nextEnd ? { start_date: nextStart, end_date: nextEnd } : {}),
+      ...(hasCustomRange ? { start_date: nextStart, end_date: nextEnd } : {}),
     }
     const changed =
-      JSON.stringify(nextFilters) !== JSON.stringify(appliedFilters.value) ||
-      nextRank !== rankMetric.value
+      !filtersEqual(nextFilters, appliedFilters.value) || nextRank !== rankMetric.value
     draft.period = nextPeriod
     draft.departmentKey = nextDeptKey
     draft.task_id = nextTaskId
@@ -1123,7 +1182,17 @@ watch(
     rankMetric.value = nextRank
     if (changed) {
       appliedFilters.value = nextFilters
-      if (authKey.value) void loadReport()
+      if (authKey.value) {
+        if (reportTab.value === 'staff') {
+          staffNeedsLoad = false
+          void loadReport()
+        } else {
+          staffNeedsLoad = true
+        }
+      }
+    } else if (nextTab === 'staff' && staffNeedsLoad && authKey.value) {
+      staffNeedsLoad = false
+      void loadReport()
     }
   },
 )

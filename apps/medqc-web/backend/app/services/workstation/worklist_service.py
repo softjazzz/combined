@@ -119,6 +119,8 @@ _ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
 _ANALYTICS_CACHE_LOCK = RLock()
 _ANALYTICS_WATERMARK_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
 _ANALYTICS_WATERMARK_CACHE_MAX = 64
+_ANALYTICS_EVENTS_WATERMARK_CACHE: "OrderedDict[tuple[Any, ...], tuple[Dict[str, Any], ...]]" = OrderedDict()
+_ANALYTICS_EVENTS_WATERMARK_CACHE_MAX = 32
 _ANALYTICS_CACHE_EVICTION_REGISTERED = False
 _ANALYTICS_IDENTITY_CHUNK_SIZE = 200
 _ANALYTICS_IDENTITY_PUSHDOWN_LIMIT = 2000
@@ -133,12 +135,20 @@ def _evict_luxian_analytics_cache_for_scope(scope_key: str) -> None:
         ]
         for key in stale_keys:
             _ANALYTICS_WATERMARK_CACHE.pop(key, None)
+        stale_event_keys = [
+            key
+            for key in _ANALYTICS_EVENTS_WATERMARK_CACHE
+            if key and key[0] == scope_key
+        ]
+        for key in stale_event_keys:
+            _ANALYTICS_EVENTS_WATERMARK_CACHE.pop(key, None)
 
 
 def clear_luxian_0609_analytics_caches() -> None:
     """清空统计分析只读水印缓存（供测试或运维手动重置）。"""
     with _ANALYTICS_CACHE_LOCK:
         _ANALYTICS_WATERMARK_CACHE.clear()
+        _ANALYTICS_EVENTS_WATERMARK_CACHE.clear()
 
 
 def _ensure_analytics_cache_eviction_registered(workspace_module: Any) -> None:
@@ -291,8 +301,14 @@ def _matches_case_scope_identity(
     return True
 
 
+def _normalized_department_filter(value: Any) -> Optional[str]:
+    from ..medical_records.query_service import normalize_department_name
+
+    return normalize_department_name(_safe_text(value)) or None
+
+
 def _normalized_department_label(value: Any) -> str:
-    return _safe_text(value, "未分科室").strip() or "未分科室"
+    return _normalized_department_filter(value) or "未分科室"
 
 
 class WorkstationAggregationService:
@@ -500,6 +516,163 @@ class WorkstationAggregationService:
         base_attr = getattr(WorkstationAggregationService, method_name, None)
         return cls_attr is base_attr
 
+    def _is_original_analytics_event_loader(self) -> bool:
+        if "_load_luxian_0609_analytics_events" in getattr(self, "__dict__", {}):
+            return False
+        return (
+            getattr(type(self), "_load_luxian_0609_analytics_events", None)
+            is _ORIGINAL_LOAD_LUXIAN_0609_ANALYTICS_EVENTS
+        )
+
+    def _build_luxian_analytics_events_cache_key(
+        self,
+        session: Session,
+        *,
+        completed_from_utc: Optional[datetime],
+        completed_to_utc: Optional[datetime],
+        job_id: Optional[str],
+        institute_id: Optional[str],
+        case_scope: Any,
+    ) -> Optional[tuple[Any, ...]]:
+        if not self._is_original_analytics_event_loader():
+            return None
+        if not hasattr(session, "get_bind"):
+            return None
+        try:
+            from ...database import clinical_connection
+            from .. import custom_qc_workspace_service as _workspace_module
+
+            _ensure_analytics_cache_eviction_registered(_workspace_module)
+            db_scope = _workspace_module._session_cache_scope_key(session)
+            if db_scope is None:
+                return None
+            workspace_service = self._get_readonly_custom_qc_workspace_service()
+            watermark_reader = getattr(
+                workspace_service, "_read_luxian_summary_watermark", None
+            )
+            if not callable(watermark_reader):
+                return None
+            watermark = watermark_reader(session)
+            if watermark is None:
+                return None
+            active_sel = clinical_connection.current_selection()
+            source_key = (
+                bool(clinical_connection.configured()),
+                None
+                if active_sel is None
+                else (
+                    _safe_text(active_sel.get("id")).strip(),
+                    active_sel.get("version"),
+                    _safe_text(active_sel.get("binding")).strip(),
+                ),
+            )
+            normalized_inst = _safe_text(institute_id).strip() or None
+            if case_scope is None:
+                scope_key: Any = ("institute", normalized_inst) if normalized_inst else ("all",)
+            elif _is_institute_case_scope(case_scope):
+                scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip() or None
+                if normalized_inst and scope_inst and normalized_inst != scope_inst:
+                    scope_key = ("conflict", normalized_inst, scope_inst)
+                else:
+                    eff_inst = scope_inst or normalized_inst
+                    scope_key = ("institute", eff_inst) if eff_inst else ("all",)
+            elif _is_doctor_case_scope(case_scope):
+                scope_key = (
+                    "doctor",
+                    normalized_inst or _safe_text(getattr(case_scope, "institute_id", None)).strip(),
+                    _safe_text(getattr(case_scope, "department", None)).strip(),
+                    _safe_text(getattr(case_scope, "doctor_name", None)).strip(),
+                    tuple(sorted(getattr(case_scope, "case_refs", ()))),
+                )
+            else:
+                return None
+            filter_key = (
+                completed_from_utc.isoformat() if completed_from_utc is not None else None,
+                completed_to_utc.isoformat() if completed_to_utc is not None else None,
+                job_id,
+                scope_key,
+            )
+            return (db_scope, source_key, watermark, filter_key)
+        except Exception:
+            return None
+
+    def load_cached_luxian_0609_analytics_events(
+        self,
+        session: Session,
+        *,
+        records_by_identity: Optional[Mapping[tuple[str, str, str], Mapping[str, Any]]] = None,
+        completed_from: Optional[datetime] = None,
+        completed_to: Optional[datetime] = None,
+        job_id: Optional[str] = None,
+        scoped_filter_active: bool = False,
+        case_scope=None,
+        institute_id: Optional[str] = None,
+    ) -> tuple[list[Dict[str, Any]], int]:
+        """带水印缓存读取统计下钻所需的 Canonical 事件，避免每次下钻重复全量扫描与反序列化。"""
+
+        if not self._is_original_analytics_event_loader():
+            return self._load_luxian_0609_analytics_events(
+                session,
+                records_by_identity=records_by_identity,
+                completed_from=completed_from,
+                completed_to=completed_to,
+                job_id=job_id,
+                scoped_filter_active=scoped_filter_active,
+                case_scope=case_scope,
+                institute_id=institute_id,
+            )
+        if scoped_filter_active and records_by_identity is not None and not records_by_identity:
+            return [], 0
+        completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
+        completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
+        normalized_job_id = _safe_text(job_id).strip() or None
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        cache_key = self._build_luxian_analytics_events_cache_key(
+            session,
+            completed_from_utc=completed_from_utc,
+            completed_to_utc=completed_to_utc,
+            job_id=normalized_job_id,
+            institute_id=normalized_institute_id,
+            case_scope=case_scope,
+        )
+        if cache_key is None:
+            return self._load_luxian_0609_analytics_events(
+                session,
+                records_by_identity=records_by_identity,
+                completed_from=completed_from,
+                completed_to=completed_to,
+                job_id=normalized_job_id,
+                scoped_filter_active=scoped_filter_active,
+                case_scope=case_scope,
+                institute_id=normalized_institute_id,
+            )
+        with _ANALYTICS_CACHE_LOCK:
+            cached = _ANALYTICS_EVENTS_WATERMARK_CACHE.get(cache_key)
+            if cached is not None:
+                _ANALYTICS_EVENTS_WATERMARK_CACHE.move_to_end(cache_key)
+        if cached is None:
+            loaded_events, _ = self._load_luxian_0609_analytics_events(
+                session,
+                records_by_identity=None,
+                completed_from=completed_from,
+                completed_to=completed_to,
+                job_id=normalized_job_id,
+                scoped_filter_active=True,
+                case_scope=case_scope,
+                institute_id=normalized_institute_id,
+            )
+            cached = tuple(loaded_events)
+            with _ANALYTICS_CACHE_LOCK:
+                _ANALYTICS_EVENTS_WATERMARK_CACHE[cache_key] = cached
+                _ANALYTICS_EVENTS_WATERMARK_CACHE.move_to_end(cache_key)
+                while len(_ANALYTICS_EVENTS_WATERMARK_CACHE) > _ANALYTICS_EVENTS_WATERMARK_CACHE_MAX:
+                    _ANALYTICS_EVENTS_WATERMARK_CACHE.popitem(last=False)
+        if records_by_identity is not None:
+            return [
+                event for event in cached if event.get("identity") in records_by_identity
+            ], 0
+        return list(cached), 0
+
     def _build_luxian_analytics_cache_key(
         self,
         session: Session,
@@ -597,7 +770,9 @@ class WorkstationAggregationService:
             raise ValueError("completed_from 不能晚于 completed_to")
         normalized_job_id = _safe_text(job_id).strip() or None
         normalized_institute_id = _safe_text(institute_id).strip() or None
-        normalized_department = _safe_text(department).strip() or None
+        normalized_department = _normalized_department_filter(department)
+        from ..medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
+
         session: Session = self._session_factory()
         cache_key: Optional[tuple[Any, ...]] = None
         try:
@@ -649,6 +824,12 @@ class WorkstationAggregationService:
                     identity: record
                     for identity, record in scoped_by_identity.items()
                     if _matches_case_scope_identity(identity, case_scope)
+                }
+            if normalized_institute_id is None and case_scope is None:
+                scoped_by_identity = {
+                    identity: record
+                    for identity, record in scoped_by_identity.items()
+                    if identity[0] not in SYNTHETIC_TEST_INSTITUTE_IDS
                 }
 
             # 科室下拉选项不受当前 department 筛选影响，避免选中单科后下拉自毁。
@@ -705,6 +886,14 @@ class WorkstationAggregationService:
                     for event in events
                     if event.get("identity") in records_by_identity
                 ]
+            else:
+                events = [
+                    event
+                    for event in events
+                    if isinstance(event.get("identity"), tuple)
+                    and len(event["identity"]) == 3
+                    and event["identity"][0] not in SYNTHETIC_TEST_INSTITUTE_IDS
+                ]
         finally:
             session.close()
 
@@ -718,6 +907,10 @@ class WorkstationAggregationService:
         )
         status_counts = {status: 0 for status in status_order}
         rule_counts: Dict[str, Dict[str, int]] = {}
+        rule_problem_records: Dict[str, set[tuple[str, str, str]]] = {}
+        rule_non_compliant_records: Dict[str, set[tuple[str, str, str]]] = {}
+        rule_data_gap_records: Dict[str, set[tuple[str, str, str]]] = {}
+        rule_uncertain_records: Dict[str, set[tuple[str, str, str]]] = {}
         department_records: Dict[str, set[tuple[str, str, str]]] = {}
         department_non_compliant: Dict[str, set[tuple[str, str, str]]] = {}
         department_data_gap: Dict[str, set[tuple[str, str, str]]] = {}
@@ -753,7 +946,7 @@ class WorkstationAggregationService:
             if event_key in event_identities:
                 invalid_total += 1
                 continue
-            department_name = _safe_text(event.get("department"), "未分科室").strip() or "未分科室"
+            department_name = _normalized_department_label(event.get("department"))
             event_statuses = set()
             validated_items: list[tuple[str, str]] = []
             valid_event = True
@@ -804,6 +997,13 @@ class WorkstationAggregationService:
                 bucket["evaluated_count"] += 1
                 if status in {"non_compliant", "data_gap", "uncertain"}:
                     bucket[f"{status}_count"] += 1
+                    rule_problem_records.setdefault(rule_id, set()).add(identity)
+                    if status == "non_compliant":
+                        rule_non_compliant_records.setdefault(rule_id, set()).add(identity)
+                    elif status == "data_gap":
+                        rule_data_gap_records.setdefault(rule_id, set()).add(identity)
+                    elif status == "uncertain":
+                        rule_uncertain_records.setdefault(rule_id, set()).add(identity)
             if "non_compliant" in event_statuses:
                 records_with_non_compliant.add(identity)
                 department_non_compliant.setdefault(department_name, set()).add(identity)
@@ -885,6 +1085,12 @@ class WorkstationAggregationService:
                 "rule_id": rule_id,
                 "rule_name": rule_names.get(rule_id, rule_id),
                 **counts,
+                "distinct_record_count": len(rule_problem_records.get(rule_id, ())),
+                "non_compliant_record_count": len(
+                    rule_non_compliant_records.get(rule_id, ())
+                ),
+                "data_gap_record_count": len(rule_data_gap_records.get(rule_id, ())),
+                "uncertain_record_count": len(rule_uncertain_records.get(rule_id, ())),
             }
             for rule_id, counts in rule_counts.items()
         ]
@@ -909,7 +1115,7 @@ class WorkstationAggregationService:
                 "time_basis": "qc_completed_at",
                 "completed_from": completed_from.isoformat() if completed_from else None,
                 "completed_to": completed_to.isoformat() if completed_to else None,
-                "department": department or None,
+                "department": normalized_department,
                 "job_id": normalized_job_id,
                 "scene": "final",
                 "rule_set_key": LUXIAN_0609_RULE_SET_KEY,
@@ -960,10 +1166,11 @@ class WorkstationAggregationService:
         case_scope=None,
         institute_id: Optional[str] = None,
     ) -> tuple[list[Dict[str, Any]], int]:
-        """读取当前版本已完成根任务的 Canonical 事件，缺失只进入数据健康。"""
+        """读取当前版本根任务的 Canonical 事件（含非 completed 根任务下已完成单病历），缺失只进入数据健康。"""
 
         from ...database import clinical_connection
         from .. import clinical_sources
+        from ..medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
         from ..qc_workspace.canonical_result_store import (
             CANONICAL_RESULT_DELIVERY_MODE as _CANONICAL_RESULT_DELIVERY_MODE,
             _CUSTOMER_STATUSES,
@@ -974,44 +1181,61 @@ class WorkstationAggregationService:
             return [], 0
 
         workspace_service = self._get_readonly_custom_qc_workspace_service()
-        finished_at_col = workspace_service._batch_job_table.c.finished_at
+        batch_job_table = workspace_service._batch_job_table
+        finished_at_col = batch_job_table.c.finished_at
+        status_col = batch_job_table.c.status
         finished_at_is_tz = bool(getattr(getattr(finished_at_col, "type", None), "timezone", False))
         completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
         completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
         jobs_query = select(
-            workspace_service._batch_job_table.c.id,
+            batch_job_table.c.id,
+            status_col,
             finished_at_col,
-            workspace_service._batch_job_table.c.filters_json,
-            workspace_service._batch_job_table.c.record_ids_json,
+            batch_job_table.c.filters_json,
+            batch_job_table.c.record_ids_json,
         ).where(
             and_(
-                workspace_service._batch_job_table.c.status == "completed",
-                finished_at_col.is_not(None),
+                status_col.in_(
+                    ("completed", "failed", "running", "queued", "canceled")
+                ),
                 or_(
-                    workspace_service._batch_job_table.c.parent_job_id.is_(None),
-                    workspace_service._batch_job_table.c.parent_job_id == "",
+                    and_(
+                        status_col == "completed",
+                        finished_at_col.is_not(None),
+                    ),
+                    status_col != "completed",
+                ),
+                or_(
+                    batch_job_table.c.parent_job_id.is_(None),
+                    batch_job_table.c.parent_job_id == "",
                 ),
             )
         )
         if job_id:
-            jobs_query = jobs_query.where(workspace_service._batch_job_table.c.id == job_id)
+            jobs_query = jobs_query.where(batch_job_table.c.id == job_id)
         if completed_from_utc is not None:
             from_bound = completed_from_utc if finished_at_is_tz else completed_from_utc.replace(tzinfo=None)
-            jobs_query = jobs_query.where(finished_at_col >= from_bound)
+            jobs_query = jobs_query.where(
+                or_(status_col != "completed", finished_at_col >= from_bound)
+            )
         if completed_to_utc is not None:
             to_bound = completed_to_utc if finished_at_is_tz else completed_to_utc.replace(tzinfo=None)
-            jobs_query = jobs_query.where(finished_at_col <= to_bound)
+            jobs_query = jobs_query.where(
+                or_(status_col != "completed", finished_at_col <= to_bound)
+            )
         jobs: Dict[str, Dict[str, Any]] = {}
         legacy_candidates: Dict[str, Dict[str, Any]] = {}
         for raw_row in session.execute(jobs_query).mappings().all():
             row = dict(raw_row)
             current_job_id = _safe_text(row.get("id")).strip()
+            job_status = _safe_text(row.get("status"), "completed").strip().lower() or "completed"
             finished_at = _to_utc_datetime(row.get("finished_at"))
             filters = _json_loads_if_needed(row.get("filters_json"))
             source = filters if isinstance(filters, Mapping) else {}
-            if (
-                not current_job_id
-                or finished_at is None
+            if not current_job_id:
+                continue
+            if job_status == "completed" and (
+                finished_at is None
                 or (completed_from_utc is not None and finished_at < completed_from_utc)
                 or (completed_to_utc is not None and finished_at > completed_to_utc)
             ):
@@ -1036,6 +1260,7 @@ class WorkstationAggregationService:
                     if all(ref_identity):
                         record_refs.add(ref_identity)
             job = {
+                "status": job_status,
                 "finished_at": row.get("finished_at"),
                 "record_ids": {
                     _safe_text(value).strip()
@@ -1060,9 +1285,9 @@ class WorkstationAggregationService:
         if legacy_candidates:
             legacy_rows = session.execute(
                 select(
-                    workspace_service._batch_job_table.c.id,
-                    workspace_service._batch_job_table.c.summary_json,
-                ).where(workspace_service._batch_job_table.c.id.in_(list(legacy_candidates)))
+                    batch_job_table.c.id,
+                    batch_job_table.c.summary_json,
+                ).where(batch_job_table.c.id.in_(list(legacy_candidates)))
             ).mappings().all()
             for raw_row in legacy_rows:
                 row = dict(raw_row)
@@ -1087,6 +1312,7 @@ class WorkstationAggregationService:
             )
             or None
         )
+        exclude_synthetic_global = scope_institute_id is None and case_scope is None
         envelope_table = workspace_service._record_result_envelope_table
         envelope_conditions = [
             envelope_table.c.root_job_id.in_(list(jobs)),
@@ -1097,13 +1323,20 @@ class WorkstationAggregationService:
             envelope_conditions.append(
                 envelope_table.c.institute_id == scope_institute_id
             )
-        envelope_cols = (
+        elif exclude_synthetic_global:
+            envelope_conditions.append(
+                envelope_table.c.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS)
+            )
+        envelope_cols_list = [
             envelope_table.c.root_job_id,
             envelope_table.c.institute_id,
             envelope_table.c.patient_id,
             envelope_table.c.visit_id,
             envelope_table.c.envelope_json,
-        )
+        ]
+        if "updated_at" in envelope_table.c:
+            envelope_cols_list.append(envelope_table.c.updated_at)
+        envelope_cols = tuple(envelope_cols_list)
         if (
             scoped_filter_active
             and records_by_identity is not None
@@ -1138,13 +1371,24 @@ class WorkstationAggregationService:
             identity = tuple(_safe_text(row.get(key)).strip() for key in ("institute_id", "patient_id", "visit_id"))
             if root_job_id not in jobs or not all(identity):
                 continue
+            if exclude_synthetic_global and identity[0] in SYNTHETIC_TEST_INSTITUTE_IDS:
+                continue
             rows_by_event.setdefault((root_job_id, *identity), []).append(row)
 
         events: list[Dict[str, Any]] = []
         invalid_total = 0
         for root_job_id, job in jobs.items():
+            is_completed_job = job.get("status", "completed") == "completed"
             record_ids = job["record_ids"]
-            job_refs = job.get("record_refs") or set()
+            raw_job_refs = job.get("record_refs") or set()
+            if raw_job_refs and exclude_synthetic_global:
+                job_refs = {
+                    ref for ref in raw_job_refs if ref[0] not in SYNTHETIC_TEST_INSTITUTE_IDS
+                }
+                if not job_refs:
+                    continue
+            else:
+                job_refs = raw_job_refs
             if records_by_identity is not None:
                 if job_refs:
                     matching_identities = [
@@ -1153,20 +1397,28 @@ class WorkstationAggregationService:
                         if identity in records_by_identity
                         and (not record_ids or identity[2] in record_ids)
                     ]
-                    if not scoped_filter_active:
+                    if is_completed_job and not scoped_filter_active:
                         unresolved_visit_ids = record_ids - {
                             identity[2] for identity in matching_identities
                         }
                         invalid_total += len(unresolved_visit_ids)
-                else:
+                elif record_ids:
                     matching_identities = [
                         identity for identity in records_by_identity if identity[2] in record_ids
                     ]
-                    if not scoped_filter_active:
+                    if is_completed_job and not scoped_filter_active:
                         unresolved_visit_ids = record_ids - {
                             identity[2] for identity in matching_identities
                         }
                         invalid_total += len(unresolved_visit_ids)
+                elif not is_completed_job:
+                    matching_identities = [
+                        ev_key[1:]
+                        for ev_key in rows_by_event
+                        if ev_key[0] == root_job_id and ev_key[1:] in records_by_identity
+                    ]
+                else:
+                    matching_identities = []
             else:
                 if job_refs:
                     matching_identities = [
@@ -1187,6 +1439,12 @@ class WorkstationAggregationService:
                         for identity in matching_identities
                         if identity[0] == scope_institute_id
                     ]
+                elif exclude_synthetic_global:
+                    matching_identities = [
+                        identity
+                        for identity in matching_identities
+                        if identity[0] not in SYNTHETIC_TEST_INSTITUTE_IDS
+                    ]
                 if case_scope is not None:
                     matching_identities = [
                         identity
@@ -1195,10 +1453,37 @@ class WorkstationAggregationService:
                     ]
             for identity in matching_identities:
                 candidates = rows_by_event.get((root_job_id, *identity), [])
+                if not candidates:
+                    if is_completed_job:
+                        invalid_total += 1
+                    continue
                 if len(candidates) != 1:
                     invalid_total += 1
                     continue
-                envelope = _json_loads_if_needed(candidates[0].get("envelope_json"))
+                candidate_row = candidates[0]
+                if is_completed_job:
+                    event_finished_at = job["finished_at"]
+                else:
+                    env_updated_at = candidate_row.get("updated_at")
+                    event_finished_at = (
+                        env_updated_at
+                        if env_updated_at is not None
+                        else job["finished_at"]
+                    )
+                    event_finished_at_utc = _to_utc_datetime(event_finished_at)
+                    if (
+                        event_finished_at_utc is None
+                        or (
+                            completed_from_utc is not None
+                            and event_finished_at_utc < completed_from_utc
+                        )
+                        or (
+                            completed_to_utc is not None
+                            and event_finished_at_utc > completed_to_utc
+                        )
+                    ):
+                        continue
+                envelope = _json_loads_if_needed(candidate_row.get("envelope_json"))
                 items = envelope.get("items") if isinstance(envelope, Mapping) else None
                 if (
                     not isinstance(envelope, Mapping)
@@ -1230,9 +1515,9 @@ class WorkstationAggregationService:
                     {
                         "root_job_id": root_job_id,
                         "identity": identity,
-                        "department": _safe_text(record.get("department"), "未分科室").strip() or "未分科室",
+                        "department": _normalized_department_label(record.get("department")),
                         "attending_physician": _safe_text(record.get("attending_physician")).strip(),
-                        "finished_at": job["finished_at"],
+                        "finished_at": event_finished_at,
                         "items": valid_items,
                     }
                 )
@@ -1254,8 +1539,10 @@ class WorkstationAggregationService:
         三坐标权威来源时保持 unknown，不能从旧工作流、文案或文书数量回填。
         """
 
-        normalized_department = _safe_text(department).strip() or None
+        normalized_department = _normalized_department_filter(department)
         normalized_institute_id = _safe_text(institute_id).strip() or None
+        from ..medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
+
         if case_scope is not None and hasattr(case_scope, "require_filters"):
             case_scope.require_filters(normalized_department, None)
 
@@ -1287,6 +1574,13 @@ class WorkstationAggregationService:
                     ),
                     case_scope,
                 )
+            ]
+        if normalized_institute_id is None and case_scope is None:
+            scoped_records = [
+                record
+                for record in scoped_records
+                if _safe_text(record.get("institute_id")).strip()
+                not in SYNTHETIC_TEST_INSTITUTE_IDS
             ]
 
         # 科室下拉选项必须来自科室筛选前的当前范围病历，避免选中单个科室后抹去其他选项。
@@ -1335,7 +1629,7 @@ class WorkstationAggregationService:
             )
             summary = summaries.get(identity) or {"status": "not_run"}
             summary_status = _safe_text(summary.get("status"), "not_run").strip()
-            department_name = _safe_text(record.get("department"), "未分科室").strip() or "未分科室"
+            department_name = _normalized_department_label(record.get("department"))
             department_bucket = department_distribution.setdefault(
                 department_name,
                 {
@@ -1577,8 +1871,9 @@ class WorkstationAggregationService:
         from sqlalchemy import inspect as sa_inspect
         from ...database import clinical_connection
         from .. import clinical_case_catalog as catalog_service
+        from ..medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
 
-        normalized_department = _safe_text(department).strip() or None
+        normalized_department = _normalized_department_filter(department)
         normalized_keyword = _safe_text(keyword).strip() or None
         normalized_institute_id = _safe_text(institute_id).strip() or None
 
@@ -1630,6 +1925,13 @@ class WorkstationAggregationService:
             case_scope=effective_case_scope,
             institute_id=effective_institute_id,
         )
+        if effective_case_scope is None and effective_institute_id is None:
+            predicates.append(
+                or_(
+                    source.c.institute_id.is_(None),
+                    source.c.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+                )
+            )
         if is_unassigned_dept:
             predicates.append(
                 or_(
@@ -1670,7 +1972,7 @@ class WorkstationAggregationService:
                     "visit_id": identity[2],
                     "patient_name": _safe_text(row.get("name")).strip(),
                     "attending_physician": _safe_text(row.get("doctor")).strip(),
-                    "department": _safe_text(row.get("department")).strip() or "未分科室",
+                    "department": _normalized_department_label(row.get("department")),
                 },
             )
         return list(records_by_identity.values())
@@ -1686,6 +1988,7 @@ class WorkstationAggregationService:
     ) -> List[Dict[str, str]]:
         from ..medical_records.query_service import (
             MedicalRecordFrontpage,
+            SYNTHETIC_TEST_INSTITUTE_IDS,
             _apply_workstation_filters,
             _filter_indexed_registration_records,
             _load_hospitalization_projection_map,
@@ -1696,7 +1999,7 @@ class WorkstationAggregationService:
         )
         from ..clinical_read import clinical_query
 
-        normalized_department = _safe_text(department).strip() or None
+        normalized_department = _normalized_department_filter(department)
         normalized_institute_id = _safe_text(institute_id).strip() or None
         discharge_summary = _workstation_discharge_summary_subquery(session)
 
@@ -1713,6 +2016,13 @@ class WorkstationAggregationService:
             query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if normalized_institute_id is not None:
             query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+        elif case_scope is None and hasattr(query, "filter"):
+            query = query.filter(
+                or_(
+                    MedicalRecordFrontpage.institute_id.is_(None),
+                    MedicalRecordFrontpage.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+                )
+            )
         if discharge_summary is not None:
             query = query.outerjoin(
                 discharge_summary,
@@ -1769,7 +2079,7 @@ class WorkstationAggregationService:
                     "visit_id": identity[2],
                     "patient_name": _safe_text(row.patient_name).strip(),
                     "attending_physician": _safe_text(row.attending_physician).strip(),
-                    "department": _safe_text(row.department).strip() or "未分科室",
+                    "department": _normalized_department_label(row.department),
                 },
             )
         indexed_raw: list[Any] = []
@@ -1806,6 +2116,12 @@ class WorkstationAggregationService:
                 if normalized_institute_id is not None and identity[0] != normalized_institute_id:
                     continue
                 if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+                    continue
+                if (
+                    case_scope is None
+                    and normalized_institute_id is None
+                    and identity[0] in SYNTHETIC_TEST_INSTITUTE_IDS
+                ):
                     continue
                 dept_label = _normalized_department_label(
                     record.discharge_dept_name or record.admission_dept_name
@@ -1882,6 +2198,15 @@ class WorkstationAggregationService:
                 case_scope=effective_case_scope,
                 institute_id=effective_institute_id,
             )
+            if effective_case_scope is None and effective_institute_id is None:
+                from ..medical_records.query_service import SYNTHETIC_TEST_INSTITUTE_IDS
+
+                predicates.append(
+                    or_(
+                        source.c.institute_id.is_(None),
+                        source.c.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+                    )
+                )
             with clinical_engine.connect() as connection:
                 rows = connection.execute(
                     select(source.c.department).distinct().where(*predicates)
@@ -1903,6 +2228,7 @@ class WorkstationAggregationService:
     ) -> List[str]:
         from ..medical_records.query_service import (
             MedicalRecordFrontpage,
+            SYNTHETIC_TEST_INSTITUTE_IDS,
             _apply_workstation_filters,
             _filter_indexed_registration_records,
             _load_hospitalization_projection_map,
@@ -1927,6 +2253,13 @@ class WorkstationAggregationService:
             query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
         if normalized_institute_id is not None:
             query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+        elif case_scope is None and hasattr(query, "filter"):
+            query = query.filter(
+                or_(
+                    MedicalRecordFrontpage.institute_id.is_(None),
+                    MedicalRecordFrontpage.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+                )
+            )
         if discharge_summary is not None:
             query = query.outerjoin(
                 discharge_summary,
@@ -1985,6 +2318,12 @@ class WorkstationAggregationService:
                 if normalized_institute_id is not None and identity[0] != normalized_institute_id:
                     continue
                 if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+                    continue
+                if (
+                    case_scope is None
+                    and normalized_institute_id is None
+                    and identity[0] in SYNTHETIC_TEST_INSTITUTE_IDS
+                ):
                     continue
                 departments.add(
                     _normalized_department_label(
@@ -3026,4 +3365,7 @@ class WorkstationAggregationService:
         return payload
 
 
+_ORIGINAL_LOAD_LUXIAN_0609_ANALYTICS_EVENTS = (
+    WorkstationAggregationService._load_luxian_0609_analytics_events
+)
 default_workstation_aggregation_service = WorkstationAggregationService()
