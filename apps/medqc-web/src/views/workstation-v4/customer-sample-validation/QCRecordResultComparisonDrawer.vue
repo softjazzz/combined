@@ -44,6 +44,57 @@
       </div>
     </template>
 
+    <nav
+      v-if="hasBatchQueue"
+      class="customer-record-result-batch-nav"
+      aria-label="本次批量质控病历切换"
+      data-testid="comparison-batch-nav"
+    >
+      <div class="customer-record-result-batch-nav__meta">
+        <span class="customer-record-result-batch-nav__pill">本次质控结果</span>
+        <span class="customer-record-result-batch-nav__summary">
+          第 <strong>{{ normalizedBatchIndex + 1 }}</strong> / {{ batchRecords.length }} 份
+        </span>
+      </div>
+      <div class="customer-record-result-batch-nav__controls">
+        <button
+          type="button"
+          class="customer-record-result-batch-nav__btn"
+          data-testid="comparison-batch-prev"
+          :disabled="normalizedBatchIndex <= 0"
+          @click="selectBatchRecord(normalizedBatchIndex - 1)"
+        >
+          <ChevronLeft :size="14" aria-hidden="true" />
+          上一份
+        </button>
+        <select
+          class="customer-record-result-batch-nav__select"
+          aria-label="选择本次质控病历"
+          data-testid="comparison-batch-select"
+          :value="String(normalizedBatchIndex)"
+          @change="handleBatchSelectChange"
+        >
+          <option
+            v-for="(item, index) in batchRecords"
+            :key="item.recordKey || index"
+            :value="String(index)"
+          >
+            {{ formatBatchOptionLabel(item, index) }}
+          </option>
+        </select>
+        <button
+          type="button"
+          class="customer-record-result-batch-nav__btn"
+          data-testid="comparison-batch-next"
+          :disabled="normalizedBatchIndex >= batchRecords.length - 1"
+          @click="selectBatchRecord(normalizedBatchIndex + 1)"
+        >
+          下一份
+          <ChevronRight :size="14" aria-hidden="true" />
+        </button>
+      </div>
+    </nav>
+
     <HospitalLoading v-if="showLoading" label="正在读取质控结果" fill />
     <template v-if="!loading">
       <div
@@ -115,7 +166,7 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useMinimumLoading } from '@/composables/useMinimumLoading'
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
-import { ShieldCheck } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, ShieldCheck } from 'lucide-vue-next'
 import RecordViewCloseIcon from '../components/RecordViewCloseIcon.vue'
 import MedicalRecordContextBanner from './MedicalRecordContextBanner.vue'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
@@ -152,6 +203,15 @@ export interface QCRecordResultFocus {
   label: string
 }
 
+export interface QCRecordResultBatchItem {
+  recordKey: string
+  patientName?: string
+  visitId?: string
+  department?: string
+  confirmedIssueCount?: number
+  resultLabel?: string
+}
+
 const { confirmedResultsOnly } = useQcResultVisibility()
 
 const props = withDefaults(
@@ -160,13 +220,54 @@ const props = withDefaults(
     focus: QCRecordResultFocus | null
     presentationMode?: 'flat' | 'grouped'
     loadJobMetadata?: boolean
+    batchRecords?: QCRecordResultBatchItem[]
+    activeBatchIndex?: number
   }>(),
-  { presentationMode: 'flat', loadJobMetadata: true },
+  {
+    presentationMode: 'flat',
+    loadJobMetadata: true,
+    batchRecords: () => [],
+    activeBatchIndex: -1,
+  },
 )
 
 const emit = defineEmits<{
   (event: 'close'): void
+  (event: 'select-batch-index', index: number): void
 }>()
+
+const hasBatchQueue = computed(
+  () => Array.isArray(props.batchRecords) && props.batchRecords.length > 1,
+)
+const normalizedBatchIndex = computed(() => {
+  if (!hasBatchQueue.value) return -1
+  const index = Math.trunc(Number(props.activeBatchIndex))
+  if (!Number.isFinite(index) || index < 0) return 0
+  return Math.min(index, props.batchRecords.length - 1)
+})
+
+function selectBatchRecord(nextIndex: number) {
+  if (!hasBatchQueue.value) return
+  if (nextIndex < 0 || nextIndex >= props.batchRecords.length) return
+  if (nextIndex === normalizedBatchIndex.value) return
+  emit('select-batch-index', nextIndex)
+}
+
+function handleBatchSelectChange(event: Event) {
+  const target = event.target as HTMLSelectElement | null
+  if (!target) return
+  const nextIndex = Number(target.value)
+  if (!Number.isInteger(nextIndex)) return
+  selectBatchRecord(nextIndex)
+}
+
+function formatBatchOptionLabel(item: QCRecordResultBatchItem, index: number): string {
+  const name = String(item.patientName || '').trim() || '患者信息待核实'
+  const visit = String(item.visitId || '').trim()
+  const count = Number(item.confirmedIssueCount || 0)
+  const issueText = count > 0 ? `${count}项问题` : item.resultLabel || '无确定问题'
+  return `${index + 1}/${props.batchRecords.length} · ${name}${visit ? ` (${visit})` : ''} · ${issueText}`
+}
 
 const loading = ref(false)
 const showLoading = useMinimumLoading(() => loading.value, () => props.open)
@@ -340,6 +441,103 @@ watch(
 
 <style scoped>
 @import '../styles/qc-result-view-apple.css';
+.customer-record-result-batch-nav {
+  position: sticky;
+  top: 0;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 14px;
+  padding: 8px 18px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #334155;
+  font-size: 12px;
+}
+.customer-record-result-batch-nav__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.customer-record-result-batch-nav__pill {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid #dbe4f0;
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.customer-record-result-batch-nav__summary {
+  color: #475569;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.customer-record-result-batch-nav__summary strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+.customer-record-result-batch-nav__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+}
+.customer-record-result-batch-nav__btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #1e293b;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+.customer-record-result-batch-nav__btn:hover:not(:disabled) {
+  border-color: #93c5fd;
+  background: #f0f7ff;
+  color: #0a6cff;
+}
+.customer-record-result-batch-nav__btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.customer-record-result-batch-nav__select {
+  height: 28px;
+  min-width: 220px;
+  max-width: min(380px, 46vw);
+  padding: 0 26px 0 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.customer-record-result-batch-nav__select:focus-visible,
+.customer-record-result-batch-nav__btn:focus-visible {
+  outline: 2px solid #0a6cff;
+  outline-offset: 2px;
+}
 .result-history-nav {
   display: flex;
   flex-wrap: wrap;

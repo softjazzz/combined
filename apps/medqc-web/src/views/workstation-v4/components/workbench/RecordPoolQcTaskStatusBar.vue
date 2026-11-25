@@ -69,7 +69,17 @@
         </button>
 
         <template v-if="!isActive">
+          <button
+            v-if="inlineResultViewer"
+            type="button"
+            class="record-pool-qc-status__detail-link"
+            data-testid="qc-task-detail-link"
+            @click="emit('view-results', currentJob)"
+          >
+            {{ confirmedResultsOnly ? '查看本次质控结果' : '查看本次结果与失败原因' }}
+          </button>
           <RouterLink
+            v-else
             :to="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
             class="record-pool-qc-status__detail-link"
             data-testid="qc-task-detail-link"
@@ -214,10 +224,12 @@ const props = withDefaults(
     job: SichuanBatchJob | null
     pollIntervalMs?: number
     autoPoll?: boolean
+    inlineResultViewer?: boolean
   }>(),
   {
     pollIntervalMs: 2000,
     autoPoll: true,
+    inlineResultViewer: false,
   },
 )
 
@@ -225,6 +237,7 @@ const emit = defineEmits<{
   dismiss: []
   completed: []
   'results-updated': []
+  'view-results': [job: SichuanBatchJob]
 }>()
 
 const { confirmedResultsOnly } = useQcResultVisibility()

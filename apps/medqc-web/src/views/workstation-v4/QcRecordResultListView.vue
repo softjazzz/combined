@@ -50,7 +50,10 @@
             :record-refs="selectedQcRecordRefs"
             :selected-count="selectedCount"
             :status-target="`#qc-record-result-task-status-${carePhase}`"
+            :inline-result-viewer="true"
             @results-updated="refreshAfterSelectedQc"
+            @view-results="handleViewBatchQcResults"
+            @dismiss-task="handleDismissBatchQcTask"
           />
         </div>
       </div>
@@ -252,7 +255,16 @@
         {{ detailNotice || exportNotice }}
       </p>
 
-      <div class="review-workbench-split">
+      <BatchQcResultsPanel
+        v-if="batchQcResults"
+        :items="batchQcResults.items"
+        :loading="batchQcResults.loading"
+        :active-record-key="batchQcResults.activeRecordKey"
+        :export-scope="isInpatient ? 'running' : 'final'"
+        @open-record="handleOpenBatchQcResult"
+        @exit="exitBatchQcResults"
+      />
+      <div v-else class="review-workbench-split">
         <div
           class="review-workbench-list"
           :aria-busy="loading"
@@ -363,8 +375,11 @@
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
+      :batch-records="comparisonBatchRecords"
+      :active-batch-index="comparisonBatchIndex"
       presentation-mode="grouped"
       :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
+      @select-batch-index="handleSelectComparisonBatchIndex"
       @close="closeResultDrawer"
     />
   </div>
@@ -373,7 +388,7 @@
 <script setup lang="ts">
 import { Alert, Button, Empty, Input, Pagination, RangePicker, Select, Spin } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -383,6 +398,7 @@ import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
 import QCRecordResultComparisonDrawer, {
+  type QCRecordResultBatchItem,
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 import type { PreviousResultRequest } from './customer-sample-validation/single-record-result-model'
@@ -393,7 +409,17 @@ import QcRecordResultTable, {
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
 import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
-import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
+import QcRunSelectedControl, {
+  type SelectedQcRecordRef,
+} from './components/qc/QcRunSelectedControl.vue'
+import BatchQcResultsPanel from './components/workbench/BatchQcResultsPanel.vue'
+import type { SichuanBatchJob } from './semantic-rules/types'
+import { buildCaseRecordKey } from './utils/caseRecordKey'
+import {
+  resolveBatchResultRecords,
+  toComparisonFocusFromBatchItem,
+  type BatchResultRecordItem,
+} from './utils/batchResultViewer'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
@@ -419,6 +445,7 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const instance = getCurrentInstance()
 const { confirmedResultsOnly } = useQcResultVisibility()
 const detailNotice = ref('')
 const exportNotice = ref('')
@@ -431,6 +458,26 @@ const exportMenuOpen = ref(false)
 const exportTriggerRef = ref<HTMLButtonElement | null>(null)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
+const comparisonBatchQueue = ref<BatchResultRecordItem[]>([])
+const comparisonBatchIndex = ref(-1)
+const batchQcResults = ref<{
+  jobId: string
+  loading: boolean
+  items: BatchResultRecordItem[]
+  activeRecordKey?: string
+} | null>(null)
+const knownRecordsByKey = new Map<string, PatientRecord>()
+let batchQcResultSequence = 0
+const comparisonBatchRecords = computed<QCRecordResultBatchItem[]>(() =>
+  comparisonBatchQueue.value.map((item) => ({
+    recordKey: item.recordKey,
+    patientName: item.patientName,
+    visitId: item.visitId,
+    department: item.department,
+    confirmedIssueCount: item.confirmedIssueCount,
+    resultLabel: item.resultLabel,
+  })),
+)
 const activeFocusRuleId = ref('')
 const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
@@ -671,6 +718,7 @@ function pruneStaleSelectedRecordKeys() {
 
 function applyFilters() {
   ++manualRefreshSequence
+  exitBatchQcResults()
   cancelPendingDeepLink()
   clearSelection()
   commitCurrentFilters()
@@ -720,6 +768,7 @@ function updateSelectedRecordKeys(recordKeys: string[]) {
   for (const key of nextKeys) {
     const record = currentRows.get(key)
     if (!record) continue
+    knownRecordsByKey.set(key, record)
     nextRefs[key] = {
       institute_id: record.instituteId as string,
       patient_id: record.patientId as string,
@@ -880,6 +929,7 @@ watch(
   (carePhase, previousCarePhase) => {
     if (carePhase === previousCarePhase) return
     ++manualRefreshSequence
+    exitBatchQcResults()
     cancelPendingDeepLink()
     medicalRecordFocus.value = null
     closeResultDrawer()
@@ -1038,11 +1088,132 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
   drawerOpen.value = true
 }
 
+function exitBatchQcResults() {
+  batchQcResultSequence += 1
+  batchQcResults.value = null
+  closeResultDrawer()
+}
+
+function handleDismissBatchQcTask(jobId: string) {
+  if (jobId && batchQcResults.value?.jobId === jobId) {
+    exitBatchQcResults()
+  }
+}
+
+function handleOpenBatchQcResult(payload: {
+  item: BatchResultRecordItem
+  queue: BatchResultRecordItem[]
+  index: number
+}) {
+  medicalRecordFocus.value = null
+  detailNotice.value = ''
+  comparisonBatchQueue.value = payload.queue
+  comparisonBatchIndex.value = payload.index
+  selectedFocus.value = toComparisonFocusFromBatchItem(payload.item)
+  drawerOpen.value = true
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: payload.item.recordKey }
+  }
+}
+
+function handleSelectComparisonBatchIndex(nextIndex: number) {
+  const nextItem = comparisonBatchQueue.value[nextIndex]
+  if (!nextItem) return
+  comparisonBatchIndex.value = nextIndex
+  selectedFocus.value = toComparisonFocusFromBatchItem(nextItem)
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: nextItem.recordKey }
+  }
+}
+
+async function handleViewBatchQcResults(payload: {
+  job: SichuanBatchJob
+  recordRefs: SelectedQcRecordRef[]
+}) {
+  const jobId = String(payload.job?.id || '').trim()
+  if (!jobId) return
+  const sequence = ++batchQcResultSequence
+  const currentByKey = new Map<string, PatientRecord>()
+  for (const record of allRecords.value) {
+    if (!hasCompleteRecordIdentity(record)) continue
+    const key = buildCaseRecordKey(
+      record.instituteId as string,
+      record.patientId as string,
+      record.visitId as string,
+    )
+    if (key) {
+      currentByKey.set(key, record)
+      knownRecordsByKey.set(key, record)
+    }
+  }
+  const submittedRecords = (payload.recordRefs || [])
+    .map((refItem) => {
+      const key = buildCaseRecordKey(refItem.institute_id, refItem.patient_id, refItem.visit_id)
+      return currentByKey.get(key) ?? knownRecordsByKey.get(key)
+    })
+    .filter((record): record is PatientRecord => Boolean(record))
+  const expectedTotal = Math.max(
+    0,
+    Math.trunc(Number(payload.job.total_records ?? payload.job.summary?.total_records ?? 0) || 0),
+  )
+  activeView.value = 'records'
+  if (expectedTotal !== 1 && submittedRecords.length !== 1) {
+    batchQcResults.value = {
+      jobId,
+      loading: true,
+      items: [],
+      activeRecordKey: '',
+    }
+  }
+  const resolved = await resolveBatchResultRecords({
+    job: payload.job,
+    sourceId: sourceId.value,
+    submittedRecords,
+    currentRecords: allRecords.value,
+    confirmedOnly: confirmedResultsOnly.value,
+  })
+  if (sequence !== batchQcResultSequence) return
+  if (resolved.items.length === 1) {
+    batchQcResults.value = null
+    medicalRecordFocus.value = null
+    detailNotice.value = ''
+    comparisonBatchQueue.value = []
+    comparisonBatchIndex.value = -1
+    selectedFocus.value = toComparisonFocusFromBatchItem(resolved.items[0])
+    drawerOpen.value = true
+    return
+  }
+  if (resolved.items.length >= 2) {
+    batchQcResults.value = {
+      jobId,
+      loading: false,
+      items: resolved.items,
+      activeRecordKey: '',
+    }
+    return
+  }
+  batchQcResults.value = null
+  const fallbackUrl = `/workstation-v5/qc-task?job_id=${encodeURIComponent(jobId)}`
+  const appRouter = instance?.appContext.config.globalProperties.$router as
+    | { push?: (target: string) => unknown }
+    | undefined
+  if (typeof appRouter?.push === 'function') {
+    void appRouter.push(fallbackUrl)
+  } else if (typeof window !== 'undefined') {
+    window.location.assign(fallbackUrl)
+  }
+}
+
 function closeResultDrawer() {
   drawerOpen.value = false
   selectedFocus.value = null
+  comparisonBatchQueue.value = []
+  comparisonBatchIndex.value = -1
   activeFocusRuleId.value = ''
   detailNotice.value = ''
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: '' }
+  }
 }
 </script>
 

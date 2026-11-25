@@ -62,7 +62,9 @@
           v-if="taskJob"
           :job="taskJob"
           :auto-poll="false"
-          @dismiss="taskJob = null"
+          :inline-result-viewer="inlineResultViewer"
+          @dismiss="handleDismissTask"
+          @view-results="handleViewTaskResults"
         />
       </div>
     </Teleport>
@@ -91,7 +93,9 @@
         v-if="taskJob"
         :job="taskJob"
         :auto-poll="false"
-        @dismiss="taskJob = null"
+        :inline-result-viewer="inlineResultViewer"
+        @dismiss="handleDismissTask"
+        @view-results="handleViewTaskResults"
       />
     </template>
   </div>
@@ -132,12 +136,28 @@ const props = defineProps<{
   recordRefs: SelectedQcRecordRef[]
   selectedCount?: number
   statusTarget?: string
+  inlineResultViewer?: boolean
 }>()
 
 const emit = defineEmits<{
   completed: []
   'results-updated': []
+  'view-results': [payload: { job: SichuanBatchJob; recordRefs: SelectedQcRecordRef[] }]
+  'dismiss-task': [jobId: string]
 }>()
+
+function handleDismissTask() {
+  const dismissedJobId = String(taskJob.value?.id || '').trim()
+  taskJob.value = null
+  if (dismissedJobId) emit('dismiss-task', dismissedJobId)
+}
+
+function handleViewTaskResults(job: SichuanBatchJob) {
+  emit('view-results', {
+    job,
+    recordRefs: frozenRecordRefs.value.map((item) => ({ ...item })),
+  })
+}
 
 const authStore = useAuthStore()
 const POLL_INTERVAL_MS = 3000

@@ -349,7 +349,17 @@
         </div>
 
         <div class="workstation-surface-enter workstation-surface-enter--delay-1">
+          <BatchQcResultsPanel
+            v-if="batchQcResults && !isStageQueueMode"
+            :items="batchQcResults.items"
+            :loading="batchQcResults.loading"
+            :active-record-key="batchQcResults.activeRecordKey"
+            export-scope="all"
+            @open-record="emit('open-batch-qc-result', $event)"
+            @exit="emit('exit-batch-qc-results')"
+          />
           <div
+            v-else
             class="wv4-record-pool-main"
             :class="{ 'wv4-record-pool-main--preview': !isStageQueueMode }"
           >
@@ -403,9 +413,11 @@
                 >
                   <RecordPoolQcTaskStatusBar
                     :job="recordPoolQcTask"
+                    :inline-result-viewer="true"
                     @dismiss="emit('dismiss-qc-task')"
                     @results-updated="handleQcTaskRefresh"
                     @completed="handleQcTaskRefresh"
+                    @view-results="emit('view-qc-results', $event)"
                   />
                 </template>
               </BatchTablePanel>
@@ -445,8 +457,10 @@ import {
 } from '@ant-design/icons-vue'
 
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
+import BatchQcResultsPanel from './workbench/BatchQcResultsPanel.vue'
 import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
+import type { BatchResultRecordItem } from '../utils/batchResultViewer'
 import AnalyticsDrilldownBar from './workbench/AnalyticsDrilldownBar.vue'
 import type { AnalyticsDrilldown } from '../utils/analyticsDrilldown'
 import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
@@ -515,6 +529,12 @@ const props = defineProps<{
   qcScopeTotal: number
   qcSummaryState: QcSummaryLoadState
   recordPoolQcTask?: SichuanBatchJob | null
+  batchQcResults?: {
+    jobId: string
+    loading: boolean
+    items: BatchResultRecordItem[]
+    activeRecordKey?: string
+  } | null
   analyticsDrilldown?: AnalyticsDrilldown | null
   loadError: boolean
 }>()
@@ -537,6 +557,9 @@ const emit = defineEmits<{
   'preview-run-qc': [recordKey: string]
   'filter-qc': []
   'dismiss-qc-task': []
+  'view-qc-results': [job: SichuanBatchJob]
+  'open-batch-qc-result': [payload: { item: BatchResultRecordItem; queue: BatchResultRecordItem[]; index: number }]
+  'exit-batch-qc-results': []
   'back-to-analytics': []
   'clear-analytics-drilldown': []
   'batch-defer': [keys: string[]]

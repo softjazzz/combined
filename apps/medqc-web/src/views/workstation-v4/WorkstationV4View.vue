@@ -39,6 +39,7 @@
         :qc-scope-total="qcScopeTotal"
         :qc-summary-state="qcSummaryState"
         :record-pool-qc-task="recordPoolQcTask"
+        :batch-qc-results="batchQcResults"
         :analytics-drilldown="analyticsDrilldown"
         :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
@@ -57,7 +58,10 @@
         @batch-extract="handleBatchExtract"
         @preview-run-qc="handlePreviewRecordQc"
         @filter-qc="handleFilterQc"
-        @dismiss-qc-task="recordPoolQcTask = null"
+        @dismiss-qc-task="handleDismissRecordPoolQcTask"
+        @view-qc-results="handleViewRecordPoolQcResults"
+        @open-batch-qc-result="handleOpenBatchQcResult"
+        @exit-batch-qc-results="exitBatchQcResults"
         @back-to-analytics="backToAnalytics"
         @clear-analytics-drilldown="clearAnalyticsDrilldown"
         @batch-defer="handleBatchDefer"
@@ -68,6 +72,16 @@
         @page-change="handlePageChange"
       />
       <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
+      <QCRecordResultComparisonDrawer
+        :open="comparisonDrawerOpen"
+        :focus="comparisonFocus"
+        :batch-records="comparisonBatchRecords"
+        :active-batch-index="comparisonActiveIndex"
+        presentation-mode="grouped"
+        :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
+        @select-batch-index="handleSelectComparisonBatchIndex"
+        @close="closeComparisonDrawer"
+      />
     </template>
     <!-- ====== 详情模式（全屏） ====== -->
     <template v-else-if="viewMode === 'detail'">
@@ -414,6 +428,16 @@ import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
+import QCRecordResultComparisonDrawer, {
+  type QCRecordResultBatchItem,
+  type QCRecordResultFocus,
+} from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
+import {
+  resolveBatchResultRecords,
+  toComparisonFocusFromBatchItem,
+  type BatchResultRecordItem,
+} from './utils/batchResultViewer'
 import {
   usePatientRecords,
   type HospitalStatusScope,
@@ -475,9 +499,11 @@ const {
 
 const route = useRoute()
 const router = useRouter()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const medicalRecordFocus = ref<PatientRecord | null>(null)
 
 const {
+  sourceId,
   allRecords,
   departments,
   doctors,
@@ -546,6 +572,29 @@ const stageServerTotalPages = ref(1)
 const stageLoading = ref(false)
 const batchExtracting = ref(false)
 const recordPoolQcTask = ref<SichuanBatchJob | null>(null)
+const recordPoolTaskSubmittedRecords = new Map<string, PatientRecord[]>()
+const batchQcResults = ref<{
+  jobId: string
+  loading: boolean
+  items: BatchResultRecordItem[]
+  activeRecordKey?: string
+} | null>(null)
+const comparisonDrawerOpen = ref(false)
+const comparisonFocus = ref<QCRecordResultFocus | null>(null)
+const comparisonQueue = ref<BatchResultRecordItem[]>([])
+const comparisonActiveIndex = ref(-1)
+let batchQcResultSequence = 0
+
+const comparisonBatchRecords = computed<QCRecordResultBatchItem[]>(() =>
+  comparisonQueue.value.map((item) => ({
+    recordKey: item.recordKey,
+    patientName: item.patientName,
+    visitId: item.visitId,
+    department: item.department,
+    confirmedIssueCount: item.confirmedIssueCount,
+    resultLabel: item.resultLabel,
+  })),
+)
 const batchRuntimeStatusMap = ref<Record<string, BatchRuntimeStatus>>({})
 const selectedStageRecord = ref<PatientRecord | null>(null)
 // 仅用于当前前端选中行。真实请求仍从 selectedRecord 读取三坐标字段。
@@ -2366,7 +2415,104 @@ function openCurrentMedicalRecord(record: PatientRecord) {
     message.warning('无法确认当前病历身份，已停止读取病历文书')
     return
   }
+  closeComparisonDrawer()
   medicalRecordFocus.value = record
+}
+
+function closeComparisonDrawer() {
+  comparisonDrawerOpen.value = false
+  comparisonFocus.value = null
+  comparisonQueue.value = []
+  comparisonActiveIndex.value = -1
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: '' }
+  }
+}
+
+function exitBatchQcResults() {
+  batchQcResultSequence += 1
+  batchQcResults.value = null
+  closeComparisonDrawer()
+}
+
+function handleDismissRecordPoolQcTask() {
+  const dismissedJobId = String(recordPoolQcTask.value?.id || '').trim()
+  recordPoolQcTask.value = null
+  if (dismissedJobId && batchQcResults.value?.jobId === dismissedJobId) {
+    exitBatchQcResults()
+  }
+}
+
+function handleOpenBatchQcResult(payload: {
+  item: BatchResultRecordItem
+  queue: BatchResultRecordItem[]
+  index: number
+}) {
+  medicalRecordFocus.value = null
+  comparisonQueue.value = payload.queue
+  comparisonActiveIndex.value = payload.index
+  comparisonFocus.value = toComparisonFocusFromBatchItem(payload.item)
+  comparisonDrawerOpen.value = true
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: payload.item.recordKey }
+  }
+}
+
+function handleSelectComparisonBatchIndex(nextIndex: number) {
+  const nextItem = comparisonQueue.value[nextIndex]
+  if (!nextItem) return
+  comparisonActiveIndex.value = nextIndex
+  comparisonFocus.value = toComparisonFocusFromBatchItem(nextItem)
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: nextItem.recordKey }
+  }
+}
+
+async function handleViewRecordPoolQcResults(job: SichuanBatchJob) {
+  const jobId = String(job?.id || '').trim()
+  if (!jobId) return
+  const sequence = ++batchQcResultSequence
+  const expectedTotal = Math.max(
+    0,
+    Math.trunc(Number(job.total_records ?? job.summary?.total_records ?? 0) || 0),
+  )
+  const submittedRecords = recordPoolTaskSubmittedRecords.get(jobId) ?? []
+  if (expectedTotal !== 1 && submittedRecords.length !== 1) {
+    batchQcResults.value = {
+      jobId,
+      loading: true,
+      items: [],
+      activeRecordKey: '',
+    }
+  }
+  const resolved = await resolveBatchResultRecords({
+    job,
+    sourceId: sourceId.value,
+    submittedRecords,
+    currentRecords: allRecords.value,
+    confirmedOnly: confirmedResultsOnly.value,
+  })
+  if (sequence !== batchQcResultSequence) return
+  if (resolved.items.length === 1) {
+    batchQcResults.value = null
+    medicalRecordFocus.value = null
+    comparisonQueue.value = []
+    comparisonActiveIndex.value = -1
+    comparisonFocus.value = toComparisonFocusFromBatchItem(resolved.items[0])
+    comparisonDrawerOpen.value = true
+    return
+  }
+  if (resolved.items.length >= 2) {
+    batchQcResults.value = {
+      jobId,
+      loading: false,
+      items: resolved.items,
+      activeRecordKey: '',
+    }
+    return
+  }
+  batchQcResults.value = null
+  void router.push(`/workstation-v5/qc-task?job_id=${encodeURIComponent(jobId)}`)
 }
 
 function handleRowOpen(recordId: string) {
@@ -2403,6 +2549,9 @@ function findBatchRecordByKey(recordKey: string): PatientRecord | null {
 
 async function handleBatchExtract(keys: string[]) {
   if (!isStageQueueMode.value) {
+    const submittedSnapshot = keys
+      .map((key) => findBatchRecordByKey(key))
+      .filter((record): record is PatientRecord => Boolean(record))
     await runRecordPoolQc({
       keys,
       getBatchExtracting: () => batchExtracting.value,
@@ -2412,7 +2561,11 @@ async function handleBatchExtract(keys: string[]) {
       findBatchRecordByKey,
       setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
       onTaskCreated: (job) => {
+        batchQcResults.value = null
         recordPoolQcTask.value = job
+        if (job?.id && submittedSnapshot.length > 0) {
+          recordPoolTaskSubmittedRecords.set(job.id, submittedSnapshot)
+        }
       },
     })
     return
@@ -2441,6 +2594,7 @@ async function handleBatchExtract(keys: string[]) {
 
 async function handlePreviewRecordQc(recordKey: string) {
   if (!recordKey) return
+  const snapshotRecord = findBatchRecordByKey(recordKey)
   await runRecordPoolQc({
     keys: [recordKey],
     preserveSelection: true,
@@ -2451,7 +2605,11 @@ async function handlePreviewRecordQc(recordKey: string) {
     findBatchRecordByKey,
     setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
     onTaskCreated: (job) => {
+      batchQcResults.value = null
       recordPoolQcTask.value = job
+      if (job?.id && snapshotRecord) {
+        recordPoolTaskSubmittedRecords.set(job.id, [snapshotRecord])
+      }
     },
   })
 }
@@ -2472,6 +2630,7 @@ async function handleFilterQc() {
       batchExtracting.value = value
     },
     onTaskCreated: (job) => {
+      batchQcResults.value = null
       recordPoolQcTask.value = job
     },
   })
