@@ -14,7 +14,7 @@ vi.mock('vue-router', () => ({ useRoute: () => routeState, useRouter: () => ({ p
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     get user() {
-      return { id: state.userId }
+      return { id: state.userId, is_demo_account: false }
     },
   }),
 }))
@@ -132,18 +132,21 @@ describe('RecordQualityReportView', () => {
     await flush()
     expect(state.getRecords).toHaveBeenLastCalledWith(
       expect.objectContaining({ defect_category: '合成大类' }),
+      expect.any(AbortSignal),
     )
     await wrapper.get('.drawer-actions button').trigger('click')
     expect(state.exportReport).toHaveBeenLastCalledWith(
       expect.objectContaining({ defect_category: '合成大类' }),
       'records',
       undefined,
+      expect.any(AbortSignal),
     )
     const veto = wrapper.findAll('.top-head button').find((button) => button.text() === '单否')
     await veto?.trigger('click')
     await wrapper.get('.top-row').trigger('click')
     expect(state.getRecords).toHaveBeenLastCalledWith(
       expect.objectContaining({ rule_id: 'LX0609-001', has_veto: true }),
+      expect.any(AbortSignal),
     )
     const unknown = wrapper
       .findAll('.top-panel .notice button')
@@ -151,6 +154,7 @@ describe('RecordQualityReportView', () => {
     await unknown?.trigger('click')
     expect(state.getRecords).toHaveBeenLastCalledWith(
       expect.objectContaining({ unknown_classification: 'defect_type' }),
+      expect.any(AbortSignal),
     )
     wrapper.unmount()
   })
@@ -197,6 +201,7 @@ describe('RecordQualityReportView', () => {
         'grade_rate:待改进',
         'average_defect_total',
       ]),
+      expect.any(AbortSignal),
     )
     expect(state.exportReport.mock.calls[0][2]).not.toContain('auto_defect_total')
     wrapper.unmount()
@@ -219,8 +224,8 @@ describe('RecordQualityReportView', () => {
       scene: 'running',
       department: '内科',
       doctor: '合成医生',
-      completed_from: '2026-10-01T08:00',
-      completed_to: '2026-10-01T09:00',
+      completed_from: '2026-10-01T08:00:00+08:00',
+      completed_to: '2026-10-01T09:00:00+08:00',
       defect_source: 'manual',
     })
     wrapper.unmount()
@@ -266,7 +271,10 @@ describe('RecordQualityReportView', () => {
     })
     const wrapper = render()
     await flush()
-    expect(state.getReport).toHaveBeenCalledWith(expect.objectContaining({ scene: 'final' }))
+    expect(state.getReport).toHaveBeenCalledWith(
+      expect.objectContaining({ scene: 'final' }),
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('未核验归档')
     expect(wrapper.get('[data-testid="archive-unverified"]').text()).toContain(
       '医院归档标记尚未接入',

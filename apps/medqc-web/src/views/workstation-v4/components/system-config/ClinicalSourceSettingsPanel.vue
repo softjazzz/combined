@@ -102,7 +102,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { clinicalSourcesApi, type ClinicalSourceSettings } from '@/api/clinicalSources'
 import { resetClinicalSourceOptionsCache } from '@/views/workstation-v4/composables/usePatientRecords'
 
@@ -110,35 +110,65 @@ const settings = ref<ClinicalSourceSettings | null>(null)
 const loading = ref(false)
 const busy = ref(false)
 const notice = ref('')
+let disposed = false
+let requestSeq = 0
+let activeController: AbortController | null = null
+
 async function load() {
+  if (busy.value) return
+  const seq = ++requestSeq
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   loading.value = true
   try {
-    settings.value = await clinicalSourcesApi.configuration()
+    const loaded = await clinicalSourcesApi.configuration()
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    settings.value = loaded
     notice.value = ''
   } catch {
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
     notice.value = '无法读取数据源配置，请稍后重试'
   } finally {
-    loading.value = false
+    if (!disposed && seq === requestSeq && activeController === controller) {
+      loading.value = false
+      activeController = null
+    }
   }
 }
 async function save() {
   if (!settings.value || busy.value) return
+  const seq = ++requestSeq
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   busy.value = true
   try {
-    settings.value = await clinicalSourcesApi.save({ ...settings.value, default_source: 'independent_cdm', legacy_enabled: false })
+    const saved = await clinicalSourcesApi.save({ ...settings.value, default_source: 'independent_cdm', legacy_enabled: false })
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    settings.value = saved
     resetClinicalSourceOptionsCache()
     notice.value = '设置已保存，已有任务继续使用创建时的来源'
   } catch {
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
     notice.value = '保存失败，请检查来源、部署凭据，或重新读取后再保存'
   } finally {
-    busy.value = false
+    if (!disposed && seq === requestSeq && activeController === controller) {
+      busy.value = false
+      activeController = null
+    }
   }
 }
 async function check() {
   if (!settings.value || busy.value) return
+  const seq = ++requestSeq
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   busy.value = true
   try {
     const report = await clinicalSourcesApi.check(settings.value)
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
     if (!report.ok) {
       const failures = report.dependencies.filter((row) => !['structure_ready', 'rows_present', 'zero_rows'].includes(row.status)
         && (row.required || row.status !== 'table_missing'))
@@ -147,12 +177,22 @@ async function check() {
     }
     notice.value = 'CDM完整依赖只读检查通过；发布就绪仍待确认，未保存配置'
   } catch {
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
     notice.value = 'CDM检查未通过，请核对连接、只读权限和同步表结构；未切换来源'
   } finally {
-    busy.value = false
+    if (!disposed && seq === requestSeq && activeController === controller) {
+      busy.value = false
+      activeController = null
+    }
   }
 }
 onMounted(load)
+onBeforeUnmount(() => {
+  disposed = true
+  requestSeq += 1
+  activeController?.abort()
+  activeController = null
+})
 </script>
 
 <style scoped>

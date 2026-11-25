@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent } from 'vue'
+import { defineComponent, ref } from 'vue'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
+
 import * as api from '@/services/rule-validation-service'
 import type {
   ComparisonRow,
@@ -193,7 +198,11 @@ describe('规则验收列表', () => {
     await flushPromises()
     await wrapper.get('[data-testid="rule-set-select"]').setValue('luxian_0916_qc_v1')
     await flushPromises()
-    expect(api.listValidationRules).toHaveBeenLastCalledWith(false, 'luxian_0916_qc_v1')
+    expect(api.listValidationRules).toHaveBeenLastCalledWith(
+      false,
+      'luxian_0916_qc_v1',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.text()).toContain('逐规则批准上线尚未接通')
     wrapper.unmount()
   })
@@ -222,7 +231,11 @@ describe('规则验收列表', () => {
     const wrapper = mount(RuleValidationListView, { global: { stubs } })
     await flushPromises()
 
-    expect(api.listValidationRules).toHaveBeenCalledWith(false, 'luxian_0609_qc_v1')
+    expect(api.listValidationRules).toHaveBeenCalledWith(
+      false,
+      'luxian_0609_qc_v1',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
     const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
     expect(rowsText).toHaveLength(2)
     expect(rowsText[0]).toContain('待复核')
@@ -252,7 +265,11 @@ describe('规则验收列表', () => {
     await wrapper.find('[data-testid="scope-released"]').trigger('click')
     await flushPromises()
 
-    expect(api.listValidationRules).toHaveBeenLastCalledWith(true, 'luxian_0609_qc_v1')
+    expect(api.listValidationRules).toHaveBeenLastCalledWith(
+      true,
+      'luxian_0609_qc_v1',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
     const rowsText = wrapper.findAll('[data-testid="rule-row"]').map((r) => r.text())
     expect(rowsText).toEqual([expect.stringContaining('已上线规则')])
   })
@@ -279,7 +296,10 @@ describe('规则验收详情', () => {
     const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
     await flushPromises()
 
-    expect(api.getValidationRule).toHaveBeenCalledWith('LX0609-06-01-01')
+    expect(api.getValidationRule).toHaveBeenCalledWith(
+      'LX0609-06-01-01',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.findAll('[data-testid="case-row"]')).toHaveLength(2)
     const compare = wrapper.findAll('[data-testid="compare-row"]').map((r) => r.text())
     expect(compare[0]).toContain('已确认')

@@ -390,10 +390,27 @@ function normalizeSemanticRuleExample(
   }
 }
 
-export async function fetchSichuanRuleSetsFromBackend(): Promise<SichuanRuleSetOption[]> {
-  const response = await ApiService.getRaw('/api/v1/qc/sichuan/workspace/rule-sets', {
-    _ts: Date.now(),
-  })
+export type SemanticRuleRequestOptions = {
+  signal?: AbortSignal
+  skipErrorToast?: boolean
+}
+
+export function isRequestCanceledError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; name?: unknown }
+  return candidate.code === 'ERR_CANCELED' || candidate.name === 'CanceledError' || candidate.name === 'AbortError'
+}
+
+export async function fetchSichuanRuleSetsFromBackend(
+  options?: SemanticRuleRequestOptions,
+): Promise<SichuanRuleSetOption[]> {
+  const response = await ApiService.getRaw(
+    '/api/v1/qc/sichuan/workspace/rule-sets',
+    {
+      _ts: Date.now(),
+    },
+    options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : undefined,
+  )
   const payload = pickResponseData(response.data ?? response)
   const items = Array.isArray(payload.items) ? payload.items : []
   return items.map((item) => ({
@@ -629,7 +646,10 @@ export function buildSemanticWorkspaceQuery(
   return nextQuery
 }
 
-export async function fetchSemanticRulesFromBackend(ruleSetKey?: string): Promise<{
+export async function fetchSemanticRulesFromBackend(
+  ruleSetKey?: string,
+  options?: SemanticRuleRequestOptions,
+): Promise<{
   rules: SemanticRuleItem[]
   stats: SemanticRuleStats
 }> {
@@ -640,9 +660,13 @@ export async function fetchSemanticRulesFromBackend(ruleSetKey?: string): Promis
     if (ruleSetKey) {
       params.rule_set_key = ruleSetKey
     }
-    const response = await ApiService.getRaw('/api/v1/qc/sichuan/rules', {
-      ...params,
-    })
+    const response = await ApiService.getRaw(
+      '/api/v1/qc/sichuan/rules',
+      {
+        ...params,
+      },
+      options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : undefined,
+    )
     const data = pickResponseData(response.data)
     const rules = Array.isArray(data.rules)
       ? data.rules.map((item: Record<string, any>) => normalizeSemanticRule(item))
@@ -653,17 +677,23 @@ export async function fetchSemanticRulesFromBackend(ruleSetKey?: string): Promis
       stats: buildSemanticStatsFromRules(rules, data),
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(parseRequestError(error, '加载规则库失败'))
   }
 }
 
-export async function fetchRulePrompt(ruleId: string): Promise<{
+export async function fetchRulePrompt(
+  ruleId: string,
+  options?: SemanticRuleRequestOptions,
+): Promise<{
   prompt: string
   isDefaultPrompt: boolean
 }> {
   try {
     const response = await ApiService.getRaw(
       `/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`,
+      undefined,
+      options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : undefined,
     )
     const data = pickResponseData(response.data)
     return {
@@ -671,16 +701,26 @@ export async function fetchRulePrompt(ruleId: string): Promise<{
       isDefaultPrompt: Boolean(data.is_default ?? true),
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(parseRequestError(error, '获取提示词失败'))
   }
 }
 
-export async function saveRulePrompt(ruleId: string, promptText: string): Promise<void> {
+export async function saveRulePrompt(
+  ruleId: string,
+  promptText: string,
+  options?: SemanticRuleRequestOptions,
+): Promise<void> {
   try {
-    await ApiService.putRaw(`/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`, {
-      custom_prompt: promptText.trim() ? promptText.trim() : null,
-    })
+    await ApiService.putRaw(
+      `/api/v1/qc/sichuan/rules/${encodeURIComponent(ruleId)}/prompt`,
+      {
+        custom_prompt: promptText.trim() ? promptText.trim() : null,
+      },
+      options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : undefined,
+    )
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     throw new Error(parseRequestError(error, '保存提示词失败'))
   }
 }
@@ -688,12 +728,17 @@ export async function saveRulePrompt(ruleId: string, promptText: string): Promis
 export async function executeSemanticRuleTest(
   ruleId: string,
   medicalText: string,
+  options?: SemanticRuleRequestOptions,
 ): Promise<SemanticRuleTestResult> {
   try {
-    const response = await ApiService.postRaw('/api/v1/qc/sichuan/test-rule', {
-      rule_id: ruleId,
-      medical_text: medicalText,
-    })
+    const response = await ApiService.postRaw(
+      '/api/v1/qc/sichuan/test-rule',
+      {
+        rule_id: ruleId,
+        medical_text: medicalText,
+      },
+      options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : undefined,
+    )
     const data = pickResponseData(response.data)
     return {
       is_compliant: normalizeComplianceFlag(data),
@@ -706,6 +751,7 @@ export async function executeSemanticRuleTest(
       error_category: data.error_category ? String(data.error_category) : undefined,
     }
   } catch (error) {
+    if (isRequestCanceledError(error)) throw error
     const parsed = parseSemanticRuleTestError(error, '规则测试失败')
     throw new SemanticRuleTestError(parsed.message, {
       statusCode: parsed.statusCode,

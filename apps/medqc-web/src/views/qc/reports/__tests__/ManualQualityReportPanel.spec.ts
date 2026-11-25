@@ -9,7 +9,7 @@ import { resolve } from 'node:path'
 const mocks = vi.hoisted(() => ({
   report: vi.fn(),
   export: vi.fn(),
-  auth: { user: { id: 'synthetic-user', roles: ['qc_manager'] } },
+  auth: { user: { id: 'synthetic-user', roles: ['qc_manager'], is_demo_account: false } },
 }))
 vi.mock('@/api/manualQualityReport', () => ({
   getManualQualityReport: mocks.report,
@@ -86,7 +86,9 @@ function make() {
 }
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.auth = reactive({ user: { id: 'synthetic-user', roles: ['qc_manager'] } })
+  mocks.auth = reactive({
+    user: { id: 'synthetic-user', roles: ['qc_manager'], is_demo_account: false },
+  })
   mocks.report.mockResolvedValue(data)
   mocks.export.mockResolvedValue(new Blob(['synthetic csv']))
 })
@@ -221,10 +223,15 @@ describe('人工质控报表', () => {
         scene: 'final',
       }),
       1,
+      expect.any(AbortSignal),
     )
     await wrapper.get('.next').trigger('click')
     await flushPromises()
-    expect(mocks.report).toHaveBeenLastCalledWith(expect.objectContaining({ task_id: 'T1' }), 2)
+    expect(mocks.report).toHaveBeenLastCalledWith(
+      expect.objectContaining({ task_id: 'T1' }),
+      2,
+      expect.any(AbortSignal),
+    )
     wrapper.unmount()
   })
   it('新查询失败清掉旧统计，不伪造零；导出使用已应用筛选', async () => {
@@ -239,7 +246,10 @@ describe('人工质控报表', () => {
       .find((button) => button.text() === '导出 CSV')!
       .trigger('click')
     await flushPromises()
-    expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ scene: 'all' }))
+    expect(mocks.export).toHaveBeenCalledWith(
+      expect.objectContaining({ scene: 'all' }),
+      expect.any(AbortSignal),
+    )
     expect(create).toHaveBeenCalledTimes(1)
     mocks.report.mockRejectedValue(new Error('来源读取失败'))
     await wrapper.get('form').trigger('submit')

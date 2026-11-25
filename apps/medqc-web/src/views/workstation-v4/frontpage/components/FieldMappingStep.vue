@@ -196,13 +196,13 @@
 
       <!-- 操作按钮 -->
       <div class="mapping-actions">
-        <a-button @click="$emit('back')">
+        <a-button :disabled="confirming" @click="$emit('back')">
           <template #icon>
             <ArrowLeftOutlined />
           </template>
           返回修改
         </a-button>
-        <a-button @click="resetMappings">
+        <a-button :disabled="confirming || loading" @click="resetMappings">
           <template #icon>
             <UndoOutlined />
           </template>
@@ -210,8 +210,9 @@
         </a-button>
         <a-button
           type="primary"
+          data-testid="confirm-mapping-btn"
           :loading="confirming"
-          :disabled="mappedCount === 0"
+          :disabled="confirming || mappedCount === 0"
           @click="confirmMapping"
         >
           <template #icon>
@@ -225,7 +226,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { message } from 'ant-design-vue'
 import { getAccessToken } from '@/utils/auth-token'
 import {
@@ -279,6 +280,43 @@ function getAuthHeaders(extraHeaders: Record<string, string> = {}): Record<strin
   return token ? { Authorization: `Bearer ${token}`, ...extraHeaders } : extraHeaders
 }
 
+function isAbortError(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError')
+}
+
+function formatMappingError(data: any, status?: number, fallback = '映射确认失败'): string {
+  const detail = data?.detail
+  if (typeof detail === 'string' && detail.trim()) {
+    return detail.trim()
+  }
+  if (detail && typeof detail === 'object') {
+    const baseError =
+      (typeof detail.error === 'string' && detail.error.trim()) ||
+      (typeof detail.message === 'string' && detail.message.trim()) ||
+      fallback
+    const missingNames = Array.isArray(detail.missing_field_names)
+      ? detail.missing_field_names.filter(
+          (item: unknown) => typeof item === 'string' && item.trim(),
+        )
+      : Array.isArray(detail.missing_fields)
+        ? detail.missing_fields.filter(
+            (item: unknown) => typeof item === 'string' && item.trim(),
+          )
+        : []
+    if (missingNames.length > 0) {
+      return `${baseError}：缺少 ${missingNames.join('、')}`
+    }
+    return baseError
+  }
+  if (typeof data?.error === 'string' && data.error.trim()) {
+    return data.error.trim()
+  }
+  if (typeof data?.message === 'string' && data.message.trim()) {
+    return data.message.trim()
+  }
+  return status ? `${fallback} (HTTP ${status})` : fallback
+}
+
 // 状态
 const loading = ref(true)
 const confirming = ref(false)
@@ -286,6 +324,11 @@ const localMappings = ref<Record<string, string>>({})
 const standardFields = ref<Record<string, StandardField>>({})
 const confidence = ref(0)
 const fallback = ref(false)
+
+let disposed = false
+let mappingLoadSeq = 0
+let loadAbortController: AbortController | null = null
+let confirmAbortController: AbortController | null = null
 
 // 计算属性
 const mappedCount = computed(() => {
@@ -313,24 +356,44 @@ const isFieldUsed = (fieldKey: string, currentCol: string) => {
   )
 }
 
-const isRequiredFieldMissing = (col: string) => {
+const isRequiredFieldMissing = (_col: string) => {
   return false // 视觉标记用
 }
 
 const resetMappings = () => {
+  if (confirming.value || loading.value) return
   // 重新请求 AI 映射
-  fetchMappingSuggestion()
+  void fetchMappingSuggestion()
 }
 
 const fetchMappingSuggestion = async () => {
+  if (disposed) return
+  const seq = ++mappingLoadSeq
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
+
   loading.value = true
   try {
     const response = await fetch(`${API_BASE}/mapping/suggest`, {
       method: 'POST',
       headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ file_id: props.fileId }),
+      signal: controller.signal,
     })
-    const data = await response.json()
+
+    let data: any
+    try {
+      data = await response.json()
+    } catch {
+      throw new Error(`服务器响应异常: ${response.status}`)
+    }
+
+    if (disposed || seq !== mappingLoadSeq || controller.signal.aborted) return
+
+    if (!response.ok) {
+      throw new Error(formatMappingError(data, response.status, '获取字段映射建议失败'))
+    }
 
     if (data.suggested_mappings) {
       localMappings.value = { ...data.suggested_mappings }
@@ -341,19 +404,37 @@ const fetchMappingSuggestion = async () => {
     confidence.value = data.confidence || 0
     fallback.value = data.fallback || false
   } catch (err: any) {
+    if (disposed || seq !== mappingLoadSeq || controller.signal.aborted || isAbortError(err)) {
+      return
+    }
     message.error('获取字段映射建议失败: ' + (err.message || ''))
   } finally {
-    loading.value = false
+    if (!disposed && seq === mappingLoadSeq) {
+      loading.value = false
+    }
   }
 }
 
-const pollMappingStatus = async () => {
+const pollMappingStatus = async (): Promise<boolean> => {
+  if (disposed) return false
+  const seq = ++mappingLoadSeq
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
+
   // 先尝试轮询后台映射是否已完成
   try {
-    const response = await fetch(`${API_BASE}/mapping-status/${props.fileId}`, {
+    const response = await fetch(`${API_BASE}/mapping-status/${encodeURIComponent(props.fileId)}`, {
       headers: getAuthHeaders(),
+      signal: controller.signal,
     })
+    if (disposed || seq !== mappingLoadSeq || controller.signal.aborted || !response.ok) {
+      return false
+    }
     const data = await response.json()
+    if (disposed || seq !== mappingLoadSeq || controller.signal.aborted) {
+      return false
+    }
     if (data.ready) {
       // 直接使用缓存结果
       if (data.mappings) {
@@ -363,8 +444,15 @@ const pollMappingStatus = async () => {
       // 仍然需要获取标准字段列表
       const fieldsRes = await fetch(`${API_BASE}/mapping/fields`, {
         headers: getAuthHeaders(),
+        signal: controller.signal,
       })
+      if (disposed || seq !== mappingLoadSeq || controller.signal.aborted || !fieldsRes.ok) {
+        return false
+      }
       const fieldsData = await fieldsRes.json()
+      if (disposed || seq !== mappingLoadSeq || controller.signal.aborted) {
+        return false
+      }
       if (fieldsData.fields) {
         standardFields.value = fieldsData.fields
       }
@@ -372,12 +460,14 @@ const pollMappingStatus = async () => {
       return true
     }
   } catch {
-    // 忽略
+    // 忽略并降级至直接请求建议
   }
   return false
 }
 
 const confirmMapping = async () => {
+  if (confirming.value || disposed) return
+
   const validMappings: Record<string, string> = {}
   for (const [col, key] of Object.entries(localMappings.value)) {
     if (key) validMappings[col] = key
@@ -388,6 +478,10 @@ const confirmMapping = async () => {
     return
   }
 
+  confirmAbortController?.abort()
+  const controller = new AbortController()
+  confirmAbortController = controller
+
   confirming.value = true
   try {
     const response = await fetch(`${API_BASE}/mapping/confirm`, {
@@ -397,32 +491,40 @@ const confirmMapping = async () => {
         file_id: props.fileId,
         mappings: validMappings,
       }),
+      signal: controller.signal,
     })
 
-    let data
+    let data: any
     try {
       data = await response.json()
     } catch {
       throw new Error(`服务器响应异常: ${response.status}`)
     }
 
-    if (data.success) {
-      message.success(`分析完成！共处理 ${data.row_count} 条记录`)
-      emit('confirmed', {
-        fileId: props.fileId,
-        mappings: validMappings,
-        analysisResults: data.analysis_results,
-        charts: data.charts,
-        aiInsights: data.ai_insights || [],
-      })
-    } else {
-      throw new Error(data.detail || data.error || '映射确认失败')
+    if (disposed || controller.signal.aborted) return
+
+    if (!response.ok || !data?.success) {
+      throw new Error(formatMappingError(data, response.status, '映射确认失败'))
     }
+
+    const rowCount = Number.isFinite(Number(data.row_count)) ? Number(data.row_count) : props.rowCount
+    message.success(`分析完成！共处理 ${rowCount} 条记录`)
+    emit('confirmed', {
+      fileId: props.fileId,
+      mappings: validMappings,
+      analysisResults: data.analysis_results,
+      charts: data.charts,
+      aiInsights: data.ai_insights || [],
+    })
   } catch (err: any) {
+    if (disposed || controller.signal.aborted || isAbortError(err)) return
     console.error('Confirm mapping error:', err)
-    message.error(err.message || '映射确认失败')
+    message.error(err?.message || '映射确认失败')
   } finally {
-    confirming.value = false
+    if (!disposed && confirmAbortController === controller) {
+      confirming.value = false
+      confirmAbortController = null
+    }
   }
 }
 
@@ -430,10 +532,19 @@ const confirmMapping = async () => {
 onMounted(async () => {
   // 先尝试轮询是否有缓存
   const cached = await pollMappingStatus()
-  if (!cached) {
+  if (!cached && !disposed) {
     // 没有缓存，直接请求 AI 映射
     await fetchMappingSuggestion()
   }
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  mappingLoadSeq += 1
+  loadAbortController?.abort()
+  loadAbortController = null
+  confirmAbortController?.abort()
+  confirmAbortController = null
 })
 </script>
 

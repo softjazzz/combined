@@ -54,6 +54,7 @@
       <div class="test-actions">
         <span class="test-action-hint">仅用于规则验证，不写入正式质控结果。</span>
         <a-button
+          v-if="!confirmedResultsOnly"
           type="primary"
           class="test-primary-btn"
           :loading="loading"
@@ -83,9 +84,11 @@
           />
           <div
             v-if="
-              result.error_message || result.error_detail || result.trace_id || result.status_code
+              !confirmedResultsOnly &&
+              (result.error_message || result.error_detail || result.trace_id || result.status_code)
             "
             class="test-result-block"
+            data-testid="rule-test-debug-info"
           >
             <div class="test-result-block-title">
               调试信息
@@ -134,6 +137,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { SemanticRuleItem, SemanticRuleTestResult } from '../../types'
 
 defineProps<{
@@ -151,6 +155,8 @@ const emit = defineEmits<{
   'update:medicalText': [value: string]
   execute: []
 }>()
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 </script>
 
 <style scoped>

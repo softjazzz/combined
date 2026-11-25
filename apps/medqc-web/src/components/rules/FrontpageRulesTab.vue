@@ -1,19 +1,27 @@
 <template>
   <div class="space-y-4">
+    <a-alert
+      type="info"
+      show-icon
+      data-testid="readonly-catalog-notice"
+      message="只读规则目录"
+      description="病案首页质控规则目录当前为只读视图，不支持在线新建、编辑、保存草稿、发布或回滚；规则内容随系统版本统一维护。"
+    />
+
     <RulesCodingHeaderBar
-      title="首页质控规则管理"
-      subtitle="面向首页资料完整性与规范性，不涉及编码主诊断/主手术。"
+      title="首页质控规则目录（只读）"
+      subtitle="面向首页资料完整性与规范性的只读规则目录，不涉及编码主诊断/主手术。"
       :version-label="versionLabel"
       :search-keyword="query.searchKeyword"
       :loading="loading"
-      :has-pending-changes="dirty"
+      :has-pending-changes="false"
       :readonly="readonly"
       search-placeholder="搜索规则名/字段名/规则编号"
       @update:search-keyword="(v) => setQuery({ searchKeyword: v })"
-      @create-rule="handleCreateRule"
-      @import-template="() => message.info('模板导入入口预留')"
-      @run-preflight="() => message.success(`预检通过：预计影响 ${estimatedImpactCount} 条病历`)"
-      @publish="publishOpen = true"
+      @create-rule="notifyReadonly"
+      @import-template="notifyReadonly"
+      @run-preflight="notifyReadonly"
+      @publish="notifyReadonly"
     />
 
     <RulesCodingMetrics
@@ -43,7 +51,7 @@
         :risk-set="query.riskSet"
         :owner-id="query.ownerId"
         :owner-options="ownerOptions"
-        :saved-views="savedViews"
+        :saved-views="[]"
         :readonly="readonly"
         rule-type-title="规则分类"
         :rule-type-options="frontpageRuleTypeOptions"
@@ -53,7 +61,7 @@
         @update:risk-set="(v) => setQuery({ riskSet: v })"
         @update:owner-id="(v) => setQuery({ ownerId: v })"
         @reset-filters="handleResetFilters"
-        @save-view="({ name }) => savedViews.push({ id: `view-${Date.now()}`, name })"
+        @save-view="notifyReadonly"
       />
 
       <RulesCodingList
@@ -77,51 +85,31 @@
         @update:sort-by="(v) => setQuery({ sortBy: v })"
         @update:status-filter="(v) => setQuery({ statusFilter: v })"
         @update:document-type-set="(v) => setQuery({ documentTypeSet: v })"
-        @duplicate-rule="handleDuplicateRule"
-        @disable-rule="handleDisableRule"
-        @delete-rule="handleDeleteRule"
+        @duplicate-rule="notifyReadonly"
+        @disable-rule="notifyReadonly"
+        @delete-rule="notifyReadonly"
         @page-change="handlePageChange"
       />
     </div>
-
-    <RulesCodingChangeTimeline
-      :items="timelineItems"
-      :loading="false"
-      :collapsed="timelineCollapsed"
-      @toggle-collapsed="timelineCollapsed = $event"
-      @rollback="({ version }) => message.success(`已回滚到 ${version || '指定版本'}`)"
-    />
 
     <RulesCodingDetailPanel
       :visible="detailVisible"
       :loading="false"
       :rule="selectedRule"
       :readonly="readonly"
-      :dirty="dirty"
+      :dirty="false"
       :sample-preview="samplePreview"
       @close="detailVisible = false"
-      @change="handleRuleChange"
-      @save-draft="handleSaveDraft"
-      @delete-rule="handleDeleteRule"
-      @preview-hit="() => message.info('已刷新命中预览')"
-    />
-
-    <RulesCodingPublishDrawer
-      :open="publishOpen"
-      :loading="publishing"
-      :change-count="dirty ? 1 : 0"
-      :estimated-impact-count="estimatedImpactCount"
-      :risk-notes="riskNotes"
-      :high-risk-unreviewed-count="metrics.highRiskRules"
-      :readonly="readonly"
-      @close="publishOpen = false"
-      @confirm-publish="handlePublish"
+      @change="notifyReadonly"
+      @save-draft="notifyReadonly"
+      @delete-rule="notifyReadonly"
+      @preview-hit="notifyReadonly"
     />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { ApiService } from '@/services/apiService'
 
@@ -130,10 +118,7 @@ import RulesCodingMetrics from './coding/RulesCodingMetrics.vue'
 import RulesCodingFilterPanel from './coding/RulesCodingFilterPanel.vue'
 import RulesCodingList from './coding/RulesCodingList.vue'
 import RulesCodingDetailPanel from './coding/RulesCodingDetailPanel.vue'
-import RulesCodingPublishDrawer from './coding/RulesCodingPublishDrawer.vue'
-import RulesCodingChangeTimeline from './coding/RulesCodingChangeTimeline.vue'
 import type {
-  RuleChangeLogItem,
   RuleDetail,
   RuleListItem,
   RuleRiskLevel,
@@ -157,10 +142,8 @@ interface FrontpageRuleListItem extends RuleListItem {
   documentTypes: string[]
 }
 
-const readonly = ref(false)
+const readonly = true
 const loading = ref(false)
-const dirty = ref(false)
-const publishing = ref(false)
 const versionLabel = ref(
   `frontpage-rules v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}`,
 )
@@ -169,10 +152,6 @@ const allRules = ref<FrontpageRuleListItem[]>([])
 const selectedRuleId = ref<string>()
 const selectedRule = ref<RuleDetail>()
 const detailVisible = ref(false)
-const publishOpen = ref(false)
-const timelineCollapsed = ref(true)
-const timelineItems = ref<RuleChangeLogItem[]>([])
-const savedViews = ref<Array<{ id: string; name: string }>>([])
 const ownerOptions = ref<Array<{ label: string; value: string }>>([
   { label: '系统', value: '系统' },
 ])
@@ -203,11 +182,12 @@ const documentTypeLabelMap: Record<string, string> = {
   discharge_record: '出院记录',
   general_record: '通用文书',
 }
+let abortController: AbortController | null = null
 
 const query = ref({
   searchKeyword: '',
   ruleType: 'all' as RuleTypeValue,
-  statusSet: ['published', 'draft'] as string[],
+  statusSet: ['published', 'disabled'] as string[],
   riskSet: ['high', 'medium', 'low'] as string[],
   documentTypeSet: [] as string[],
   ownerId: undefined as string | undefined,
@@ -352,10 +332,9 @@ const metrics = computed(() => {
   }
 })
 
-const estimatedImpactCount = computed(() => Math.min(9999, filteredList.value.length * 2))
-const riskNotes = computed(() =>
-  metrics.value.highRiskRules > 0 ? ['存在高风险规则，建议发布前复核。'] : [],
-)
+function notifyReadonly() {
+  message.info('当前为只读规则目录，暂不支持在线编辑、保存或发布')
+}
 
 function handleMetricClick(payload: { key: 'total' | 'enabled' | 'hit7d' | 'risk' }) {
   if (payload.key === 'enabled') setQuery({ statusSet: ['published'], statusFilter: 'published' })
@@ -367,7 +346,7 @@ function handleResetFilters() {
   query.value = {
     searchKeyword: '',
     ruleType: 'all',
-    statusSet: ['published', 'draft'],
+    statusSet: ['published', 'disabled'],
     riskSet: ['high', 'medium', 'low'],
     documentTypeSet: [],
     ownerId: undefined,
@@ -395,114 +374,23 @@ function handleSelectRule(payload: { id: string }) {
   detailVisible.value = true
 }
 
-function handleRuleChange(payload: Partial<RuleDetail>) {
-  if (!selectedRule.value) return
-  selectedRule.value = { ...selectedRule.value, ...payload }
-  dirty.value = true
-}
-
-function handleSaveDraft(payload: RuleDetail) {
-  const idx = allRules.value.findIndex((item) => item.id === payload.id)
-  if (idx >= 0) {
-    allRules.value[idx] = {
-      ...allRules.value[idx],
-      name: payload.name,
-      status: 'draft',
-      conditionSummary: payload.description || allRules.value[idx].conditionSummary,
-    }
-  }
-  dirty.value = false
-  timelineItems.value.unshift({
-    id: `save-${Date.now()}`,
-    time: new Date().toLocaleString('zh-CN', { hour12: false }),
-    operator: '当前用户',
-    action: 'save_draft',
-    ruleCount: 1,
-    result: 'success',
-  })
-  message.success('规则草稿已保存')
-}
-
-function handleDuplicateRule(payload: { id: string }) {
-  const source = allRules.value.find((item) => item.id === payload.id)
-  if (!source) return
-  allRules.value.unshift({
-    ...source,
-    id: `${source.id}-COPY`,
-    name: `${source.name}（副本）`,
-    status: 'draft',
-  })
-  dirty.value = true
-  message.success('规则已复制')
-}
-
-function handleDisableRule(payload: { id: string }) {
-  const target = allRules.value.find((item) => item.id === payload.id)
-  if (!target) return
-  target.status = 'disabled'
-  dirty.value = true
-  message.success('规则已停用')
-}
-
-function handleDeleteRule(payload: { id: string }) {
-  allRules.value = allRules.value.filter((item) => item.id !== payload.id)
-  if (selectedRuleId.value === payload.id) {
-    selectedRuleId.value = undefined
-    selectedRule.value = undefined
-    detailVisible.value = false
-  }
-  dirty.value = true
-  message.success('规则已删除')
-}
-
 function handlePageChange(payload: { current: number; pageSize: number }) {
   query.value.current = payload.current
   query.value.pageSize = payload.pageSize
 }
 
-function handleCreateRule() {
-  selectedRule.value = {
-    id: `NEW-${Date.now()}`,
-    name: '新建首页规则',
-    description: '',
-    ruleType: 'required',
-    status: 'draft',
-    riskLevel: 'medium',
-    conditionTree: { operator: 'AND', children: [] },
-  }
-  selectedRuleId.value = selectedRule.value.id
-  detailVisible.value = true
-}
-
-async function handlePublish() {
-  publishing.value = true
-  try {
-    await new Promise((resolve) => setTimeout(resolve, 400))
-    timelineItems.value.unshift({
-      id: `publish-${Date.now()}`,
-      time: new Date().toLocaleString('zh-CN', { hour12: false }),
-      operator: '当前用户',
-      action: 'publish',
-      ruleCount: filteredList.value.length,
-      impactCount: estimatedImpactCount.value,
-      version: `v${new Date().toISOString().slice(0, 10).replace(/-/g, '.')}.1`,
-      result: 'success',
-      rollbackable: true,
-    })
-    dirty.value = false
-    publishOpen.value = false
-    message.success('首页规则发布成功')
-  } finally {
-    publishing.value = false
-  }
-}
-
 async function fetchRules() {
+  abortController?.abort()
+  const controller = new AbortController()
+  abortController = controller
   loading.value = true
   try {
     const response = await ApiService.get<FrontpageRuleApi[] | { items?: FrontpageRuleApi[] }>(
       '/api/v1/qc/formal-qc/rules',
+      undefined,
+      { signal: controller.signal, skipErrorToast: true },
     )
+    if (controller.signal.aborted) return
     const payload = response.data
     if (response.success && Array.isArray(payload)) {
       allRules.value = payload.map(toListItem)
@@ -514,13 +402,20 @@ async function fetchRules() {
         message.error(response.error || '加载首页质控规则失败')
       }
     }
-  } catch (error) {
+  } catch (error: any) {
+    if (controller.signal.aborted || error?.code === 'ERR_CANCELED') return
     console.error(error)
     message.error('加载首页质控规则失败')
   } finally {
-    loading.value = false
+    if (abortController === controller) {
+      abortController = null
+      loading.value = false
+    }
   }
 }
 
 onMounted(fetchRules)
+onBeforeUnmount(() => {
+  abortController?.abort()
+})
 </script>

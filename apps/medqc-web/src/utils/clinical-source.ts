@@ -25,7 +25,7 @@ export function resetClinicalSourceMode(): void {
 const ORDINARY_CLINICAL_API_RE =
   /^\/api\/(?:v1\/)?(?:medical-records|emr|records|qc\/sichuan)(?:\/|$)/u
 const FALLBACK_AWARE_CLINICAL_API_RE =
-  /^\/api\/v1\/(?:workstation|frontpage-qc|quality-reports)(?:\/|\?|$)/u
+  /^\/api\/v1\/(?:workstation|frontpage-qc|quality-reports|core-system-reports|custom-qc\/workspace)(?:\/|\?|$)/u
 
 /** 普通病历默认固定东华；仅在后端显式开启 legacy_compat 时按页签来源透传；历史任务和已登记材料由后端专用路径解析。 */
 export function clinicalSourceForRequest(url?: string, method = 'GET'): string | undefined {
@@ -54,7 +54,7 @@ export function clinicalSourceForRequest(url?: string, method = 'GET'): string |
     return isClinicalSourceId(pageSource) ? pageSource : activeCompatClinicalSource
   }
   if (isFallbackAwareClinicalPath) {
-    // 默认 fixed_donghua_cdm 模式下，workstation / frontpage-qc / quality-reports 不强加未请求 header，
+    // 默认 fixed_donghua_cdm 模式下，workstation / frontpage-qc / quality-reports / core-system-reports / custom-qc/workspace 不强加未请求 header，
     // 以保留本地无 CDM 时的 legacy_snapshot 安全回退；仅当 URL 显式指定 independent_cdm 时透传。
     const requestSource = request.searchParams.get('source_id')
     const pageSource = new URLSearchParams(window.location.search).get('source_id')

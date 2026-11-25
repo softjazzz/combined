@@ -446,7 +446,7 @@ export function resolveBreadcrumb(groups: NavGroup[], route: NavRouteLike): stri
     if (tab) crumbs.push(tab.label)
   } else if (active.item.key === 'rules') {
     const tab = typeof route.query.tab === 'string' ? route.query.tab : ''
-    crumbs.push(RULE_TAB_LABELS[tab] || RULE_TAB_LABELS.coding)
+    crumbs.push(RULE_TAB_LABELS[tab] || RULE_TAB_LABELS.semantic)
   } else if (active.item.to.path !== route.path && metaTitle && metaTitle !== active.item.label) {
     crumbs.push(metaTitle)
   }

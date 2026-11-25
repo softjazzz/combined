@@ -35,6 +35,15 @@
       </div>
     </header>
 
+    <a-alert
+      v-if="confirmedResultsOnly"
+      type="info"
+      show-icon
+      data-testid="custom-rule-demo-readonly"
+      message="演示账号只读模式"
+      description="演示账号仅支持查看规则草稿与执行结果概览，已隐藏底层 Prompt 编辑、单条/批量试跑与发布入口。"
+    />
+
     <section class="ops-overview mq-card">
       <div class="ops-kpis">
         <article class="kpi-card">
@@ -106,7 +115,9 @@
               刷新
             </a-button>
             <a-button
+              v-if="!confirmedResultsOnly"
               type="primary"
+              data-testid="create-draft-btn"
               @click="openCreateDrawer"
             >
               <template #icon>
@@ -172,7 +183,10 @@
               </a-tag>
             </template>
             <template v-else-if="column.key === 'actions'">
-              <div class="draft-actions">
+              <div
+                v-if="!confirmedResultsOnly"
+                class="draft-actions"
+              >
                 <a-tooltip title="继续编辑">
                   <a-button
                     type="text"
@@ -188,6 +202,7 @@
                   <a-button
                     type="text"
                     size="small"
+                    :loading="copyingDraft"
                     @click.stop="copyDraft(record as CustomRuleDraft)"
                   >
                     <template #icon>
@@ -203,6 +218,7 @@
                     type="text"
                     danger
                     size="small"
+                    :loading="deletingDraft"
                     @click.stop
                   >
                     <template #icon>
@@ -211,6 +227,10 @@
                   </a-button>
                 </a-popconfirm>
               </div>
+              <span
+                v-else
+                class="cell-muted"
+              >只读</span>
             </template>
           </template>
         </a-table>
@@ -218,6 +238,7 @@
     </section>
 
     <section
+      v-if="!confirmedResultsOnly"
       v-show="isStepVisible('step-create')"
       id="step-create"
       class="workspace-panel step-inline-panel"
@@ -361,10 +382,11 @@
     </a-drawer>
 
     <section
-      v-if="workspaceMode === 'batch'"
+      v-if="!confirmedResultsOnly && workspaceMode === 'batch'"
       v-show="isStepVisible('step-prompt')"
       id="step-prompt"
       class="workspace-panel"
+      data-testid="custom-rule-prompt-section"
     >
       <div class="panel-head">
         <div>
@@ -423,9 +445,10 @@
     </section>
 
     <section
-      v-else
+      v-else-if="!confirmedResultsOnly"
       id="step-prompt"
       class="workspace-panel"
+      data-testid="custom-rule-prompt-section"
     >
       <div class="panel-head">
         <div>
@@ -463,7 +486,7 @@
             type="primary"
             :disabled="!selectedDraft"
             :loading="savingDraft"
-            @click="saveDraftEditor"
+            @click="saveDraftEditor()"
           >
             保存草稿
           </a-button>
@@ -513,10 +536,12 @@
     </section>
 
     <a-drawer
-      v-model:open="promptDrawerVisible"
+      v-if="!confirmedResultsOnly"
+      :open="promptDrawerVisible"
       title="步骤3：Prompt 生成与编辑"
       placement="right"
       :width="780"
+      @close="handleClosePromptDrawer"
     >
       <template #extra>
         <div class="panel-actions">
@@ -534,7 +559,7 @@
             type="primary"
             :disabled="!selectedDraft"
             :loading="savingDraft"
-            @click="saveDraftEditor"
+            @click="saveDraftEditor()"
           >
             保存草稿
           </a-button>
@@ -625,14 +650,14 @@
       </a-form>
       <template #footer>
         <div class="drawer-footer">
-          <a-button @click="promptDrawerVisible = false">
+          <a-button @click="handleClosePromptDrawer">
             关闭
           </a-button>
           <a-button
             type="primary"
             :disabled="!selectedDraft"
             :loading="savingDraft"
-            @click="saveDraftEditor"
+            @click="saveDraftEditor()"
           >
             保存草稿
           </a-button>
@@ -669,7 +694,9 @@
             </a-radio-button>
           </a-radio-group>
           <a-button
+            v-if="!confirmedResultsOnly"
             type="primary"
+            data-testid="launch-batch-job-btn"
             :disabled="!canRunBatchJob"
             :loading="runningBatchJob"
             @click="runBatchJob"
@@ -689,7 +716,9 @@
             刷新任务
           </a-button>
           <a-button
+            v-if="!confirmedResultsOnly"
             :disabled="!activeBatchJob"
+            :loading="exportingBatchJob"
             @click="exportActiveBatchJob('xlsx')"
           >
             导出
@@ -736,7 +765,7 @@
         <a-input
           v-model:value="recordFilters.keyword"
           allow-clear
-          placeholder="关键词：患者/住院号/visit"
+          placeholder="关键词：患者/住院号/就诊号"
           @press-enter="searchRecords"
         />
         <a-button
@@ -748,6 +777,7 @@
       </div>
 
       <a-form
+        v-if="!confirmedResultsOnly"
         layout="vertical"
         class="advanced-grid"
       >
@@ -821,14 +851,20 @@
           </template>
           <template v-else-if="column.key === 'actions'">
             <a-button
+              v-if="!confirmedResultsOnly"
               type="link"
               size="small"
+              data-testid="single-test-btn"
               :disabled="!selectedDraft"
               :loading="testingSingleRecordId === record.record_id"
               @click="runSingleTest(record as CustomRuleWorkspaceRecord)"
             >
               单条质控
             </a-button>
+            <span
+              v-else
+              class="cell-muted"
+            >只读</span>
           </template>
         </template>
       </a-table>
@@ -923,7 +959,7 @@
                   查看
                 </a-button>
                 <a-button
-                  v-if="record.cancellable"
+                  v-if="!confirmedResultsOnly && record.cancellable"
                   size="small"
                   danger
                   :loading="cancellingBatchJobId === record.id"
@@ -932,7 +968,7 @@
                   停止
                 </a-button>
                 <a-button
-                  v-else
+                  v-else-if="!confirmedResultsOnly"
                   size="small"
                   :loading="retryingBatchJobId === record.id"
                   @click="retryBatchJob(record.id)"
@@ -985,10 +1021,10 @@
               进度：{{ formatJobProgress(activeBatchJob) }}
             </p>
             <p
-              v-if="activeBatchJob.error_message"
+              v-if="activeBatchJob.error_message && !confirmedResultsOnly"
               class="result-text result-text--danger"
             >
-              错误：{{ activeBatchJob.error_message }}
+              异常说明：{{ formatSafeFailureReason(activeBatchJob.error_message) }}
             </p>
           </template>
         </div>
@@ -1027,7 +1063,11 @@
           />
         </div>
 
-        <div class="result-panel">
+        <div
+          v-if="!confirmedResultsOnly"
+          class="result-panel"
+          data-testid="custom-rule-failed-panel"
+        >
           <h3>失败明细</h3>
           <a-empty
             v-if="failedResultRows.length === 0"
@@ -1041,7 +1081,13 @@
             :columns="failedResultColumns"
             :data-source="failedResultRows"
             :scroll="{ y: 220, x: 760 }"
-          />
+          >
+            <template #bodyCell="{ column, record }">
+              <template v-if="column.key === 'error'">
+                <span>{{ formatSafeFailureReason(record.error) }}</span>
+              </template>
+            </template>
+          </a-table>
         </div>
       </div>
     </section>
@@ -1051,10 +1097,12 @@
 import { serializeCaseRecordKey } from '@/views/workstation-v4/utils/caseRecordKey'
 import { retryTargetJobId } from '@/utils/batchJobRetryIdentity'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import type { Dayjs } from 'dayjs'
-import { message } from 'ant-design-vue'
+import { message, Modal } from 'ant-design-vue'
 import type { TableColumnsType, TableProps } from 'ant-design-vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   CopyOutlined,
   DeleteOutlined,
@@ -1108,13 +1156,42 @@ type StepStatus = 'pending' | 'ready' | 'running' | 'done'
 
 const JOB_POLL_INTERVAL_MS = 3000
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
+const route = (() => {
+  try {
+    return useRoute()
+  } catch {
+    return null
+  }
+})()
+const router = (() => {
+  try {
+    return useRouter()
+  } catch {
+    return null
+  }
+})()
+
 const draftLoading = ref(false)
 const creatingDraft = ref(false)
 const savingDraft = ref(false)
+const copyingDraft = ref(false)
+const deletingDraft = ref(false)
 const generatingPrompt = ref(false)
 const publishingDraft = ref(false)
 const runningBatchJob = ref(false)
+const exportingBatchJob = ref(false)
 const testingSingleRecordId = ref('')
+const editorBaseline = ref('')
+
+let draftsAbortController: AbortController | null = null
+let filtersAbortController: AbortController | null = null
+let recordsAbortController: AbortController | null = null
+let batchJobsAbortController: AbortController | null = null
+let batchJobDetailAbortController: AbortController | null = null
+let isApplyingRouteQuery = false
+let allowNextRouteLeave = false
 
 const drafts = ref<CustomRuleDraft[]>([])
 const selectedDraftId = ref('')
@@ -1295,7 +1372,7 @@ const advancedParams = reactive({
 
 const recordColumns: TableColumnsType<CustomRuleWorkspaceRecord> = [
   { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 120 },
-  { title: '住院号/visit', dataIndex: 'visit_id', key: 'visit_id', width: 140 },
+  { title: '住院号/就诊号', dataIndex: 'visit_id', key: 'visit_id', width: 140 },
   { title: '病历范围', dataIndex: 'scope', key: 'scope', width: 100 },
   { title: '科室', dataIndex: 'department', key: 'department', width: 140 },
   { title: '医生', dataIndex: 'doctor', key: 'doctor', width: 140 },
@@ -1355,6 +1432,44 @@ function getExamplesFromDraft(draft: CustomRuleDraft): { positive: string; negat
   return { positive, negative }
 }
 
+function serializeEditorState(): string {
+  return JSON.stringify({
+    name: editorForm.name,
+    description: editorForm.description,
+    prompt_template: editorForm.prompt_template,
+    source_requirement: editorForm.source_requirement,
+    document_type: editorForm.document_type,
+    scene: editorForm.scene,
+    severity: editorForm.severity,
+    defect_level: editorForm.defect_level,
+    complexity: editorForm.complexity,
+    positive_example: editorForm.positive_example,
+    negative_example: editorForm.negative_example,
+  })
+}
+
+const isEditorDirty = computed(
+  () =>
+    !confirmedResultsOnly.value &&
+    Boolean(selectedDraft.value) &&
+    Boolean(editorBaseline.value) &&
+    serializeEditorState() !== editorBaseline.value,
+)
+
+function formatSafeFailureReason(raw: unknown): string {
+  const text = String(raw ?? '').trim()
+  if (!text) return '执行失败，请稍后重试'
+  if (
+    /traceback|stack\s*trace|exception:|error\s+code\s+\d+|request failed with status code|econn|timeout\s+of\s+\d+ms|sqlalchemy|psycopg|pydantic/i.test(
+      text,
+    )
+  ) {
+    if (/timeout|econn/i.test(text)) return '执行超时或网络异常，请稍后重试'
+    return '执行异常，请联系管理员排查'
+  }
+  return text.length > 120 ? `${text.slice(0, 120)}...` : text
+}
+
 function hydrateEditorFromDraft(draft: CustomRuleDraft) {
   const examples = getExamplesFromDraft(draft)
   editorForm.name = draft.name || ''
@@ -1377,6 +1492,7 @@ function hydrateEditorFromDraft(draft: CustomRuleDraft) {
   editorCheckPoints.value = Array.isArray((draft.check_logic || {}).generated_check_points)
     ? ((draft.check_logic || {}).generated_check_points as string[])
     : []
+  editorBaseline.value = serializeEditorState()
 }
 
 function mapDefectLevelToSeverity(defectLevel: string): WorkspaceSeverity {
@@ -1393,14 +1509,21 @@ function formatDateTime(value?: string | Date | null): string {
 }
 
 async function loadDrafts() {
+  draftsAbortController?.abort()
+  const controller = new AbortController()
+  draftsAbortController = controller
   draftLoading.value = true
   try {
-    const response = await listWorkspaceDrafts({
-      page: draftPagination.current,
-      page_size: draftPagination.pageSize,
-      status: draftQuery.status,
-      q: draftQuery.keyword || undefined,
-    })
+    const response = await listWorkspaceDrafts(
+      {
+        page: draftPagination.current,
+        page_size: draftPagination.pageSize,
+        status: draftQuery.status,
+        q: draftQuery.keyword || undefined,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (response.canceled || controller.signal.aborted) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取草稿列表失败')
     }
@@ -1410,6 +1533,7 @@ async function loadDrafts() {
     if (drafts.value.length === 0) {
       selectedDraftId.value = ''
       selectedDraftIds.value = []
+      editorBaseline.value = ''
       return
     }
 
@@ -1427,14 +1551,19 @@ async function loadDrafts() {
       hydrateEditorFromDraft(currentDraft)
     }
   } catch (error: any) {
+    if (controller.signal.aborted) return
     message.error(error?.message || '获取草稿列表失败')
   } finally {
-    draftLoading.value = false
+    if (draftsAbortController === controller) {
+      draftsAbortController = null
+      draftLoading.value = false
+    }
   }
 }
 
 function searchDrafts() {
   draftPagination.current = 1
+  syncStateToRoute()
   void loadDrafts()
 }
 
@@ -1444,24 +1573,60 @@ function handleDraftTableChange(pagination: { current?: number; pageSize?: numbe
   void loadDrafts()
 }
 
-function selectDraft(record: CustomRuleDraft) {
+function applyDraftSelection(record: CustomRuleDraft) {
   selectedDraftId.value = record.id
   hydrateEditorFromDraft(record)
   singleResult.value = null
 }
 
+function selectDraft(record: CustomRuleDraft, options?: { force?: boolean }) {
+  if (!options?.force && record.id !== selectedDraftId.value && isEditorDirty.value) {
+    Modal.confirm({
+      title: '切换草稿将丢失未保存修改',
+      content: '当前规则草稿有未保存的编辑内容，确定放弃并切换到其他草稿吗？',
+      okText: '放弃并切换',
+      cancelText: '继续编辑',
+      onOk: () => {
+        applyDraftSelection(record)
+      },
+    })
+    return
+  }
+  applyDraftSelection(record)
+}
+
 function openCreateDrawer() {
+  if (confirmedResultsOnly.value) return
   createDrawerVisible.value = true
 }
 
 function openPromptDrawer() {
+  if (confirmedResultsOnly.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿')
     return
   }
   promptDrawerVisible.value = true
 }
+
+function handleClosePromptDrawer() {
+  if (!isEditorDirty.value) {
+    promptDrawerVisible.value = false
+    return
+  }
+  Modal.confirm({
+    title: '关闭编辑器？',
+    content: '当前规则草稿仍有未保存修改，关闭后暂存在当前页面但未提交至服务端。确定关闭吗？',
+    okText: '确认关闭',
+    cancelText: '继续编辑',
+    onOk: () => {
+      promptDrawerVisible.value = false
+    },
+  })
+}
+
 async function createDraft() {
+  if (confirmedResultsOnly.value || creatingDraft.value) return
   const name = createForm.name.trim()
   const requirement = createForm.source_requirement.trim()
   if (!name) {
@@ -1507,7 +1672,7 @@ async function createDraft() {
     }
     createDrawerVisible.value = false
     await loadDrafts()
-    selectDraft(response.data)
+    selectDraft(response.data, { force: true })
   } catch (error: any) {
     message.error(error?.message || '创建草稿失败')
   } finally {
@@ -1526,22 +1691,28 @@ function buildEditorExamples() {
   return examples
 }
 
-function validateEditorReady(showWarning = true): boolean {
-  const ready = Boolean(
-    editorForm.name.trim() && editorForm.description.trim() && editorForm.prompt_template.trim(),
-  )
+function validateEditorReady(
+  showWarning = true,
+  options?: { allowEmptyPrompt?: boolean },
+): boolean {
+  const hasBasicFields = Boolean(editorForm.name.trim() && editorForm.description.trim())
+  const hasPrompt = options?.allowEmptyPrompt ? true : Boolean(editorForm.prompt_template.trim())
+  const ready = hasBasicFields && hasPrompt
   if (!ready && showWarning) {
-    message.warning('规则名称、描述、Prompt 均不能为空')
+    message.warning(
+      options?.allowEmptyPrompt ? '规则名称与描述不能为空' : '规则名称、描述、Prompt 均不能为空',
+    )
   }
   return ready
 }
 
-async function saveDraftEditor() {
+async function saveDraftEditor(options?: { allowEmptyPrompt?: boolean; silent?: boolean }) {
+  if (confirmedResultsOnly.value || savingDraft.value) return false
   if (!selectedDraft.value) {
     message.warning('请先选择草稿')
     return false
   }
-  if (!validateEditorReady()) {
+  if (!validateEditorReady(true, { allowEmptyPrompt: options?.allowEmptyPrompt })) {
     return false
   }
   savingDraft.value = true
@@ -1574,8 +1745,10 @@ async function saveDraftEditor() {
     }
     const next = response.data
     drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item))
-    selectDraft(next)
-    message.success('草稿已保存')
+    selectDraft(next, { force: true })
+    if (!options?.silent) {
+      message.success('草稿已保存')
+    }
     return true
   } catch (error: any) {
     message.error(error?.message || '保存草稿失败')
@@ -1586,13 +1759,14 @@ async function saveDraftEditor() {
 }
 
 async function generatePromptForDraft() {
+  if (confirmedResultsOnly.value || generatingPrompt.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿')
     return
   }
   generatingPrompt.value = true
   try {
-    const saved = await saveDraftEditor()
+    const saved = await saveDraftEditor({ allowEmptyPrompt: true, silent: true })
     if (!saved) return
     const response = await generateWorkspaceDraftPrompt(selectedDraft.value.id)
     if (!response.success || !response.data) {
@@ -1600,7 +1774,7 @@ async function generatePromptForDraft() {
     }
     const { draft, prompt_result: promptResult } = response.data
     drafts.value = drafts.value.map((item) => (item.id === draft.id ? draft : item))
-    selectDraft(draft)
+    selectDraft(draft, { force: true })
     editorPromptSummary.value = promptResult.summary || ''
     editorCheckPoints.value = promptResult.check_points || []
     message.success(
@@ -1614,6 +1788,8 @@ async function generatePromptForDraft() {
 }
 
 async function copyDraft(record: CustomRuleDraft) {
+  if (confirmedResultsOnly.value || copyingDraft.value) return
+  copyingDraft.value = true
   const normalizedDocumentType = normalizeWorkspaceDocumentType(
     record.document_type,
     defaultDocumentTypeByScene(record.scene || 'running'),
@@ -1643,10 +1819,14 @@ async function copyDraft(record: CustomRuleDraft) {
     await loadDrafts()
   } catch (error: any) {
     message.error(error?.message || '复制草稿失败')
+  } finally {
+    copyingDraft.value = false
   }
 }
 
 async function deleteDraft(record: CustomRuleDraft) {
+  if (confirmedResultsOnly.value || deletingDraft.value) return
+  deletingDraft.value = true
   try {
     const response = await deleteWorkspaceDraft(record.id)
     if (!response.success) {
@@ -1660,10 +1840,13 @@ async function deleteDraft(record: CustomRuleDraft) {
     await loadDrafts()
   } catch (error: any) {
     message.error(error?.message || '删除草稿失败')
+  } finally {
+    deletingDraft.value = false
   }
 }
 
 async function publishDraftById(draftId: string) {
+  if (confirmedResultsOnly.value || publishingDraft.value) return
   publishingDraft.value = true
   try {
     const response = await publishWorkspaceDraft(draftId)
@@ -1680,46 +1863,70 @@ async function publishDraftById(draftId: string) {
 }
 
 async function loadRecordFilters() {
-  const response = await getWorkspaceRecordFilters({
-    scope: recordFilters.scope,
-    department: recordFilters.department,
-  })
-  if (!response.success || !response.data) {
-    throw new Error(response.message || '获取筛选项失败')
+  filtersAbortController?.abort()
+  const controller = new AbortController()
+  filtersAbortController = controller
+  try {
+    const response = await getWorkspaceRecordFilters(
+      {
+        scope: recordFilters.scope,
+        department: recordFilters.department,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (response.canceled || controller.signal.aborted) return
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '获取筛选项失败')
+    }
+    departmentOptions.value = (response.data.departments || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+    doctorOptions.value = (response.data.doctors || []).map((item) => ({
+      label: item,
+      value: item,
+    }))
+  } finally {
+    if (filtersAbortController === controller) {
+      filtersAbortController = null
+    }
   }
-  departmentOptions.value = (response.data.departments || []).map((item) => ({
-    label: item,
-    value: item,
-  }))
-  doctorOptions.value = (response.data.doctors || []).map((item) => ({
-    label: item,
-    value: item,
-  }))
 }
 
 async function loadRecords() {
+  recordsAbortController?.abort()
+  const controller = new AbortController()
+  recordsAbortController = controller
   recordLoading.value = true
   try {
-    const response = await getWorkspaceRecords({
-      scope: recordFilters.scope,
-      department: recordFilters.department,
-      doctor: recordFilters.doctor,
-      date_field: recordFilters.date_field,
-      start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
-      end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
-      keyword: recordFilters.keyword || undefined,
-      page: recordPagination.current,
-      page_size: recordPagination.pageSize,
-    })
+    const response = await getWorkspaceRecords(
+      {
+        scope: recordFilters.scope,
+        department: recordFilters.department,
+        doctor: recordFilters.doctor,
+        date_field: recordFilters.date_field,
+        start_date: recordFilters.dateRange?.[0]?.format('YYYY-MM-DD'),
+        end_date: recordFilters.dateRange?.[1]?.format('YYYY-MM-DD'),
+        keyword: recordFilters.keyword || undefined,
+        page: recordPagination.current,
+        page_size: recordPagination.pageSize,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (response.canceled || controller.signal.aborted) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取病历列表失败')
     }
     records.value = response.data.items
     recordPagination.total = response.data.total
   } catch (error: any) {
+    if (controller.signal.aborted) return
     message.error(error?.message || '获取病历列表失败')
   } finally {
-    recordLoading.value = false
+    if (recordsAbortController === controller) {
+      recordsAbortController = null
+      recordLoading.value = false
+    }
   }
 }
 
@@ -1813,20 +2020,28 @@ function buildSelectedRecordRefs():
 }
 
 async function runSingleTest(record: CustomRuleWorkspaceRecord) {
+  if (confirmedResultsOnly.value || testingSingleRecordId.value) return
   if (!selectedDraft.value) {
     message.warning('请先选择草稿规则')
     return
   }
+  const recordRef = normalizeWorkspaceRecordRef(record)
+  if (!recordRef) {
+    message.error('当前病历缺少完整的机构/患者/就诊三坐标，无法执行单病历测试')
+    return
+  }
   testingSingleRecordId.value = record.record_id
   try {
-    const saved = await saveDraftEditor()
+    const saved = await saveDraftEditor({ silent: true })
     if (!saved) return
     const response = await runWorkspaceSingleTest({
       draft_id: selectedDraft.value.id,
       records: [
         {
+          institute_id: recordRef.institute_id,
+          patient_id: recordRef.patient_id,
           record_id: record.record_id,
-          visit_id: record.visit_id,
+          visit_id: recordRef.visit_id,
           patient_name: record.patient_name,
           department: record.department,
           doctor: record.doctor,
@@ -1887,8 +2102,11 @@ const batchJobColumns: TableColumnsType<CustomRuleBatchJob> = [
 ]
 
 let batchJobPollTimer: number | null = null
+let batchJobPollInFlight = false
+let batchJobPollSession = 0
 
 function stopBatchJobPolling() {
+  batchJobPollSession += 1
   if (batchJobPollTimer !== null) {
     window.clearInterval(batchJobPollTimer)
     batchJobPollTimer = null
@@ -1897,25 +2115,40 @@ function stopBatchJobPolling() {
 
 function startBatchJobPolling(jobId: string) {
   stopBatchJobPolling()
+  const session = batchJobPollSession
   batchJobPollTimer = window.setInterval(async () => {
-    await Promise.all([fetchBatchJobDetail(jobId, true), loadBatchJobs()])
-    const current = activeBatchJob.value
-    if (!current || !['queued', 'running'].includes(current.status)) {
-      stopBatchJobPolling()
+    if (session !== batchJobPollSession || batchJobPollInFlight) return
+    batchJobPollInFlight = true
+    try {
+      await Promise.all([fetchBatchJobDetail(jobId, true), loadBatchJobs()])
+      if (session !== batchJobPollSession) return
+      const current = activeBatchJob.value
+      if (!current || !['queued', 'running'].includes(current.status)) {
+        stopBatchJobPolling()
+      }
+    } finally {
+      batchJobPollInFlight = false
     }
   }, JOB_POLL_INTERVAL_MS)
 }
 
 async function loadBatchJobs() {
+  batchJobsAbortController?.abort()
+  const controller = new AbortController()
+  batchJobsAbortController = controller
   batchJobLoading.value = true
   try {
-    const response = await listWorkspaceBatchJobs({
-      q: batchJobQuery.keyword || undefined,
-      status: batchJobQuery.status,
-      scope: batchJobQuery.scope,
-      page: batchJobPagination.current,
-      page_size: batchJobPagination.pageSize,
-    })
+    const response = await listWorkspaceBatchJobs(
+      {
+        q: batchJobQuery.keyword || undefined,
+        status: batchJobQuery.status,
+        scope: batchJobQuery.scope,
+        page: batchJobPagination.current,
+        page_size: batchJobPagination.pageSize,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (response.canceled || controller.signal.aborted) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取批量任务失败')
     }
@@ -1931,9 +2164,13 @@ async function loadBatchJobs() {
       }
     }
   } catch (error: any) {
+    if (controller.signal.aborted) return
     message.error(error?.message || '获取批量任务失败')
   } finally {
-    batchJobLoading.value = false
+    if (batchJobsAbortController === controller) {
+      batchJobsAbortController = null
+      batchJobLoading.value = false
+    }
   }
 }
 
@@ -1949,8 +2186,15 @@ function handleBatchJobTableChange(pagination: { current?: number; pageSize?: nu
 }
 
 async function fetchBatchJobDetail(jobId: string, silent = false) {
+  batchJobDetailAbortController?.abort()
+  const controller = new AbortController()
+  batchJobDetailAbortController = controller
   try {
-    const response = await getWorkspaceBatchJob(jobId)
+    const response = await getWorkspaceBatchJob(jobId, {
+      signal: controller.signal,
+      skipErrorToast: true,
+    })
+    if (response.canceled || controller.signal.aborted) return null
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取任务详情失败')
     }
@@ -1958,10 +2202,14 @@ async function fetchBatchJobDetail(jobId: string, silent = false) {
     activeBatchJobId.value = response.data.id
     return response.data
   } catch (error: any) {
-    if (!silent) {
+    if (!silent && !controller.signal.aborted) {
       message.error(error?.message || '获取任务详情失败')
     }
     return null
+  } finally {
+    if (batchJobDetailAbortController === controller) {
+      batchJobDetailAbortController = null
+    }
   }
 }
 
@@ -1976,7 +2224,7 @@ async function openBatchJob(job: CustomRuleBatchJob) {
 }
 
 async function cancelBatchJob(jobId: string) {
-  if (!jobId || cancellingBatchJobId.value) return
+  if (confirmedResultsOnly.value || !jobId || cancellingBatchJobId.value) return
   cancellingBatchJobId.value = jobId
   try {
     const response = await cancelWorkspaceBatchJob(jobId)
@@ -1994,7 +2242,7 @@ async function cancelBatchJob(jobId: string) {
 }
 
 async function retryBatchJob(jobId: string) {
-  if (!jobId || retryingBatchJobId.value) return
+  if (confirmedResultsOnly.value || !jobId || retryingBatchJobId.value) return
   retryingBatchJobId.value = jobId
   try {
     const response = await retryWorkspaceBatchJob(jobId)
@@ -2022,28 +2270,34 @@ async function refreshActiveBatchJob() {
 }
 
 async function exportActiveBatchJob(format: 'xlsx' | 'csv') {
+  if (confirmedResultsOnly.value || exportingBatchJob.value) return
   if (!activeBatchJob.value) {
     message.info('请先选择任务')
     return
   }
-  const response = await exportWorkspaceBatchJob({
-    job_id: activeBatchJob.value.id,
-    format,
-  })
-  if (!response.success || !response.data) {
-    message.error(response.message || '导出任务失败')
-    return
+  exportingBatchJob.value = true
+  try {
+    const response = await exportWorkspaceBatchJob({
+      job_id: activeBatchJob.value.id,
+      format,
+    })
+    if (!response.success || !response.data) {
+      message.error(response.message || '导出任务失败')
+      return
+    }
+    const blob = response.data
+    const url = window.URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `custom-rule-batch-${activeBatchJob.value.id}.${format}`
+    document.body.appendChild(anchor)
+    anchor.click()
+    document.body.removeChild(anchor)
+    window.URL.revokeObjectURL(url)
+    message.success('导出任务已开始下载')
+  } finally {
+    exportingBatchJob.value = false
   }
-  const blob = response.data
-  const url = window.URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = `custom-rule-batch-${activeBatchJob.value.id}.${format}`
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  window.URL.revokeObjectURL(url)
-  message.success('导出任务已开始下载')
 }
 
 function jobStatusText(status?: string): string {
@@ -2097,6 +2351,7 @@ const executionTipText = computed(() => {
 })
 
 async function runBatchJob() {
+  if (confirmedResultsOnly.value || runningBatchJob.value) return
   if (!canRunBatchJob.value) {
     message.warning('请先补全 Prompt、选择病历并确定执行规则')
     return
@@ -2112,11 +2367,11 @@ async function runBatchJob() {
     return
   }
 
-  const saved = await saveDraftEditor()
-  if (!saved) return
-
   runningBatchJob.value = true
   try {
+    const saved = await saveDraftEditor({ silent: true })
+    if (!saved) return
+
     const draftIds = effectiveExecutionDraftIds.value
     if (executionMode.value === 'single' && draftIds.length !== 1) {
       message.warning('单规则模式需要且仅需要 1 条规则')
@@ -2242,7 +2497,7 @@ const ruleResultColumns: TableColumnsType<CustomRuleBatchJobRuleResult> = [
 const recordResultColumns: TableColumnsType<Record<string, unknown>> = [
   { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 110 },
   { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 100 },
-  { title: 'visit', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
+  { title: '就诊号', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
   { title: '状态', dataIndex: 'status', key: 'status', width: 90 },
   { title: '结论', dataIndex: 'findings', key: 'findings' },
 ]
@@ -2250,9 +2505,127 @@ const recordResultColumns: TableColumnsType<Record<string, unknown>> = [
 const failedResultColumns: TableColumnsType<Record<string, unknown>> = [
   { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 110 },
   { title: '患者', dataIndex: 'patient_name', key: 'patient_name', width: 100 },
-  { title: 'visit', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
-  { title: '错误', dataIndex: 'error', key: 'error' },
+  { title: '就诊号', dataIndex: 'visit_id', key: 'visit_id', width: 120 },
+  { title: '失败原因', dataIndex: 'error', key: 'error' },
 ]
+
+const VALID_STEPS = new Set(['step-rules', 'step-create', 'step-prompt', 'step-records'])
+
+function readQueryString(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function applyRouteQuery() {
+  if (!route) return
+  isApplyingRouteQuery = true
+  try {
+    const mode = readQueryString(route.query?.mode)
+    if (mode === 'batch' || mode === 'design') {
+      workspaceMode.value = mode
+    }
+    const step = readQueryString(route.query?.step)
+    if (VALID_STEPS.has(step)) {
+      activeStep.value = step
+    }
+    const scope = readQueryString(route.query?.scope)
+    if (scope === 'all' || scope === 'running' || scope === 'final') {
+      recordFilters.scope = scope
+    }
+    const draftStatus = readQueryString(route.query?.draftStatus)
+    if (draftStatus === 'draft' || draftStatus === 'published') {
+      draftQuery.status = draftStatus
+    } else if (!draftStatus) {
+      draftQuery.status = undefined
+    }
+    const draftKeyword = readQueryString(route.query?.draftKeyword)
+    if (draftKeyword !== draftQuery.keyword) {
+      draftQuery.keyword = draftKeyword
+    }
+  } finally {
+    isApplyingRouteQuery = false
+  }
+}
+
+function syncStateToRoute() {
+  if (!route || !router?.replace || isApplyingRouteQuery) return
+  const nextQuery: Record<string, unknown> = { ...(route.query || {}) }
+  delete nextQuery.mode
+  delete nextQuery.step
+  delete nextQuery.scope
+  delete nextQuery.draftStatus
+  delete nextQuery.draftKeyword
+  if (workspaceMode.value !== 'batch') nextQuery.mode = workspaceMode.value
+  if (activeStep.value !== 'step-rules') nextQuery.step = activeStep.value
+  if (recordFilters.scope !== 'all') nextQuery.scope = recordFilters.scope
+  if (draftQuery.status) nextQuery.draftStatus = draftQuery.status
+  if (draftQuery.keyword.trim()) nextQuery.draftKeyword = draftQuery.keyword.trim()
+
+  const currentComparable = JSON.stringify({
+    mode: readQueryString(route.query?.mode),
+    step: readQueryString(route.query?.step),
+    scope: readQueryString(route.query?.scope),
+    draftStatus: readQueryString(route.query?.draftStatus),
+    draftKeyword: readQueryString(route.query?.draftKeyword),
+  })
+  const nextComparable = JSON.stringify({
+    mode: readQueryString(nextQuery.mode),
+    step: readQueryString(nextQuery.step),
+    scope: readQueryString(nextQuery.scope),
+    draftStatus: readQueryString(nextQuery.draftStatus),
+    draftKeyword: readQueryString(nextQuery.draftKeyword),
+  })
+  if (currentComparable === nextComparable) return
+  void router.replace({ query: nextQuery as typeof route.query })
+}
+
+if (route) {
+  applyRouteQuery()
+  watch(
+    () => [
+      route.query?.mode,
+      route.query?.step,
+      route.query?.scope,
+      route.query?.draftStatus,
+      route.query?.draftKeyword,
+    ],
+    () => {
+      applyRouteQuery()
+    },
+  )
+}
+
+watch([workspaceMode, activeStep], () => {
+  syncStateToRoute()
+})
+
+function warnBeforeUnload(event: BeforeUnloadEvent) {
+  if (!isEditorDirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+try {
+  onBeforeRouteLeave((to) => {
+    if (allowNextRouteLeave || !isEditorDirty.value) {
+      allowNextRouteLeave = false
+      return true
+    }
+    Modal.confirm({
+      title: '离开页面将丢失未保存草稿',
+      content: '当前规则草稿有未保存的编辑内容，确定放弃并离开吗？',
+      okText: '放弃并离开',
+      cancelText: '留在当前页',
+      onOk: () => {
+        allowNextRouteLeave = true
+        void router?.push?.(to.fullPath)
+      },
+    })
+    return false
+  })
+} catch {
+  // 兼容无 vue-router 上下文的单元测试
+}
 
 watch(
   () => selectedDraftId.value,
@@ -2269,6 +2642,7 @@ watch(
   async () => {
     recordFilters.department = undefined
     recordFilters.doctor = undefined
+    syncStateToRoute()
     await searchRecords()
   },
 )
@@ -2283,10 +2657,21 @@ watch(
 )
 
 onMounted(async () => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', warnBeforeUnload)
+  }
   await Promise.all([loadDrafts(), searchRecords(), loadBatchJobs()])
 })
 
 onBeforeUnmount(() => {
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', warnBeforeUnload)
+  }
+  draftsAbortController?.abort()
+  filtersAbortController?.abort()
+  recordsAbortController?.abort()
+  batchJobsAbortController?.abort()
+  batchJobDetailAbortController?.abort()
   stopBatchJobPolling()
 })
 </script>

@@ -1,10 +1,17 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { ref } from 'vue'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
+
 import SemanticRuleDetailModal from '@/views/workstation-v4/semantic-rules/components/modals/SemanticRuleDetailModal.vue'
 import type { SemanticRuleItem } from '@/views/workstation-v4/semantic-rules/types'
 
 const modalStubs = {
   'a-modal': { template: '<section class="modal-stub"><slot /></section>' },
+  'a-alert': { template: '<div class="alert-stub" />' },
   'a-descriptions': { template: '<section><slot /></section>' },
   'a-descriptions-item': {
     props: { label: { type: String, default: '' } },
@@ -12,6 +19,7 @@ const modalStubs = {
   },
   'a-button': { template: '<button><slot /></button>' },
   'a-textarea': { template: '<textarea />' },
+  RouterLink: { props: ['to'], template: '<a><slot /></a>' },
 }
 
 function makeRule(overrides: Partial<SemanticRuleItem> = {}): SemanticRuleItem {

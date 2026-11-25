@@ -22,7 +22,7 @@
           :class="{ 'is-active': activeTab === tab.key }"
           :aria-selected="activeTab === tab.key"
           :data-testid="tab.testId"
-          @click="activeTab = tab.key"
+          @click="handleSelectTab(tab.key)"
         >
           {{ tab.label }}
         </button>
@@ -468,7 +468,7 @@
       v-else-if="activeTab === 'llmConfig' && canManageLlmConfig"
       class="model-settings-panel"
     >
-      <LLMApiConfig />
+      <LLMApiConfig ref="llmConfigRef" />
     </section>
 
     <!-- 执行前确认：页面内弹窗，跟随工作台主题（静态 Modal.confirm 拿不到嵌套主题） -->
@@ -522,7 +522,7 @@
 <script setup lang="ts">
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import * as vueRouter from 'vue-router'
 import { message } from 'ant-design-vue'
 import datePickerZhCN from 'ant-design-vue/es/date-picker/locale/zh_CN'
 import dayjs from 'dayjs'
@@ -546,14 +546,34 @@ import MqIconTile from '@/components/icons/MqIconTile.vue'
 
 const workstationConfirmation = useWorkstationConfirmation()
 
-const activeTab = ref('dataSync')
 const selectedDataPipeline = ref<DataPipeline>('independent_cdm')
 const pipelineConfigReady = ref(false)
 const syncInitialized = ref(false)
 const detailWorkbenchOpen = ref(false)
 const syncScopeConfirmed = ref(false)
 const currentPageSyncStarted = ref(false)
-const route = useRoute()
+const llmConfigRef = ref<{
+  hasUnsavedChanges?: boolean
+  confirmDiscardChanges?: () => Promise<boolean>
+} | null>(null)
+function tryUseRoute() {
+  try {
+    return typeof vueRouter.useRoute === 'function' ? vueRouter.useRoute() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function tryUseRouter() {
+  try {
+    return typeof vueRouter.useRouter === 'function' ? vueRouter.useRouter() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const route = tryUseRoute()
+const router = tryUseRouter()
 const authStore = useAuthStore()
 
 const {
@@ -590,7 +610,9 @@ const canManageFrontpageConfig = computed(() =>
 const canManageLlmConfig = computed(() =>
   authStore.userRoles.some((role) => ['admin', 'sync_admin', 'super_admin'].includes(role)),
 )
-const canManageAccounts = computed(() => authStore.userRoles.includes('admin'))
+const canManageAccounts = computed(() =>
+  authStore.userRoles.some((role) => role === 'admin' || role === 'super_admin'),
+)
 const isDemoSyncUser = computed(() => !isSyncAdvancedUser.value)
 const showLegacyPipeline = computed(() => false)
 
@@ -605,7 +627,12 @@ const canViewLlmObservability = computed(
 // 页签：显示条件与原 a-tab-pane 的 v-if 一致
 const configTabs = computed(() =>
   [
-    { key: 'dataSync', label: '数据同步', testId: undefined, visible: true },
+    {
+      key: 'dataSync',
+      label: '数据同步',
+      testId: undefined,
+      visible: canManageLlmConfig.value || showLegacyPipeline.value,
+    },
     { key: 'qcRuntime', label: '质控运行', testId: 'qc-runtime-tab', visible: canViewLlmObservability.value },
     { key: 'dailyQc', label: '定时质控', testId: 'daily-qc-config-tab', visible: canManageLlmConfig.value },
     {
@@ -634,6 +661,40 @@ const configTabs = computed(() =>
     },
   ].filter((tab) => tab.visible),
 )
+
+function resolveAllowedTab(requested: unknown): string {
+  const tabKey = typeof requested === 'string' ? requested : ''
+  if (tabKey && configTabs.value.some((tab) => tab.key === tabKey)) {
+    return tabKey
+  }
+  return configTabs.value[0]?.key || ''
+}
+
+const activeTab = ref(resolveAllowedTab(route?.query?.tab))
+
+function syncTabToRoute(tab: string) {
+  if (!tab || !router || typeof router.replace !== 'function') return
+  const currentQuery = route?.query || {}
+  const currentTab = typeof currentQuery.tab === 'string' ? currentQuery.tab : ''
+  if (currentTab === tab) return
+  const nextQuery: Record<string, any> = { ...currentQuery, tab }
+  if (tab !== 'accounts') {
+    delete nextQuery.section
+    delete nextQuery.registration_id
+  }
+  void Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
+async function handleSelectTab(nextTab: string) {
+  if (!nextTab || nextTab === activeTab.value) return
+  if (!configTabs.value.some((tab) => tab.key === nextTab)) return
+  if (activeTab.value === 'llmConfig' && llmConfigRef.value?.hasUnsavedChanges) {
+    const canLeave = await llmConfigRef.value.confirmDiscardChanges?.()
+    if (!canLeave || disposed) return
+  }
+  activeTab.value = nextTab
+  syncTabToRoute(nextTab)
+}
 
 const LAST_SYNC_STATUS_TEXT: Record<string, string> = {
   success: '成功',
@@ -1115,24 +1176,30 @@ async function handleExecuteSync() {
 
 onMounted(async () => {
   if (showLegacyPipeline.value) void loadDepartments()
-  const requestedTab = typeof route.query.tab === 'string' ? route.query.tab : ''
-  const canOpenRequestedTab =
-    (requestedTab === 'frontpageExtraction' && canManageFrontpageConfig.value) ||
-    (requestedTab === 'llmConfig' && canManageLlmConfig.value) ||
-    (requestedTab === 'qcRuntime' && canViewLlmObservability.value) ||
-    (requestedTab === 'dailyQc' && canManageLlmConfig.value) ||
-    (requestedTab === 'llmObservability' && canViewLlmObservability.value) ||
-    (requestedTab === 'accounts' && canManageAccounts.value)
-  if (canOpenRequestedTab) {
-    activeTab.value = requestedTab
-  }
-  if (
-    !['llmConfig', 'llmObservability', 'accounts', 'qcRuntime', 'dailyQc'].includes(activeTab.value) &&
-    !(activeTab.value === 'dataSync' && canManageLlmConfig.value)
-  ) {
+  activeTab.value = resolveAllowedTab(route?.query?.tab)
+  if (activeTab.value === 'dataSync' && !canManageLlmConfig.value && showLegacyPipeline.value) {
     await ensureSyncInitialized()
   }
 })
+
+watch(
+  () => route?.query?.tab,
+  (requestedTab) => {
+    const resolved = resolveAllowedTab(requestedTab)
+    if (resolved !== activeTab.value) {
+      activeTab.value = resolved
+    }
+  },
+)
+
+watch(
+  configTabs,
+  () => {
+    if (!configTabs.value.some((tab) => tab.key === activeTab.value)) {
+      activeTab.value = resolveAllowedTab(route?.query?.tab)
+    }
+  },
+)
 
 watch(activeTab, async (tab) => {
   if (tab !== 'dataSync') {

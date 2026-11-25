@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios'
+import { EXTENDED_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
@@ -188,9 +189,17 @@ function paramsOf(filters: StaffAnalysisFilters): Record<string, string> {
 async function read<T>(
   url: string,
   params: Record<string, string | number>,
+  signal?: AbortSignal,
 ): Promise<StaffAnalysisResult<T>> {
   try {
-    const response = await ApiService.requestRaw<T>({ method: 'GET', url, params })
+    const response = await ApiService.requestRaw<T>({
+      method: 'GET',
+      url,
+      params,
+      skipErrorToast: true,
+      timeout: EXTENDED_REQUEST_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
+    })
     const result = normalizeApiSuccess<T>(response.data)
     return {
       success: result.success,
@@ -210,11 +219,16 @@ async function read<T>(
 export function getStaffAnalysis(
   filters: StaffAnalysisFilters,
   rankMetric?: StaffAnalysisMetric,
+  signal?: AbortSignal,
 ): Promise<StaffAnalysisResult> {
-  return read<StaffAnalysisReport>(BASE, {
-    ...paramsOf(filters),
-    ...(rankMetric ? { rank_metric: rankMetric } : {}),
-  })
+  return read<StaffAnalysisReport>(
+    BASE,
+    {
+      ...paramsOf(filters),
+      ...(rankMetric ? { rank_metric: rankMetric } : {}),
+    },
+    signal,
+  )
 }
 
 export function getStaffAnalysisDetails(
@@ -223,18 +237,24 @@ export function getStaffAnalysisDetails(
   metric: StaffAnalysisMetric,
   page = 1,
   pageSize = 20,
+  signal?: AbortSignal,
 ): Promise<StaffAnalysisResult<StaffAnalysisDetailsPage>> {
-  return read<StaffAnalysisDetailsPage>(`${BASE}/${encodeURIComponent(userId)}/details`, {
-    ...paramsOf(filters),
-    metric,
-    page,
-    page_size: pageSize,
-  })
+  return read<StaffAnalysisDetailsPage>(
+    `${BASE}/${encodeURIComponent(userId)}/details`,
+    {
+      ...paramsOf(filters),
+      metric,
+      page,
+      page_size: pageSize,
+    },
+    signal,
+  )
 }
 
 export async function exportStaffAnalysis(
   filters: StaffAnalysisFilters,
   rankMetric?: StaffAnalysisMetric,
+  signal?: AbortSignal,
 ): Promise<StaffAnalysisResult<Blob>> {
   try {
     const response = await ApiService.requestRaw<Blob>({
@@ -242,6 +262,9 @@ export async function exportStaffAnalysis(
       url: `${BASE}/export`,
       params: { ...paramsOf(filters), ...(rankMetric ? { rank_metric: rankMetric } : {}) },
       responseType: 'blob',
+      skipErrorToast: true,
+      timeout: LONG_REQUEST_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
     })
     const contentType = headerValue(response.headers, 'content-type')
     if (
@@ -292,8 +315,20 @@ async function messageFromBlob(value: unknown): Promise<string | undefined> {
     for (const key of ['detail', 'error', 'message'] as const) {
       const candidate = (parsed as Record<string, unknown>)[key]
       if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+      if (Array.isArray(candidate)) {
+        for (const item of candidate) {
+          if (item && typeof item === 'object') {
+            const msg =
+              (item as Record<string, unknown>).msg ?? (item as Record<string, unknown>).message
+            if (typeof msg === 'string' && msg.trim()) return msg.trim()
+          }
+        }
+      }
       if (candidate && typeof candidate === 'object') {
-        const message = (candidate as Record<string, unknown>).message
+        const message =
+          (candidate as Record<string, unknown>).message ??
+          (candidate as Record<string, unknown>).detail ??
+          (candidate as Record<string, unknown>).msg
         if (typeof message === 'string' && message.trim()) return message.trim()
       }
     }

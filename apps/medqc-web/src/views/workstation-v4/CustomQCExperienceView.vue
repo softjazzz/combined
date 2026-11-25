@@ -8,12 +8,12 @@
               <a-tag color="processing">
                 {{ sceneLabel }}
               </a-tag>
-              <a-tag color="blue"> 只读试跑 </a-tag>
+              <a-tag color="blue"> 试跑记录落库 </a-tag>
               <a-tag color="default"> 待人工复核后发布 </a-tag>
             </div>
             <h1 class="custom-qc-title mq-page-title">自定义质控点工作台</h1>
             <p class="custom-qc-subtitle">
-              按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑过程只读病历，不写正式质控结果表。
+              按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑会保存试跑结果记录以便复核，不修改病历正文或正式质控结果表；复核发布后写入规则库。
             </p>
           </div>
           <div class="custom-qc-actions mq-page-head__actions">
@@ -530,7 +530,7 @@ async function fetchRecords() {
     records.value = (response.data.items || []).map((item: AdminRecordItem) => ({
       id: item.id,
       record_id: item.record_id,
-      visit_id: item.visit_type,
+      visit_id: (item as AdminRecordItem & { visit_id?: string }).visit_id || item.record_id,
       patient_name: item.patient_name,
       department: item.department,
       discharge_date: item.discharge_date,
@@ -827,7 +827,7 @@ async function handlePublish() {
 }
 
 function jumpToRulesList() {
-  router.push('/dashboard/rules')
+  router.push('/workstation-v5/rules')
 }
 
 function goBack() {

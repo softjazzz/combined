@@ -16,7 +16,9 @@ vi.mock('@/api/frontpageQualityReport', () => ({
   exportFrontpageQualityReport: state.exportReport,
 }))
 vi.mock('ant-design-vue', () => ({ message: { error: vi.fn() } }))
-vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: { id: 'manager' } }) }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({ user: { id: 'manager', is_demo_account: false } }),
+}))
 
 const drawerStub = {
   props: ['open', 'width', 'rootStyle'],
@@ -132,6 +134,7 @@ describe('FrontpageQualityReportView', () => {
     await flush()
     expect(state.getRecords).toHaveBeenCalledWith(
       expect.objectContaining({ source: 'coding', rule_code: 'CR-1', page: 1 }),
+      expect.any(AbortSignal),
     )
     // 该来源没有结果时显示“未质控”，不显示 0。
     expect(wrapper.text()).toContain('未质控')

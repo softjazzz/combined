@@ -225,8 +225,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { ArrowLeft, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
@@ -239,8 +239,17 @@ import {
 const loading = ref(false)
 const loadError = ref('')
 const router = useRouter()
+const route = (() => {
+  try {
+    return typeof useRoute === 'function' ? useRoute() : null
+  } catch {
+    return null
+  }
+})()
 const data = ref<SurgeryProcedureCatalogData>()
 let catalogRequestSeq = 0
+let catalogAbortController: AbortController | null = null
+let isApplyingRouteQuery = false
 const filters = reactive({
   keyword: '',
   category: undefined as string | undefined,
@@ -249,6 +258,75 @@ const filters = reactive({
   page: 1,
   pageSize: 20,
 })
+
+function readQueryText(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function parsePositiveInt(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(readQueryText(value), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function applyRouteQuery(): boolean {
+  if (!route) return false
+  const nextKeyword = readQueryText(route.query?.keyword)
+  const nextCategory = readQueryText(route.query?.category) || undefined
+  const nextLevel = readQueryText(route.query?.level) || undefined
+  const nextSource = readQueryText(route.query?.source) || undefined
+  const nextPage = parsePositiveInt(route.query?.page, 1)
+  const nextPageSize = parsePositiveInt(route.query?.pageSize, 20)
+  const changed =
+    nextKeyword !== filters.keyword ||
+    nextCategory !== filters.category ||
+    nextLevel !== filters.level ||
+    nextSource !== filters.source ||
+    nextPage !== filters.page ||
+    nextPageSize !== filters.pageSize
+  isApplyingRouteQuery = true
+  filters.keyword = nextKeyword
+  filters.category = nextCategory
+  filters.level = nextLevel
+  filters.source = nextSource
+  filters.page = nextPage
+  filters.pageSize = nextPageSize
+  isApplyingRouteQuery = false
+  return changed
+}
+
+function syncFiltersToRoute() {
+  if (!route || !router || typeof router.replace !== 'function' || isApplyingRouteQuery) return
+  const nextQuery: Record<string, unknown> = { ...(route.query || {}) }
+  delete nextQuery.keyword
+  delete nextQuery.category
+  delete nextQuery.level
+  delete nextQuery.source
+  delete nextQuery.page
+  delete nextQuery.pageSize
+  if (filters.keyword.trim()) nextQuery.keyword = filters.keyword.trim()
+  if (filters.category) nextQuery.category = filters.category
+  if (filters.level) nextQuery.level = filters.level
+  if (filters.source) nextQuery.source = filters.source
+  if (filters.page > 1) nextQuery.page = String(filters.page)
+  if (filters.pageSize !== 20) nextQuery.pageSize = String(filters.pageSize)
+
+  const same =
+    readQueryText(route.query?.keyword) === readQueryText(nextQuery.keyword) &&
+    readQueryText(route.query?.category) === readQueryText(nextQuery.category) &&
+    readQueryText(route.query?.level) === readQueryText(nextQuery.level) &&
+    readQueryText(route.query?.source) === readQueryText(nextQuery.source) &&
+    readQueryText(route.query?.page) === readQueryText(nextQuery.page) &&
+    readQueryText(route.query?.pageSize) === readQueryText(nextQuery.pageSize)
+  if (same) return
+  void router.replace({ query: nextQuery as typeof route.query })
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; name?: unknown }
+  return candidate.code === 'ERR_CANCELED' || candidate.name === 'CanceledError' || candidate.name === 'AbortError'
+}
 
 const columns: TableColumnsType<SurgeryProcedureCatalogItem> = [
   { title: '编码与名称', key: 'identity', width: 500 },
@@ -292,25 +370,34 @@ const versionBadgeText = computed(() => {
 
 async function loadCatalog(): Promise<void> {
   const seq = ++catalogRequestSeq
+  catalogAbortController?.abort()
+  const controller = new AbortController()
+  catalogAbortController = controller
   loading.value = true
   loadError.value = ''
   try {
-    const result = await fetchSurgeryProcedureCatalog({
-      keyword: filters.keyword,
-      category: filters.category,
-      effectiveLevel: filters.level,
-      source: filters.source,
-      page: filters.page,
-      pageSize: filters.pageSize,
-    })
-    if (seq !== catalogRequestSeq) return
+    const result = await fetchSurgeryProcedureCatalog(
+      {
+        keyword: filters.keyword,
+        category: filters.category,
+        effectiveLevel: filters.level,
+        source: filters.source,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (controller.signal.aborted || seq !== catalogRequestSeq) return
     data.value = result
   } catch (error) {
-    if (seq !== catalogRequestSeq) return
+    if (isAbortError(error) || controller.signal.aborted || seq !== catalogRequestSeq) return
     const errMsg = error instanceof Error ? error.message : '加载手术操作分级目录失败'
     loadError.value = errMsg
     message.error(errMsg)
   } finally {
+    if (catalogAbortController === controller) {
+      catalogAbortController = null
+    }
     if (seq === catalogRequestSeq) {
       loading.value = false
     }
@@ -319,6 +406,7 @@ async function loadCatalog(): Promise<void> {
 
 function applyFilters(): void {
   filters.page = 1
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
@@ -328,6 +416,7 @@ function resetFilters(): void {
   filters.level = undefined
   filters.source = undefined
   filters.page = 1
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
@@ -360,6 +449,7 @@ function showOperations(): void {
 function handleTableChange(paginationValue: TablePaginationConfig): void {
   filters.page = paginationValue.current || 1
   filters.pageSize = paginationValue.pageSize || 20
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
@@ -371,7 +461,29 @@ function goBack(): void {
   void router.push({ name: 'WorkstationV4CustomerSampleValidation' })
 }
 
+if (route) {
+  applyRouteQuery()
+  watch(
+    () => [
+      route.query?.keyword,
+      route.query?.category,
+      route.query?.level,
+      route.query?.source,
+      route.query?.page,
+      route.query?.pageSize,
+    ],
+    () => {
+      if (applyRouteQuery()) {
+        void loadCatalog()
+      }
+    },
+  )
+}
+
 onMounted(() => void loadCatalog())
+onBeforeUnmount(() => {
+  catalogAbortController?.abort()
+})
 </script>
 
 <style scoped>

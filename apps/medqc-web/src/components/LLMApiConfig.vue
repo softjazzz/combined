@@ -427,14 +427,16 @@
       <div class="llm-actions__buttons">
         <a-button
           class="mq-btn"
-          :disabled="loading"
+          :disabled="loading || saving || resetting"
           @click="reloadAll"
         >
           刷新
         </a-button>
         <a-button
           class="mq-btn"
-          :disabled="isReadonly || loading"
+          data-testid="llm-reset-default"
+          :loading="resetting"
+          :disabled="isReadonly || loading || saving || resetting || testing"
           @click="resetDefault"
         >
           恢复默认
@@ -442,7 +444,7 @@
         <a-button
           class="mq-btn"
           :loading="testing"
-          :disabled="!canTest"
+          :disabled="!canTest || resetting"
           @click="testConnection"
         >
           测试连接
@@ -451,7 +453,7 @@
           class="mq-btn mq-btn--primary"
           type="primary"
           :loading="saving"
-          :disabled="isReadonly || loading || !canTest || !dirty"
+          :disabled="isReadonly || loading || resetting || !canTest || !dirty"
           @click="saveDraft"
         >
           保存配置
@@ -462,9 +464,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import * as vueRouter from 'vue-router'
 import { message } from 'ant-design-vue'
 
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { useAuthStore } from '@/stores/auth'
 import { canManageSystemConfig } from '@/utils/systemConfigAccess'
 import {
@@ -485,18 +489,25 @@ const emit = defineEmits<{
   'config-updated': [configData: unknown]
   'close-drawer': []
   'close-modal': []
+  'dirty-change': [dirty: boolean]
 }>()
 
 const authStore = useAuthStore()
+const workstationConfirmation = useWorkstationConfirmation()
 const loading = ref(false)
 const loadingModels = ref(false)
 const saving = ref(false)
+const resetting = ref(false)
+const confirmPending = ref(false)
 const testing = ref(false)
 const addingModel = ref(false)
 const deletingModelCode = ref('')
 const newModelCode = ref('')
 const source = ref('unknown')
+let disposed = false
 let modelRequestVersion = 0
+let reloadRequestVersion = 0
+let reloadController: AbortController | null = null
 
 const providers = ref<Array<Pick<LLMProvider, 'provider_code' | 'provider_name'>>>([])
 const localProviders = ref<LLMLocalProvider[]>([])
@@ -658,24 +669,34 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
 }
 
 async function reloadAll() {
+  const version = ++reloadRequestVersion
+  reloadController?.abort()
+  const controller = new AbortController()
+  reloadController = controller
   loading.value = true
   try {
     const summary = await llmConfigService.getDefaultSummary()
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     source.value = summary.source || 'unknown'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
 
     await loadProviders()
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     if (!draft.provider_code && providers.value.length) {
       draft.provider_code = providers.value[0].provider_code
     }
     await loadModelsByProvider(draft.provider_code, draft.model_code)
   } catch (error) {
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`加载模型配置失败：${text}`)
   } finally {
-    loading.value = false
+    if (!disposed && version === reloadRequestVersion && reloadController === controller) {
+      loading.value = false
+      reloadController = null
+    }
   }
 }
 
@@ -772,7 +793,10 @@ async function testConnection() {
 }
 
 async function saveDraft() {
-  if (isReadonly.value || loadingModels.value || !canTest.value || !dirty.value) return
+  if (isReadonly.value || loadingModels.value || saving.value || resetting.value || !canTest.value || !dirty.value) return
+  reloadController?.abort()
+  const controller = new AbortController()
+  reloadController = controller
   saving.value = true
   try {
     const payload: LLMConfigInput = {
@@ -784,16 +808,20 @@ async function saveDraft() {
       is_active: true,
     }
     const saved = await llmConfigService.saveConfig(payload)
+    if (disposed || controller.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     })
+    if (disposed || controller.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
 
     await reloadAll()
+    if (disposed) return
     const eventPayload = {
       selectedProviderCode: draft.provider_code,
       selectedModelCode: draft.model_code,
@@ -804,43 +832,153 @@ async function saveDraft() {
     emit('config-updated', saved || eventPayload)
     message.success('LLM 配置保存成功')
   } catch (error) {
+    if (disposed || controller.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`保存配置失败：${text}`)
   } finally {
-    saving.value = false
+    if (!disposed) saving.value = false
   }
 }
 
 async function resetDefault() {
-  saving.value = true
+  if (
+    isReadonly.value ||
+    loading.value ||
+    saving.value ||
+    resetting.value ||
+    testing.value ||
+    confirmPending.value
+  ) {
+    return
+  }
+
+  confirmPending.value = true
+  let confirmed = false
+  try {
+    confirmed = await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '确认恢复默认模型配置？',
+        content: '将把默认推理服务、模型、任务角色分工与执行并发参数恢复为系统默认，未保存草稿将被覆盖。',
+        okText: '确认恢复',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+  if (!confirmed || disposed || isReadonly.value || saving.value || resetting.value) return
+
+  reloadController?.abort()
+  const controller = new AbortController()
+  reloadController = controller
+  resetting.value = true
   try {
     const summary = await llmConfigService.resetDefaultSummary()
+    if (disposed || controller.signal.aborted) return
     source.value = summary.source || 'database+env'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
     await loadModelsByProvider(draft.provider_code, draft.model_code)
+    if (disposed || controller.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
     })
+    if (disposed || controller.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
     message.success('已恢复默认配置')
   } catch (error) {
+    if (disposed || controller.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`恢复默认失败：${text}`)
   } finally {
-    saving.value = false
+    if (!disposed) resetting.value = false
   }
 }
 
+async function confirmDiscardChanges(): Promise<boolean> {
+  if (!dirty.value) return true
+  if (confirmPending.value) return false
+  confirmPending.value = true
+  try {
+    return await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '有未保存的模型配置草稿',
+        content: '当前模型配置草稿尚未保存，离开后修改将丢失。确定要离开吗？',
+        okText: '放弃修改并离开',
+        cancelText: '继续编辑',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+watch(
+  dirty,
+  (value) => {
+    emit('dirty-change', value)
+  },
+  { immediate: true },
+)
+
+try {
+  const hasRouterInstance = Boolean(
+    getCurrentInstance()?.appContext?.config?.globalProperties?.$router,
+  )
+  const beforeLeaveFn = vueRouter.onBeforeRouteLeave as
+    | ((guard: () => Promise<boolean> | boolean) => void)
+    | undefined
+  const isMockedGuard = Boolean(beforeLeaveFn && 'mock' in beforeLeaveFn)
+  if ((hasRouterInstance || isMockedGuard) && typeof beforeLeaveFn === 'function') {
+    beforeLeaveFn(async () => {
+      if (!dirty.value) return true
+      return await confirmDiscardChanges()
+    })
+  }
+} catch {
+  // 无路由实例的单测环境下忽略导航守卫注册
+}
+
+defineExpose({
+  dirty,
+  hasUnsavedChanges: dirty,
+  confirmDiscardChanges,
+})
+
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', handleBeforeUnload)
+  }
   void reloadAll()
 })
-onBeforeUnmount(() => { ++modelRequestVersion })
+onBeforeUnmount(() => {
+  disposed = true
+  ++modelRequestVersion
+  ++reloadRequestVersion
+  reloadController?.abort()
+  reloadController = null
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', handleBeforeUnload)
+  }
+})
 </script>
 
 <style scoped>

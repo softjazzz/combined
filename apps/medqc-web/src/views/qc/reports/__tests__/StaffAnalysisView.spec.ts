@@ -23,7 +23,7 @@ vi.mock('@/stores/auth', async () => {
   return {
     useAuthStore: () => ({
       get user() {
-        return state.auth.userId ? { id: state.auth.userId } : null
+        return state.auth.userId ? { id: state.auth.userId, is_demo_account: false } : null
       },
       get userRoles() {
         return state.auth.roles
@@ -314,12 +314,14 @@ describe('StaffAnalysisView', () => {
       'confirmed_defect_count',
       2,
       20,
+      expect.any(AbortSignal),
     )
     await wrapper.get('[data-testid="staff-rank-metric"]').setValue('confirmed_defect_count')
     await settle()
     expect(state.getReport).toHaveBeenLastCalledWith(
       { period: 'this_month', scene: 'all' },
       'confirmed_defect_count',
+      expect.any(AbortSignal),
     )
   })
   it('缺少已知明细总数时不显示为零', async () => {
@@ -364,6 +366,7 @@ describe('StaffAnalysisView', () => {
     expect(state.getReport).toHaveBeenLastCalledWith(
       { period: 'this_month', scene: 'all' },
       'urged_defect_count',
+      expect.any(AbortSignal),
     )
   })
   it('复用既有报告页面的人工质控tab入口', async () => {
@@ -395,7 +398,11 @@ describe('StaffAnalysisView', () => {
   it('shows verified counts, context warning and same-name departments with institute identity', async () => {
     const wrapper = render()
     await settle()
-    expect(state.getReport).toHaveBeenCalledWith({ period: 'this_month', scene: 'all' })
+    expect(state.getReport).toHaveBeenCalledWith(
+      { period: 'this_month', scene: 'all' },
+      undefined,
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('张质控')
     expect(wrapper.get('[data-testid="staff-context-unavailable"]').text()).toContain(
       '2 条工作事件',
@@ -422,27 +429,35 @@ describe('StaffAnalysisView', () => {
     await setDatePickerValue(wrapper.get('[data-testid="staff-end-date"] input'), '2026-09-28')
     await wrapper.get('.primary').trigger('click')
     await settle()
-    expect(state.getReport).toHaveBeenLastCalledWith({
-      period: 'this_month',
-      scene: 'all',
-      institute_id: 'H2',
-      department: '心内科',
-      task_id: 'task-1',
-      start_date: '2026-09-01',
-      end_date: '2026-09-28',
-    })
+    expect(state.getReport).toHaveBeenLastCalledWith(
+      {
+        period: 'this_month',
+        scene: 'all',
+        institute_id: 'H2',
+        department: '心内科',
+        task_id: 'task-1',
+        start_date: '2026-09-01',
+        end_date: '2026-09-28',
+      },
+      undefined,
+      expect.any(AbortSignal),
+    )
 
     await wrapper.get('[data-testid="staff-start-date"] .ant-picker-clear').trigger('mouseup')
     await wrapper.get('[data-testid="staff-end-date"] .ant-picker-clear').trigger('mouseup')
     await wrapper.get('.primary').trigger('click')
     await settle()
-    expect(state.getReport).toHaveBeenLastCalledWith({
-      period: 'this_month',
-      scene: 'all',
-      institute_id: 'H2',
-      department: '心内科',
-      task_id: 'task-1',
-    })
+    expect(state.getReport).toHaveBeenLastCalledWith(
+      {
+        period: 'this_month',
+        scene: 'all',
+        institute_id: 'H2',
+        department: '心内科',
+        task_id: 'task-1',
+      },
+      undefined,
+      expect.any(AbortSignal),
+    )
   })
 
   it('rejects an unpaired or reversed custom date range before requesting', async () => {
@@ -472,6 +487,7 @@ describe('StaffAnalysisView', () => {
       'reviewed_case_count',
       1,
       20,
+      expect.any(AbortSignal),
     )
     expect(wrapper.get('.drawer').text()).toContain('H1 / P1 / V1')
     expect(wrapper.get('.drawer').text()).toContain('心内科')
@@ -487,6 +503,7 @@ describe('StaffAnalysisView', () => {
       'reviewed_case_count',
       2,
       20,
+      expect.any(AbortSignal),
     )
   })
 
@@ -569,7 +586,11 @@ describe('StaffAnalysisView', () => {
     await settle()
     oldReport.resolve({ success: true, data: allReport })
     await settle()
-    expect(state.getReport).toHaveBeenLastCalledWith({ period: 'this_week', scene: 'all' })
+    expect(state.getReport).toHaveBeenLastCalledWith(
+      { period: 'this_week', scene: 'all' },
+      undefined,
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).toContain('本周')
     expect(wrapper.findAll('tbody tr')).toHaveLength(0)
   })
@@ -614,11 +635,15 @@ describe('StaffAnalysisView', () => {
       .findAll('.head-actions button')
       .find((button) => button.text().includes('导出 CSV'))!
       .trigger('click')
-    expect(state.exportReport).toHaveBeenCalledWith({
-      period: 'this_month',
-      scene: 'all',
-      as_of: appliedFilters.as_of,
-    })
+    expect(state.exportReport).toHaveBeenCalledWith(
+      {
+        period: 'this_month',
+        scene: 'all',
+        as_of: appliedFilters.as_of,
+      },
+      undefined,
+      expect.any(AbortSignal),
+    )
     state.auth.userId = 'admin-2'
     await settle()
     delayed.resolve({ success: true, data: new Blob(['late']) })

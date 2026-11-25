@@ -1,5 +1,5 @@
 import { RUN_CREATE_TIMEOUT_MS } from '@/config/requestTimeouts'
-import { ApiService } from './apiService'
+import { ApiService, type ApiRequestConfig } from './apiService'
 
 /** 规则验收接口（/api/v1/qc/rule-validation）的数据契约，与后端 rule_validation 路由一一对应。 */
 
@@ -181,29 +181,47 @@ export type CaseAnswerPayload = {
 const BASE = '/api/v1/qc/rule-validation'
 const rule = (id: string) => `${BASE}/rules/${encodeURIComponent(id)}`
 
-export const listValidationRules = (includeReleased = false, ruleSetKey = 'luxian_0609_qc_v1') =>
-  ApiService.get<{ items: RuleListItem[] }>(`${BASE}/rules`, {
-    include_released: includeReleased, rule_set_key: ruleSetKey,
-  })
-export const getValidationRule = (ruleId: string) => ApiService.get<RuleDetail>(rule(ruleId))
-export const listCandidateCases = (ruleId: string) =>
-  ApiService.get<{ items: CandidateCase[] }>(`${rule(ruleId)}/candidate-cases`)
-export const saveCaseAnswer = (ruleId: string, itemId: string, payload: CaseAnswerPayload) =>
-  ApiService.put<ValidationCase>(`${rule(ruleId)}/cases/${encodeURIComponent(itemId)}`, payload)
+export const listValidationRules = (
+  includeReleased = false,
+  ruleSetKey = 'luxian_0609_qc_v1',
+  config?: ApiRequestConfig,
+) =>
+  ApiService.get<{ items: RuleListItem[] }>(
+    `${BASE}/rules`,
+    {
+      include_released: includeReleased,
+      rule_set_key: ruleSetKey,
+    },
+    config,
+  )
+export const getValidationRule = (ruleId: string, config?: ApiRequestConfig) =>
+  ApiService.get<RuleDetail>(rule(ruleId), undefined, config)
+export const listCandidateCases = (ruleId: string, config?: ApiRequestConfig) =>
+  ApiService.get<{ items: CandidateCase[] }>(`${rule(ruleId)}/candidate-cases`, undefined, config)
+export const saveCaseAnswer = (
+  ruleId: string,
+  itemId: string,
+  payload: CaseAnswerPayload,
+  config?: ApiRequestConfig,
+) => ApiService.put<ValidationCase>(`${rule(ruleId)}/cases/${encodeURIComponent(itemId)}`, payload, config)
 export const removeCaseAnswer = (ruleId: string, itemId: string, revision: number) =>
   ApiService.delete<{ removed: boolean }>(`${rule(ruleId)}/cases/${encodeURIComponent(itemId)}`, {
     params: { revision },
   })
 /** 创建运行要走正式任务创建链路（实测约 25 秒），不能用默认 15 秒超时，否则前端报错而后台已建成 */
 export { RUN_CREATE_TIMEOUT_MS }
-export const startValidationRun = (ruleId: string, itemIds?: string[]) =>
+export const startValidationRun = (
+  ruleId: string,
+  itemIds?: string[],
+  config?: ApiRequestConfig,
+) =>
   ApiService.post<{ run_id: string; job_id: string }>(
     `${rule(ruleId)}/runs`,
     { item_ids: itemIds ?? null },
-    { timeout: RUN_CREATE_TIMEOUT_MS },
+    { timeout: RUN_CREATE_TIMEOUT_MS, ...config },
   )
-export const getValidationRun = (runId: string) =>
-  ApiService.get<RunDetail>(`${BASE}/runs/${encodeURIComponent(runId)}`)
+export const getValidationRun = (runId: string, config?: ApiRequestConfig) =>
+  ApiService.get<RunDetail>(`${BASE}/runs/${encodeURIComponent(runId)}`, undefined, config)
 export const reviewCase = (
   runId: string,
   itemId: string,
@@ -217,6 +235,7 @@ export const reviewCase = (
 export const concludeRule = (
   ruleId: string,
   payload: { run_id: string; decision: 'accepted' | 'rejected'; note: string; gap_ack: string },
-) => ApiService.post<ValidationEvent>(`${rule(ruleId)}/conclusion`, payload)
+  config?: ApiRequestConfig,
+) => ApiService.post<ValidationEvent>(`${rule(ruleId)}/conclusion`, payload, config)
 export const approveRule = (ruleId: string, decision: 'approved' | 'rejected', note: string) =>
   ApiService.post<ValidationEvent>(`${rule(ruleId)}/approval`, { decision, note })

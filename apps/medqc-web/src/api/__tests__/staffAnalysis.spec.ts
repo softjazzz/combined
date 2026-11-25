@@ -56,11 +56,15 @@ describe('staff analysis API', () => {
       },
     } as Awaited<ReturnType<typeof ApiService.requestRaw>>)
     const result = await getStaffAnalysis({ period: 'last_week', scene: 'all' })
-    expect(request).toHaveBeenCalledWith({
-      method: 'GET',
-      url: '/api/v1/quality-reports/staff-work',
-      params: { period: 'last_week', scene: 'all' },
-    })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/api/v1/quality-reports/staff-work',
+        params: { period: 'last_week', scene: 'all' },
+        skipErrorToast: true,
+        timeout: 60_000,
+      }),
+    )
     expect(result.success).toBe(true)
   })
 
@@ -155,23 +159,27 @@ describe('staff analysis API', () => {
       2,
       20,
     )
-    expect(request).toHaveBeenCalledWith({
-      method: 'GET',
-      url: '/api/v1/quality-reports/staff-work/user%2F1/details',
-      params: {
-        period: 'this_month',
-        scene: 'running',
-        institute_id: 'H1',
-        department: '心内科',
-        task_id: 'task-1',
-        start_date: '2026-09-01',
-        end_date: '2026-09-28',
-        as_of: '2026-09-29T00:00:00+08:00',
-        metric: 'record_review_count',
-        page: 2,
-        page_size: 20,
-      },
-    })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/api/v1/quality-reports/staff-work/user%2F1/details',
+        params: {
+          period: 'this_month',
+          scene: 'running',
+          institute_id: 'H1',
+          department: '心内科',
+          task_id: 'task-1',
+          start_date: '2026-09-01',
+          end_date: '2026-09-28',
+          as_of: '2026-09-29T00:00:00+08:00',
+          metric: 'record_review_count',
+          page: 2,
+          page_size: 20,
+        },
+        skipErrorToast: true,
+        timeout: 60_000,
+      }),
+    )
   })
 
   it('exports the same frozen aggregate filters as CSV blob', async () => {
@@ -189,12 +197,16 @@ describe('staff analysis API', () => {
       scene: 'all',
       as_of: '2026-09-28T00:00:00Z',
     })
-    expect(request).toHaveBeenCalledWith({
-      method: 'GET',
-      url: '/api/v1/quality-reports/staff-work/export',
-      params: { period: 'this_week', scene: 'all', as_of: '2026-09-28T00:00:00Z' },
-      responseType: 'blob',
-    })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/api/v1/quality-reports/staff-work/export',
+        params: { period: 'this_week', scene: 'all', as_of: '2026-09-28T00:00:00Z' },
+        responseType: 'blob',
+        skipErrorToast: true,
+        timeout: 120_000,
+      }),
+    )
     expect(result).toMatchObject({ success: true, data: blob })
   })
 

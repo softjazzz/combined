@@ -65,7 +65,7 @@ describe('workstationNav 面包屑', () => {
     ).toEqual(['首页与结算清单', '生成首页'])
   })
 
-  it('规则页带出当前 Tab，缺省为编码规则', () => {
+  it('规则页带出当前 Tab，缺省为语义规则', () => {
     expect(resolveBreadcrumb(WORKSTATION_NAV, route(`${B}/rules`, { tab: 'semantic' }))).toEqual([
       '规则',
       '质控规则',
@@ -74,7 +74,7 @@ describe('workstationNav 面包屑', () => {
     expect(resolveBreadcrumb(WORKSTATION_NAV, route(`${B}/rules`))).toEqual([
       '规则',
       '质控规则',
-      '编码规则',
+      '语义规则',
     ])
   })
 

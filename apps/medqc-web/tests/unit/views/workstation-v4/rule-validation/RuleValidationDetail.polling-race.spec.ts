@@ -1,6 +1,11 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { defineComponent, reactive } from 'vue'
+import { defineComponent, reactive, ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
+
 import * as api from '@/services/rule-validation-service'
 import type { RuleDetail, ValidationCase } from '@/services/rule-validation-service'
 import RuleValidationDetailView from '@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'
@@ -183,12 +188,20 @@ describe('RuleValidationDetailView 卸载与切页在途请求轮询竞态保护
       .mockReturnValueOnce(ruleBReq.promise as any)
 
     const wrapper = mount(RuleValidationDetailView, { global: { stubs } })
-    expect(api.getValidationRule).toHaveBeenNthCalledWith(1, 'RULE-A')
+    expect(api.getValidationRule).toHaveBeenNthCalledWith(
+      1,
+      'RULE-A',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
 
     // RULE-A 请求在途时切页到 RULE-B
     mockRoute.params.ruleId = 'RULE-B'
     await flushPromises()
-    expect(api.getValidationRule).toHaveBeenNthCalledWith(2, 'RULE-B')
+    expect(api.getValidationRule).toHaveBeenNthCalledWith(
+      2,
+      'RULE-B',
+      expect.objectContaining({ skipErrorToast: true, signal: expect.any(AbortSignal) }),
+    )
 
     // 新规则 RULE-B 先完成（非运行中，不需轮询）
     ruleBReq.resolve({ success: true, data: buildDetail('RULE-B', false) })

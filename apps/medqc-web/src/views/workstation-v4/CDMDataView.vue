@@ -9,6 +9,7 @@
       <a-button
         class="cdm-refresh-btn"
         type="primary"
+        :loading="pageLoading"
         @click="loadData"
       >
         刷新数据
@@ -75,7 +76,7 @@
         </div>
         <div class="stat-body">
           <div class="stat-value">
-            {{ independent ? '未提供' : (schema.total_tables ?? '未统计') }}
+            {{ !canShowTableBrowser ? '未提供' : (schema.total_tables ?? '未统计') }}
           </div>
           <div class="stat-label">
             CDM 数据表
@@ -118,8 +119,9 @@
     <div class="main-content">
       <!-- 左侧：表浏览面板 -->
       <div
-        v-if="!independent"
+        v-if="canShowTableBrowser"
         class="schema-panel"
+        data-testid="cdm-schema-panel"
       >
         <div class="panel-header">
           <TableOutlined />
@@ -191,12 +193,24 @@
             <span class="col-comment">{{ col.comment || '—' }}</span>
           </div>
         </div>
+        <div
+          v-else-if="leftView === 'schema' && !pageLoading"
+          class="data-empty"
+        >
+          暂无表结构信息
+        </div>
 
         <!-- ===== 数据视图 ===== -->
         <div
           v-if="leftView === 'data'"
           class="table-data-view"
         >
+          <a-alert
+            v-if="tableDataError"
+            type="error"
+            :message="tableDataError"
+            show-icon
+          />
           <div
             v-if="tableDataLoading"
             class="data-loading"
@@ -204,17 +218,35 @@
             <a-spin /> 加载中...
           </div>
           <div
-            v-else-if="tableData.items.length === 0"
+            v-else-if="tableData.items.length === 0 && !tableDataError"
             class="data-empty"
           >
             暂无数据
           </div>
           <div
-            v-else
+            v-else-if="tableData.items.length > 0"
             class="data-table-wrap"
           >
-            <div class="data-table-info">
-              共 <strong>{{ tableData.total }}</strong> 条 · 第 {{ tableData.page }} 页
+            <div class="data-table-info data-table-toolbar">
+              <span>共 <strong>{{ tableData.total }}</strong> 条 · 第 {{ tableData.page }} / {{ tableDataTotalPages }} 页</span>
+              <div class="table-pagination-actions">
+                <a-button
+                  size="small"
+                  data-testid="table-page-prev"
+                  :disabled="tableDataLoading || tableData.page <= 1"
+                  @click="loadTableData(selectedTable, tableData.page - 1)"
+                >
+                  上一页
+                </a-button>
+                <a-button
+                  size="small"
+                  data-testid="table-page-next"
+                  :disabled="tableDataLoading || tableData.page >= tableDataTotalPages"
+                  @click="loadTableData(selectedTable, tableData.page + 1)"
+                >
+                  下一页
+                </a-button>
+              </div>
             </div>
             <div class="data-table-scroll">
               <table class="data-table">
@@ -258,12 +290,17 @@
       <div
         v-else
         class="schema-panel"
+        data-testid="cdm-readonly-panel"
       >
         <div class="panel-header">
-          <TableOutlined />东华CDM只读浏览
+          <TableOutlined />{{ independent ? '东华CDM只读浏览' : '只读病例预览' }}
         </div>
         <div class="data-empty">
-          当前来源不开放整表结构和原始表浏览。请在右侧选择病例查看首页资料；完整文书请使用病历池的“查看病历”。
+          {{
+            independent
+              ? '当前来源不开放整表结构和原始表浏览。请在右侧选择病例查看首页资料；完整文书请使用病历池的“查看病历”。'
+              : '当前账号仅支持只读病例预览，不开放整表结构和原始表浏览。请在右侧选择病例查看首页资料。'
+          }}
         </div>
       </div>
       <!-- 右侧：数据预览 -->
@@ -279,8 +316,27 @@
           </a-tag>
         </div>
 
+        <div
+          v-if="pageLoading"
+          class="data-loading"
+          data-testid="cdm-page-loading"
+        >
+          <a-spin /> 正在加载病例数据...
+        </div>
+
+        <div
+          v-else-if="!loadError && patients.length === 0"
+          class="data-empty"
+          data-testid="cdm-patients-empty"
+        >
+          暂无可预览病例数据
+        </div>
+
         <!-- 病例卡片 -->
-        <div class="patient-cards">
+        <div
+          v-else
+          class="patient-cards"
+        >
           <div
             v-for="pt in patients"
             :key="patientKey(pt)"
@@ -309,16 +365,25 @@
                 <span class="pt-days">{{ pt.hospital_duration }}天</span>
               </span>
               <a-button
-                v-if="!independent"
+                v-if="canShowTableBrowser"
                 size="small"
                 type="link"
                 class="pt-view-btn"
+                data-testid="pt-table-data-btn"
                 @click.stop="openRecordModal(pt)"
               >
                 <DatabaseOutlined /> 表数据
               </a-button>
             </div>
           </div>
+        </div>
+
+        <div
+          v-if="detailLoading"
+          class="data-loading"
+          data-testid="cdm-detail-loading"
+        >
+          <a-spin /> 正在加载病案详情...
         </div>
 
         <!-- 选中病例详情 -->
@@ -420,6 +485,13 @@
         <span>加载表数据中...</span>
       </div>
       <div v-else>
+        <a-alert
+          v-if="recordModalError"
+          type="warning"
+          :message="recordModalError"
+          show-icon
+          style="margin-bottom: 12px"
+        />
         <!-- 表 Tab 切换 -->
         <a-tabs
           v-model:active-key="recordActiveTab"
@@ -428,10 +500,16 @@
           <a-tab-pane
             v-for="tab in recordTabs"
             :key="tab.name"
-            :tab="`${tab.label} (${tab.count})`"
+            :tab="`${tab.label} (${tab.error ? '失败' : tab.count})`"
           >
             <div
-              v-if="tab.count === 0"
+              v-if="tab.error"
+              class="data-empty"
+            >
+              {{ tab.error }}
+            </div>
+            <div
+              v-else-if="tab.count === 0"
               class="data-empty"
             >
               此表中无该患者数据
@@ -483,8 +561,9 @@
 
 <script setup lang="ts">
 import { serializeCaseRecordKey } from './utils/caseRecordKey'
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { clinicalSourcesApi } from '@/api/clinicalSources'
+import { useAuthStore } from '@/stores/auth'
 import { getAccessToken } from '@/utils/auth-token'
 import {
   FileTextOutlined,
@@ -500,6 +579,22 @@ import {
 } from '@ant-design/icons-vue'
 
 const API_BASE = '/api/medical-records'
+const TABLE_DATA_ROLES = new Set(['admin', 'sync_admin', 'super_admin'])
+const TABLE_PAGE_SIZE = 50
+
+function tryUseAuthStore() {
+  try {
+    return useAuthStore()
+  } catch {
+    return null
+  }
+}
+
+const authStore = tryUseAuthStore()
+
+function isAbortError(err: unknown): boolean {
+  return Boolean(err && typeof err === 'object' && (err as { name?: string }).name === 'AbortError')
+}
 
 function getAuthHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = getAccessToken()
@@ -508,6 +603,12 @@ function getAuthHeaders(extra: Record<string, string> = {}): Record<string, stri
     headers.Authorization = `Bearer ${token}`
   }
   return headers
+}
+
+function getSourceHeaders(): Record<string, string> {
+  return getAuthHeaders({
+    'X-Clinical-Source': independent.value ? 'independent_cdm' : 'legacy_pg',
+  })
 }
 
 // ===== State =====
@@ -520,20 +621,53 @@ const selectedPatient = ref<any>(null)
 const selectedDetail = ref<any>(null)
 const dbPath = ref('')
 const independent = ref(true)
+const tableAccessDenied = ref(false)
 const sourceName = ref('尚未确认')
 const connected = ref(false)
+const pageLoading = ref(false)
+const detailLoading = ref(false)
 const loadError = ref('')
 const detailError = ref('')
+const tableDataError = ref('')
+const recordModalError = ref('')
+
 let detailSequence = 0
 let loadSequence = 0
+let tableDataSequence = 0
+let modalSequence = 0
+let loadAbortController: AbortController | null = null
+let detailAbortController: AbortController | null = null
+let tableDataAbortController: AbortController | null = null
+let modalAbortController: AbortController | null = null
+
+const canBrowseTables = computed(() => {
+  const roles = authStore?.userRoles ?? []
+  return roles.some((role) =>
+    TABLE_DATA_ROLES.has(
+      String(role || '')
+        .trim()
+        .toLowerCase(),
+    ),
+  )
+})
+const canShowTableBrowser = computed(
+  () => !independent.value && canBrowseTables.value && !tableAccessDenied.value,
+)
+
 function patientKey(pt: Record<string, unknown>) {
   return serializeCaseRecordKey(pt.institute_id, pt.patient_id, pt.visit_id)
 }
-async function readJson(url: string) {
-  const resp = await fetch(url, { headers: getAuthHeaders({
-    'X-Clinical-Source': independent.value ? 'independent_cdm' : 'legacy_pg',
-  }) })
-  if (!resp.ok) throw new Error(`数据读取失败（HTTP ${resp.status}）`)
+
+async function readJson(url: string, signal?: AbortSignal) {
+  const resp = await fetch(url, {
+    headers: getSourceHeaders(),
+    signal,
+  })
+  if (!resp.ok) {
+    const err = new Error(`数据读取失败（HTTP ${resp.status}）`) as Error & { status?: number }
+    err.status = resp.status
+    throw err
+  }
   const body = await resp.json()
   if (body?.success === false) throw new Error('数据接口未返回有效结果')
   return body?.data ?? body
@@ -541,8 +675,13 @@ async function readJson(url: string) {
 
 // 左侧面板视图：schema / data
 const leftView = ref<'schema' | 'data'>('schema')
-const tableData = ref<any>({ items: [], columns: [], total: 0, page: 1 })
+const tableData = ref<any>({ items: [], columns: [], total: 0, page: 1, page_size: TABLE_PAGE_SIZE })
 const tableDataLoading = ref(false)
+const tableDataTotalPages = computed(() => {
+  const total = Number(tableData.value?.total || 0)
+  const pageSize = Number(tableData.value?.page_size || TABLE_PAGE_SIZE) || TABLE_PAGE_SIZE
+  return Math.max(1, Math.ceil(total / pageSize))
+})
 
 // 病历弹窗
 const recordModalVisible = ref(false)
@@ -592,57 +731,110 @@ function formatCell(val: any): string {
 async function selectTable(name: string) {
   selectedTable.value = name
   if (leftView.value === 'data') {
-    await loadTableData(name)
+    await loadTableData(name, 1)
   }
 }
 
 function switchToDataView() {
   leftView.value = 'data'
-  loadTableData(selectedTable.value)
+  void loadTableData(selectedTable.value, 1)
 }
 
-async function loadTableData(tableName: string) {
-  if (independent.value) return
+async function loadTableData(tableName: string, page = 1) {
+  if (!canShowTableBrowser.value || !tableName) return
+  const safePage = Math.max(1, Number(page) || 1)
+  const seq = ++tableDataSequence
+  tableDataAbortController?.abort()
+  const controller = new AbortController()
+  tableDataAbortController = controller
+
   tableDataLoading.value = true
+  tableDataError.value = ''
   try {
-    const resp = await fetch(`${API_BASE}/table-data/${tableName}`, {
-      headers: getAuthHeaders(),
+    const params = new URLSearchParams({
+      page: String(safePage),
+      page_size: String(TABLE_PAGE_SIZE),
     })
-    if (!resp.ok) throw new Error('表数据接口不可用')
-    tableData.value = await resp.json()
+    const resp = await fetch(`${API_BASE}/table-data/${encodeURIComponent(tableName)}?${params.toString()}`, {
+      headers: getSourceHeaders(),
+      signal: controller.signal,
+    })
+    if (seq !== tableDataSequence || controller.signal.aborted) return
+    if (resp.status === 403) {
+      tableAccessDenied.value = true
+      tableData.value = { items: [], columns: [], total: 0, page: 1, page_size: TABLE_PAGE_SIZE }
+      return
+    }
+    if (!resp.ok) throw new Error(`表数据读取失败（HTTP ${resp.status}）`)
+    const data = await resp.json()
+    if (seq !== tableDataSequence || controller.signal.aborted) return
+    tableData.value = {
+      items: Array.isArray(data?.items) ? data.items : [],
+      columns: Array.isArray(data?.columns) ? data.columns : [],
+      total: Number(data?.total || 0),
+      page: Number(data?.page || safePage),
+      page_size: Number(data?.page_size || TABLE_PAGE_SIZE),
+    }
   } catch (e) {
-    loadError.value = '表数据读取失败，不能据此认定表为空'
+    if (seq !== tableDataSequence || controller.signal.aborted || isAbortError(e)) return
+    tableDataError.value = '表数据读取失败，不能据此认定表为空'
     console.error('加载表数据失败', e)
   } finally {
-    tableDataLoading.value = false
+    if (seq === tableDataSequence) {
+      tableDataLoading.value = false
+    }
   }
 }
 
 async function selectPatient(pt: Record<string, unknown>) {
   const sequence = ++detailSequence
+  detailAbortController?.abort()
+  const controller = new AbortController()
+  detailAbortController = controller
+
   selectedPatient.value = pt
   selectedDetail.value = null
   detailError.value = ''
   const identity = [pt.institute_id, pt.patient_id, pt.visit_id]
   if (identity.some(value => value == null || String(value).trim() === '')) {
+    detailLoading.value = false
     detailError.value = '病例身份不完整，无法读取详情'
     return
   }
+  detailLoading.value = true
   try {
-    const value = await readJson(`${API_BASE}/frontpage/${identity.map(value => encodeURIComponent(String(value))).join('/')}`)
-    if (sequence === detailSequence) selectedDetail.value = value
-  } catch {
-    if (sequence === detailSequence) detailError.value = '病案详情读取失败，请重试；此状态不表示没有诊断或文书。'
+    const value = await readJson(
+      `${API_BASE}/frontpage/${identity.map(value => encodeURIComponent(String(value))).join('/')}`,
+      controller.signal,
+    )
+    if (sequence === detailSequence && !controller.signal.aborted) {
+      selectedDetail.value = value
+    }
+  } catch (err) {
+    if (sequence === detailSequence && !controller.signal.aborted && !isAbortError(err)) {
+      detailError.value = '病案详情读取失败，请重试；此状态不表示没有诊断或文书。'
+    }
+  } finally {
+    if (sequence === detailSequence) {
+      detailLoading.value = false
+    }
   }
 }
 
 // 病历弹窗：加载该患者在所有表中的数据
 async function openRecordModal(pt: any) {
-  if (independent.value) return
+  if (!canShowTableBrowser.value) return
+  const seq = ++modalSequence
+  modalAbortController?.abort()
+  const controller = new AbortController()
+  modalAbortController = controller
+
   recordModalTitle.value = `${pt.name} (${pt.mr_no}) — 各表原始数据`
   recordModalVisible.value = true
   recordModalLoading.value = true
+  recordModalError.value = ''
   recordActiveTab.value = 'mr'
+  recordTabs.value = []
 
   // 需要查询的表（按顺序）
   const tablesToQuery = [
@@ -661,12 +853,39 @@ async function openRecordModal(pt: any) {
     // 并发请求所有表
     const results = await Promise.all(
       tablesToQuery.map(async (t) => {
-        const resp = await fetch(`${API_BASE}/table-data/${t.name}`, {
-          headers: getAuthHeaders(),
+        const params = new URLSearchParams({
+          page: '1',
+          page_size: '100',
         })
+        if (pt.institute_id != null && String(pt.institute_id).trim() !== '') {
+          params.set('institute_id', String(pt.institute_id))
+        }
+        if (pt.patient_id != null && String(pt.patient_id).trim() !== '') {
+          params.set('patient_id', String(pt.patient_id))
+        }
+        if (t.name !== 'patient_information' && pt.visit_id != null && String(pt.visit_id).trim() !== '') {
+          params.set('visit_id', String(pt.visit_id))
+        }
+
+        const resp = await fetch(`${API_BASE}/table-data/${encodeURIComponent(t.name)}?${params.toString()}`, {
+          headers: getSourceHeaders(),
+          signal: controller.signal,
+        })
+        if (!resp.ok) {
+          return {
+            name: t.name,
+            label: t.label,
+            columns: [],
+            items: [],
+            count: 0,
+            error: `读取失败（HTTP ${resp.status}）`,
+          }
+        }
         const data = await resp.json()
+        const rawItems = Array.isArray(data?.items) ? data.items : []
+        const columns = Array.isArray(data?.columns) ? data.columns : []
         // 过滤出这个患者的数据
-        const patientItems = data.items.filter((item: any) => {
+        const patientItems = rawItems.filter((item: any) => {
           // patient_information 只有 patient_id（无 visit_id）
           if (t.name === 'patient_information') {
             return item.patient_id === pt.patient_id && item.institute_id === pt.institute_id
@@ -680,29 +899,50 @@ async function openRecordModal(pt: any) {
         return {
           name: t.name,
           label: t.label,
-          columns: data.columns,
+          columns,
           items: patientItems,
           count: patientItems.length,
+          error: '',
         }
       }),
     )
+    if (seq !== modalSequence || controller.signal.aborted) return
     recordTabs.value = results
+    const failedTabs = results.filter((r) => Boolean(r.error))
+    if (failedTabs.length > 0) {
+      recordModalError.value = `部分原始表读取失败（${failedTabs.length}/${results.length}），其余表可正常查看`
+    }
     // 自动选中第一个有数据的 tab
     const firstWithData = results.find((r) => r.count > 0)
     if (firstWithData) recordActiveTab.value = firstWithData.name
   } catch (e) {
+    if (seq !== modalSequence || controller.signal.aborted || isAbortError(e)) return
+    recordModalError.value = '加载病历表数据失败，请稍后重试'
     console.error('加载病历表数据失败', e)
   } finally {
-    recordModalLoading.value = false
+    if (seq === modalSequence) {
+      recordModalLoading.value = false
+    }
   }
 }
 
 async function loadData() {
   const sequence = ++loadSequence
   ++detailSequence
+  ++tableDataSequence
+  loadAbortController?.abort()
+  detailAbortController?.abort()
+  tableDataAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
+
+  pageLoading.value = true
+  detailLoading.value = false
   connected.value = false
+  tableAccessDenied.value = false
   loadError.value = ''
   detailError.value = ''
+  tableDataError.value = ''
   patients.value = []
   selectedPatient.value = null
   selectedDetail.value = null
@@ -711,19 +951,36 @@ async function loadData() {
   schema.value = { tables: [], total_tables: null }
   try {
     const options = await clinicalSourcesApi.options()
-    if (sequence !== loadSequence) return
+    if (sequence !== loadSequence || controller.signal.aborted) return
     const source = options.sources.find(item => item.id === options.default_source)
     if (!source?.enabled) throw new Error('当前临床来源未启用')
     independent.value = source.id === 'independent_cdm'
     sourceName.value = source.id === 'independent_cdm' ? '东华CDM（PostgreSQL）' : source.name
+
+    const shouldLoadSchema = !independent.value && canBrowseTables.value
+    const schemaPromise = shouldLoadSchema
+      ? readJson(`${API_BASE}/schema`, controller.signal).catch((err: any) => {
+          if (err?.status === 403) {
+            tableAccessDenied.value = true
+            return { tables: [], total_tables: null }
+          }
+          throw err
+        })
+      : Promise.resolve({ tables: [], total_tables: null })
+
     const [statsData, listData, deptsData, schemaData] = await Promise.all([
-      readJson(`${API_BASE}/stats`), readJson(`${API_BASE}/list`),
-      readJson(`${API_BASE}/departments`),
-      independent.value ? Promise.resolve({ tables: [], total_tables: null }) : readJson(`${API_BASE}/schema`),
+      readJson(`${API_BASE}/stats`, controller.signal),
+      readJson(`${API_BASE}/list`, controller.signal),
+      readJson(`${API_BASE}/departments`, controller.signal),
+      schemaPromise,
     ])
-    if (sequence !== loadSequence) return
+    if (sequence !== loadSequence || controller.signal.aborted) return
     stats.value = statsData
     schema.value = schemaData
+    if (Array.isArray(schemaData?.tables) && schemaData.tables.length > 0) {
+      const exists = schemaData.tables.some((t: any) => t.name === selectedTable.value)
+      if (!exists) selectedTable.value = schemaData.tables[0].name
+    }
     patients.value = (listData.items || []).map((pt: Record<string, unknown>) => ({
       ...pt,
       institute_id: pt.institute_id ?? pt.instituteId,
@@ -735,14 +992,29 @@ async function loadData() {
     }))
     departments.value = deptsData
     connected.value = true
+    pageLoading.value = false
     if (patients.value.length) await selectPatient(patients.value[0])
   } catch (error) {
-    if (sequence !== loadSequence) return
+    if (sequence !== loadSequence || controller.signal.aborted || isAbortError(error)) return
     loadError.value = error instanceof Error ? error.message : '数据加载失败，请重试'
+  } finally {
+    if (sequence === loadSequence) {
+      pageLoading.value = false
+    }
   }
 }
 
 onMounted(loadData)
+onBeforeUnmount(() => {
+  loadSequence += 1
+  detailSequence += 1
+  tableDataSequence += 1
+  modalSequence += 1
+  loadAbortController?.abort()
+  detailAbortController?.abort()
+  tableDataAbortController?.abort()
+  modalAbortController?.abort()
+})
 </script>
 
 <style scoped>
@@ -1483,5 +1755,19 @@ onMounted(loadData)
 
 .stat-icon {
   border-radius: 12px;
+}
+
+.data-table-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.table-pagination-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 </style>

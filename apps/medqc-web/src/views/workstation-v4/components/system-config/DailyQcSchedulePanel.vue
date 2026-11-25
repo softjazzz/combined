@@ -86,7 +86,7 @@
       v-model:open="editing"
       :title="current ? '编辑每日质控计划' : '新增每日质控计划'"
       :confirm-loading="saving"
-      :ok-button-props="{ disabled: !valid || !canManage || optionsLoading }"
+      :ok-button-props="{ disabled: !valid || !canManage || optionsLoading || Boolean(optionsError) }"
       @ok="save"
     >
       <a-form
@@ -184,9 +184,14 @@
           {{ rangeHint }}。超出单次上限会阻止创建任务，不会静默截断。仅新周期采用编辑后的筛选条件。
         </p>
         <a-alert
-          v-if="editError"
+          v-if="optionsError"
           type="error"
-          :message="editError"
+          :message="optionsError"
+        />
+        <a-alert
+          v-if="submitError"
+          type="error"
+          :message="submitError"
         />
       </a-form>
     </a-modal>
@@ -228,7 +233,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { canManageSystemConfig } from '@/utils/systemConfigAccess'
@@ -239,7 +244,8 @@ const canManage = computed(() => canManageSystemConfig(auth.userRoles))
 const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
-const editError = ref('')
+const optionsError = ref('')
+const submitError = ref('')
 const editing = ref(false)
 const current = ref<DailyQcPlan>()
 const status = ref<DailyQcList>({ items: [], scheduler_enabled: false, local_process_active: false })
@@ -249,8 +255,12 @@ const historyOpen = ref(false)
 const historyError = ref('')
 const runs = ref<DailyQcRun[]>([])
 let active = true
+let loadVersion = 0
 let optionVersion = 0
 let historyVersion = 0
+let loadController: AbortController | null = null
+let optionController: AbortController | null = null
+let historyController: AbortController | null = null
 const defaults = (): DailyQcDefinition => ({ name: '', enabled: false, time_of_day: '02:00', timezone: 'Asia/Shanghai', institute_id: '', scope: 'final', department: '', date_field: 'discharge', lookback_days: 1, end_offset_days: 1, rule_set_key: 'luxian_0609_qc_v1', rule_ids: [], max_records: 200 })
 const form = reactive<DailyQcDefinition>(defaults())
 const sceneOptions = [{ value: 'running', label: '运行病历' }, { value: 'final', label: '终末病历' }]
@@ -258,6 +268,14 @@ const timezoneOptions = [...new Set(['Asia/Shanghai', Intl.DateTimeFormat().reso
 const ruleOptions = computed(() => options.value.rule_sets.filter(item => item.key === 'luxian_0609_qc_v1' || ['all', form.scope].includes(item.scope)).map(item => ({ value: item.key, label: item.name })))
 const valid = computed(() => Boolean(form.name.trim() && form.institute_id && form.rule_set_key && /^([01]\d|2[0-3]):[0-5]\d$/.test(form.time_of_day)))
 const rangeHint = computed(() => `按${form.date_field === 'admission' ? '入院' : '出院'}日期，结束于执行日之前${form.end_offset_days}天，向前覆盖${form.lookback_days}天`)
+
+watch(
+  form,
+  () => {
+    if (submitError.value) submitError.value = ''
+  },
+  { deep: true },
+)
 
 const labels: Record<string, string> = { submitted: '已提交质控任务', submitting: '正在提交／等待恢复', missed: '错过执行时间', skipped_overlap: '上一轮未结束，已跳过', skipped_disabled: '已停用，未触发', empty: '无符合条件病历', failed: '触发失败' }
 function stateLabel(value: string | null) { return value ? labels[value] || '状态待核对' : '尚未触发' }
@@ -268,33 +286,57 @@ function formatTime(value: string, timezone: string) {
 
 async function load() {
   if (!canManage.value) return
+  const version = ++loadVersion
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
   error.value = ''
-  try { const result = await dailyQcScheduleService.list(); if (active) status.value = result }
-  catch { if (active) error.value = '定时计划读取失败；请确认权限、接口及064迁移已就绪。' }
-  finally { if (active) loading.value = false }
+  try {
+    const result = await dailyQcScheduleService.list()
+    if (active && version === loadVersion && !controller.signal.aborted) status.value = result
+  } catch {
+    if (active && version === loadVersion && !controller.signal.aborted) error.value = '定时计划读取失败；请确认权限、接口及064迁移已就绪。'
+  } finally {
+    if (active && version === loadVersion && loadController === controller) {
+      loading.value = false
+      loadController = null
+    }
+  }
 }
 async function refreshOptions() {
   const version = ++optionVersion
+  optionController?.abort()
+  const controller = new AbortController()
+  optionController = controller
   optionsLoading.value = true
-  editError.value = ''
+  optionsError.value = ''
+  submitError.value = ''
   try {
     const result = await dailyQcScheduleService.options(form.institute_id, form.scope)
-    if (!active || version !== optionVersion) return
+    if (!active || version !== optionVersion || controller.signal.aborted) return
     options.value = result
     if (!form.institute_id && result.institutes.length === 1) { form.institute_id = result.institutes[0]; await refreshOptions() }
     else if (form.department && !result.departments.includes(form.department)) form.department = ''
-  } catch { if (active && version === optionVersion) editError.value = '机构、科室或规则选项读取失败，请重新打开计划。' }
-  finally { if (active && version === optionVersion) optionsLoading.value = false }
+  } catch { if (active && version === optionVersion && !controller.signal.aborted) optionsError.value = '机构、科室或规则选项读取失败，请重新打开计划。' }
+  finally {
+    if (active && version === optionVersion && optionController === controller) {
+      optionsLoading.value = false
+      optionController = null
+    }
+  }
 }
 function openEditor(plan?: DailyQcPlan) {
   if (!canManage.value) return
   current.value = plan
+  optionsError.value = ''
+  submitError.value = ''
   Object.assign(form, plan ? Object.fromEntries(Object.keys(defaults()).map(key => [key, plan[key as keyof DailyQcDefinition]])) : defaults())
   editing.value = true
   void refreshOptions()
 }
 function changeScene() {
+  submitError.value = ''
   form.department = ''
   form.date_field = form.scope === 'running' ? 'admission' : 'discharge'
   form.lookback_days = form.scope === 'running' ? 30 : 1
@@ -304,25 +346,42 @@ function changeScene() {
   void refreshOptions()
 }
 async function save() {
-  if (!canManage.value || !valid.value || optionsLoading.value || saving.value || editError.value) return
+  if (!canManage.value || !valid.value || optionsLoading.value || saving.value || optionsError.value) return
   saving.value = true
-  editError.value = ''
+  submitError.value = ''
   try {
     await dailyQcScheduleService.save({ ...form, rule_ids: [...form.rule_ids] }, current.value)
     if (active) { editing.value = false; message.success('计划已保存'); await load() }
-  } catch { if (active) editError.value = '保存失败；计划可能已被修改，请刷新并核对选项后重试。' }
+  } catch { if (active) submitError.value = '保存失败；计划可能已被修改，请刷新并核对选项后重试。' }
   finally { if (active) saving.value = false }
 }
 async function showHistory(plan: DailyQcPlan) {
   const version = ++historyVersion
+  historyController?.abort()
+  const controller = new AbortController()
+  historyController = controller
   historyOpen.value = true
   historyError.value = ''
   runs.value = []
-  try { const result = await dailyQcScheduleService.history(plan.id); if (active && version === historyVersion) runs.value = result }
-  catch { if (active && version === historyVersion) historyError.value = '触发记录读取失败，不能据此判断未执行。' }
+  try {
+    const result = await dailyQcScheduleService.history(plan.id)
+    if (active && version === historyVersion && !controller.signal.aborted) runs.value = result
+  } catch {
+    if (active && version === historyVersion && !controller.signal.aborted) historyError.value = '触发记录读取失败，不能据此判断未执行。'
+  } finally {
+    if (historyController === controller) historyController = null
+  }
 }
 onMounted(load)
-onBeforeUnmount(() => { active = false; optionVersion++; historyVersion++ })
+onBeforeUnmount(() => {
+  active = false
+  loadVersion++
+  optionVersion++
+  historyVersion++
+  loadController?.abort()
+  optionController?.abort()
+  historyController?.abort()
+})
 </script>
 
 <style scoped>

@@ -30,6 +30,15 @@
     </header>
 
     <a-alert
+      v-if="confirmedResultsOnly"
+      type="info"
+      show-icon
+      data-testid="rule-validation-demo-readonly"
+      message="演示账号只读模式"
+      description="演示账号仅支持查看规则验收状态与结果，已隐藏病例编辑、运行验证、验收结论提交与批准上线入口。"
+    />
+
+    <a-alert
       v-if="error"
       type="error"
       :message="error"
@@ -156,7 +165,10 @@
                 每个病例按本规则单独标注预期；病例创建后内容与评价时间点固定，需修改请复制为新病例。
               </p>
             </div>
-            <div class="mq-page-head__actions">
+            <div
+              v-if="!confirmedResultsOnly"
+              class="mq-page-head__actions"
+            >
               <button
                 type="button"
                 class="mq-btn"
@@ -227,23 +239,25 @@
                     <span class="mq-mono">r{{ item.answer_revision }}</span>
                   </td>
                   <td class="rv-right rv-row-actions">
-                    <router-link
-                      class="mq-btn"
-                      :to="{
-                        name: 'WorkstationV4RuleValidationNewCase',
-                        params: { ruleId },
-                        query: { copyFrom: item.item_id },
-                      }"
-                    >
-                      复制
-                    </router-link>
-                    <button
-                      type="button"
-                      class="mq-btn"
-                      @click="openAnswer(item)"
-                    >
-                      编辑预期
-                    </button>
+                    <template v-if="!confirmedResultsOnly">
+                      <router-link
+                        class="mq-btn"
+                        :to="{
+                          name: 'WorkstationV4RuleValidationNewCase',
+                          params: { ruleId },
+                          query: { copyFrom: item.item_id },
+                        }"
+                      >
+                        复制
+                      </router-link>
+                      <button
+                        type="button"
+                        class="mq-btn"
+                        @click="openAnswer(item)"
+                      >
+                        编辑预期
+                      </button>
+                    </template>
                   </td>
                 </tr>
                 <tr v-if="!detail.cases.length">
@@ -286,6 +300,7 @@
               </p>
             </div>
             <button
+              v-if="!confirmedResultsOnly"
               type="button"
               class="mq-btn mq-btn--primary"
               data-testid="start-run"
@@ -543,7 +558,11 @@
               </li>
             </ul>
           </div>
-          <div class="rv-form">
+          <div
+            v-if="!confirmedResultsOnly"
+            class="rv-form"
+            data-testid="rule-validation-conclusion-form"
+          >
             <label class="mq-field">
               <span class="mq-field__label">验收意见</span>
               <a-textarea
@@ -653,6 +672,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   concludeRule,
   getValidationRule,
@@ -686,6 +706,7 @@ import type { Labeled } from './presentation'
 const POLL_MS = 5000
 
 const route = useRoute()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const ruleId = computed(() => String(route.params.ruleId || ''))
 const detail = ref<RuleDetail | null>(null)
 const loading = ref(false)
@@ -704,6 +725,7 @@ let disposed = false
 let activeGeneration = 0
 let requestSeq = 0
 let pollInFlight = false
+let loadAbortController: AbortController | null = null
 
 const latestRun = computed<ValidationRun | null>(() => detail.value?.runs[0] ?? null)
 const allRows = computed(() => detail.value?.latest_run_rows ?? [])
@@ -915,13 +937,19 @@ async function load(options: { fromPoll?: boolean; expectedGeneration?: number }
 
   stopPolling()
   const seq = ++requestSeq
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
   if (options.fromPoll) {
     pollInFlight = true
   }
   loading.value = true
   try {
-    const response = await getValidationRule(targetRuleId)
-    if (!isCurrentContext(generation, targetRuleId) || seq !== requestSeq) {
+    const response = await getValidationRule(targetRuleId, {
+      signal: controller.signal,
+      skipErrorToast: true,
+    })
+    if (controller.signal.aborted || !isCurrentContext(generation, targetRuleId) || seq !== requestSeq) {
       return
     }
     loading.value = false
@@ -933,6 +961,9 @@ async function load(options: { fromPoll?: boolean; expectedGeneration?: number }
     detail.value = response.data
     schedulePoll(generation, targetRuleId)
   } finally {
+    if (loadAbortController === controller) {
+      loadAbortController = null
+    }
     if (options.fromPoll) {
       pollInFlight = false
     }
@@ -955,6 +986,7 @@ function schedulePoll(generation = activeGeneration, targetRuleId = ruleId.value
 }
 
 function openAnswer(item: ValidationCase | null) {
+  if (confirmedResultsOnly.value) return
   answerTarget.value = item
   answerOpen.value = true
 }
@@ -968,6 +1000,7 @@ async function onAnswerSaved() {
 }
 
 async function startRun() {
+  if (confirmedResultsOnly.value || starting.value || runInProgress.value) return
   const generation = activeGeneration
   const targetRuleId = ruleId.value
   if (disposed || !targetRuleId) return
@@ -996,7 +1029,7 @@ async function startRun() {
 }
 
 async function conclude(decision: 'accepted' | 'rejected') {
-  if (!latestRun.value) return
+  if (confirmedResultsOnly.value || busy.value || !latestRun.value) return
   const generation = activeGeneration
   const targetRuleId = ruleId.value
   busy.value = true
@@ -1037,6 +1070,7 @@ watch(
   () => {
     activeGeneration += 1
     requestSeq += 1
+    loadAbortController?.abort()
     stopPolling()
     detail.value = null
     error.value = ''
@@ -1050,6 +1084,7 @@ onBeforeUnmount(() => {
   disposed = true
   activeGeneration += 1
   requestSeq += 1
+  loadAbortController?.abort()
   stopPolling()
 })
 </script>

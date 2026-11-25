@@ -47,6 +47,15 @@
     </header>
 
     <a-alert
+      v-if="confirmedResultsOnly"
+      type="info"
+      show-icon
+      data-testid="rule-validation-list-demo-readonly"
+      message="演示账号只读模式"
+      description="演示账号仅支持只读查看规则验收状态，不支持运行、验收结论与批准上线操作。"
+    />
+
+    <a-alert
       v-if="error"
       type="error"
       :message="error"
@@ -55,7 +64,11 @@
 
     <section class="rv-hero">
       <div class="rv-hero__copy">
-        <span class="rv-hero__eyebrow">{{ ruleSetKey === 'luxian_0916_qc_v1' ? '泸县0916' : '泸县0609' }}规则集 · {{ ruleSetKey }}</span>
+        <span class="rv-hero__eyebrow">{{
+          confirmedResultsOnly
+            ? `${ruleSetKey === 'luxian_0916_qc_v1' ? '泸县0916' : '泸县0609'}规则集`
+            : `${ruleSetKey === 'luxian_0916_qc_v1' ? '泸县0916' : '泸县0609'}规则集 · ${ruleSetKey}`
+        }}</span>
         <strong class="rv-hero__title">{{ pendingCount }} 条规则待验收</strong>
         <p v-if="ruleSetKey === 'luxian_0916_qc_v1'">
           关联病例与人工预期 → 整包运行 → 比较本规则 → 逐例复核。当前仅接入测试，整包其他规则不因此视为已验收；逐规则批准上线尚未接通。
@@ -179,7 +192,7 @@
                     :to="detailLink(row.rule_id)"
                     class="rv-link"
                   >
-                    进入验收
+                    {{ confirmedResultsOnly ? '查看详情' : '进入验收' }}
                   </router-link>
                 </td>
               </tr>
@@ -200,8 +213,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { listValidationRules } from '@/services/rule-validation-service'
 import type { ExpectedStatus, RuleListItem, ValidationStage } from '@/services/rule-validation-service'
 import { expectedStatuses, STAGES, STATUS, buildLabel, formatTime, statusClass } from './presentation'
@@ -214,16 +228,35 @@ const scopeTabs: { key: Scope; label: string }[] = [
   { key: 'all', label: '全部' },
 ]
 
+const { confirmedResultsOnly } = useQcResultVisibility()
 const rows = ref<RuleListItem[]>([])
 const loading = ref(false)
 const error = ref('')
-const scope = ref<Scope>('pending')
-const familyFilter = ref('')
-const keyword = ref('')
 const route = useRoute()
 const router = useRouter()
-const ruleSetKey = ref(route.query.ruleSetKey === 'luxian_0916_qc_v1' ? 'luxian_0916_qc_v1' : 'luxian_0609_qc_v1')
+
+function readQueryText(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function parseScope(value: unknown): Scope {
+  const raw = readQueryText(value)
+  if (raw === 'released' || raw === 'all') return raw
+  return 'pending'
+}
+
+function parseRuleSetKey(value: unknown): string {
+  return readQueryText(value) === 'luxian_0916_qc_v1' ? 'luxian_0916_qc_v1' : 'luxian_0609_qc_v1'
+}
+
+const scope = ref<Scope>(parseScope(route.query.scope))
+const familyFilter = ref(readQueryText(route.query.family))
+const keyword = ref(readQueryText(route.query.keyword))
+const ruleSetKey = ref(parseRuleSetKey(route.query.ruleSetKey))
 let loadSequence = 0
+let loadAbortController: AbortController | null = null
+let isApplyingRouteQuery = false
 
 const pendingRows = computed(() => rows.value.filter((r) => r.release_scope === 'acceptance_only'))
 const pendingCount = computed(() => pendingRows.value.length)
@@ -269,27 +302,93 @@ function detailLink(ruleId: string) {
   return { name: 'WorkstationV4RuleValidationDetail', params: { ruleId } }
 }
 
+function syncStateToRoute() {
+  if (isApplyingRouteQuery) return
+  const nextQuery: Record<string, unknown> = {
+    ...route.query,
+    ruleSetKey: ruleSetKey.value,
+  }
+  if (scope.value !== 'pending') nextQuery.scope = scope.value
+  else delete nextQuery.scope
+  if (familyFilter.value) nextQuery.family = familyFilter.value
+  else delete nextQuery.family
+  if (keyword.value.trim()) nextQuery.keyword = keyword.value.trim()
+  else delete nextQuery.keyword
+
+  const same =
+    readQueryText(route.query.ruleSetKey) === readQueryText(nextQuery.ruleSetKey) &&
+    readQueryText(route.query.scope) === readQueryText(nextQuery.scope) &&
+    readQueryText(route.query.family) === readQueryText(nextQuery.family) &&
+    readQueryText(route.query.keyword) === readQueryText(nextQuery.keyword)
+  if (same) return
+  void router.replace({ query: nextQuery as typeof route.query })
+}
+
 async function load() {
   const sequence = ++loadSequence
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
   loading.value = true
   error.value = ''
   rows.value = []
-  const response = await listValidationRules(scope.value !== 'pending', ruleSetKey.value)
-  if (sequence !== loadSequence) return
-  loading.value = false
-  if (!response.success) {
-    error.value = response.error || '规则验收列表加载失败'
-    return
+  try {
+    const response = await listValidationRules(scope.value !== 'pending', ruleSetKey.value, {
+      signal: controller.signal,
+      skipErrorToast: true,
+    })
+    if (controller.signal.aborted || sequence !== loadSequence) return
+    loading.value = false
+    if (!response.success) {
+      error.value = response.error || '规则验收列表加载失败'
+      return
+    }
+    rows.value = response.data.items
+  } finally {
+    if (loadAbortController === controller) {
+      loadAbortController = null
+    }
+    if (sequence === loadSequence) {
+      loading.value = false
+    }
   }
-  rows.value = response.data.items
 }
 
+watch(
+  () => [route.query.ruleSetKey, route.query.scope, route.query.family, route.query.keyword],
+  () => {
+    const nextRuleSetKey = parseRuleSetKey(route.query.ruleSetKey)
+    const nextScope = parseScope(route.query.scope)
+    const nextFamily = readQueryText(route.query.family)
+    const nextKeyword = readQueryText(route.query.keyword)
+    const shouldReload = nextRuleSetKey !== ruleSetKey.value || nextScope !== scope.value
+    isApplyingRouteQuery = true
+    ruleSetKey.value = nextRuleSetKey
+    scope.value = nextScope
+    familyFilter.value = nextFamily
+    keyword.value = nextKeyword
+    isApplyingRouteQuery = false
+    if (shouldReload) {
+      void load()
+    }
+  },
+)
+
 watch([scope, ruleSetKey], () => {
+  if (isApplyingRouteQuery) return
   familyFilter.value = ''
-  void router.replace({ query: { ...route.query, ruleSetKey: ruleSetKey.value } })
+  syncStateToRoute()
   void load()
 })
+
+watch([familyFilter, keyword], () => {
+  syncStateToRoute()
+})
+
 onMounted(load)
+onBeforeUnmount(() => {
+  loadAbortController?.abort()
+})
 </script>
 
 <style scoped src="./styles/rule-validation.css"></style>

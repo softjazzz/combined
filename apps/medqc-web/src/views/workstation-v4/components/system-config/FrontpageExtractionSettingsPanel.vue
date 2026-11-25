@@ -14,8 +14,8 @@
           v-if="isReadonly"
           type="info"
           show-icon
-          message="当前为只读模式（qc_manager）"
-          description="当前账号仅可查看，需首页配置管理角色方可修改。"
+          message="当前为只读模式"
+          description="当前账号仅可查看，需管理员或质控主管（admin / qc_manager / sync_admin / super_admin）角色方可修改。"
           class="mb-3"
         />
 
@@ -171,13 +171,15 @@
             <span class="ds-footer-meta">来源：{{ source }}</span>
             <div class="ds-actions">
               <a-button
-                :disabled="loading"
+                :disabled="loading || saving || resetting"
                 @click="handleReload"
               >
                 刷新
               </a-button>
               <a-button
-                :disabled="isReadonly || loading"
+                data-testid="frontpage-settings-reset"
+                :loading="resetting"
+                :disabled="isReadonly || loading || saving || resetting"
                 @click="handleReset"
               >
                 恢复默认
@@ -186,7 +188,7 @@
                 type="primary"
                 data-testid="frontpage-settings-save"
                 :loading="saving"
-                :disabled="isReadonly || loading"
+                :disabled="isReadonly || loading || resetting"
                 @click="handleSave"
               >
                 保存配置
@@ -200,9 +202,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import {
   frontpageApi,
   type FrontpageExtractionSettings,
@@ -211,9 +214,16 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
+const workstationConfirmation = useWorkstationConfirmation()
 const loading = ref(false)
 const saving = ref(false)
+const resetting = ref(false)
+const confirmPending = ref(false)
 const source = ref<'default' | 'file' | string>('default')
+
+let disposed = false
+let loadSeq = 0
+let loadController: AbortController | null = null
 
 const form = reactive<FrontpageExtractionSettings>({
   sql_prefill_enabled: true,
@@ -245,16 +255,26 @@ function patchForm(payload: FrontpageExtractionSettings) {
 }
 
 async function loadSettings() {
+  if (saving.value || resetting.value) return
+  const seq = ++loadSeq
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
   try {
     const resp = await frontpageApi.getExtractionSettings()
+    if (disposed || seq !== loadSeq || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
   } catch (error) {
+    if (disposed || seq !== loadSeq || controller.signal.aborted) return
     console.error('加载首页抽取设置失败:', error)
     message.error('加载首页抽取设置失败')
   } finally {
-    loading.value = false
+    if (!disposed && seq === loadSeq && loadController === controller) {
+      loading.value = false
+      loadController = null
+    }
   }
 }
 
@@ -263,6 +283,10 @@ async function handleReload() {
 }
 
 async function handleSave() {
+  if (isReadonly.value || loading.value || saving.value || resetting.value) return
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
   const payload: FrontpageExtractionSettingsUpdate = {
     sql_prefill_enabled: form.sql_prefill_enabled,
     llm_backfill_enabled: form.llm_backfill_enabled,
@@ -276,34 +300,70 @@ async function handleSave() {
   saving.value = true
   try {
     const resp = await frontpageApi.updateExtractionSettings(payload)
+    if (disposed) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('首页抽取设置已保存')
   } catch (error) {
+    if (disposed) return
     console.error('保存首页抽取设置失败:', error)
     message.error('保存失败')
   } finally {
-    saving.value = false
+    if (!disposed) saving.value = false
   }
 }
 
 async function handleReset() {
-  saving.value = true
+  if (isReadonly.value || loading.value || saving.value || resetting.value || confirmPending.value) {
+    return
+  }
+  confirmPending.value = true
+  let confirmed = false
+  try {
+    confirmed = await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '确认恢复默认首页抽取设置？',
+        content: '将把抽取策略、样例数据策略和运行体验策略恢复为系统默认值，当前修改将被覆盖。',
+        okText: '确认恢复',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+  if (!confirmed || disposed || isReadonly.value || saving.value || resetting.value) return
+
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
+  resetting.value = true
   try {
     const resp = await frontpageApi.resetExtractionSettings()
+    if (disposed) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('已恢复默认设置')
   } catch (error) {
+    if (disposed) return
     console.error('重置首页抽取设置失败:', error)
     message.error('重置失败')
   } finally {
-    saving.value = false
+    if (!disposed) resetting.value = false
   }
 }
 
 onMounted(() => {
   void loadSettings()
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
 })
 </script>
 

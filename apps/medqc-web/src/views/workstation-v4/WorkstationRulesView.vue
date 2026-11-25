@@ -64,17 +64,39 @@ const resolveTab = (tab: string | undefined): TabKey => {
 
 // 导航合并为单一入口后，语义规则 Tab 沿用原侧栏入口的默认规则集
 const DEFAULT_SEMANTIC_RULE_SET_KEY = 'luxian_0609_qc_v1'
+const SEMANTIC_ONLY_QUERY_KEYS = [
+  'ruleSetKey',
+  'keyword',
+  'complexity',
+  'defectLevel',
+  'documentType',
+  'releaseScope',
+  'page',
+  'pageSize',
+] as const
+
+function stripSemanticOnlyQuery(source: Record<string, unknown>): Record<string, unknown> {
+  const next = { ...source }
+  for (const key of SEMANTIC_ONLY_QUERY_KEYS) {
+    delete next[key]
+  }
+  return next
+}
 
 const selectTab = (tab: TabKey) => {
   activeTab.value = tab
-  const query: Record<string, unknown> = { ...route.query, tab }
+  const baseQuery =
+    tab === 'semantic'
+      ? { ...route.query }
+      : stripSemanticOnlyQuery(route.query as Record<string, unknown>)
+  const query: Record<string, unknown> = { ...baseQuery, tab }
   if (tab === 'semantic' && !route.query.ruleSetKey) {
     query.ruleSetKey = DEFAULT_SEMANTIC_RULE_SET_KEY
   }
   void router.replace({ query: query as typeof route.query })
 }
 
-// 默认入口先补齐0609查询参数，再挂载规则列表，避免先请求其他规则集。
+// 默认入口先补齐0609查询参数，再挂载规则列表，避免先请求其他规则集；切走语义 Tab 时清理 ruleSetKey。
 watch(
   () => [route.query.tab, route.query.ruleSetKey],
   () => {
@@ -84,6 +106,12 @@ watch(
       void router.replace({
         query: { ...route.query, tab, ruleSetKey: DEFAULT_SEMANTIC_RULE_SET_KEY },
       })
+      return
+    }
+    if (tab !== 'semantic' && route.query.ruleSetKey != null) {
+      activeTab.value = tab
+      const cleaned = stripSemanticOnlyQuery(route.query as Record<string, unknown>)
+      void router.replace({ query: { ...cleaned, tab } as typeof route.query })
       return
     }
     activeTab.value = tab

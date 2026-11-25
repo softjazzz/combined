@@ -3,6 +3,7 @@ import type { TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ApiService } from '@/services/apiService'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { UserRole } from '@/types/auth'
 import type { User } from '@/types/auth'
 import type { WorkspaceScope } from '@/types/custom-rule-workspace'
@@ -25,6 +26,7 @@ import {
   fetchSemanticRulesFromBackend,
   fetchSichuanRuleSetsFromBackend,
   filterSemanticRules,
+  isRequestCanceledError,
   parseSemanticWorkspaceQuery,
   saveRulePrompt,
   SemanticRuleTestError,
@@ -97,11 +99,22 @@ export function useSemanticRulesWorkspace() {
   const ruleSetOptions = ref<SichuanRuleSetOption[]>([DEFAULT_RULE_SET_OPTION])
 
   const currentUser = ref<User | null>(null)
-  const isAdmin = computed(() => currentUser.value?.roles?.includes(UserRole.ADMIN) || false)
+  const { confirmedResultsOnly } = useQcResultVisibility()
+  const isAdmin = computed(
+    () =>
+      !confirmedResultsOnly.value &&
+      Boolean(
+        currentUser.value?.roles?.some((role) => {
+          const normalized = String(role || '').trim().toLowerCase()
+          return normalized === UserRole.ADMIN || normalized === 'super_admin'
+        }),
+      ),
+  )
 
   const showRuleDetail = ref(false)
   const selectedRule = ref<SemanticRuleItem | null>(null)
   const promptLoading = ref(false)
+  const promptError = ref('')
   const isEditingPrompt = ref(false)
   const currentPrompt = ref('')
   const editingPrompt = ref('')
@@ -178,6 +191,12 @@ export function useSemanticRulesWorkspace() {
   let keywordTimer: ReturnType<typeof setTimeout> | null = null
   let isApplyingRouteQuery = false
   let rulesRefreshSeq = 0
+  let promptRequestSeq = 0
+  let testRequestSeq = 0
+  let rulesAbortController: AbortController | null = null
+  let ruleSetAbortController: AbortController | null = null
+  let promptAbortController: AbortController | null = null
+  let testAbortController: AbortController | null = null
 
   const complexityBreakdown = computed(() => {
     const distribution = stats.value.complexity_distribution || {}
@@ -385,9 +404,15 @@ export function useSemanticRulesWorkspace() {
     requestedRuleSetKey: string = queryState.ruleSetKey,
   ) {
     const currentSeq = ++rulesRefreshSeq
+    rulesAbortController?.abort()
+    const controller = new AbortController()
+    rulesAbortController = controller
     loading.value = true
     try {
-      const payload = await fetchSemanticRulesFromBackend(requestedRuleSetKey)
+      const payload = await fetchSemanticRulesFromBackend(requestedRuleSetKey, {
+        signal: controller.signal,
+        skipErrorToast: true,
+      })
       if (currentSeq !== rulesRefreshSeq || requestedRuleSetKey !== queryState.ruleSetKey) {
         return
       }
@@ -396,12 +421,15 @@ export function useSemanticRulesWorkspace() {
       lastRefreshedAt.value = new Date()
       if (showSuccessMessage) message.success('规则库已刷新')
     } catch (error) {
-      if (currentSeq !== rulesRefreshSeq) {
+      if (isRequestCanceledError(error) || currentSeq !== rulesRefreshSeq) {
         return
       }
       message.error('规则库加载失败')
       console.error('[SemanticRulesWorkspace] refresh failed', error)
     } finally {
+      if (rulesAbortController === controller) {
+        rulesAbortController = null
+      }
       if (currentSeq === rulesRefreshSeq) {
         loading.value = false
       }
@@ -414,13 +442,21 @@ export function useSemanticRulesWorkspace() {
     queryState.complexity = ''
     queryState.defectLevel = ''
     queryState.documentType = ''
+    queryState.releaseScope = ''
     queryState.page = 1
     queryState.pageSize = DEFAULT_RULE_PAGE_SIZE
   }
 
   async function loadRuleSetOptions() {
+    ruleSetAbortController?.abort()
+    const controller = new AbortController()
+    ruleSetAbortController = controller
     try {
-      const items = await fetchSichuanRuleSetsFromBackend()
+      const items = await fetchSichuanRuleSetsFromBackend({
+        signal: controller.signal,
+        skipErrorToast: true,
+      })
+      if (controller.signal.aborted) return
       const luxianRuleSet = items.find((item) => item.rule_set_key === LUXIAN_0609_RULE_SET_KEY)
       ruleSetOptions.value = [
         DEFAULT_RULE_SET_OPTION,
@@ -435,8 +471,13 @@ export function useSemanticRulesWorkspace() {
         },
       ]
     } catch (error) {
+      if (isRequestCanceledError(error)) return
       ruleSetOptions.value = [DEFAULT_RULE_SET_OPTION]
       console.error('[SemanticRulesWorkspace] load rule set options failed', error)
+    } finally {
+      if (ruleSetAbortController === controller) {
+        ruleSetAbortController = null
+      }
     }
   }
 
@@ -458,44 +499,69 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function openRuleDetail(rule: SemanticRuleItem) {
+    promptAbortController?.abort()
+    promptRequestSeq += 1
     selectedRule.value = rule
     showRuleDetail.value = true
     isEditingPrompt.value = false
     testResult.value = null
+    promptError.value = ''
     currentPrompt.value = ''
     editingPrompt.value = ''
     if (rule.rule_id.startsWith('LX0609-')) {
-      currentPrompt.value = rule.custom_prompt || '// 暂无检查模板'
+      currentPrompt.value = rule.custom_prompt || ''
       editingPrompt.value = rule.custom_prompt || ''
       isDefaultPrompt.value = false
       return
     }
-    if (!isAdmin.value) return
+    if (!isAdmin.value || confirmedResultsOnly.value) return
     await loadPrompt(rule.rule_id)
   }
 
   function closeRuleDetail() {
+    promptAbortController?.abort()
+    promptAbortController = null
+    promptRequestSeq += 1
+    promptLoading.value = false
+    isEditingPrompt.value = false
     showRuleDetail.value = false
   }
 
   async function loadPrompt(ruleId: string) {
+    const seq = ++promptRequestSeq
+    promptAbortController?.abort()
+    const controller = new AbortController()
+    promptAbortController = controller
     promptLoading.value = true
+    promptError.value = ''
     try {
-      const payload = await fetchRulePrompt(ruleId)
-      currentPrompt.value = payload.prompt || '// 暂无提示词'
+      const payload = await fetchRulePrompt(ruleId, {
+        signal: controller.signal,
+        skipErrorToast: true,
+      })
+      if (seq !== promptRequestSeq || selectedRule.value?.rule_id !== ruleId) return
+      currentPrompt.value = payload.prompt || ''
       editingPrompt.value = payload.prompt || ''
       isDefaultPrompt.value = payload.isDefaultPrompt
+      promptError.value = ''
     } catch (error) {
+      if (isRequestCanceledError(error) || seq !== promptRequestSeq) return
       const reason = toErrorMessage(error, '请稍后重试')
-      currentPrompt.value = `// 获取提示词失败：${reason}`
+      promptError.value = `提示词加载失败：${reason}`
       message.error(`提示词加载失败：${reason}`)
       console.error('[SemanticRulesWorkspace] load prompt failed', error)
     } finally {
-      promptLoading.value = false
+      if (promptAbortController === controller) {
+        promptAbortController = null
+      }
+      if (seq === promptRequestSeq) {
+        promptLoading.value = false
+      }
     }
   }
 
   function startEditPrompt() {
+    if (confirmedResultsOnly.value || promptError.value) return
     editingPrompt.value = currentPrompt.value || ''
     isEditingPrompt.value = true
   }
@@ -506,13 +572,17 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function savePromptChanges() {
-    if (!selectedRule.value) return
+    if (!selectedRule.value || confirmedResultsOnly.value) return
     promptLoading.value = true
     try {
-      await saveRulePrompt(selectedRule.value.rule_id, editingPrompt.value)
-      currentPrompt.value = editingPrompt.value.trim() || '// 暂无提示词'
-      isDefaultPrompt.value = !editingPrompt.value.trim()
+      await saveRulePrompt(selectedRule.value.rule_id, editingPrompt.value, {
+        skipErrorToast: true,
+      })
+      currentPrompt.value = editingPrompt.value.trim()
+      editingPrompt.value = currentPrompt.value
+      isDefaultPrompt.value = !currentPrompt.value
       isEditingPrompt.value = false
+      promptError.value = ''
       message.success('提示词已保存')
     } catch (error) {
       message.error(`保存提示词失败：${toErrorMessage(error, '请稍后重试')}`)
@@ -549,6 +619,13 @@ export function useSemanticRulesWorkspace() {
   }
 
   function startRuleTest(rule: SemanticRuleItem) {
+    if (confirmedResultsOnly.value) return
+    if (rule.rule_id.startsWith('LX0609-')) {
+      message.info('LX0609 规则不支持纯文本测试，请前往「规则验收」使用结构化测试病例验证')
+      return
+    }
+    testAbortController?.abort()
+    testRequestSeq += 1
     testingRule.value = rule
     showRuleTest.value = true
     testResult.value = null
@@ -556,23 +633,39 @@ export function useSemanticRulesWorkspace() {
   }
 
   function closeRuleTest() {
+    testAbortController?.abort()
+    testAbortController = null
+    testRequestSeq += 1
     showRuleTest.value = false
     testLoading.value = false
   }
 
   async function executeRuleTestAction() {
+    if (confirmedResultsOnly.value) return
     if (!testingRule.value || !testMedicalText.value.trim()) {
       message.warning('请输入病历文本')
       return
     }
+    if (testingRule.value.rule_id.startsWith('LX0609-')) {
+      message.info('LX0609 规则不支持纯文本测试，请前往「规则验收」使用结构化测试病例验证')
+      return
+    }
+    const seq = ++testRequestSeq
+    const targetRuleId = testingRule.value.primary_execution_rule_id || testingRule.value.rule_id
+    testAbortController?.abort()
+    const controller = new AbortController()
+    testAbortController = controller
     testLoading.value = true
     testResult.value = null
     try {
-      const ruleId = testingRule.value.rule_id.startsWith('LX0609-')
-        ? testingRule.value.rule_id
-        : testingRule.value.primary_execution_rule_id || testingRule.value.rule_id
-      testResult.value = await executeSemanticRuleTest(ruleId, testMedicalText.value)
+      const result = await executeSemanticRuleTest(targetRuleId, testMedicalText.value, {
+        signal: controller.signal,
+        skipErrorToast: true,
+      })
+      if (seq !== testRequestSeq || !showRuleTest.value) return
+      testResult.value = result
     } catch (error) {
+      if (isRequestCanceledError(error) || seq !== testRequestSeq) return
       message.error('规则测试失败')
       if (error instanceof SemanticRuleTestError) {
         testResult.value = {
@@ -591,11 +684,17 @@ export function useSemanticRulesWorkspace() {
       }
       console.error('[SemanticRulesWorkspace] rule test failed', error)
     } finally {
-      testLoading.value = false
+      if (testAbortController === controller) {
+        testAbortController = null
+      }
+      if (seq === testRequestSeq) {
+        testLoading.value = false
+      }
     }
   }
 
   function openBatchLaunchModal() {
+    if (confirmedResultsOnly.value) return
     resetBatchLaunchFiltersFromCurrent()
     batchLaunchModalOpen.value = true
     void loadBatchLaunchFilterOptions({ silent: true }).catch(() => {
@@ -608,7 +707,7 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function confirmBatchLaunch() {
-    if (testingBatch.value) return
+    if (confirmedResultsOnly.value || testingBatch.value) return
     const isLuxianRuleSet = queryState.ruleSetKey === LUXIAN_0609_RULE_SET_KEY
     const ruleIds = isLuxianRuleSet
       ? []
@@ -650,7 +749,7 @@ export function useSemanticRulesWorkspace() {
 
   async function openBatchJobDrawer(job: { id: string }) {
     resultDrawerOpen.value = true
-    await fetchBatchJobDetail(job.id, { includeDebugSnapshot: true })
+    await fetchBatchJobDetail(job.id, { includeDebugSnapshot: !confirmedResultsOnly.value })
     startBatchJobPolling(job.id)
   }
 
@@ -660,6 +759,7 @@ export function useSemanticRulesWorkspace() {
   }
 
   function openQCEvaluation() {
+    if (confirmedResultsOnly.value) return
     showQCEvaluation.value = true
   }
 
@@ -668,6 +768,7 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function goCustomWorkspace() {
+    if (confirmedResultsOnly.value) return
     await router.push('/workstation-v5/rules/custom-workspace')
   }
 
@@ -689,7 +790,6 @@ export function useSemanticRulesWorkspace() {
     }
     await loadRuleSetOptions()
     await refreshRules(false)
-    await loadBatchJobs()
   }
 
   onMounted(() => {
@@ -701,6 +801,10 @@ export function useSemanticRulesWorkspace() {
       clearTimeout(keywordTimer)
       keywordTimer = null
     }
+    rulesAbortController?.abort()
+    ruleSetAbortController?.abort()
+    promptAbortController?.abort()
+    testAbortController?.abort()
     resetBatchJobs()
   })
 
@@ -738,7 +842,9 @@ export function useSemanticRulesWorkspace() {
     openRuleDetail,
     closeRuleDetail,
     isAdmin,
+    confirmedResultsOnly,
     promptLoading,
+    promptError,
     isEditingPrompt,
     currentPrompt,
     editingPrompt,

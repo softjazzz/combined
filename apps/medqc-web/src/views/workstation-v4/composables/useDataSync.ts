@@ -1,4 +1,4 @@
-import { computed, getCurrentScope, reactive, watch } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, reactive, watch } from 'vue'
 import { message } from 'ant-design-vue'
 
 import { useAuthStore } from '@/stores/auth'
@@ -204,11 +204,20 @@ function createInitialState() {
   }
 }
 
+const POLL_BASE_INTERVAL_MS = 2000
+const POLL_MAX_INTERVAL_MS = 30000
+const POLL_MAX_CONSECUTIVE_ERRORS = 5
+const POLL_PRE_RUN_GRACE_TICKS = 3
+
 const globalSyncState = reactive(createInitialState())
 let pollingTimer: ReturnType<typeof setTimeout> | null = null
 let pollingActive = false
 let pollInFlight = false
 let pollGeneration = 0
+let pollConsecutiveErrors = 0
+let pollSeenRunning = false
+let triggerRequestSettled = false
+let preRunPollMisses = 0
 let statusRequestSeq = 0
 let departmentsRequest: { controller: AbortController; promise: Promise<void> } | null = null
 let departmentsRequestSequence = 0
@@ -427,9 +436,21 @@ async function loadStatusAndStats(
     ) {
       return false
     }
-    globalSyncState.pgSyncState = statusResp.pg_sync || {}
-    globalSyncState.pgStats = statsResp
-    globalSyncState.isSyncing = Boolean(globalSyncState.pgSyncState.is_running)
+    const nextRunning = Boolean(statusResp.pg_sync?.is_running)
+    if (nextRunning) {
+      pollSeenRunning = true
+      preRunPollMisses = 0
+      globalSyncState.pgSyncState = statusResp.pg_sync || {}
+      globalSyncState.pgStats = statsResp
+      globalSyncState.isSyncing = true
+    } else if (pollingActive && !pollSeenRunning && !triggerRequestSettled) {
+      globalSyncState.pgStats = statsResp
+      globalSyncState.isSyncing = true
+    } else {
+      globalSyncState.pgSyncState = statusResp.pg_sync || {}
+      globalSyncState.pgStats = statsResp
+      globalSyncState.isSyncing = false
+    }
     recomputeOverview()
     return true
   } finally {
@@ -717,6 +738,9 @@ async function applyTemplate() {
 
 function stopPolling() {
   pollingActive = false
+  pollConsecutiveErrors = 0
+  pollSeenRunning = false
+  preRunPollMisses = 0
   ++pollGeneration
   if (pollingTimer) {
     clearTimeout(pollingTimer)
@@ -724,7 +748,11 @@ function stopPolling() {
   }
 }
 
-function scheduleNextPoll(stateGen: number, currentPollGen: number) {
+function scheduleNextPoll(
+  stateGen: number,
+  currentPollGen: number,
+  delayMs: number = POLL_BASE_INTERVAL_MS,
+) {
   if (
     !pollingActive ||
     stateGen !== activeGeneration ||
@@ -741,7 +769,7 @@ function scheduleNextPoll(stateGen: number, currentPollGen: number) {
   pollingTimer = setTimeout(() => {
     pollingTimer = null
     void runPollTick(stateGen, currentPollGen)
-  }, 2000)
+  }, delayMs)
 }
 
 async function runPollTick(stateGen: number, currentPollGen: number) {
@@ -769,20 +797,37 @@ async function runPollTick(stateGen: number, currentPollGen: number) {
     ) {
       return
     }
+    pollConsecutiveErrors = 0
     const stillRunning = Boolean(globalSyncState.pgSyncState.is_running)
-    if (!stillRunning) {
-      stopPolling()
-      await loadRunHistory(stateGen)
-      if (stateGen === activeGeneration && !isSessionEnded()) {
-        pushLog('success', '同步任务已结束')
-      }
+    if (stillRunning) {
+      pollSeenRunning = true
+      preRunPollMisses = 0
+      scheduleNextPoll(stateGen, currentPollGen, POLL_BASE_INTERVAL_MS)
       return
     }
-    scheduleNextPoll(stateGen, currentPollGen)
+    if (!pollSeenRunning) {
+      if (!triggerRequestSettled) {
+        globalSyncState.isSyncing = true
+        scheduleNextPoll(stateGen, currentPollGen, POLL_BASE_INTERVAL_MS)
+        return
+      }
+      preRunPollMisses += 1
+      if (preRunPollMisses < POLL_PRE_RUN_GRACE_TICKS) {
+        scheduleNextPoll(stateGen, currentPollGen, POLL_BASE_INTERVAL_MS)
+        return
+      }
+    }
+    stopPolling()
+    globalSyncState.isSyncing = false
+    await loadRunHistory(stateGen)
+    if (stateGen === activeGeneration && !isSessionEnded()) {
+      pushLog('success', '同步任务已结束')
+    }
   } catch (error) {
     console.error('同步状态轮询失败:', error)
     if (isAuthFailureError(error) || isSessionEnded()) {
       stopPolling()
+      globalSyncState.isSyncing = false
       return
     }
     if (
@@ -790,22 +835,43 @@ async function runPollTick(stateGen: number, currentPollGen: number) {
       stateGen === activeGeneration &&
       currentPollGen === pollGeneration
     ) {
-      scheduleNextPoll(stateGen, currentPollGen)
+      pollConsecutiveErrors += 1
+      if (pollConsecutiveErrors >= POLL_MAX_CONSECUTIVE_ERRORS) {
+        stopPolling()
+        globalSyncState.isSyncing = false
+        pushLog(
+          'error',
+          `同步状态轮询连续失败 ${pollConsecutiveErrors} 次，已停止轮询，请手动刷新确认`,
+        )
+        return
+      }
+      const backoffDelay = Math.min(
+        POLL_BASE_INTERVAL_MS * 2 ** pollConsecutiveErrors,
+        POLL_MAX_INTERVAL_MS,
+      )
+      scheduleNextPoll(stateGen, currentPollGen, backoffDelay)
     }
   } finally {
     pollInFlight = false
   }
 }
 
-function startPolling(expectedGeneration: number = activeGeneration) {
+function startPolling(
+  expectedGeneration: number = activeGeneration,
+  options: { preserveRunningState?: boolean } = {},
+) {
   if (expectedGeneration !== activeGeneration || isSessionEnded()) {
     stopPolling()
     return
   }
+  const prevSeenRunning = options.preserveRunningState ? pollSeenRunning : false
   stopPolling()
   pollingActive = true
+  pollConsecutiveErrors = 0
+  pollSeenRunning = prevSeenRunning
+  preRunPollMisses = 0
   const currentPollGen = ++pollGeneration
-  scheduleNextPoll(expectedGeneration, currentPollGen)
+  scheduleNextPoll(expectedGeneration, currentPollGen, POLL_BASE_INTERVAL_MS)
 }
 
 function resolveTargetDepartments(): string[] | undefined {
@@ -951,6 +1017,9 @@ async function executeSync(source: SyncSource = 'pg') {
     },
   }
   pushLog('info', '同步任务已提交，正在轮询执行进度')
+  triggerRequestSettled = false
+  pollSeenRunning = false
+  preRunPollMisses = 0
   startPolling(generation)
   try {
     const payload = buildSyncScopePayload(source)
@@ -958,6 +1027,7 @@ async function executeSync(source: SyncSource = 'pg') {
       ...payload,
       preflight_fingerprint: globalSyncState.preflightResult?.preflight_fingerprint,
     })
+    triggerRequestSettled = true
     if (generation !== activeGeneration || isSessionEnded()) {
       stopPolling()
       return result
@@ -978,7 +1048,7 @@ async function executeSync(source: SyncSource = 'pg') {
         return result
       }
       if (globalSyncState.isSyncing) {
-        startPolling(generation)
+        startPolling(generation, { preserveRunningState: true })
       } else {
         stopPolling()
       }
@@ -989,6 +1059,7 @@ async function executeSync(source: SyncSource = 'pg') {
     }
     return result
   } catch (error: any) {
+    triggerRequestSettled = true
     if (generation !== activeGeneration || isSessionEnded()) {
       stopPolling()
       throw error
@@ -1010,7 +1081,7 @@ async function executeSync(source: SyncSource = 'pg') {
       try {
         const applied = await loadStatusAndStats(generation)
         if (applied && generation === activeGeneration && !isSessionEnded()) {
-          startPolling(generation)
+          startPolling(generation, { preserveRunningState: true })
         } else {
           stopPolling()
         }
@@ -1121,6 +1192,7 @@ async function initialize() {
 function resetState() {
   ++activeGeneration
   ++statusRequestSeq
+  triggerRequestSettled = false
   cancelDepartmentsRequest()
   stopPolling()
   Object.assign(globalSyncState, createInitialState())
@@ -1152,6 +1224,7 @@ export function useDataSync() {
         }
       },
     )
+    onScopeDispose(stopPolling)
   }
   const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
   const isReadonly = computed(() => !isAdmin.value)

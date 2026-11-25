@@ -23,7 +23,8 @@
         :class="{ 'is-active': section === 'registrations' }"
         :aria-selected="section === 'registrations'"
         :disabled="saving"
-        @click="section = 'registrations'"
+        data-testid="accounts-section-registrations"
+        @click="showRegistrations"
       >
         注册审批
       </button>
@@ -298,7 +299,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import * as vueRouter from 'vue-router'
 import RegistrationReviewPanel from './RegistrationReviewPanel.vue'
 import { message } from 'ant-design-vue'
 import { ChevronLeft, ChevronRight, Pencil, RefreshCw } from 'lucide-vue-next'
@@ -314,19 +315,75 @@ import {
 } from '@/api/accountManagement'
 
 const auth = useAuthStore()
-const route = useRoute()
-const section = ref<'accounts' | 'registrations'>('accounts')
+function tryUseRoute() {
+  try {
+    return typeof vueRouter.useRoute === 'function' ? vueRouter.useRoute() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function tryUseRouter() {
+  try {
+    return typeof vueRouter.useRouter === 'function' ? vueRouter.useRouter() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const route = tryUseRoute()
+const router = tryUseRouter()
+
+const canManageAccounts = computed(() =>
+  auth.userRoles.some((item) => item === 'admin' || item === 'super_admin'),
+)
+
+const registrationId = computed(() =>
+  typeof route?.query?.registration_id === 'string' ? route.query.registration_id : undefined,
+)
+const requestedSection = computed<'accounts' | 'registrations'>(() => {
+  if (registrationId.value) return 'registrations'
+  return route?.query?.section === 'registrations' ? 'registrations' : 'accounts'
+})
+
+const section = ref<'accounts' | 'registrations'>(requestedSection.value)
+
+function syncSectionToRoute(nextSection: 'accounts' | 'registrations') {
+  if (!router || typeof router.replace !== 'function') return
+  const currentQuery = route?.query || {}
+  const currentSection = typeof currentQuery.section === 'string' ? currentQuery.section : ''
+  const nextQuery: Record<string, any> = { ...currentQuery, section: nextSection }
+  if (nextSection === 'accounts') {
+    delete nextQuery.registration_id
+  }
+  if (currentSection === nextSection && (nextSection === 'registrations' || !currentQuery.registration_id)) {
+    return
+  }
+  void Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
 function showAccounts() {
   section.value = 'accounts'
-  void load(1)
+  syncSectionToRoute('accounts')
+  if (canManageAccounts.value) {
+    void load(1)
+  }
 }
-const registrationId = computed(() =>
-  typeof route?.query.registration_id === 'string' ? route.query.registration_id : undefined,
-)
+
+function showRegistrations() {
+  listAbortController?.abort()
+  listAbortController = null
+  section.value = 'registrations'
+  syncSectionToRoute('registrations')
+}
+
 watch(
-  registrationId,
-  (id) => {
-    if (id) section.value = 'registrations'
+  [() => route?.query?.section, registrationId],
+  () => {
+    const next = requestedSection.value
+    if (next !== section.value) {
+      section.value = next
+    }
   },
   { immediate: true },
 )
@@ -337,7 +394,9 @@ const roleOptions: Array<{ value: AccountRole; label: string }> = [
   { value: 'admin', label: '系统管理员' },
 ]
 const roleName = (role: string) =>
-  role === 'sync_admin' ? '超级管理员' : roleOptions.find((item) => item.value === role)?.label || '未知角色'
+  role === 'sync_admin' || role === 'super_admin'
+    ? '超级管理员'
+    : roleOptions.find((item) => item.value === role)?.label || '未知角色'
 const editableRoles = (roles: string[]) =>
   roles.every((role) => roleOptions.some((item) => item.value === role))
 const formatTime = (value: string | null) => {
@@ -380,9 +439,13 @@ const emptyForm = () => ({
 const form = reactive(emptyForm())
 const isSelf = computed(() => !!editing.value && editing.value.id === actorId.value)
 let generation = 0
+let listAbortController: AbortController | null = null
 async function load(next = 1) {
   if (saving.value) return
   const token = ++generation
+  listAbortController?.abort()
+  const controller = new AbortController()
+  listAbortController = controller
   loading.value = true
   error.value = ''
   try {
@@ -393,7 +456,7 @@ async function load(next = 1) {
       page: next,
       page_size: 20,
     })
-    if (token !== generation) return
+    if (token !== generation || controller.signal.aborted) return
     rows.value = data.items
     total.value = data.total
     page.value = data.page
@@ -401,13 +464,16 @@ async function load(next = 1) {
     actorId.value = data.actor_id
     ready.value = true
   } catch (err) {
-    if (token !== generation) return
+    if (token !== generation || controller.signal.aborted) return
     error.value = err instanceof Error ? err.message : '账号读取失败'
     rows.value = []
     total.value = 0
     ready.value = false
   } finally {
-    if (token === generation) loading.value = false
+    if (token === generation && listAbortController === controller) {
+      loading.value = false
+      listAbortController = null
+    }
   }
 }
 function openCreate() {
@@ -489,12 +555,14 @@ watch(
   () => [auth.user?.id, auth.userRoles.join(',')],
   () => {
     generation++
+    listAbortController?.abort()
+    listAbortController = null
     dialog.value = false
     saving.value = false
     ready.value = false
     rows.value = []
     Object.assign(form, emptyForm())
-    if (auth.userRoles.includes('admin')) void load(1)
+    if (canManageAccounts.value) void load(1)
     else {
       error.value = '仅系统管理员可管理账号'
       loading.value = false
@@ -504,6 +572,8 @@ watch(
 )
 onBeforeUnmount(() => {
   generation++
+  listAbortController?.abort()
+  listAbortController = null
   Object.assign(form, emptyForm())
 })
 </script>
