@@ -58,8 +58,10 @@ from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     customer_safe_projection_key,
+    is_sample_validation_batch_job,
     project_batch_job_overview,
     project_customer_safe_batch_job,
+    resolve_batch_job_origin,
 )
 from ..services.luxian_0609_result_export_service import (
     export_filtered_record_results_workbook,
@@ -829,9 +831,12 @@ def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False
         response_job["rule_results"] = []
         response_job["children"] = []
         response_job["child_jobs"] = []
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         **response_job,
         "execution_mode": "batch",
+        "is_sample_validation": is_sample_validation,
+        "task_origin": resolve_batch_job_origin(job),
         "rule_count": int(summary.get("rule_count") or filters.get("rule_count") or job.get("rule_count") or 0),
         "customer_rule_count": int(filters.get("customer_rule_count") or job.get("customer_rule_count") or 0),
         "execution_rule_count": int(filters.get("execution_rule_count") or job.get("execution_rule_count") or 0),
@@ -2946,6 +2951,8 @@ def _workspace_batch_list_item(job: Dict[str, Any]) -> Dict[str, Any]:
         if key in job
     }
     metadata["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
+    metadata["is_sample_validation"] = is_sample_validation_batch_job(job)
+    metadata["task_origin"] = resolve_batch_job_origin(job)
     safe = _workspace_batch_response_item(metadata, compact=True)
     for container in (safe, safe["summary"]):
         for key in (
@@ -2969,33 +2976,50 @@ async def list_workspace_batch_jobs(
     created_end_date: Optional[str] = Query(None),
     record_id: Optional[str] = Query(None),
     view: Optional[str] = Query(None),
+    exclude_validation: bool = Query(False, description="是否排除客户样本验证任务"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service(readonly=True)
+    exclude_validation_flag = exclude_validation is True
     if str(view or "").strip().lower() == "overview":
         # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
-        overview = await run_in_threadpool(
-            workspace.list_batch_job_overviews,
-            created_by=_current_user_id(current_user),
-            status=status,
-            scope=scope,
-            query=q,
-            created_start_date=created_start_date,
-            created_end_date=created_end_date,
-            record_id=record_id,
-            page=page,
-            page_size=page_size,
-        )
+        overview_kwargs: Dict[str, Any] = {
+            "created_by": _current_user_id(current_user),
+            "status": status,
+            "scope": scope,
+            "query": q,
+            "created_start_date": created_start_date,
+            "created_end_date": created_end_date,
+            "record_id": record_id,
+            "page": page,
+            "page_size": page_size,
+        }
+        if exclude_validation_flag:
+            overview_kwargs["exclude_validation"] = True
+        try:
+            overview = await run_in_threadpool(workspace.list_batch_job_overviews, **overview_kwargs)
+            overview_items = list(overview.items)
+            overview_total = overview.total
+        except TypeError:
+            overview_kwargs.pop("exclude_validation", None)
+            overview = await run_in_threadpool(workspace.list_batch_job_overviews, **overview_kwargs)
+            overview_items = list(overview.items)
+            overview_total = overview.total
+            if exclude_validation_flag:
+                overview_items = [
+                    item for item in overview_items if not is_sample_validation_batch_job(item)
+                ]
+                overview_total = len(overview_items)
         return success_response(
             data={
                 "items": [
                     project_batch_job_overview(item)
-                    for item in overview.items
+                    for item in overview_items
                     if _is_workspace_batch_job(item)
                 ],
-                "total": overview.total,
+                "total": overview_total,
                 "page": overview.page,
                 "page_size": overview.page_size,
             },
@@ -3010,7 +3034,7 @@ async def list_workspace_batch_jobs(
     elif cache_hit_value in {"miss", "false", "0", "no"}:
         cache_hit_filter = False
 
-    list_kwargs = {
+    list_kwargs: Dict[str, Any] = {
         "created_by": _current_user_id(current_user),
         "draft_id": None,
         "status": status,
@@ -3023,15 +3047,31 @@ async def list_workspace_batch_jobs(
         "page": page,
         "page_size": page_size,
     }
+    if exclude_validation_flag:
+        list_kwargs["exclude_validation"] = True
     # 查询与逐行客户安全投影都是同步重活（一页可达数秒），放到线程池，避免阻塞其他请求。
+    fallback_filter_validation = False
     try:
         result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, query=q)
     except TypeError:
-        result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+        try:
+            result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+        except TypeError:
+            list_kwargs.pop("exclude_validation", None)
+            fallback_filter_validation = exclude_validation_flag
+            try:
+                result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, query=q)
+            except TypeError:
+                result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+    raw_items = list(result.items)
+    total_count = result.total
+    if fallback_filter_validation:
+        raw_items = [item for item in raw_items if not is_sample_validation_batch_job(item)]
+        total_count = len(raw_items)
     items = await run_in_threadpool(
         lambda: [
             _workspace_batch_list_item(item)
-            for item in result.items
+            for item in raw_items
             if _is_workspace_batch_job(item)
         ]
     )
@@ -3040,7 +3080,7 @@ async def list_workspace_batch_jobs(
     return success_response(
         data={
             "items": items,
-            "total": result.total,
+            "total": total_count,
             "page": result.page,
             "page_size": result.page_size,
         },

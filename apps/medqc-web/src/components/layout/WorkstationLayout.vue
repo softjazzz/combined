@@ -153,12 +153,10 @@
         </nav>
 
         <main class="ws-content">
-          <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-              <div :key="route.path" class="workstation-route-view">
-                <component :is="Component" v-if="Component" />
-              </div>
-            </transition>
+          <router-view v-slot="{ Component, route: currentRoute }">
+            <div :key="currentRoute.path" class="workstation-route-view">
+              <component :is="Component" v-if="Component" />
+            </div>
           </router-view>
         </main>
       </div>
@@ -834,21 +832,9 @@ const handleLogout = async () => {
   background: transparent !important;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 150ms ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .ws-sider,
-  .ws-nav__item,
-  .fade-enter-active,
-  .fade-leave-active {
+  .ws-nav__item {
     transition: none;
   }
 }

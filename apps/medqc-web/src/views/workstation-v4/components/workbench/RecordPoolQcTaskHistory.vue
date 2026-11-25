@@ -103,6 +103,7 @@
     :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
     :get-batch-job-status-text="getBatchJobStatusText"
     :format-date-time="formatPaddedQcTaskDateTime"
+    back-label="返回病历池"
   />
 </template>
 
@@ -144,7 +145,30 @@ let loadJobsSequence = 0
 let openJobSequence = 0
 let debugSnapshotSequence = 0
 
+const SAMPLE_VALIDATION_FILTER_SOURCES = new Set([
+  'manual_problem_sample_pool',
+  'manual_sample_formal_fast_screen_full',
+])
+
+function isSampleValidationJob(job: SichuanBatchJob): boolean {
+  if (job.is_sample_validation === true) return true
+  const taskOrigin = String(job.task_origin || '')
+    .trim()
+    .toLowerCase()
+  if (taskOrigin === 'sample_validation') return true
+  const filters = job.filters && typeof job.filters === 'object' ? job.filters : null
+  if (filters) {
+    if (String(filters.sample_pool_id || '').trim()) return true
+    const source = String(filters.source || '')
+      .trim()
+      .toLowerCase()
+    if (SAMPLE_VALIDATION_FILTER_SOURCES.has(source) || source.includes('sample_pool')) return true
+  }
+  return false
+}
+
 function isRecordPoolJob(job: SichuanBatchJob): boolean {
+  if (isSampleValidationJob(job)) return false
   const ruleSetKey = String(job.rule_set_key || job.summary?.rule_set_key || '').trim()
   return ruleSetKey === RECORD_POOL_RULE_SET_KEY
 }
@@ -153,7 +177,11 @@ async function loadJobs() {
   const requestSequence = ++loadJobsSequence
   loading.value = true
   try {
-    const response = await listSichuanWorkspaceBatchJobs({ page: 1, page_size: 30 })
+    const response = await listSichuanWorkspaceBatchJobs({
+      page: 1,
+      page_size: 30,
+      exclude_validation: true,
+    })
     if (requestSequence !== loadJobsSequence) return
     if (!response.success || !response.data) {
       throw new Error(response.message || '获取最近质控任务失败')

@@ -2161,12 +2161,14 @@ useWorkstationRouteEffects({
 })
 
 // 统计分析下钻：筛选状态完全由 URL 承载，刷新、返回/前进都按 URL 还原并重新查询。
+const mountedRoutePath = route.path
 const analyticsDrilldown = computed(() => readAnalyticsDrilldown(route.query))
 
 watch(
   () => analyticsDrilldownSignature(route.query),
   (signature, previous) => {
     if (signature === previous) return
+    if (route.path !== mountedRoutePath || isAggregatedStageMode.value) return
     const rawDept = route.query.department
     const routeDept = Array.isArray(rawDept)
       ? typeof rawDept[0] === 'string'
@@ -2181,6 +2183,13 @@ watch(
     void fetchData(1)
   },
 )
+
+watch(isAggregatedStageMode, (inAggregatedStage, wasInAggregatedStage) => {
+  if (wasInAggregatedStage && !inAggregatedStage && route.path === mountedRoutePath) {
+    currentPage.value = 1
+    void fetchData(1)
+  }
+})
 
 function backToAnalytics() {
   const drilldown = analyticsDrilldown.value
@@ -2197,7 +2206,9 @@ function clearAnalyticsDrilldown() {
 }
 
 onMounted(() => {
-  fetchData()
+  if (!isAggregatedStageMode.value) {
+    void fetchData()
+  }
 })
 
 onBeforeUnmount(() => {

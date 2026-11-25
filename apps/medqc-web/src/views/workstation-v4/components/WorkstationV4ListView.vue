@@ -121,7 +121,9 @@
                     aria-label="住院状态"
                     @update:value="emit('selectHospFilter', normalizeHospFilterValue($event))"
                   />
+                  <!-- 暂按用户要求隐藏「核验当日在院」快捷按钮，保留 props / emits 及父级联动逻辑 -->
                   <a-button
+                    v-if="false"
                     :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
                     :loading="hospitalizationStatusVerifying"
                     :disabled="hospitalizationStatusVerifying"
@@ -186,7 +188,7 @@
                       <span class="workbench-dept-select__option">
                         <span class="workbench-dept-select__name">{{ dept.name }}</span>
                         <span
-                          v-if="isStageQueueMode"
+                          v-if="showStageDepartmentOptionCount"
                           class="workbench-dept-select__count"
                         >{{
                           dept.total
@@ -197,7 +199,7 @@
                   <span
                     v-if="isStageQueueMode"
                     class="workbench-dept-filter__count"
-                    :aria-label="`当前科室共 ${activeDepartmentTotal} 份病历`"
+                    :aria-label="`当前阶段共 ${activeDepartmentTotal} 份病历`"
                   >
                     {{ activeDepartmentTotal }}
                   </span>
@@ -648,10 +650,23 @@ const searchPlaceholder = computed(() =>
 )
 
 const activeDepartmentTotal = computed(() => {
+  if (props.isStageQueueMode) {
+    return Math.max(0, Number(props.displayServerTotal || 0))
+  }
   const selected = props.departmentSelectOptions.find(
     (department) => department.name === props.activeDept,
   )
   return selected?.total ?? props.qcScopeTotal
+})
+
+const showStageDepartmentOptionCount = computed(() => {
+  if (!props.isStageQueueMode) return false
+  if (props.searchText.trim()) return false
+  const serverTotal = Math.max(0, Number(props.displayServerTotal || 0))
+  const selected = props.departmentSelectOptions.find(
+    (department) => department.name === props.activeDept,
+  )
+  return Boolean(selected && Number(selected.total || 0) === serverTotal)
 })
 
 const totalRows = computed(() =>

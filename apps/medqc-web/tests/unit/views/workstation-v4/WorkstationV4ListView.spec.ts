@@ -283,7 +283,7 @@ describe('WorkstationV4ListView filters', () => {
     expect(surface.find('.wv4-record-pool-filter__summary').text()).toContain('当前筛选')
     expect(
       surface.find('.workbench-hosp-filter .wv4-record-pool-filter__sync-shortcut').exists(),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       surface
         .find('.wv4-analysis-overview__header .wv4-record-pool-filter__sync-shortcut')
@@ -479,17 +479,17 @@ describe('WorkstationV4ListView filters', () => {
     expect(wrapper.emitted('selectHospFilter')?.[0]).toEqual(['discharged'])
   })
 
-  it('offers a dedicated lightweight verification shortcut for patients still hospitalized today', async () => {
+  it('hides the today-inpatient verification shortcut button while preserving admission date label and props contract', () => {
     const wrapper = mountListView({
       syncScope: 'today_inpatient',
       dateField: 'admission',
     })
-    const shortcut = wrapper.find('.wv4-record-pool-filter__sync-shortcut')
 
-    expect(shortcut.text()).toContain('当日在院 · 已核验')
+    expect(wrapper.find('.wv4-record-pool-filter__sync-shortcut').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('核验当日在院')
+    expect(wrapper.text()).not.toContain('当日在院 · 已核验')
     expect(wrapper.find('#record-pool-date-label').text()).toBe('入院日期')
-    await shortcut.trigger('click')
-    expect(wrapper.emitted('toggleTodayInpatient')).toHaveLength(1)
+    expect(wrapper.find('select.wv4-record-pool-filter__inpatient-sort').exists()).toBe(true)
   })
 
   it('shows server-side admission sorting only for inpatient records', async () => {

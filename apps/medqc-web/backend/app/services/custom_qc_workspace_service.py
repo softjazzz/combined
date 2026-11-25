@@ -1117,6 +1117,37 @@ def _safe_review_report(
     }
 
 
+_SAMPLE_VALIDATION_JOB_SOURCES = frozenset(
+    {
+        "manual_problem_sample_pool",
+        "manual_sample_formal_fast_screen_full",
+    }
+)
+
+
+def is_sample_validation_batch_job(job_or_filters: Mapping[str, Any] | None) -> bool:
+    """判断批次任务是否属于客户样本验证入口（不误伤病历池直连原生规则任务）。"""
+
+    if not isinstance(job_or_filters, Mapping):
+        return False
+    raw_filters = job_or_filters.get("filters")
+    filters = raw_filters if isinstance(raw_filters, Mapping) else job_or_filters
+    if _safe_text(filters.get("sample_pool_id")):
+        return True
+    source = _safe_text(filters.get("source")).lower()
+    if source in _SAMPLE_VALIDATION_JOB_SOURCES or source.startswith("manual_problem_sample_pool"):
+        return True
+    if job_or_filters.get("is_sample_validation") is True:
+        return True
+    if _safe_text(job_or_filters.get("task_origin")).lower() == "sample_validation":
+        return True
+    return False
+
+
+def resolve_batch_job_origin(job_or_filters: Mapping[str, Any] | None) -> str:
+    return "sample_validation" if is_sample_validation_batch_job(job_or_filters) else "record_pool"
+
+
 def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     """质控记录列表的一行：任务元数据、范围与病历进度，不含任何结果计数、结论或证据。
 
@@ -1135,6 +1166,7 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     total_records = _to_int(job.get("total_records"))
     success_count = _to_int(job.get("success_count"))
     customer_rule_count = _to_int(filters.get("customer_rule_count"))
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         "schema_version": "customer-qc-job-overview-v1",
         "id": _safe_text(job.get("id")),
@@ -1146,6 +1178,8 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
         "rule_set_name": _safe_text(filters.get("rule_set_name")),
         "scene": _safe_text(job.get("scene")),
         "scope": _safe_text(job.get("scope")),
+        "is_sample_validation": is_sample_validation,
+        "task_origin": "sample_validation" if is_sample_validation else "record_pool",
         "created_at": _safe_text(job.get("created_at")),
         "started_at": _safe_text(job.get("started_at")),
         "finished_at": _safe_text(job.get("finished_at")),
@@ -1541,8 +1575,11 @@ def project_customer_safe_batch_job(
     if isinstance(raw_summary.get("execution_error"), dict):
         from .qc_execution_errors import safe_failure_projection
         safe_summary["execution_error"] = safe_failure_projection(raw_summary["execution_error"])
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         "schema_version": "customer-qc-job-v1",
+        "is_sample_validation": is_sample_validation,
+        "task_origin": "sample_validation" if is_sample_validation else "record_pool",
         "retry_lineage": retry_lineage or None,
         "retry_of_job_id": retry_lineage.get("source_job_id", ""),
         "retry_root_job_id": retry_lineage.get("root_job_id", ""),
@@ -3870,6 +3907,7 @@ class CustomQCWorkspaceService:
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
         record_id: Optional[str] = None,
+        exclude_validation: bool = False,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
@@ -3912,21 +3950,42 @@ class CustomQCWorkspaceService:
         )
         session = _session()
         try:
-            total = int(
-                session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
-                or 0
-            )
-            rows = (
-                session.execute(
-                    select(*columns)
-                    .where(where_clause)
-                    .order_by(desc(table.c.created_at))
-                    .offset(max(page - 1, 0) * page_size)
-                    .limit(page_size)
+            if not exclude_validation:
+                total = int(
+                    session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
+                    or 0
                 )
-                .mappings()
-                .all()
-            )
+                rows = (
+                    session.execute(
+                        select(*columns)
+                        .where(where_clause)
+                        .order_by(desc(table.c.created_at))
+                        .offset(max(page - 1, 0) * page_size)
+                        .limit(page_size)
+                    )
+                    .mappings()
+                    .all()
+                )
+            else:
+                all_rows = (
+                    session.execute(
+                        select(*columns)
+                        .where(where_clause)
+                        .order_by(desc(table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
+                filtered_rows = [
+                    raw_row
+                    for raw_row in all_rows
+                    if not is_sample_validation_batch_job(
+                        _safe_json_loads(raw_row.get("filters_json"), {})
+                    )
+                ]
+                total = len(filtered_rows)
+                offset = max(page - 1, 0) * page_size
+                rows = filtered_rows[offset : offset + page_size]
         finally:
             session.close()
         items: List[Dict[str, Any]] = []
@@ -4010,6 +4069,7 @@ class CustomQCWorkspaceService:
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
         record_id: Optional[str] = None,
+        exclude_validation: bool = False,
         include_children: bool = False,
         institute_id: Optional[str] = None,
         page: int = 1,
@@ -4034,6 +4094,7 @@ class CustomQCWorkspaceService:
                 executor_value in {"program", "llm"}
                 or cache_hit is not None
                 or institute_scope is not None
+                or bool(exclude_validation)
             )
 
             if not enable_runtime_filter:
@@ -4073,6 +4134,14 @@ class CustomQCWorkspaceService:
                 .mappings()
                 .all()
             )
+            if exclude_validation:
+                rows = [
+                    row
+                    for row in rows
+                    if not is_sample_validation_batch_job(
+                        _safe_json_loads(row.get("filters_json"), {})
+                    )
+                ]
             all_items = [
                 self._aggregate_parent_job(
                     session,

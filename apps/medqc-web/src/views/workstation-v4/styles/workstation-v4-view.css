@@ -1451,3 +1451,10 @@
     display: none;
   }
 }
+
+/* 办公屏（1280×800 / 1366×860）：收紧筛选区行距，为首屏病历列表与右侧预览主按钮留出纵向空间 */
+@media (max-width: 1420px), (max-height: 880px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+    gap: 8px 10px;
+  }
+}

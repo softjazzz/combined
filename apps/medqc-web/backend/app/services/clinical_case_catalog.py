@@ -358,9 +358,9 @@ def _predicates(source, *, dept=None, doctor=None, keyword=None, start_date=None
         # 当前发布合同没有权威在院登记；没有出院信息不能证明在院。
         predicates.append(literal(False))
     elif hospital_status == "discharged":
-        predicates.append(source.c.discharge.is_not(None))
+        predicates.append(_ShanghaiISODate(source.c.discharge).is_not(None))
     elif hospital_status == "unknown":
-        predicates.append(source.c.discharge.is_(None))
+        predicates.append(_ShanghaiISODate(source.c.discharge).is_(None))
     # 与既有病历池一致：visit范围包含入院或出院，不能仅按入院过滤。
     # 禁止在 PG 直接 CAST(varchar AS DATE)；统一按 Asia/Shanghai 安全 ISO 日期校验与比较。
     if start_date or end_date:

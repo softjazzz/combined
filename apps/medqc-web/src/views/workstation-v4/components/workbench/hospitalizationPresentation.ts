@@ -1,6 +1,6 @@
 /**
  * 病历池住院状态与日期的展示口径（列表与右侧预览共用）。
- * 优先使用后端核验的 hospitalizationStatus；缺失时按是否有出院日期推断。
+ * 存在明确出院日期时统一归为已出院；否则优先使用后端核验的 hospitalizationStatus，缺失时默认在院。
  */
 export interface HospitalizationRow {
   sourceId?: 'legacy_pg' | 'independent_cdm'
@@ -9,10 +9,12 @@ export interface HospitalizationRow {
   hospitalizationStatusVerifiedAt?: string
 }
 
+const EMPTY_HOSPITAL_DATE_PLACEHOLDERS = new Set(['-', '--', '—', 'null', 'none', 'undefined'])
+
 export function displayHospitalDate(value?: string) {
   const normalized = String(value || '').trim()
   // 仅替换 ISO 日期与时间的分隔符，不按浏览器时区转换，不给日期补零点。
-  return normalized && normalized !== '-'
+  return normalized && !EMPTY_HOSPITAL_DATE_PLACEHOLDERS.has(normalized.toLowerCase())
     ? normalized.replace(/^(\d{4}-\d{2}-\d{2})T(?=\d{2}:\d{2})/, '$1 ')
     : '-'
 }
@@ -22,8 +24,9 @@ export function isDischargedRecord(record: Pick<HospitalizationRow, 'dischargeDa
 }
 
 export function resolvedHospitalizationStatus(record: HospitalizationRow) {
+  if (isDischargedRecord(record)) return 'discharged'
   if (record.hospitalizationStatus) return record.hospitalizationStatus
-  return isDischargedRecord(record) ? 'discharged' : 'inpatient'
+  return 'inpatient'
 }
 
 export function hospitalizationStatusLabel(record: HospitalizationRow) {

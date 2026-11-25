@@ -258,7 +258,9 @@ def _projection_matches_frontpage(*, status: str | None = None, verified_today: 
         HospitalizationStatusProjection.patient_id == MedicalRecordFrontpage.patient_id,
         HospitalizationStatusProjection.visit_id == MedicalRecordFrontpage.visit_id,
     ]
-    if status:
+    if status == "inpatient":
+        conditions.append(HospitalizationStatusProjection.status.in_(("inpatient", "active")))
+    elif status:
         conditions.append(HospitalizationStatusProjection.status == status)
     if verified_today:
         conditions.append(func.date(HospitalizationStatusProjection.verified_at) == _hospital_today())
@@ -269,7 +271,11 @@ def _load_hospitalization_projection_map(
     session: Session,
 ) -> dict[tuple[str, str, str], dict[str, Any]]:
     return {
-        (str(row.institute_id), str(row.patient_id), str(row.visit_id)): {
+        (
+            str(row.institute_id).strip(),
+            str(row.patient_id).strip(),
+            str(row.visit_id).strip(),
+        ): {
             "status": str(row.status or "unknown"),
             "verified_at": row.verified_at,
             "source": str(row.source or ""),
@@ -277,6 +283,46 @@ def _load_hospitalization_projection_map(
         }
         for row in clinical_query(session, HospitalizationStatusProjection).all()
     }
+
+
+def _resolve_workstation_hospitalization_state(
+    *,
+    resolved_discharge_datetime: datetime | None,
+    has_discharge_record: bool,
+    hospitalization_projection: Mapping[str, Any] | None,
+) -> tuple[str | None, Any, str]:
+    """统一工作台行级住院状态与筛选口径：本地明确出院证据优先于过期的在院投影。"""
+
+    projection = hospitalization_projection or {}
+    projection_status = str(projection.get("status") or "").strip().lower()
+    locally_discharged = resolved_discharge_datetime is not None or bool(has_discharge_record)
+    if locally_discharged:
+        if projection_status == "discharged":
+            return (
+                "discharged",
+                projection.get("verified_at"),
+                str(projection.get("source") or "local_discharge_evidence"),
+            )
+        return ("discharged", None, "local_discharge_evidence")
+    if projection_status == "discharged":
+        return (
+            "discharged",
+            projection.get("verified_at"),
+            str(projection.get("source") or ""),
+        )
+    if projection_status in {"inpatient", "active"}:
+        return (
+            "inpatient",
+            projection.get("verified_at"),
+            str(projection.get("source") or ""),
+        )
+    if projection_status:
+        return (
+            "unknown",
+            projection.get("verified_at"),
+            str(projection.get("source") or ""),
+        )
+    return (None, None, "")
 
 
 def _escape_like_pattern(value: str) -> str:
@@ -628,7 +674,11 @@ def _filter_indexed_registration_records(
 
     filtered: list[SimpleNamespace] = []
     for record in records:
-        identity = (str(record.institute_id), str(record.patient_id), str(record.visit_id))
+        identity = (
+            str(record.institute_id).strip(),
+            str(record.patient_id).strip(),
+            str(record.visit_id).strip(),
+        )
         projection = hospitalization_projection_map.get(identity) or {}
         projection_status = str(projection.get("status") or "").strip().lower()
         verified_at = _parse_datetime_value(projection.get("verified_at"))
@@ -639,7 +689,7 @@ def _filter_indexed_registration_records(
         if sync_scope == "today_inpatient" and (
             locally_discharged
             or not (
-                projection_status == "inpatient"
+                projection_status in {"inpatient", "active"}
                 and verified_at is not None
                 and verified_at.date() == _hospital_today()
             )
@@ -675,9 +725,9 @@ def _filter_indexed_registration_records(
                 continue
         discharged = projection_status == "discharged" or locally_discharged
         inpatient = not locally_discharged and (
-            projection_status == "inpatient" or not projection_status
+            projection_status in {"inpatient", "active"} or not projection_status
         )
-        unknown = not discharged and projection_status != "inpatient"
+        unknown = not discharged and projection_status not in {"inpatient", "active"}
         if hospital_status == "inpatient" and not inpatient:
             continue
         if hospital_status == "discharged" and not discharged:
@@ -724,9 +774,14 @@ def _serialize_real_workstation_record(
     if not key:
         return {}
     discharge_summary = discharge_summary_map.get(key) or {}
+    resolved_admission_datetime = _parse_datetime_value(record.admission_datetime)
     resolved_discharge_datetime = (
         _parse_datetime_value(discharge_summary.get("discharge_time"))
-        or record.discharge_datetime
+        or _parse_datetime_value(record.discharge_datetime)
+    )
+    has_discharge_record = bool(
+        discharge_summary.get("has_discharge_record")
+        or getattr(record, "_has_discharge_record", False)
     )
     resolved_dept_name = (
         discharge_summary.get("dept_name")
@@ -736,8 +791,22 @@ def _serialize_real_workstation_record(
     )
     qc_info = status_map.get(key)
     hospitalization_projection = hospitalization_projection_map.get(
-        (str(record.institute_id), str(record.patient_id), str(record.visit_id))
+        (
+            str(record.institute_id).strip(),
+            str(record.patient_id).strip(),
+            str(record.visit_id).strip(),
+        )
     ) or {}
+    (
+        resolved_hospitalization_status,
+        resolved_hospitalization_verified_at,
+        resolved_hospitalization_source,
+    ) = _resolve_workstation_hospitalization_state(
+        resolved_discharge_datetime=resolved_discharge_datetime,
+        has_discharge_record=has_discharge_record,
+        hospitalization_projection=hospitalization_projection,
+    )
+    resolved_verified_at_dt = _parse_datetime_value(resolved_hospitalization_verified_at)
     if qc_info is None:
         record_status = "pending"
     elif qc_info["has_error"]:
@@ -765,16 +834,17 @@ def _serialize_real_workstation_record(
     if queue_status_source not in {"backfill", "runtime"}:
         queue_status_source = "backfill"
 
-    sort_time = record.update_time or resolved_discharge_datetime or record.admission_datetime
+    resolved_update_time = _parse_datetime_value(record.update_time)
+    sort_time = resolved_update_time or resolved_discharge_datetime or resolved_admission_datetime
     hospital_days = 0
     if record.hospital_duration:
         try:
             hospital_days = int(record.hospital_duration)
         except (TypeError, ValueError):
             hospital_days = 0
-    elif record.admission_datetime and resolved_discharge_datetime:
+    elif resolved_admission_datetime and resolved_discharge_datetime:
         hospital_days = max(
-            (resolved_discharge_datetime.date() - record.admission_datetime.date()).days,
+            (resolved_discharge_datetime.date() - resolved_admission_datetime.date()).days,
             0,
         )
 
@@ -789,23 +859,23 @@ def _serialize_real_workstation_record(
         "age": int(record.age_year) if record.age_year else 0,
         "insurance": record.insurance_type or "",
         "department": resolved_dept_name,
-        "admissionDate": record.admission_datetime.strftime("%Y-%m-%d") if record.admission_datetime else "",
+        "admissionDate": resolved_admission_datetime.strftime("%Y-%m-%d") if resolved_admission_datetime else "",
         "dischargeDate": resolved_discharge_datetime.strftime("%Y-%m-%d") if resolved_discharge_datetime else "",
         "dischargeDatetime": (
             resolved_discharge_datetime.strftime("%Y-%m-%d %H:%M:%S")
             if resolved_discharge_datetime
             else ""
         ),
-        "admissionDateDisplay": record.admission_datetime.strftime("%m-%d") if record.admission_datetime else "",
+        "admissionDateDisplay": resolved_admission_datetime.strftime("%m-%d") if resolved_admission_datetime else "",
         "dischargeDateDisplay": resolved_discharge_datetime.strftime("%m-%d") if resolved_discharge_datetime else "",
-        "hospitalizationStatus": hospitalization_projection.get("status"),
+        "hospitalizationStatus": resolved_hospitalization_status,
         "hospitalizationStatusVerifiedAt": (
-            hospitalization_projection["verified_at"].strftime("%Y-%m-%d %H:%M:%S")
-            if hospitalization_projection.get("verified_at")
+            resolved_verified_at_dt.strftime("%Y-%m-%d %H:%M:%S")
+            if resolved_verified_at_dt
             else ""
         ),
-        "hospitalizationStatusSource": hospitalization_projection.get("source") or "",
-        "updateTime": record.update_time.strftime("%Y-%m-%d %H:%M:%S") if record.update_time else "",
+        "hospitalizationStatusSource": resolved_hospitalization_source,
+        "updateTime": resolved_update_time.strftime("%Y-%m-%d %H:%M:%S") if resolved_update_time else "",
         "sortTime": sort_time.strftime("%Y-%m-%d %H:%M:%S") if sort_time else "",
         "days": hospital_days,
         "doctor": record.attending_physician_sign or "",
@@ -1859,6 +1929,7 @@ def get_workstation_data(
                 discharge_summary.c.visit_id,
                 discharge_summary.c.discharge_time,
                 discharge_summary.c.dept_name,
+                discharge_summary.c.document_id,
             ).filter(discharge_summary.c.visit_id.in_([r.visit_id for r in records])).all()
             for row in discharge_rows:
                 key = _workstation_record_key(row.institute_id, row.patient_id, row.visit_id)
@@ -1867,6 +1938,7 @@ def get_workstation_data(
                 discharge_summary_map[key] = {
                     "discharge_time": _parse_datetime_value(row.discharge_time),
                     "dept_name": row.dept_name,
+                    "has_discharge_record": bool(str(row.document_id or "").strip()),
                 }
 
         bed_map: dict[str, str] = {}

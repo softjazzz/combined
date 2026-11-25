@@ -1,6 +1,10 @@
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
 
 import RecordPoolQcTaskHistory from '@/views/workstation-v4/components/workbench/RecordPoolQcTaskHistory.vue'
 
@@ -95,6 +99,7 @@ describe('RecordPoolQcTaskHistory', () => {
             props: {
               open: Boolean,
               batchJobDetail: Object,
+              backLabel: String,
             },
             setup(props) {
               return () =>
@@ -102,6 +107,7 @@ describe('RecordPoolQcTaskHistory', () => {
                   'data-testid': 'batch-job-detail-drawer',
                   'data-open': String(props.open),
                   'data-job-id': String((props.batchJobDetail as { id?: string } | null)?.id || ''),
+                  'data-back-label': String(props.backLabel || ''),
                 })
             },
           }),
@@ -112,7 +118,11 @@ describe('RecordPoolQcTaskHistory', () => {
     await wrapper.get('[data-testid="record-pool-qc-task-history-entry"]').trigger('click')
     await flushPromises()
 
-    expect(listJobs).toHaveBeenCalledWith({ page: 1, page_size: 30 })
+    expect(listJobs).toHaveBeenCalledWith({
+      page: 1,
+      page_size: 30,
+      exclude_validation: true,
+    })
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).not.toContain('其他规则任务')
 
@@ -130,5 +140,8 @@ describe('RecordPoolQcTaskHistory', () => {
     expect(wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-job-id')).toBe(
       'record-pool-job',
     )
+    expect(
+      wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-back-label'),
+    ).toBe('返回病历池')
   })
 })

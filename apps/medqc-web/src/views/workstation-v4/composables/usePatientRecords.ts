@@ -548,14 +548,18 @@ export function usePatientRecords(initialHospitalStatus: HospitalStatusScope = '
   }
 
   function selectDept(deptName: string) {
-    activeDept.value = deptName
+    const nextDept = String(deptName || ALL_DEPARTMENTS).trim() || ALL_DEPARTMENTS
+    if (activeDept.value === nextDept && activeDoctor.value === ALL_DOCTORS) return
+    activeDept.value = nextDept
     activeDoctor.value = ALL_DOCTORS
     currentPage.value = 1
     fetchData(1)
   }
 
   function selectDoctor(doctorName: string) {
-    activeDoctor.value = String(doctorName || ALL_DOCTORS).trim() || ALL_DOCTORS
+    const nextDoctor = String(doctorName || ALL_DOCTORS).trim() || ALL_DOCTORS
+    if (activeDoctor.value === nextDoctor) return
+    activeDoctor.value = nextDoctor
     currentPage.value = 1
     fetchData(1)
   }

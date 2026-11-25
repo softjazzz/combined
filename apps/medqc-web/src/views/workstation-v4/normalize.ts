@@ -93,16 +93,62 @@ export function resolveVisitId(record: PatientRecord): string {
   return (record as any).visitId || record.id
 }
 
+const FULL_DATE_RE = /^(\d{4})-(\d{2})-(\d{2})/
+const EMPTY_DATE_PLACEHOLDERS = new Set(['-', '--', '—', 'null', 'none', 'undefined'])
+
+function hasExplicitDischargeDate(value: string): boolean {
+  const normalized = value.trim()
+  if (!normalized) return false
+  return !EMPTY_DATE_PLACEHOLDERS.has(normalized.toLowerCase())
+}
+
+function parseFullDateUtcMs(value: string): number {
+  const match = value.trim().match(FULL_DATE_RE)
+  if (!match) return Number.NaN
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  if (!year || month < 1 || month > 12 || day < 1 || day > 31) return Number.NaN
+  return Date.UTC(year, month - 1, day)
+}
+
+function computeDischargedStayDays(admissionDate: string, dischargeDate: string): number | null {
+  const startMs = parseFullDateUtcMs(admissionDate)
+  const endMs = parseFullDateUtcMs(dischargeDate)
+  if (Number.isNaN(startMs) || Number.isNaN(endMs) || endMs < startMs) return null
+  return Math.max(1, Math.round((endMs - startMs) / 86_400_000))
+}
+
 export function normalizeRecord(raw: unknown): PatientRecord {
   const source = (raw || {}) as LooseRecord
   const id =
     pickString(source, ['id', 'record_id', 'visit_id', 'visitId']) || `record-${Date.now()}`
   const visitId = pickString(source, ['visitId', 'visit_id']) || id
   const dischargeDatetime = pickString(source, ['dischargeDatetime', 'discharge_datetime'])
-  const dischargeDate =
+  const rawDischargeDate =
     pickString(source, ['dischargeDate', 'discharge_date', 'out_date']) ||
     dischargeDatetime.slice(0, 10)
+  const hasDischargeDate = hasExplicitDischargeDate(rawDischargeDate)
+  const dischargeDate = hasDischargeDate ? rawDischargeDate : ''
   const admissionDate = pickString(source, ['admissionDate', 'admission_date', 'in_date'])
+  const rawHospitalizationStatus = pickString(source, [
+    'hospitalizationStatus',
+    'hospitalization_status',
+  ]).toLowerCase()
+  const hospitalizationStatus: PatientRecord['hospitalizationStatus'] = hasDischargeDate
+    ? 'discharged'
+    : rawHospitalizationStatus === 'inpatient' || rawHospitalizationStatus === 'active'
+      ? 'inpatient'
+      : rawHospitalizationStatus === 'discharged' || rawHospitalizationStatus === 'unknown'
+        ? rawHospitalizationStatus
+        : undefined
+  const rawDays = asNumber(
+    source.days ?? source.stay_days ?? source.length_of_stay ?? source.hospital_days,
+  )
+  const dischargedStayDays = hasDischargeDate
+    ? computeDischargedStayDays(admissionDate, dischargeDate)
+    : null
+  const days = dischargedStayDays ?? rawDays
   const updateTime = pickString(source, ['updateTime', 'update_time', 'updated_at'])
   const sortTime =
     pickString(source, ['sortTime', 'sort_time']) || updateTime || dischargeDate || admissionDate
@@ -165,15 +211,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     admissionDate,
     dischargeDate,
     dischargeDatetime,
-    hospitalizationStatus: (() => {
-      const status = pickString(source, [
-        'hospitalizationStatus',
-        'hospitalization_status',
-      ]).toLowerCase()
-      return status === 'inpatient' || status === 'discharged' || status === 'unknown'
-        ? status
-        : undefined
-    })(),
+    hospitalizationStatus,
     hospitalizationStatusVerifiedAt:
       pickString(source, [
         'hospitalizationStatusVerifiedAt',
@@ -187,9 +225,7 @@ export function normalizeRecord(raw: unknown): PatientRecord {
     materialCompleteness: pickString(source, ['materialCompleteness']) || undefined,
     updateTime: updateTime || undefined,
     sortTime: sortTime || undefined,
-    days: asNumber(
-      source.days ?? source.stay_days ?? source.length_of_stay ?? source.hospital_days,
-    ),
+    days,
     cdmFrontpageEmpty,
     hasAdmission,
     hasFrontpageDraft,

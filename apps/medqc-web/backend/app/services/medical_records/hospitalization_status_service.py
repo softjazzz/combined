@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import inspect as sa_inspect, text
 from sqlalchemy.orm import Session
@@ -70,9 +70,11 @@ def reconcile_hospitalization_statuses(
     local_discharge_times: Mapping[CaseIdentity, datetime],
     source_result: HospitalizationScopeResult,
     verified_at: datetime,
+    local_discharge_doc_identities: Iterable[CaseIdentity] = (),
 ) -> list[dict[str, Any]]:
     """将源库当前范围与本地明确出院证据归并成安全的当前状态。"""
 
+    discharge_doc_identities = set(local_discharge_doc_identities)
     source_rows = {
         (
             str(row.get("institute_id") or "").strip(),
@@ -84,18 +86,26 @@ def reconcile_hospitalization_statuses(
     projections: list[dict[str, Any]] = []
     for identity in sorted(local_identities):
         source_row = source_rows.get(identity) or {}
-        source_status = str(source_row.get("hospitalization_status") or "").strip()
-        local_discharge = _as_datetime(local_discharge_times.get(identity))
-        source_discharge = _as_datetime(source_row.get("discharge_time"))
+        source_status = str(source_row.get("hospitalization_status") or "").strip().lower()
+        raw_local_discharge = _as_datetime(local_discharge_times.get(identity))
+        raw_source_discharge = _as_datetime(source_row.get("discharge_time"))
+        local_discharge = raw_local_discharge
+        source_discharge = raw_source_discharge
         if local_discharge is not None and local_discharge > verified_at:
             local_discharge = None
         if source_discharge is not None and source_discharge > verified_at:
             source_discharge = None
         discharge_datetime = source_discharge or local_discharge
-        if source_status == "discharged" or discharge_datetime is not None:
+        has_local_discharge_doc = identity in discharge_doc_identities
+        has_any_discharge_evidence = (
+            raw_local_discharge is not None
+            or raw_source_discharge is not None
+            or has_local_discharge_doc
+        )
+        if source_status == "discharged" or discharge_datetime is not None or has_local_discharge_doc:
             status = "discharged"
             source = str(source_row.get("source_table") or "local_discharge_evidence")
-        elif source_status == "active":
+        elif source_status in {"active", "inpatient"} and not has_any_discharge_evidence:
             status = "inpatient"
             source = str(source_row.get("source_table") or "source_active_scope")
         else:
@@ -154,11 +164,15 @@ class HospitalizationStatusService:
             local_identities, local_discharge_times = self._load_local_cases(
                 session, target_schema=target_schema
             )
+            local_discharge_doc_identities = self._load_local_discharge_doc_identities(
+                session, target_schema=target_schema
+            )
             rows = reconcile_hospitalization_statuses(
                 local_identities=local_identities,
                 local_discharge_times=local_discharge_times,
                 source_result=source_result,
                 verified_at=verified_at,
+                local_discharge_doc_identities=local_discharge_doc_identities,
             )
             try:
                 existing = {
@@ -277,6 +291,26 @@ class HospitalizationStatusService:
                 if all(identity):
                     identities.add((identity[0], identity[1], identity[2]))
         return identities, discharge_times
+
+    @staticmethod
+    def _load_local_discharge_doc_identities(
+        session: Session,
+        *,
+        target_schema: str | None = None,
+    ) -> set[CaseIdentity]:
+        doc_identities: set[CaseIdentity] = set()
+        for row in _scoped_query(
+            session,
+            target_schema,
+            DischargeRecord.institute_id,
+            DischargeRecord.patient_id,
+            DischargeRecord.visit_id,
+            DischargeRecord.document_id,
+        ).all():
+            identity = _identity(row)
+            if identity is not None and str(getattr(row, "document_id", None) or "").strip():
+                doc_identities.add(identity)
+        return doc_identities
 
 
 default_hospitalization_status_service = HospitalizationStatusService()
