@@ -1,6 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import {
+  resolveAuthorizedWorkstationPath,
+  resolveDefaultWorkstationPath,
+} from '@/components/layout/workstationNav'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import { canUseMessageCenter, MESSAGE_CENTER_PATH, MESSAGE_CENTER_ROLES } from '@/views/workstation/notificationNavigation'
 import type { RouteRecordRaw } from 'vue-router'
+
+export { resolveAuthorizedWorkstationPath, resolveDefaultWorkstationPath }
 
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
@@ -231,7 +238,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '整改任务',
           icon: 'ToolOutlined',
-          permission: ['admin', 'qc_manager', 'doctor'],
+          permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'],
         },
       },
 
@@ -933,13 +940,16 @@ const routes: RouteRecordRaw[] = [
         path: 'stats',
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
-        meta: { title: '统计分析', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: { title: '统计分析', permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'] },
       },
       {
         path: 'reports/record-quality',
         name: 'WorkstationV5RecordQualityReport',
         component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
-        meta: { title: '病历质量分析', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '病历质量分析',
+          permission: ['admin', 'qc_manager', 'super_admin'],
+        },
       },
       {
         path: 'reports/special-records',
@@ -1149,10 +1159,13 @@ router.beforeEach(async (to, from, next) => {
     }
 
     if (authStore.isAuthenticated) {
-      const redirect =
+      const defaultLanding = resolveDefaultWorkstationPath(authStore.userRoles)
+      const rawRedirect =
         typeof to.query.redirect === 'string'
           ? normalizeWorkstationPath(to.query.redirect)
-          : WORKSTATION_BASE_PATH
+          : ''
+      const redirect =
+        rawRedirect && rawRedirect !== WORKSTATION_BASE_PATH ? rawRedirect : defaultLanding
       next(redirect)
       return
     }
@@ -1201,19 +1214,22 @@ router.beforeEach(async (to, from, next) => {
 
     // 检查权限
     if (to.meta.permission) {
-      const userRoles = authStore.userRoles
+      const userRoles = effectiveRoles(authStore.userRoles)
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = userRoles.includes('sync_admin') || requiredPermissions.some((permission) => userRoles.includes(permission))
+      const hasPermission =
+        userRoles.includes('sync_admin') ||
+        userRoles.includes('super_admin') ||
+        requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
-        // 普通质控员已有待办权限，不能回到无权进入的首页形成重定向循环。
-        if (userRoles.includes('qc_staff')) {
-          next('/workstation-v5/feedback')
+        const fallbackWorkstationPath = resolveAuthorizedWorkstationPath(userRoles)
+        if (fallbackWorkstationPath && to.path !== fallbackWorkstationPath) {
+          next(fallbackWorkstationPath)
           return
         }
-        // 仪表板会返回工作台首页。已在首页时，使用登录后可访问的个人资料页。
-        next(to.name === 'WorkstationV4Index' ? '/auth/profile' : '/dashboard')
+        // 无任何可用工作台入口或目标即默认入口时，回退登录后可访问的个人资料页，避免重定向循环。
+        next('/auth/profile')
         return
       }
     }

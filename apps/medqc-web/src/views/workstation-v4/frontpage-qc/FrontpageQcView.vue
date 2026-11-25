@@ -13,7 +13,7 @@
       </div>
       <div class="mq-page-head__actions">
         <nav
-          v-if="homeInstitute"
+          v-if="canSwitchDataScope"
           class="mq-segmented mq-segmented--sm"
           aria-label="数据范围"
         >
@@ -213,10 +213,16 @@
           <option value="required_missing">
             有必填缺项
           </option>
-          <option value="hint">
+          <option
+            v-if="!confirmedResultsOnly"
+            value="hint"
+          >
             有提示
           </option>
-          <option value="data_gap">
+          <option
+            v-if="!confirmedResultsOnly"
+            value="data_gap"
+          >
             有资料不足
           </option>
           <option value="clean">
@@ -227,7 +233,7 @@
           </option>
         </select>
         <span
-          v-if="ruleFilter"
+          v-if="ruleFilter && (!confirmedResultsOnly || ruleFilter.rule_verdict !== 'data_gap')"
           class="fpqc-toolbar__rule"
           data-testid="fpqc-rule-filter"
         >
@@ -417,7 +423,7 @@
           </p>
         </div>
         <dl class="mq-soft fpqc-confirm__summary">
-          <div v-if="homeInstitute">
+          <div v-if="canSwitchDataScope">
             <dt>数据范围</dt>
             <dd>{{ applied.data_scope === 'all' ? '含测试数据' : '本院病历' }}</dd>
           </div>
@@ -459,6 +465,7 @@
 <script setup lang="ts">
 import { Alert, Button, DatePicker as ADatePicker, Empty, Modal, Pagination, Spin } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 
 import MqIconTile from '@/components/icons/MqIconTile.vue'
@@ -492,12 +499,12 @@ import FrontpageQcRunBar from './FrontpageQcRunBar.vue'
 import { formatPercent, formatScore } from './presentation'
 import { useFrontpageQcRun } from './useFrontpageQcRun'
 
-type FrontpageQcViewIssueFilter = FrontpageQcIssueFilter | 'required_missing'
-
 interface FilterState extends Required<FrontpageQcScopeFilters> {
   grade: FrontpageQcGrade | ''
-  issue: FrontpageQcViewIssueFilter
+  issue: FrontpageQcIssueFilter
 }
+
+const UNFILLED_DEPARTMENT = '未填科室'
 
 const emptyFilters = (): FilterState => ({
   data_scope: 'home',
@@ -525,6 +532,28 @@ const loadError = ref('')
 const notice = ref('')
 const exporting = ref(false)
 const auth = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
+const normalizedRoles = computed(() => {
+  const raw = Array.isArray(auth.user?.roles)
+    ? auth.user.roles
+    : auth.user?.role
+      ? [auth.user.role]
+      : Array.isArray(auth.userRoles)
+        ? auth.userRoles
+        : []
+  return new Set(raw.map((role) => String(role || '').trim().toLowerCase()).filter(Boolean))
+})
+const boundInstitute = computed(() =>
+  String(auth.user?.institute_id || auth.user?.hospital_id || '').trim(),
+)
+const isGlobalAdmin = computed(() => {
+  const roles = normalizedRoles.value
+  if (roles.has('sync_admin')) return true
+  return (roles.has('admin') || roles.has('super_admin')) && !boundInstitute.value
+})
+const canSwitchDataScope = computed(
+  () => Boolean(homeInstitute.value) && !confirmedResultsOnly.value && isGlobalAdmin.value,
+)
 let exportGeneration = 0
 let exportAlive = true
 const activeKey = ref('')
@@ -590,7 +619,6 @@ async function loadList(targetPage = page.value) {
   try {
     const data = await listFrontpageQcRecords({
       ...applied,
-      issue: applied.issue as FrontpageQcIssueFilter,
       ...ruleQuery(),
       page: targetPage,
       page_size: pageSize.value,
@@ -647,7 +675,7 @@ async function loadFilterOptions() {
 }
 
 async function changeDataScope(scope: FrontpageQcDataScope) {
-  if (scopeChanging.value || scope === applied.data_scope) return
+  if (!canSwitchDataScope.value || scopeChanging.value || scope === applied.data_scope) return
   scopeChanging.value = true
   draft.data_scope = scope
   applied.data_scope = scope
@@ -703,6 +731,7 @@ function clearRuleFilter() {
 }
 
 function drillRule(rule: { rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' }) {
+  if (confirmedResultsOnly.value && rule.rule_verdict === 'data_gap') return
   ruleFilter.value = rule
   // 按规则只能看已质控病历；“未质控”与之冲突时清掉
   if (draft.issue === 'unchecked') draft.issue = ''
@@ -713,7 +742,9 @@ function drillRule(rule: { rule_id: string; rule_name: string; rule_verdict: 'fa
 }
 
 function drillDepartment(department: string) {
-  draft.department = department
+  const normalized = String(department || '').trim()
+  if (!normalized || normalized === UNFILLED_DEPARTMENT) return
+  draft.department = normalized
   activeView.value = 'records'
   applyFilters()
 }
@@ -829,6 +860,20 @@ function exportFiltered() {
     '首页质控-当前筛选.xlsx',
   )
 }
+
+watch(canSwitchDataScope, (allowed) => {
+  if (!allowed && (draft.data_scope !== 'home' || applied.data_scope !== 'home')) {
+    draft.data_scope = 'home'
+    applied.data_scope = 'home'
+  }
+})
+
+watch(confirmedResultsOnly, (onlyConfirmed) => {
+  if (!onlyConfirmed) return
+  if (draft.issue === 'hint' || draft.issue === 'data_gap') draft.issue = ''
+  if (applied.issue === 'hint' || applied.issue === 'data_gap') applied.issue = ''
+  if (ruleFilter.value?.rule_verdict === 'data_gap') ruleFilter.value = null
+})
 
 watch(activeView, (view) => {
   if (view === 'analysis') analyticsRefreshKey.value += 1

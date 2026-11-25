@@ -3,7 +3,9 @@ import {
   WORKSTATION_NAV,
   filterVisibleNav,
   findActiveNav,
+  resolveAuthorizedWorkstationPath,
   resolveBreadcrumb,
+  resolveDefaultWorkstationPath,
   type NavRouteLike,
 } from '../workstationNav'
 
@@ -18,7 +20,11 @@ describe('workstationNav 选中项', () => {
     [route(B), 'home'],
     [route(`${B}/qc-overview`), 'home'],
     [route(`${B}/worklist`), 'worklist'],
+    [route(`${B}/qc-task`), 'worklist'],
+    [route(`${B}/feedback`), 'feedback-worklist'],
+    [route(`${B}/case-communications`), 'feedback-worklist'],
     [route(`${B}/messages`), 'message-center'],
+    [route(`${B}/qc-result`), 'message-center'],
     [route(B, { record_id: 'r1' }), 'worklist'],
     [route(B, { task_id: 't1' }), 'worklist'],
     [route(B, { source: 'analytics', analytics_scope: 'final', analytics_rule_id: 'R1' }), 'worklist'],
@@ -146,5 +152,30 @@ describe('workstationNav 可见性', () => {
     expect(visible).toContain('feedback-worklist')
     expect(visible).toContain('frontpage-qc-v2')
     expect(visible).toContain('rule-validation')
+  })
+
+  it('super_admin 可见全部非演示专属导航入口，且不误显演示反馈入口', () => {
+    const visible = keys(
+      filterVisibleNav(WORKSTATION_NAV, {
+        isDemoFeedbackAccount: false,
+        userRoles: ['super_admin'],
+        resolvePermission,
+      }),
+    )
+    expect(visible).toContain('stats')
+    expect(visible).toContain('report-record-quality')
+    expect(visible).toContain('records-running')
+    expect(visible).toContain('rule-validation')
+    expect(visible).not.toContain('qc-feedback-demo')
+  })
+
+  it('统一默认工作台着陆页解析覆盖 coder、qc_staff 与管理/医生角色', () => {
+    expect(resolveDefaultWorkstationPath(['coder'])).toBe(`${B}/frontpage-qc`)
+    expect(resolveDefaultWorkstationPath(['coder', 'doctor'])).toBe(B)
+    expect(resolveDefaultWorkstationPath(['qc_staff'])).toBe(`${B}/feedback`)
+    expect(resolveDefaultWorkstationPath(['super_admin'])).toBe(B)
+    expect(resolveDefaultWorkstationPath(['sync_admin'])).toBe(B)
+    expect(resolveAuthorizedWorkstationPath(['nurse'])).toBeNull()
+    expect(resolveDefaultWorkstationPath(['nurse'])).toBe(B)
   })
 })

@@ -131,7 +131,11 @@
       />
       <div>
         <strong>正在汇总最新质控结果</strong>
-        <span>只读取当前范围内已交付的 Canonical 结果。</span>
+        <span>{{
+          confirmedResultsOnly
+            ? '正在汇总当前范围内已完成的质控结果。'
+            : '只读取当前范围内已交付的 Canonical 结果。'
+        }}</span>
       </div>
     </section>
 
@@ -185,10 +189,16 @@
                   <th scope="col">
                     确定问题
                   </th>
-                  <th scope="col">
+                  <th
+                    v-if="!confirmedResultsOnly"
+                    scope="col"
+                  >
                     资料待核实
                   </th>
-                  <th scope="col">
+                  <th
+                    v-if="!confirmedResultsOnly"
+                    scope="col"
+                  >
                     待判断
                   </th>
                   <th scope="col">
@@ -218,12 +228,12 @@
                         rule.non_compliant_count
                       }}</span>
                     </td>
-                    <td>
+                    <td v-if="!confirmedResultsOnly">
                       <span class="qc-result-analysis__count is-warning">{{
                         rule.data_gap_count
                       }}</span>
                     </td>
-                    <td>
+                    <td v-if="!confirmedResultsOnly">
                       <span class="qc-result-analysis__count is-neutral">{{
                         rule.uncertain_count
                       }}</span>
@@ -254,7 +264,7 @@
                     v-if="expandedRuleId === rule.rule_id"
                     class="qc-result-analysis__department-row"
                   >
-                    <td colspan="6">
+                    <td :colspan="confirmedResultsOnly ? 4 : 6">
                       <div
                         v-if="rule.department_distribution.length"
                         class="qc-result-analysis__department-list"
@@ -269,13 +279,14 @@
                           <small>{{ departmentItem.record_total }} 份病历</small>
                           <strong>
                             <em v-if="departmentItem.non_compliant_count">确定 {{ departmentItem.non_compliant_count }}</em>
-                            <em v-if="departmentItem.data_gap_count">待核实 {{ departmentItem.data_gap_count }}</em>
-                            <em v-if="departmentItem.uncertain_count">待判断 {{ departmentItem.uncertain_count }}</em>
+                            <em v-if="!confirmedResultsOnly && departmentItem.data_gap_count">待核实 {{ departmentItem.data_gap_count }}</em>
+                            <em v-if="!confirmedResultsOnly && departmentItem.uncertain_count">待判断 {{ departmentItem.uncertain_count }}</em>
                             <template
                               v-if="
                                 !departmentItem.non_compliant_count &&
-                                  !departmentItem.data_gap_count &&
-                                  !departmentItem.uncertain_count
+                                  (confirmedResultsOnly ||
+                                    (!departmentItem.data_gap_count &&
+                                      !departmentItem.uncertain_count))
                               "
                             >无重点问题</template>
                           </strong>
@@ -346,11 +357,12 @@
                   <strong>{{ item.physician }}</strong>
                   <small>
                     <em v-if="item.non_compliant_count">确定 {{ item.non_compliant_count }}</em>
-                    <em v-if="item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
-                    <em v-if="item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
+                    <em v-if="!confirmedResultsOnly && item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
+                    <em v-if="!confirmedResultsOnly && item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
                     <template
                       v-if="
-                        !item.non_compliant_count && !item.data_gap_count && !item.uncertain_count
+                        !item.non_compliant_count &&
+                          (confirmedResultsOnly || (!item.data_gap_count && !item.uncertain_count))
                       "
                     >已核对 {{ item.record_total }}</template>
                   </small>
@@ -382,7 +394,7 @@
           <span
             v-if="selectedRule"
             class="qc-result-analysis__panel-note"
-          >{{ payload.record_page.total }} 份匹配病历</span>
+          >{{ visibleRecordTotal }} 份匹配病历</span>
         </header>
         <div
           v-if="!selectedRule"
@@ -391,7 +403,7 @@
           请在上方选择一个质控点，查看对应科室、医师和病历结果。
         </div>
         <div
-          v-else-if="payload.record_page.items.length"
+          v-else-if="visibleRecordItems.length"
           class="qc-result-analysis__record-table-wrap"
         >
           <table class="qc-result-analysis__record-table">
@@ -417,11 +429,13 @@
             </thead>
             <tbody>
               <tr
-                v-for="record in payload.record_page.items"
+                v-for="record in visibleRecordItems"
                 :key="record.record_key"
               >
                 <td>
-                  <strong>{{ record.patient_name || '患者信息待核实' }}</strong>
+                  <strong>{{
+                    record.patient_name || (confirmedResultsOnly ? '未登记患者姓名' : '患者信息待核实')
+                  }}</strong>
                   <span>住院号 {{ record.visit_id }}</span>
                 </td>
                 <td>{{ record.department }}</td>
@@ -470,6 +484,7 @@ import {
   RotateCcw,
   Search,
 } from 'lucide-vue-next'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   getLuxianQcResultAnalysis,
   type LuxianQcAnalysisCarePhase,
@@ -482,8 +497,11 @@ import { formatQcCompletedAt } from './latestQcSummaryPresentation'
 
 const props = defineProps<{ carePhase: LuxianQcAnalysisCarePhase }>()
 const emit = defineEmits<{ (event: 'open-result', record: LuxianQcAnalysisRecordItem): void }>()
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 type StatusNavigatorKey = 'all' | LuxianQcAnalysisStatus
+
+const DEMO_HIDDEN_STATUSES = new Set<LuxianQcAnalysisStatus>(['data_gap', 'uncertain'])
 
 const STATUS_META: Array<{ key: LuxianQcAnalysisStatus; label: string }> = [
   { key: 'non_compliant', label: QC_RESULT_STATUS_LABELS.non_compliant },
@@ -523,11 +541,15 @@ const physicianOptions = computed(() =>
     .filter((item) => item && item !== '未登记主治医师')
     .sort((left, right) => left.localeCompare(right, 'zh-CN')),
 )
+const visibleStatusMeta = computed(() =>
+  confirmedResultsOnly.value
+    ? STATUS_META.filter((item) => !DEMO_HIDDEN_STATUSES.has(item.key))
+    : STATUS_META,
+)
 const totalStatusCount = computed(() =>
-  (payload.value?.status_distribution || []).reduce(
-    (total, item) => total + Number(item.count || 0),
-    0,
-  ),
+  (payload.value?.status_distribution || [])
+    .filter((item) => !confirmedResultsOnly.value || !DEMO_HIDDEN_STATUSES.has(item.status))
+    .reduce((total, item) => total + Number(item.count || 0), 0),
 )
 const statusNavigator = computed(() => {
   const counts = new Map(
@@ -535,7 +557,7 @@ const statusNavigator = computed(() => {
   )
   return [
     { key: 'all' as const, label: '全部', count: totalStatusCount.value },
-    ...STATUS_META.map((item) => ({ ...item, count: Number(counts.get(item.key) || 0) })),
+    ...visibleStatusMeta.value.map((item) => ({ ...item, count: Number(counts.get(item.key) || 0) })),
   ]
 })
 const visibleStatusItems = computed(() =>
@@ -549,13 +571,36 @@ const visibleStatusItems = computed(() =>
     })),
 )
 const topPhysicians = computed(() => (payload.value?.physician_distribution || []).slice(0, 5))
+const visibleRecordItems = computed(() =>
+  (payload.value?.record_page.items || []).filter(
+    (record) => !confirmedResultsOnly.value || !DEMO_HIDDEN_STATUSES.has(record.status),
+  ),
+)
+const visibleRecordTotal = computed(() => {
+  if (!payload.value) return 0
+  if (!confirmedResultsOnly.value) return payload.value.record_page.total
+  const rawItems = payload.value.record_page.items || []
+  const hiddenCount = rawItems.filter((record) => DEMO_HIDDEN_STATUSES.has(record.status)).length
+  return hiddenCount > 0 ? visibleRecordItems.value.length : payload.value.record_page.total
+})
 
 function statusLabel(status: LuxianQcAnalysisStatus): string {
-  return STATUS_META.find((item) => item.key === status)?.label || '结果待核实'
+  if (confirmedResultsOnly.value && DEMO_HIDDEN_STATUSES.has(status)) return '暂未显示'
+  return (
+    STATUS_META.find((item) => item.key === status)?.label ||
+    (confirmedResultsOnly.value ? '其他状态' : '结果待核实')
+  )
 }
 
 async function queryAnalysis(options: { resetRule?: boolean } = {}) {
   if (options.resetRule) selectedRuleId.value = ''
+  if (
+    confirmedResultsOnly.value &&
+    activeStatus.value !== 'all' &&
+    DEMO_HIDDEN_STATUSES.has(activeStatus.value)
+  ) {
+    activeStatus.value = 'all'
+  }
   const request = ++activeRequest
   loading.value = true
   error.value = ''
@@ -588,10 +633,22 @@ async function queryAnalysis(options: { resetRule?: boolean } = {}) {
 }
 
 async function selectStatus(status: StatusNavigatorKey) {
+  if (confirmedResultsOnly.value && status !== 'all' && DEMO_HIDDEN_STATUSES.has(status)) return
   if (activeStatus.value === status) return
   activeStatus.value = status
   await queryAnalysis()
 }
+
+watch(confirmedResultsOnly, (confirmedOnly) => {
+  if (
+    confirmedOnly &&
+    activeStatus.value !== 'all' &&
+    DEMO_HIDDEN_STATUSES.has(activeStatus.value)
+  ) {
+    activeStatus.value = 'all'
+    void queryAnalysis()
+  }
+})
 
 async function selectRule(ruleId: string) {
   selectedRuleId.value = ruleId

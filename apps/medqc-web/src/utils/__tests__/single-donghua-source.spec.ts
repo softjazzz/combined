@@ -50,4 +50,28 @@ describe('固定东华来源，历史与材料专用入口保持中立', () => {
     window.history.replaceState({}, '', '/workstation-v5/customer-sample-validation?source_id=legacy_pg')
     expect(clinicalSourceForRequest('/api/v1/emr/V/documents')).toBeUndefined()
   })
+
+  it.each([
+    '/api/v1/workstation/analytics/luxian-0609',
+    '/api/v1/workstation/qc-result-analysis/luxian-0609',
+    '/api/v1/frontpage-qc/records',
+    '/api/v1/quality-reports/record-quality',
+  ])('新增统计/首页质控/报表路径 %s 在 legacy_compat 透传页签源，fixed_donghua_cdm 保留安全回退', (url) => {
+    // 默认 fixed_donghua_cdm 且页签未显式请求 independent_cdm：不强加 header
+    window.history.replaceState({}, '', '/workstation-v5/stats')
+    expect(clinicalSourceForRequest(url)).toBeUndefined()
+    window.history.replaceState({}, '', '/workstation-v5/stats?source_id=legacy_pg')
+    expect(clinicalSourceForRequest(url)).toBeUndefined()
+
+    // URL 显式带 source_id=independent_cdm 时透传
+    window.history.replaceState({}, '', '/workstation-v5/stats?source_id=independent_cdm')
+    expect(clinicalSourceForRequest(url)).toBe('independent_cdm')
+
+    // 显式 legacy_compat 模式下透传当前页签来源
+    setClinicalSourceMode('legacy_compat', 'legacy_pg')
+    window.history.replaceState({}, '', '/workstation-v5/stats?source_id=legacy_pg')
+    expect(clinicalSourceForRequest(url)).toBe('legacy_pg')
+    window.history.replaceState({}, '', '/workstation-v5/stats?source_id=independent_cdm')
+    expect(clinicalSourceForRequest(url)).toBe('independent_cdm')
+  })
 })

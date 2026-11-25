@@ -16,11 +16,11 @@
       <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
         <MqIcon name="task" :size="16" />病历审核
       </button>
-      <router-link v-if="!scope && auth.hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
+      <router-link v-if="!scope && hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
         <MqIcon name="task" :size="16" />病历沟通
       </router-link>
       <router-link
-        v-if="!scope && auth.hasRole('doctor')"
+        v-if="!scope && hasRole('doctor')"
         class="mq-btn"
         to="/workstation-v5/worklist?assist=message"
         >消息面板</router-link
@@ -136,7 +136,7 @@
         </a-descriptions>
         <button
           v-if="
-            auth.hasRole('doctor') &&
+            hasRole('doctor') &&
             selected.assignee_id === auth.user?.id &&
             ['running', 'final'].includes(selected.scene)
           "
@@ -227,6 +227,23 @@
       </template>
     </a-drawer>
   </section>
+  <section
+    v-else
+    class="rectification-todos rectification-todos--denied"
+    :class="{ 'mq-page': !scope }"
+    role="status"
+    aria-label="无权访问缺陷整改待办"
+  >
+    <header v-if="!scope" class="mq-page-head">
+      <div class="rectification-heading mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 整改处理</span>
+        <h2 class="mq-page-title">缺陷整改待办</h2>
+      </div>
+    </header>
+    <div class="rectification-empty" :class="{ 'mq-card': !scope }">
+      当前账号无权访问缺陷整改待办，请联系管理员核对角色权限。
+    </div>
+  </section>
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
@@ -236,6 +253,7 @@ import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDraw
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
 import RecordReviewWorkflowDrawer from '@/components/qc/RecordReviewWorkflowDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import {
   actOnRectification,
   getRectification,
@@ -258,8 +276,21 @@ const reviewOpen = ref(false)
 const appealOpen = ref(false),
   appealSource = ref<Rectification | null>(null)
 const appealId = ref<string>()
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const hasRole = (role: string) =>
+  effectiveUserRoles.value.includes(role) ||
+  (typeof auth.hasRole === 'function' && auth.hasRole(role))
 const appealAllowed = computed(() =>
-  ['admin', 'qc_manager', 'doctor'].some((role) => auth.hasRole(role)),
+  ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
 )
 function openAppeals(source: Rectification | null = null) {
   appealId.value = undefined
@@ -269,9 +300,9 @@ function openAppeals(source: Rectification | null = null) {
 }
 const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const manager = computed(() =>
-  ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
+  ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
 )
-const allowed = computed(() => manager.value || auth.hasRole('doctor'))
+const allowed = computed(() => manager.value || hasRole('doctor'))
 const labels: Record<RectificationState, string> = {
   pending: '待整改',
   submitted: '待验收',
@@ -392,7 +423,7 @@ const actions = computed<Array<{ value: RectificationAction; label: string }>>((
   const item = selected.value
   if (!item) return []
   const pending = item.status === 'pending' || item.status === 'rejected'
-  if (item.assignee_id === auth.user?.id && auth.hasRole('doctor') && pending)
+  if (item.assignee_id === auth.user?.id && hasRole('doctor') && pending)
     return [{ value: 'submit', label: '提交整改' }]
   if (!manager.value || item.assignee_id === auth.user?.id) return []
   if (item.status === 'submitted')
@@ -489,7 +520,7 @@ function reset() {
   saving.value = false
 }
 watch(
-  () => [auth.user?.id, auth.user?.roles, allowed.value],
+  () => [auth.user?.id, auth.user?.roles, auth.user?.role, ...effectiveUserRoles.value, allowed.value],
   () => {
     reset()
     page.value = 1

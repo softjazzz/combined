@@ -2,11 +2,18 @@
  * 首页质控 V2 接口（/api/v1/frontpage-qc）。
  * 确定性规则，不调用模型；后端口径见 docs/frontpage-qc-v2/。
  */
-import { ApiService } from '@/services/apiService'
+import { ApiService, type ApiRequestConfig } from '@/services/apiService'
 
 export type FrontpageQcDataScope = 'home' | 'all'
 export type FrontpageQcGrade = 'excellent' | 'qualified' | 'unqualified'
-export type FrontpageQcIssueFilter = '' | 'fail' | 'hint' | 'data_gap' | 'clean' | 'unchecked'
+export type FrontpageQcIssueFilter =
+  | ''
+  | 'fail'
+  | 'hint'
+  | 'required_missing'
+  | 'data_gap'
+  | 'clean'
+  | 'unchecked'
 export type FrontpageQcRunStatus =
   | 'queued'
   | 'running'
@@ -149,6 +156,7 @@ export interface FrontpageQcAnalytics {
     grades: Record<FrontpageQcGrade, number>
     issue_records: number
     hint_records: number
+    required_missing_records?: number
     data_gap_records: number
   }
   indicators: Array<{ key: string; label: string; numerator: number; denominator: number; rate: number | null }>
@@ -186,6 +194,7 @@ export interface FrontpageQcListQuery extends FrontpageQcScopeFilters, Frontpage
 }
 
 const BASE = '/api/v1/frontpage-qc'
+const PAGE_OWNED_ERROR_CONFIG: ApiRequestConfig = { skipErrorToast: true }
 
 export class FrontpageQcRequestError extends Error {
   constructor(
@@ -210,7 +219,7 @@ function toRequestError(error: unknown, fallback: string): FrontpageQcRequestErr
   const detail = body ? (body.error ?? body.detail ?? body.message) : null
   let message = fallback
   if (typeof detail === 'string' && detail.trim()) message = detail
-  else if (isObject(detail) && typeof detail.message === 'string') message = detail.message
+  else if (isObject(detail) && typeof detail.message === 'string' && detail.message.trim()) message = detail.message
   else if (status === 0 && isObject(error) && typeof error.message === 'string') message = fallback
   return new FrontpageQcRequestError(message, status, detail)
 }
@@ -218,11 +227,14 @@ function toRequestError(error: unknown, fallback: string): FrontpageQcRequestErr
 function unwrap<T>(value: unknown, fallback: string): T {
   if (isObject(value) && 'success' in value) {
     if (value.success === false) {
-      throw new FrontpageQcRequestError(
-        typeof value.error === 'string' ? value.error : fallback,
-        200,
-        value,
-      )
+      const err = value.error
+      const msg =
+        typeof err === 'string' && err.trim()
+          ? err
+          : isObject(err) && typeof err.message === 'string' && err.message.trim()
+            ? err.message
+            : fallback
+      throw new FrontpageQcRequestError(msg, 200, value)
     }
     return value.data as T
   }
@@ -235,9 +247,17 @@ function cleanParams(params: Record<string, unknown>): Record<string, unknown> {
   )
 }
 
-async function get<T>(url: string, params: Record<string, unknown>, fallback: string): Promise<T> {
+async function get<T>(
+  url: string,
+  params: Record<string, unknown>,
+  fallback: string,
+  config?: ApiRequestConfig,
+): Promise<T> {
   try {
-    const response = await ApiService.getRaw(url, cleanParams(params))
+    const cleaned = cleanParams(params)
+    const response = config
+      ? await ApiService.getRaw(url, cleaned, config)
+      : await ApiService.getRaw(url, cleaned)
     return unwrap<T>(response.data, fallback)
   } catch (error) {
     if (error instanceof FrontpageQcRequestError) throw error
@@ -245,9 +265,16 @@ async function get<T>(url: string, params: Record<string, unknown>, fallback: st
   }
 }
 
-async function post<T>(url: string, body: unknown, fallback: string): Promise<T> {
+async function post<T>(
+  url: string,
+  body: unknown,
+  fallback: string,
+  config?: ApiRequestConfig,
+): Promise<T> {
   try {
-    const response = await ApiService.postRaw(url, body)
+    const response = config
+      ? await ApiService.postRaw(url, body, config)
+      : await ApiService.postRaw(url, body)
     return unwrap<T>(response.data, fallback)
   } catch (error) {
     if (error instanceof FrontpageQcRequestError) throw error
@@ -270,25 +297,50 @@ export function listFrontpageQcRecords(query: FrontpageQcListQuery) {
 }
 
 export function getFrontpageQcRecord(ref: FrontpageQcRef) {
-  return get<FrontpageQcRecordDetail>(`${BASE}/record`, { ...ref }, '读取首页质控详情失败')
+  return get<FrontpageQcRecordDetail>(
+    `${BASE}/record`,
+    { ...ref },
+    '读取首页质控详情失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function createFrontpageQcRun(
   body: { record_refs: FrontpageQcRef[] } | FrontpageQcScopeFilters,
 ) {
-  return post<FrontpageQcRun>(`${BASE}/runs`, body, '创建首页质控任务失败')
+  return post<FrontpageQcRun>(
+    `${BASE}/runs`,
+    body,
+    '创建首页质控任务失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function getFrontpageQcRun(runId: string) {
-  return get<FrontpageQcRun>(`${BASE}/runs/${encodeURIComponent(runId)}`, {}, '读取任务进度失败')
+  return get<FrontpageQcRun>(
+    `${BASE}/runs/${encodeURIComponent(runId)}`,
+    {},
+    '读取任务进度失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function listActiveFrontpageQcRuns() {
-  return get<{ items: FrontpageQcRun[] }>(`${BASE}/runs`, { active: true }, '读取进行中的任务失败')
+  return get<{ items: FrontpageQcRun[] }>(
+    `${BASE}/runs`,
+    { active: true },
+    '读取进行中的任务失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function cancelFrontpageQcRun(runId: string) {
-  return post<FrontpageQcRun>(`${BASE}/runs/${encodeURIComponent(runId)}/cancel`, {}, '取消任务失败')
+  return post<FrontpageQcRun>(
+    `${BASE}/runs/${encodeURIComponent(runId)}/cancel`,
+    {},
+    '取消任务失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function reviewFrontpageQcFinding(
@@ -299,6 +351,7 @@ export function reviewFrontpageQcFinding(
     `${BASE}/findings/${encodeURIComponent(findingId)}/review`,
     body,
     '保存复核失败',
+    PAGE_OWNED_ERROR_CONFIG,
   )
 }
 
@@ -324,6 +377,7 @@ export async function exportFrontpageQcRecords(
   try {
     const response = await ApiService.postRaw<Blob>(`${BASE}/records/export`, body, {
       responseType: 'blob',
+      skipErrorToast: true,
     })
     return response.data
   } catch (error) {

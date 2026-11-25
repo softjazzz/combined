@@ -89,13 +89,14 @@
                 data-testid="fpqc-issue-required-missing"
               >必填缺项 {{ row.result.required_missing_count }}</span>
               <span
-                v-if="row.result.hint_count"
+                v-if="!confirmedResultsOnly && row.result.hint_count"
                 class="fpqc-table__issue fpqc-table__issue--warning"
+                data-testid="fpqc-issue-hint"
               >提示 {{ row.result.hint_count }}</span>
               <span
                 v-if="
                   !row.result.fail_count &&
-                    !row.result.hint_count &&
+                    (confirmedResultsOnly || !row.result.hint_count) &&
                     !row.result.required_missing_count
                 "
                 class="fpqc-table__muted"
@@ -126,9 +127,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { FrontpageQcRecordItem } from '@/services/frontpage-qc-v2-service'
 
 import { formatDateTime, formatScore, GRADE_LABELS, GRADE_TONES } from './presentation'
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const props = defineProps<{
   rows: FrontpageQcRecordItem[]

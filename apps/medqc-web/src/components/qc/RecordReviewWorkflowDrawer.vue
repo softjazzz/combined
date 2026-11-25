@@ -340,6 +340,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import {
   getRecordReviewCurrent,
   getRecordReviewHistory,
@@ -359,8 +360,22 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const auth = useAuthStore()
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
 const reviewer = computed(() =>
-  ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
+  ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'].some(
+    (role) =>
+      effectiveUserRoles.value.includes(role) ||
+      (typeof auth.hasRole === 'function' && auth.hasRole(role)),
+  ),
 )
 const labels: Record<ReviewState, string> = {
   pending_review: '待初审',
@@ -528,6 +543,7 @@ watch(
     props.reviewId,
     auth.user?.id,
     JSON.stringify(auth.user?.roles || []),
+    JSON.stringify(effectiveUserRoles.value),
     auth.user?.role,
     auth.user?.institute_id,
     auth.user?.department,

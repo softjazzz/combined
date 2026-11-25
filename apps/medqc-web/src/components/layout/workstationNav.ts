@@ -4,9 +4,48 @@
  * 选中项、面包屑与可见性都由本模块的纯函数计算，布局组件只负责渲染。
  */
 import type { MqIconName } from '@/components/icons/mqIcons'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import { readAnalyticsDrilldown } from '@/views/workstation-v4/utils/analyticsDrilldown'
 
 export const WORKSTATION_BASE = '/workstation-v5'
+export const WORKSTATION_HOME_ROLES = [
+  'admin',
+  'qc_manager',
+  'doctor',
+  'sync_admin',
+  'super_admin',
+] as const
+
+/**
+ * 仅返回角色明确拥有访问权的工作台默认着陆页；
+ * 无任何可用工作台入口的角色返回 null，供路由守卫安全回退到个人资料页。
+ */
+export function resolveAuthorizedWorkstationPath(userRoles: readonly string[]): string | null {
+  const roles = effectiveRoles(userRoles)
+  if (
+    roles.some((role) =>
+      WORKSTATION_HOME_ROLES.includes(role as (typeof WORKSTATION_HOME_ROLES)[number]),
+    )
+  ) {
+    return WORKSTATION_BASE
+  }
+  if (roles.includes('qc_staff')) {
+    return `${WORKSTATION_BASE}/feedback`
+  }
+  if (roles.includes('coder')) {
+    return `${WORKSTATION_BASE}/frontpage-qc`
+  }
+  return null
+}
+
+/**
+ * 统一的角色默认工作台着陆页解析（登录页、侧栏品牌 Logo、路由守卫共用）。
+ * 仅具 coder 且无权进入首页时指向 /workstation-v5/frontpage-qc；
+ * 仅具 qc_staff 时指向 /workstation-v5/feedback；其余默认 /workstation-v5。
+ */
+export function resolveDefaultWorkstationPath(userRoles: readonly string[]): string {
+  return resolveAuthorizedWorkstationPath(userRoles) ?? WORKSTATION_BASE
+}
 
 export type WorklistStage = 'frontpage_generate' | 'frontpage_qc' | 'settlement_qc'
 
@@ -128,7 +167,8 @@ export const WORKSTATION_NAV: NavGroup[] = [
         iconName: 'pool',
         match: (route) =>
           (route.path === p('/worklist') && stageOf(route) === '') ||
-          (route.path === p() && isHomeWorklistMode(route) && stageOf(route) === ''),
+          (route.path === p() && isHomeWorklistMode(route) && stageOf(route) === '') ||
+          matchPrefix(p('/qc-task'))(route),
       },
       {
         key: 'records-running',
@@ -166,14 +206,16 @@ export const WORKSTATION_NAV: NavGroup[] = [
         label: '整改待办',
         to: { path: p('/feedback') },
         iconName: 'doc',
-        match: matchPrefix(p('/feedback')),
+        match: (route) =>
+          matchPrefix(p('/feedback'))(route) || matchPrefix(p('/case-communications'))(route),
       },
       {
         key: 'message-center',
         label: '消息中心',
         to: { path: p('/messages') },
         iconName: 'doc',
-        match: matchPrefix(p('/messages')),
+        match: (route) =>
+          matchPrefix(p('/messages'))(route) || matchPrefix(p('/qc-result'))(route),
       },
     ],
   },
@@ -349,14 +391,20 @@ export interface NavVisibilityContext {
 
 /** 按现有路由权限与演示账号条件过滤入口；与路由守卫口径一致，不新增权限规则 */
 export function filterVisibleNav(groups: NavGroup[], ctx: NavVisibilityContext): NavGroup[] {
+  const roles = effectiveRoles(ctx.userRoles)
   return groups
     .map((group) => ({
       ...group,
       items: group.items.filter((item) => {
-        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount && !ctx.userRoles.includes('sync_admin')) return false
+        if (item.demoFeedbackOnly && !ctx.isDemoFeedbackAccount && !roles.includes('sync_admin'))
+          return false
         const required = ctx.resolvePermission(item.to)
         if (!required || required.length === 0) return true
-        return ctx.userRoles.includes('sync_admin') || required.some((role) => ctx.userRoles.includes(role))
+        return (
+          roles.includes('sync_admin') ||
+          roles.includes('super_admin') ||
+          required.some((role) => roles.includes(role))
+        )
       }),
     }))
     .filter((group) => group.items.length > 0)

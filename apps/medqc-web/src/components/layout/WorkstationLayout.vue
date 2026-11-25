@@ -5,7 +5,7 @@
       <!-- 侧栏：分组标题 + 平铺入口（配置见 workstationNav.ts） -->
       <aside class="ws-sider">
         <div class="ws-sider__head">
-          <RouterLink :to="WORKSTATION_BASE" class="ws-brand" aria-label="病案质控系统首页">
+          <RouterLink :to="homePath" class="ws-brand" aria-label="病案质控系统首页">
             <span class="ws-brand__mark" aria-hidden="true">
               <MqIcon name="rules" color="#FFFFFF" :size="18" />
             </span>
@@ -190,11 +190,11 @@ import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
 import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import {
   DRG_SECTION_TABS,
-  WORKSTATION_BASE,
   WORKSTATION_NAV,
   filterVisibleNav,
   findActiveNav,
   findDrgSectionTab,
+  resolveDefaultWorkstationPath,
   type NavLocation,
   type NavRouteLike,
 } from './workstationNav'
@@ -210,6 +210,7 @@ onBeforeUnmount(workstationConfirmation.dispose)
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const homePath = computed(() => resolveDefaultWorkstationPath(authStore.userRoles ?? []))
 const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))
 provide(WORKSTATION_REMINDER_PANEL, computed(() => canUseReminderPanel(authStore.userRoles)))
 
@@ -239,9 +240,11 @@ onBeforeUnmount(() => {
 
 const ROLE_LABEL_MAP: Record<string, string> = {
   sync_admin: '超级管理员',
+  super_admin: '超级管理员',
   admin: '系统管理员',
   qc_manager: '质控主管',
   QC_MANAGER: '质控主管',
+  qc_staff: '质控员',
   coder: '病案编码员',
   doctor: '临床医生',
   reviewer: '审核员',

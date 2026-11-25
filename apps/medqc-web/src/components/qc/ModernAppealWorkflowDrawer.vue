@@ -123,7 +123,7 @@
         <h4>操作记录</h4>
         <ul>
           <li v-for="event in selected.events" :key="event.id">
-            {{ actionLabels[event.action] }} · {{ event.reviewer_name }} · {{ event.comment
+            {{ actionLabels[event.action] || event.action }} · {{ event.reviewer_name }} · {{ event.comment
             }}<time class="appeal-time mq-mono">{{ event.created_at }}</time>
           </li>
         </ul>
@@ -135,6 +135,7 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import {
   actOnModernAppeal,
   createModernAppeal,
@@ -150,19 +151,37 @@ import type { Rectification } from '@/api/defectRectifications'
 const props = defineProps<{ open: boolean; source?: Rectification | null; appealId?: string }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const auth = useAuthStore()
-const doctor = computed(() => auth.hasRole('doctor'))
-const reviewer = computed(() => auth.hasRole('admin') || auth.hasRole('qc_manager'))
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const hasRole = (role: string) =>
+  effectiveUserRoles.value.includes(role) ||
+  (typeof auth.hasRole === 'function' && auth.hasRole(role))
+const doctor = computed(() => hasRole('doctor'))
+const reviewer = computed(() =>
+  ['admin', 'qc_manager', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
+)
 const labels: Record<AppealState, string> = {
   pending: '待审核',
   reviewing: '审核中',
   approved: '已通过',
   rejected: '已驳回',
   withdrawn: '已撤回',
+  superseded: '已失效（重跑关闭）',
 }
 const actionLabels: Record<AppealAction, string> = {
   withdraw: '撤回申诉',
   approve: '审核通过',
   reject: '驳回申诉',
+  close_stale: '重跑关闭',
+  supersede: '新轮次替代关闭',
 }
 const statusClass = (status: AppealState) =>
   ({
@@ -171,6 +190,7 @@ const statusClass = (status: AppealState) =>
     approved: 'mq-status--success',
     rejected: 'mq-status--danger',
     withdrawn: 'mq-status--neutral',
+    superseded: 'mq-status--neutral',
   })[status]
 const items = ref<ModernAppeal[]>([]),
   selected = ref<AppealDetail | null>(null)
@@ -308,7 +328,7 @@ function reset() {
   uncertain.value = false
 }
 watch(
-  () => [props.open, props.appealId, auth.user?.id, auth.user?.roles],
+  () => [props.open, props.appealId, auth.user?.id, auth.user?.roles, ...effectiveUserRoles.value],
   () => {
     reset()
     page.value = 1

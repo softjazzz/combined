@@ -1,8 +1,14 @@
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 
-export type AppealState = 'pending' | 'reviewing' | 'approved' | 'rejected' | 'withdrawn'
-export type AppealAction = 'withdraw' | 'approve' | 'reject'
+export type AppealState =
+  | 'pending'
+  | 'reviewing'
+  | 'approved'
+  | 'rejected'
+  | 'withdrawn'
+  | 'superseded'
+export type AppealAction = 'withdraw' | 'approve' | 'reject' | 'close_stale' | 'supersede'
 export interface ModernAppeal {
   id: string
   target_kind: 'canonical_defect' | 'task_manual_defect'
@@ -38,8 +44,15 @@ export interface AppealList {
   pending_count: number
 }
 const base = '/api/v1/modern-appeals'
-const states: AppealState[] = ['pending', 'reviewing', 'approved', 'rejected', 'withdrawn']
-const actions: AppealAction[] = ['withdraw', 'approve', 'reject']
+const states: AppealState[] = [
+  'pending',
+  'reviewing',
+  'approved',
+  'rejected',
+  'withdrawn',
+  'superseded',
+]
+const actions: AppealAction[] = ['withdraw', 'approve', 'reject', 'close_stale', 'supersede']
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
 function validAppeal(value: unknown): value is ModernAppeal {

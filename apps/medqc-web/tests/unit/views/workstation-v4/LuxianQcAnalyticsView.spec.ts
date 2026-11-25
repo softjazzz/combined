@@ -7,6 +7,11 @@ const routerPush = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ query: {} as Record<string, string | undefined> }))
 
 vi.mock('@/services/apiService', () => ({ ApiService: { get: apiGet } }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    user: { is_demo_account: false, roles: ['admin'] },
+  }),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({
     query: routeState.query,

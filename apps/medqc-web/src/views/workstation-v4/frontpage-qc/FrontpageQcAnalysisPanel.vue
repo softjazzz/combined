@@ -116,13 +116,22 @@
                 >
                   <td>
                     <button
+                      v-if="isDrillableDepartment(item.department)"
                       type="button"
                       class="fpqc-analysis__link"
                       data-testid="fpqc-drill-department"
-                      @click="emit('drill-department', item.department)"
+                      @click="emit('drill-department', item.department.trim())"
                     >
                       {{ item.department }}
                     </button>
+                    <span
+                      v-else
+                      class="fpqc-analysis__none"
+                      data-testid="fpqc-department-unfilled"
+                      title="该类病历未填写出院科室，暂不支持按科室下钻筛选"
+                    >
+                      {{ item.department || '未填科室' }}
+                    </span>
                   </td>
                   <td>{{ item.records }}</td>
                   <td>{{ formatScore(item.avg_score) }}</td>
@@ -134,7 +143,11 @@
           </div>
         </article>
 
-        <article class="mq-card mq-card--padded fpqc-analysis__card">
+        <article
+          v-if="!confirmedResultsOnly"
+          class="mq-card mq-card--padded fpqc-analysis__card"
+          data-testid="fpqc-analysis-hints"
+        >
           <h3 class="mq-card__title">
             提示 Top {{ data.top_hints.length }}
           </h3>
@@ -169,7 +182,11 @@
           </p>
         </article>
 
-        <article class="mq-card mq-card--padded fpqc-analysis__card">
+        <article
+          v-if="!confirmedResultsOnly"
+          class="mq-card mq-card--padded fpqc-analysis__card"
+          data-testid="fpqc-analysis-data-gaps"
+        >
           <h3 class="mq-card__title">
             资料不足来源
           </h3>
@@ -211,6 +228,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   getFrontpageQcAnalytics,
   type FrontpageQcAnalytics,
@@ -219,6 +237,14 @@ import {
 } from '@/services/frontpage-qc-v2-service'
 
 import { formatPercent, formatScore } from './presentation'
+
+const UNFILLED_DEPARTMENT = '未填科室'
+const { confirmedResultsOnly } = useQcResultVisibility()
+
+function isDrillableDepartment(department: string | null | undefined): boolean {
+  const normalized = String(department ?? '').trim()
+  return Boolean(normalized) && normalized !== UNFILLED_DEPARTMENT
+}
 
 const props = defineProps<{ filters: FrontpageQcScopeFilters; refreshKey: number }>()
 const emit = defineEmits<{

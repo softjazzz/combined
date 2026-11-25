@@ -47,7 +47,10 @@ vi.mock('ant-design-vue', async (importOriginal) => ({
 
 vi.mock('../../customer-sample-validation/batchExport', () => ({ downloadBlob: vi.fn() }))
 
-const testAuth = reactive({ user: { id: 'synthetic-admin', institute_id: 'H-TEST', roles: ['admin'] }, userRoles: ['admin'] })
+const testAuth = reactive({
+  user: { id: 'synthetic-admin', institute_id: '', roles: ['admin'], is_demo_account: false },
+  userRoles: ['admin'],
+})
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => testAuth }))
 
 import FrontpageQcView from '../FrontpageQcView.vue'
@@ -128,6 +131,10 @@ const rows = [record('C01', true), record('C02', false)]
 beforeEach(() => {
     vi.resetAllMocks()
     testAuth.user.id = 'synthetic-admin'
+    testAuth.user.institute_id = ''
+    testAuth.user.roles = ['admin']
+    testAuth.user.is_demo_account = false
+    testAuth.userRoles = ['admin']
     svc.listRecords.mockResolvedValue({ items: rows, total: 2, page: 1, page_size: 15 })
     svc.getRecord.mockImplementation(async (ref: { visit_id: string }) =>
       detailFor(rows.find((row) => row.visit_id === ref.visit_id)!),

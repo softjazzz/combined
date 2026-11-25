@@ -112,6 +112,47 @@ export const apiClient: AxiosInstance = axios.create({
 // 全局刷新控制，避免并发重复刷新与竞态
 let refreshPromise: Promise<string> | null = null
 
+export interface ApiRequestConfig extends AxiosRequestConfig {
+  skipErrorToast?: boolean
+}
+
+function extractNestedErrorMessage(value: unknown, depth = 0): string {
+  if (depth > 4 || value == null) return ''
+  if (typeof value === 'string') return value.trim()
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const extracted = extractNestedErrorMessage(item, depth + 1)
+      if (extracted) return extracted
+    }
+    return ''
+  }
+  if (typeof value === 'object' && !(value instanceof Blob)) {
+    const record = value as Record<string, unknown>
+    for (const key of ['message', 'msg', 'error', 'detail']) {
+      const extracted = extractNestedErrorMessage(record[key], depth + 1)
+      if (extracted) return extracted
+    }
+  }
+  return ''
+}
+
+function extractInterceptorErrorMessage(data: unknown, fallback?: unknown): string {
+  if (typeof data === 'string' && data.trim()) {
+    return data.trim()
+  }
+  if (data && typeof data === 'object' && !(data instanceof Blob)) {
+    const record = data as Record<string, unknown>
+    for (const key of ['message', 'error', 'detail']) {
+      const extracted = extractNestedErrorMessage(record[key])
+      if (extracted) return extracted
+    }
+  }
+  if (typeof fallback === 'string' && fallback.trim()) {
+    return fallback.trim()
+  }
+  return '请求失败'
+}
+
 function shouldSuppressExpected404(url: string | undefined, status: number | undefined): boolean {
   if (status !== 404 || !url) return false
   return (
@@ -208,17 +249,21 @@ apiClient.interceptors.response.use(
   async (error: unknown) => {
     const originalRequest = error.config
     const requestUrl: string | undefined = error.config?.url
+    const requestPath: string | undefined = typeof requestUrl === 'string' ? requestUrl.split('?')[0] : undefined
+    const requestMethod = String(originalRequest?.method || '').toLowerCase()
     const responseStatus: number | undefined = error.response?.status
-    const workstationList = requestUrl === WORKSTATION_LIST_PATH
+    const skipErrorToast = Boolean(originalRequest?.skipErrorToast)
+    const workstationList = requestPath === WORKSTATION_LIST_PATH
     const qcSummaryMode = originalRequest?.params?.qc_summary_mode
     const backgroundQcSummary =
-      (requestUrl === WORKSTATION_QC_SUMMARY_PATH && originalRequest?.method === 'post')
+      (requestPath === WORKSTATION_QC_SUMMARY_PATH && requestMethod === 'post')
       || (workstationList && qcSummaryMode === 'only')
-    const pageOwnedGet = originalRequest?.method === 'get' && (
+    const pageOwnedGet = requestMethod === 'get' && (
       (workstationList && qcSummaryMode === 'deferred')
-      || requestUrl === '/api/v1/frontpage-qc/records'
-      || requestUrl === '/api/v1/frontpage-qc/analytics'
-      || requestUrl === '/api/v1/workstation/qc-home'
+      || requestPath === '/api/v1/frontpage-qc/records'
+      || requestPath === '/api/v1/frontpage-qc/analytics'
+      || requestPath === '/api/v1/workstation/qc-home'
+      || requestPath === '/api/v1/workstation/analytics/luxian-0609'
     )
     const pageOwnedRequestFailed = pageOwnedGet && (responseStatus === undefined
         ? error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED'
@@ -300,11 +345,11 @@ apiClient.interceptors.response.use(
       }
     }
 
-    // 工作台页内展示摘要、列表服务异常和网络失败，保留会话续期及权限提示。
-    if (backgroundQcSummary || pageOwnedRequestFailed) return Promise.reject(error)
-    // 统一错误处理（兼容后端统一错误结构）
+    // 工作台页内展示摘要、列表服务异常和网络失败，保留会话续期及权限提示；显式 skipErrorToast 的请求由调用方页内自处理。
+    if (backgroundQcSummary || pageOwnedRequestFailed || skipErrorToast) return Promise.reject(error)
+    // 统一错误处理（兼容后端统一错误结构及对象型 error，如 { message, run }）
     const data = error.response?.data || {}
-    const errorMessage = data.message || data.error || data.detail || error.message || '请求失败'
+    const errorMessage = extractInterceptorErrorMessage(data, error.message)
     const traceIdFromPayload = traceId || data.trace_id || data.traceId
 
     // 根据状态码显示不同的错误信息
@@ -358,14 +403,14 @@ apiClient.interceptors.response.use(
 // API服务类
 export class ApiService {
   // Generic HTTP helpers used by legacy/new modules.
-  static async requestRaw<T = unknown>(config: AxiosRequestConfig): Promise<AxiosResponse<T>> {
+  static async requestRaw<T = unknown>(config: ApiRequestConfig): Promise<AxiosResponse<T>> {
     return apiClient.request<T>(config)
   }
 
   static async getRaw<T = unknown>(
     url: string,
     params?: Record<string, unknown>,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<AxiosResponse<T>> {
     const defaultConfig = url === WORKSTATION_LIST_PATH
       ? { timeout: WORKSTATION_LIST_TIMEOUT_MS }
@@ -376,7 +421,7 @@ export class ApiService {
   static async postRaw<T = unknown>(
     url: string,
     data?: unknown,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<AxiosResponse<T>> {
     const defaultConfig = url === WORKSTATION_QC_SUMMARY_PATH
       ? { timeout: WORKSTATION_LIST_TIMEOUT_MS }
@@ -387,14 +432,14 @@ export class ApiService {
   static async putRaw<T = unknown>(
     url: string,
     data?: unknown,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<AxiosResponse<T>> {
     return apiClient.put<T>(url, data, config)
   }
 
   static async deleteRaw<T = unknown>(
     url: string,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<AxiosResponse<T>> {
     return apiClient.delete<T>(url, config)
   }
@@ -402,7 +447,7 @@ export class ApiService {
   static async get<T = unknown>(
     url: string,
     params?: Record<string, unknown>,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.get<T>(url, { ...(config || {}), params })
@@ -422,7 +467,7 @@ export class ApiService {
   static async post<T = unknown>(
     url: string,
     data?: unknown,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.post<T>(url, data, config)
@@ -442,7 +487,7 @@ export class ApiService {
   static async put<T = unknown>(
     url: string,
     data?: unknown,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.put<T>(url, data, config)
@@ -461,7 +506,7 @@ export class ApiService {
 
   static async delete<T = unknown>(
     url: string,
-    config?: AxiosRequestConfig,
+    config?: ApiRequestConfig,
   ): Promise<ApiResponse<T>> {
     try {
       const response = await apiClient.delete<T>(url, config)

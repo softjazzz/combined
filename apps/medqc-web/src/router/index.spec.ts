@@ -22,6 +22,15 @@ vi.mock('@/views/workstation/MessageCenter.vue', () => ({ default: { template: '
 vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
   default: { template: '<div />' },
 }))
+vi.mock('@/views/workstation-v4/frontpage-qc/FrontpageQcView.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/workstation-v4/LuxianQcAnalyticsView.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/qc/reports/RecordQualityReportView.vue', () => ({
+  default: { template: '<div />' },
+}))
 vi.mock('@/components/layout/MainLayout.vue', () => ({ default: { template: '<router-view />' } }))
 vi.mock('@/views/auth/LoginView.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/error/NotFoundView.vue', () => ({ default: { template: '<div />' } }))
@@ -193,6 +202,7 @@ describe('反馈与整改入口保护', () => {
     await router.push('/workstation-v5/feedback')
     expect(legacy.components!.default).toBe(modern.components!.default)
     expect(legacy.meta.permission).toContain('doctor')
+    expect(legacy.meta.permission).toContain('qc_staff')
   })
 })
 
@@ -250,8 +260,16 @@ describe('历史页面下线重定向', () => {
     }
   })
 
-  it('无工作台首页权限的账号进入个人资料，避免在旧首页间循环', async () => {
+  it('编码员进入无权旧入口落到首页质控（新），无任何工作台入口权限的账号进入个人资料', async () => {
     auth.roles.splice(0, auth.roles.length, 'coder')
+    try {
+      await router.push('/demo/lx33/feedbacks')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/frontpage-qc')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+
+    auth.roles.splice(0, auth.roles.length, 'nurse')
     try {
       await router.push('/demo/lx33/feedbacks')
       expect(router.currentRoute.value.path).toBe('/auth/profile')
@@ -259,6 +277,22 @@ describe('历史页面下线重定向', () => {
       auth.roles.splice(0, auth.roles.length, 'admin')
     }
   })
+
+  it('super_admin 可直接访问 /stats 与 /reports/record-quality', async () => {
+    expect(router.resolve('/workstation-v5/stats').meta.permission).toContain('super_admin')
+    expect(router.resolve('/workstation-v5/reports/record-quality').meta.permission).toContain(
+      'super_admin',
+    )
+    auth.roles.splice(0, auth.roles.length, 'super_admin')
+    try {
+      await router.push('/workstation-v5/stats')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/stats')
+      await router.push('/workstation-v5/reports/record-quality')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/reports/record-quality')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15_000)
 
   it.each([
     ['/workstation-v4', 'WorkstationV4Index'],

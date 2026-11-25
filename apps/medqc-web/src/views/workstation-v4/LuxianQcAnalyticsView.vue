@@ -17,7 +17,13 @@
               全院临时范围 · 终末质控
             </p>
             <h1>质控统计分析</h1>
-            <p>聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。</p>
+            <p>
+              {{
+                confirmedResultsOnly
+                  ? '基于已完成终末质控任务的确定问题统计分析。'
+                  : '聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。'
+              }}
+            </p>
           </div>
 
           <div
@@ -73,6 +79,7 @@
             <small>版本 {{ payload.scope.rule_set_version }}</small>
           </div>
           <div
+            v-if="!confirmedResultsOnly"
             class="analytics-health-indicator"
             :class="{ 'has-attention': payload.data_health.canonical_invalid_or_missing_total > 0 }"
             data-testid="analytics-data-health"
@@ -114,13 +121,18 @@
         <a-spin size="large" />
         <div>
           <strong>正在汇总统计范围</strong>
-          <span>正在核对已完成任务与 Canonical 结果。</span>
+          <span>{{
+            confirmedResultsOnly
+              ? '正在汇总已完成任务的质控统计结果。'
+              : '正在核对已完成任务与 Canonical 结果。'
+          }}</span>
         </div>
       </section>
 
       <template v-else-if="payload">
         <section
           class="analytics-kpis"
+          :class="{ 'is-confirmed-only': confirmedResultsOnly }"
           data-testid="analytics-kpis"
         >
           <article
@@ -224,7 +236,11 @@
                   <p>整改优先级</p>
                   <h2>科室风险排行</h2>
                 </div>
-                <span class="panel-note">红：确定问题 · 橙：资料待核实</span>
+                <span class="panel-note">{{
+                  confirmedResultsOnly
+                    ? '仅统计确定问题病历'
+                    : '红：确定问题 · 橙：资料待核实 · 灰：待判断'
+                }}</span>
               </header>
               <div
                 v-if="departmentItems.length"
@@ -241,28 +257,28 @@
                   <span class="department-name">{{ item.department }}</span>
                   <span class="department-track">
                     <i
+                      v-if="item.primaryNonCompliant"
                       class="bar-danger"
                       :style="{
-                        width: `${barPercent(item.non_compliant_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryNonCompliant, departmentMax)}%`,
                       }"
                     />
                     <i
+                      v-if="!confirmedResultsOnly && item.primaryDataGap"
                       class="bar-warning"
                       :style="{
-                        width: `${barPercent(item.data_gap_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryDataGap, departmentMax)}%`,
                       }"
                     />
                     <i
-                      v-if="item.uncertain_record_total"
+                      v-if="!confirmedResultsOnly && item.primaryUncertain"
                       class="bar-uncertain"
                       :style="{
-                        width: `${barPercent(item.uncertain_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryUncertain, departmentMax)}%`,
                       }"
                     />
                   </span>
-                  <strong>{{
-                    item.non_compliant_record_total + item.data_gap_record_total
-                  }}</strong>
+                  <strong>{{ item.problemTotal }}</strong>
                 </button>
               </div>
               <a-empty
@@ -299,26 +315,26 @@
                   <span class="physician-name">{{ item.physician }}</span>
                   <span class="department-track">
                     <i
+                      v-if="item.primaryNonCompliant"
                       class="bar-danger"
                       :style="{
-                        width: `${barPercent(item.non_compliant_record_total, physicianMax)}%`,
+                        width: `${barPercent(item.primaryNonCompliant, physicianMax)}%`,
                       }"
                     />
                     <i
+                      v-if="!confirmedResultsOnly && item.primaryDataGap"
                       class="bar-warning"
-                      :style="{ width: `${barPercent(item.data_gap_record_total, physicianMax)}%` }"
+                      :style="{ width: `${barPercent(item.primaryDataGap, physicianMax)}%` }"
                     />
                     <i
-                      v-if="item.uncertain_record_total"
+                      v-if="!confirmedResultsOnly && item.primaryUncertain"
                       class="bar-uncertain"
                       :style="{
-                        width: `${barPercent(item.uncertain_record_total, physicianMax)}%`,
+                        width: `${barPercent(item.primaryUncertain, physicianMax)}%`,
                       }"
                     />
                   </span>
-                  <strong>{{
-                    item.non_compliant_record_total + item.data_gap_record_total
-                  }}</strong>
+                  <strong>{{ item.problemTotal }}</strong>
                 </div>
               </div>
               <a-empty
@@ -358,8 +374,8 @@
                       <strong>{{ item.rule_name }}</strong>
                       <span class="rule-breakdown">
                         <em v-if="item.non_compliant_count">确定 {{ item.non_compliant_count }}</em>
-                        <em v-if="item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
-                        <em v-if="item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
+                        <em v-if="!confirmedResultsOnly && item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
+                        <em v-if="!confirmedResultsOnly && item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
                       </span>
                     </span>
                     <span class="rule-count">
@@ -386,8 +402,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ApiService } from '@/services/apiService'
-import { ANALYTICS_WORKLIST_PATH } from './utils/analyticsDrilldown'
+import {
+  ANALYTICS_PROBLEM_RESULT_STATUS_PARAM,
+  ANALYTICS_WORKLIST_PATH,
+} from './utils/analyticsDrilldown'
 import { QC_RESULT_STATUS_LABELS } from './utils/qcResultStatusLabels'
 
 type Status =
@@ -397,6 +417,24 @@ type Status =
   | 'compliant'
   | 'not_applicable'
   | 'not_executed'
+
+interface RiskDistributionMetrics {
+  distinct_record_total: number
+  non_compliant_record_total: number
+  data_gap_record_total: number
+  uncertain_record_total: number
+  problem_record_total?: number
+  primary_non_compliant_record_total?: number
+  primary_data_gap_record_total?: number
+  primary_uncertain_record_total?: number
+}
+
+interface ResolvedRiskMetrics {
+  primaryNonCompliant: number
+  primaryDataGap: number
+  primaryUncertain: number
+  problemTotal: number
+}
 
 interface AnalyticsPayload {
   scope: {
@@ -417,20 +455,8 @@ interface AnalyticsPayload {
     canonical_invalid_or_missing_total: number
   }
   status_distribution: Array<{ status: Status; count: number }>
-  department_distribution: Array<{
-    department: string
-    distinct_record_total: number
-    non_compliant_record_total: number
-    data_gap_record_total: number
-    uncertain_record_total: number
-  }>
-  physician_distribution: Array<{
-    physician: string
-    distinct_record_total: number
-    non_compliant_record_total: number
-    data_gap_record_total: number
-    uncertain_record_total: number
-  }>
+  department_distribution: Array<RiskDistributionMetrics & { department: string }>
+  physician_distribution: Array<RiskDistributionMetrics & { physician: string }>
   rule_distribution: Array<{
     rule_id: string
     rule_name: string
@@ -443,8 +469,11 @@ interface AnalyticsPayload {
   data_health: { canonical_invalid_or_missing_total: number }
 }
 
+const DEMO_HIDDEN_STATUSES = new Set<Status>(['data_gap', 'uncertain'])
+
 const router = useRouter()
 const route = useRoute()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const loading = ref(true)
 const error = ref('')
 const payload = ref<AnalyticsPayload | null>(null)
@@ -474,6 +503,79 @@ const STATUS_META: Array<{ status: Status; label: string; color: string }> = [
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ]
 
+function nonNegativeCount(value: unknown): number {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function resolveRiskMetrics(item: RiskDistributionMetrics): ResolvedRiskMetrics {
+  const nc = nonNegativeCount(item.non_compliant_record_total)
+  if (confirmedResultsOnly.value) {
+    return {
+      primaryNonCompliant: nc,
+      primaryDataGap: 0,
+      primaryUncertain: 0,
+      problemTotal: nc,
+    }
+  }
+  const hasPrimaryBuckets =
+    item.primary_non_compliant_record_total != null ||
+    item.primary_data_gap_record_total != null ||
+    item.primary_uncertain_record_total != null
+  if (hasPrimaryBuckets) {
+    const primaryNonCompliant = nonNegativeCount(
+      item.primary_non_compliant_record_total ?? item.non_compliant_record_total,
+    )
+    const primaryDataGap = nonNegativeCount(item.primary_data_gap_record_total)
+    const primaryUncertain = nonNegativeCount(item.primary_uncertain_record_total)
+    const bucketSum = primaryNonCompliant + primaryDataGap + primaryUncertain
+    const problemTotal =
+      item.problem_record_total != null
+        ? nonNegativeCount(item.problem_record_total)
+        : bucketSum
+    return {
+      primaryNonCompliant,
+      primaryDataGap,
+      primaryUncertain,
+      problemTotal,
+    }
+  }
+  // 向后兼容无新字段的旧返回：按 non_compliant > data_gap > uncertain 互斥分桶，
+  // 并在 distinct_record_total > 0 时限制不超过去重总病历数，同时计入 uncertain。
+  const dg = nonNegativeCount(item.data_gap_record_total)
+  const unc = nonNegativeCount(item.uncertain_record_total)
+  const distinctTotal = nonNegativeCount(item.distinct_record_total)
+  const explicitProblem =
+    item.problem_record_total != null ? nonNegativeCount(item.problem_record_total) : null
+  const cap =
+    distinctTotal > 0
+      ? explicitProblem != null
+        ? Math.min(explicitProblem, distinctTotal)
+        : distinctTotal
+      : explicitProblem
+  if (cap != null) {
+    const primaryNonCompliant = Math.min(nc, cap)
+    const primaryDataGap = Math.min(dg, Math.max(0, cap - primaryNonCompliant))
+    const primaryUncertain = Math.min(unc, Math.max(0, cap - primaryNonCompliant - primaryDataGap))
+    const problemTotal =
+      explicitProblem != null
+        ? explicitProblem
+        : primaryNonCompliant + primaryDataGap + primaryUncertain
+    return {
+      primaryNonCompliant,
+      primaryDataGap,
+      primaryUncertain,
+      problemTotal,
+    }
+  }
+  return {
+    primaryNonCompliant: nc,
+    primaryDataGap: dg,
+    primaryUncertain: unc,
+    problemTotal: nc + dg + unc,
+  }
+}
+
 const departmentOptions = computed(() =>
   (payload.value?.department_distribution || []).map((item) => ({
     label: item.department,
@@ -481,12 +583,14 @@ const departmentOptions = computed(() =>
   })),
 )
 const statusItems = computed(() =>
-  STATUS_META.map((meta) => ({
-    ...meta,
-    count: Number(
-      payload.value?.status_distribution.find((item) => item.status === meta.status)?.count || 0,
-    ),
-  })).filter((item) => item.count > 0),
+  STATUS_META.filter((meta) => !confirmedResultsOnly.value || !DEMO_HIDDEN_STATUSES.has(meta.status))
+    .map((meta) => ({
+      ...meta,
+      count: Number(
+        payload.value?.status_distribution.find((item) => item.status === meta.status)?.count || 0,
+      ),
+    }))
+    .filter((item) => item.count > 0),
 )
 const statusTotal = computed(() => statusItems.value.reduce((total, item) => total + item.count, 0))
 const primaryConcernTotal = computed(() =>
@@ -506,95 +610,89 @@ const statusRingBackground = computed(() => {
     .join(', ')})`
 })
 const departmentItems = computed(() =>
-  [...(payload.value?.department_distribution || [])]
-    .filter(
-      (item) =>
-        item.non_compliant_record_total ||
-        item.data_gap_record_total ||
-        item.uncertain_record_total,
-    )
-    .sort(
-      (a, b) =>
-        b.non_compliant_record_total - a.non_compliant_record_total ||
-        b.data_gap_record_total - a.data_gap_record_total ||
-        b.uncertain_record_total - a.uncertain_record_total,
+  (payload.value?.department_distribution || [])
+    .map((item) => ({ ...item, ...resolveRiskMetrics(item) }))
+    .filter((item) => item.problemTotal > 0)
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? b.primaryNonCompliant - a.primaryNonCompliant ||
+          a.department.localeCompare(b.department)
+        : b.primaryNonCompliant - a.primaryNonCompliant ||
+          b.problemTotal - a.problemTotal ||
+          b.primaryDataGap - a.primaryDataGap ||
+          b.primaryUncertain - a.primaryUncertain ||
+          a.department.localeCompare(b.department),
     )
     .slice(0, 8),
 )
 const departmentMax = computed(() =>
-  Math.max(
-    1,
-    ...departmentItems.value.map(
-      (item) =>
-        item.non_compliant_record_total + item.data_gap_record_total + item.uncertain_record_total,
-    ),
-  ),
+  Math.max(1, ...departmentItems.value.map((item) => item.problemTotal)),
 )
 const physicianItems = computed(() =>
-  [...(payload.value?.physician_distribution || [])]
-    .filter(
-      (item) =>
-        item.non_compliant_record_total ||
-        item.data_gap_record_total ||
-        item.uncertain_record_total,
-    )
-    .sort(
-      (a, b) =>
-        b.non_compliant_record_total - a.non_compliant_record_total ||
-        b.data_gap_record_total - a.data_gap_record_total ||
-        b.uncertain_record_total - a.uncertain_record_total ||
-        a.physician.localeCompare(b.physician),
+  (payload.value?.physician_distribution || [])
+    .map((item) => ({ ...item, ...resolveRiskMetrics(item) }))
+    .filter((item) => item.problemTotal > 0)
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? b.primaryNonCompliant - a.primaryNonCompliant ||
+          a.physician.localeCompare(b.physician)
+        : b.primaryNonCompliant - a.primaryNonCompliant ||
+          b.problemTotal - a.problemTotal ||
+          b.primaryDataGap - a.primaryDataGap ||
+          b.primaryUncertain - a.primaryUncertain ||
+          a.physician.localeCompare(b.physician),
     )
     .slice(0, 8),
 )
 const physicianMax = computed(() =>
-  Math.max(
-    1,
-    ...physicianItems.value.map(
-      (item) =>
-        item.non_compliant_record_total + item.data_gap_record_total + item.uncertain_record_total,
-    ),
-  ),
+  Math.max(1, ...physicianItems.value.map((item) => item.problemTotal)),
 )
 const ruleItems = computed(() =>
   [...(payload.value?.rule_distribution || [])]
-    .sort(
-      (a, b) =>
-        b.non_compliant_count - a.non_compliant_count ||
-        b.data_gap_count - a.data_gap_count ||
-        b.uncertain_count - a.uncertain_count ||
-        a.rule_id.localeCompare(b.rule_id),
+    .filter((item) => (!confirmedResultsOnly.value ? true : item.non_compliant_count > 0))
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? b.non_compliant_count - a.non_compliant_count || a.rule_id.localeCompare(b.rule_id)
+        : b.non_compliant_count - a.non_compliant_count ||
+          b.data_gap_count - a.data_gap_count ||
+          b.uncertain_count - a.uncertain_count ||
+          a.rule_id.localeCompare(b.rule_id),
     )
     .slice(0, 5),
 )
 const completionSeries = computed(() => payload.value?.completion_time_series || [])
 const hasTrend = computed(() => completionSeries.value.length >= 2)
-const kpiCards = computed(() => [
-  {
-    label: '纳入病历',
-    value: payload.value?.kpis.distinct_record_total || 0,
-    detail: '按三坐标去重',
-    tone: 'brand',
-  },
-  {
-    label: '质控事件',
-    value: payload.value?.kpis.completed_event_total || 0,
-    detail: '已完成根任务',
-    tone: 'neutral',
-  },
-  {
-    label: '需优先处理',
-    value: payload.value?.kpis.records_with_non_compliant || 0,
-    detail: '至少一项确定问题',
-    tone: 'danger',
-  },
-  {
-    label: '资料待核实',
-    value: payload.value?.kpis.records_with_data_gap || 0,
-    detail: '至少一项资料待核实',
-    tone: 'warning',
-  },
-])
+const kpiCards = computed(() => {
+  const cards = [
+    {
+      label: '纳入病历',
+      value: payload.value?.kpis.distinct_record_total || 0,
+      detail: '按三坐标去重',
+      tone: 'brand',
+    },
+    {
+      label: '质控事件',
+      value: payload.value?.kpis.completed_event_total || 0,
+      detail: '已完成根任务',
+      tone: 'neutral',
+    },
+    {
+      label: '需优先处理',
+      value: payload.value?.kpis.records_with_non_compliant || 0,
+      detail: '至少一项确定问题',
+      tone: 'danger',
+    },
+  ]
+  if (!confirmedResultsOnly.value) {
+    cards.push({
+      label: '资料待核实',
+      value: payload.value?.kpis.records_with_data_gap || 0,
+      detail: '至少一项资料待核实',
+      tone: 'warning',
+    })
+  }
+  return cards
+})
 
 function formatTime(value: string) {
   const parsed = dayjs(value)
@@ -608,6 +706,7 @@ function trendPercent(value: number) {
   return Math.max(10, Math.round((value / maximum) * 100))
 }
 function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
+  if (confirmedResultsOnly.value) return item.non_compliant_count
   return item.non_compliant_count + item.data_gap_count + item.uncertain_count
 }
 function resetFilters() {
@@ -638,7 +737,17 @@ function returnToHospitalAnalytics() {
     },
   })
 }
-function drillDown(filters: { department?: string; rule_id?: string; rule_name?: string }) {
+function drillDown(filters: {
+  department?: string
+  rule_id?: string
+  rule_name?: string
+  result_status?: string
+}) {
+  const defaultRuleResultStatus = confirmedResultsOnly.value
+    ? 'non_compliant'
+    : ANALYTICS_PROBLEM_RESULT_STATUS_PARAM
+  const resultStatus =
+    filters.result_status ?? (filters.rule_id ? defaultRuleResultStatus : undefined)
   void router.push({
     // 下钻目标是病历池列表；工作台根路径是首页总览，不承载统计筛选
     path: ANALYTICS_WORKLIST_PATH,
@@ -650,6 +759,7 @@ function drillDown(filters: { department?: string; rule_id?: string; rule_name?:
       analytics_completed_to: dateRange.value?.[1],
       analytics_job_id: jobId.value || undefined,
       analytics_rule_id: filters.rule_id,
+      analytics_result_status: resultStatus,
       // 仅供病历池展示下钻上下文，不参与后端筛选
       analytics_rule_name: filters.rule_name || undefined,
     },
@@ -902,6 +1012,10 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
+}
+
+.analytics-kpis.is-confirmed-only {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .analytics-kpi {

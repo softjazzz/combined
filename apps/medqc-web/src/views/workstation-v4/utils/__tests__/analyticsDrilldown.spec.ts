@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest'
 import AnalyticsDrilldownBar from '../../components/workbench/AnalyticsDrilldownBar.vue'
 import {
   analyticsDrilldownSignature,
+  analyticsResultStatusLabel,
   analyticsStatsQuery,
+  parseAnalyticsResultStatuses,
   readAnalyticsDrilldown,
   withoutAnalyticsDrilldown,
 } from '../analyticsDrilldown'
@@ -72,6 +74,34 @@ describe('analyticsDrilldown', () => {
       job_id: undefined,
     })
   })
+  it('支持逗号分隔多状态解析、归一化与友好中文标签', () => {
+    expect(parseAnalyticsResultStatuses('non_compliant, data_gap, uncertain, non_compliant')).toEqual([
+      'non_compliant',
+      'data_gap',
+      'uncertain',
+    ])
+    expect(analyticsResultStatusLabel('non_compliant')).toBe('确定问题')
+    expect(analyticsResultStatusLabel('non_compliant,data_gap,uncertain')).toBe('存在问题')
+    expect(analyticsResultStatusLabel('uncertain, non_compliant, data_gap')).toBe('存在问题')
+    expect(analyticsResultStatusLabel('non_compliant,data_gap')).toBe('确定问题 / 资料待核实')
+
+    const parsed = readAnalyticsDrilldown({
+      ...DRILLDOWN_QUERY,
+      analytics_result_status: 'non_compliant, data_gap, uncertain',
+    })!
+    expect(parsed.resultStatus).toBe('non_compliant,data_gap,uncertain')
+    expect(
+      analyticsDrilldownSignature({
+        ...DRILLDOWN_QUERY,
+        analytics_result_status: 'non_compliant,data_gap,uncertain',
+      }),
+    ).toBe(
+      analyticsDrilldownSignature({
+        ...DRILLDOWN_QUERY,
+        analytics_result_status: 'non_compliant, data_gap, uncertain',
+      }),
+    )
+  })
 })
 
 describe('AnalyticsDrilldownBar', () => {
@@ -112,6 +142,23 @@ describe('AnalyticsDrilldownBar', () => {
     expect(wrapper.get('[data-testid="analytics-drilldown-result-status"]').text()).toBe(
       '结论状态 确定问题',
     )
+  })
+
+  it('逗号分隔三类问题状态在胶囊中展示为“结论状态 存在问题”', () => {
+    const wrapper = mount(AnalyticsDrilldownBar, {
+      props: {
+        drilldown: readAnalyticsDrilldown({
+          ...DRILLDOWN_QUERY,
+          analytics_result_status: 'non_compliant,data_gap,uncertain',
+        })!,
+        total: 18,
+      },
+      global: { stubs: { 'a-button': { template: '<button><slot /></button>' } } },
+    })
+
+    const chip = wrapper.get('[data-testid="analytics-drilldown-result-status"]')
+    expect(chip.text()).toBe('结论状态 存在问题')
+    expect(chip.attributes('title')).toBe('确定问题、资料待核实、待判断')
   })
 
   it('列表加载中不显示命中数量', () => {

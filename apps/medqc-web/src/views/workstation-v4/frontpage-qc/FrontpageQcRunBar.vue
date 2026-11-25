@@ -51,8 +51,9 @@
         {{ run.error_message }}
       </p>
       <details
-        v-if="run.failed_records.length"
+        v-if="!confirmedResultsOnly && run.failed_records.length"
         class="fpqc-run__failed"
+        data-testid="fpqc-run-failed-details"
       >
         <summary>查看未能质控的病历（{{ run.failed_count }} 份）</summary>
         <ul>
@@ -77,6 +78,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { isFrontpageQcRunActive, type FrontpageQcRun } from '@/services/frontpage-qc-v2-service'
 
 import { RUN_STATUS_LABELS, runProgressPercent, runTone } from './presentation'
@@ -84,6 +86,7 @@ import { RUN_STATUS_LABELS, runProgressPercent, runTone } from './presentation'
 const props = defineProps<{ run: FrontpageQcRun | null; error: string; cancelling: boolean }>()
 const emit = defineEmits<{ cancel: []; dismiss: [] }>()
 
+const { confirmedResultsOnly } = useQcResultVisibility()
 const active = computed(() => isFrontpageQcRunActive(props.run))
 const percent = computed(() => (props.run ? runProgressPercent(props.run) : 0))
 const tone = computed(() => (props.run ? runTone(props.run.status) : 'neutral'))
@@ -92,7 +95,7 @@ const title = computed(() => {
   const filters = props.run?.filters ?? {}
   if (filters.mode === 'selected') return `首页质控 · 所选 ${props.run?.total_records ?? 0} 份`
   const parts = [String(filters.department || '') || '全部科室']
-  if (filters.data_scope === 'all') parts.push('含测试数据')
+  if (!confirmedResultsOnly.value && filters.data_scope === 'all') parts.push('含测试数据')
   if (filters.start_date || filters.end_date) {
     parts.push(`出院 ${filters.start_date || '不限'} 至 ${filters.end_date || '不限'}`)
   }

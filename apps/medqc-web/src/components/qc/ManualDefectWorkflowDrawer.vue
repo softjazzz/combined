@@ -250,6 +250,7 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import {
   createManualEntry,
   decideManualDefect,
@@ -267,8 +268,22 @@ import {
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const auth = useAuthStore()
-const canReview = computed(
-  () => auth.user?.roles?.some((role) => ['admin', 'qc_manager'].includes(role)) ?? false,
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const canReview = computed(() =>
+  ['admin', 'qc_manager', 'sync_admin', 'super_admin'].some(
+    (role) =>
+      effectiveUserRoles.value.includes(role) ||
+      (typeof auth.hasRole === 'function' && auth.hasRole(role)),
+  ),
 )
 const tab = ref<'entry' | 'review'>('entry'),
   scene = ref<ManualScene>('all'),
@@ -469,7 +484,7 @@ async function decide(item: ManualItem, decision: 'approved' | 'rejected') {
   }
 }
 watch(
-  () => [props.open, auth.user?.id, JSON.stringify(auth.user?.roles)],
+  () => [props.open, auth.user?.id, JSON.stringify(auth.user?.roles), JSON.stringify(effectiveUserRoles.value)],
   () => {
     ++generation
     ++ownGeneration

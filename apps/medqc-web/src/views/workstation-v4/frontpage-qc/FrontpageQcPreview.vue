@@ -44,7 +44,10 @@
           <dt>质控时间</dt>
           <dd>{{ result ? formatDateTime(result.created_at) : '—' }}</dd>
         </div>
-        <div>
+        <div
+          v-if="!confirmedResultsOnly"
+          data-testid="fpqc-preview-scorable-ratio"
+        >
           <dt>可评分项</dt>
           <dd>{{ result ? formatPercent(result.scorable_ratio) : '—' }}</dd>
         </div>
@@ -65,9 +68,9 @@
         {{ loadError }}
       </div>
 
-      <template v-else-if="detail">
+      <template v-else-if="activeDetail">
         <div
-          v-if="detail.stale"
+          v-if="activeDetail.stale"
           class="fpqc-preview__notice"
           data-testid="fpqc-preview-stale"
         >
@@ -101,6 +104,7 @@
         <template v-else>
           <dl
             class="mq-soft fpqc-preview__counts"
+            :style="{ gridTemplateColumns: `repeat(${counts.length}, minmax(0, 1fr))` }"
             aria-label="问题数量"
           >
             <div
@@ -114,7 +118,7 @@
           </dl>
 
           <p
-            v-if="!groups.sections.length && !groups.hints.length"
+            v-if="!groups.sections.length && (confirmedResultsOnly || !groups.hints.length)"
             class="fpqc-preview__clean"
           >
             未发现扣分问题和必填缺项。
@@ -237,8 +241,9 @@
           </section>
 
           <details
-            v-if="groups.hints.length"
+            v-if="!confirmedResultsOnly && groups.hints.length"
             class="fpqc-preview__fold"
+            data-testid="fpqc-preview-hints"
             open
           >
             <summary>提示 {{ groups.hints.length }} 项<span>不扣分，请人工核实</span></summary>
@@ -261,7 +266,7 @@
           </details>
 
           <details
-            v-if="groups.dataGaps.length"
+            v-if="!confirmedResultsOnly && groups.dataGaps.length"
             class="fpqc-preview__fold"
             data-testid="fpqc-preview-data-gaps"
           >
@@ -286,6 +291,7 @@
 import { message } from 'ant-design-vue'
 import { computed, ref, watch } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   getFrontpageQcRecord,
   reviewFrontpageQcFinding,
@@ -316,6 +322,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ rerun: [ref: FrontpageQcRef]; reviewed: [] }>()
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
 const detail = ref<FrontpageQcRecordDetail | null>(null)
 const loading = ref(false)
 const loadError = ref('')
@@ -329,17 +337,27 @@ const recordRef = computed<FrontpageQcRef>(() => ({
   patient_id: props.record?.patient_id ?? '',
   visit_id: props.record?.visit_id ?? '',
 }))
-const result = computed(() => detail.value?.result ?? null)
+const activeDetail = computed<FrontpageQcRecordDetail | null>(() => {
+  const currentKey = props.record?.record_key
+  if (!currentKey || !detail.value) return null
+  return detail.value.record.record_key === currentKey ? detail.value : null
+})
+const result = computed(() => activeDetail.value?.result ?? null)
 const groups = computed(() => groupFindings(result.value?.findings ?? []))
 const gapSummary = computed(() => summarizeDataGaps(groups.value.dataGaps))
 const counts = computed(() => {
   const value = result.value
-  return [
+  const items = [
     { label: '扣分问题', value: value?.fail_count ?? 0, tone: 'danger' },
     { label: '必填缺项', value: value?.required_missing_count ?? 0, tone: 'danger' },
-    { label: '提示', value: value?.hint_count ?? 0, tone: 'warning' },
-    { label: '资料不足', value: value?.data_gap_count ?? 0, tone: 'neutral' },
   ]
+  if (!confirmedResultsOnly.value) {
+    items.push(
+      { label: '提示', value: value?.hint_count ?? 0, tone: 'warning' },
+      { label: '资料不足', value: value?.data_gap_count ?? 0, tone: 'neutral' },
+    )
+  }
+  return items
 })
 
 function severityText(finding: FrontpageQcFinding): string {
@@ -362,17 +380,23 @@ function reviewTone(status: FrontpageQcReviewStatus): string {
 async function load() {
   const seq = ++requestSeq
   editingId.value = ''
+  noteDraft.value = ''
+  detail.value = null
+  loadError.value = ''
   if (!props.record) {
-    detail.value = null
+    loading.value = false
     return
   }
+  const expectedKey = props.record.record_key
+  const refToLoad = { ...recordRef.value }
   loading.value = true
-  loadError.value = ''
   try {
-    const next = await getFrontpageQcRecord(recordRef.value)
-    if (seq === requestSeq) detail.value = next
+    const next = await getFrontpageQcRecord(refToLoad)
+    if (seq === requestSeq && props.record?.record_key === expectedKey) {
+      detail.value = next
+    }
   } catch (error) {
-    if (seq === requestSeq) {
+    if (seq === requestSeq && props.record?.record_key === expectedKey) {
       detail.value = null
       loadError.value = error instanceof Error ? error.message : '读取首页质控详情失败'
     }
@@ -400,18 +424,23 @@ function cancelEdit() {
 }
 
 async function saveReview(finding: FrontpageQcFinding, status: FrontpageQcReviewStatus, note: string) {
+  const expectedKey = props.record?.record_key ?? ''
   savingId.value = finding.id
   try {
     const saved = await reviewFrontpageQcFinding(finding.id, { status, note: note.trim() })
-    const findings = result.value?.findings ?? []
-    const index = findings.findIndex((item) => item.id === saved.id)
-    if (index >= 0) findings.splice(index, 1, saved)
-    cancelEdit()
+    if (props.record?.record_key === expectedKey) {
+      const findings = result.value?.findings ?? []
+      const index = findings.findIndex((item) => item.id === saved.id)
+      if (index >= 0) findings.splice(index, 1, saved)
+      cancelEdit()
+    }
     emit('reviewed')
   } catch (error) {
     message.error(error instanceof Error ? error.message : '保存复核失败')
     // 结果被重新质控替换时，重新读取最新结果
-    void load()
+    if (props.record?.record_key === expectedKey) {
+      void load()
+    }
   } finally {
     savingId.value = ''
   }

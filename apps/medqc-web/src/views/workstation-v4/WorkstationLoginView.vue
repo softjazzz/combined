@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
 import { ArrowRight, LoaderCircle, Sparkles } from 'lucide-vue-next'
+import {
+  resolveDefaultWorkstationPath,
+  WORKSTATION_BASE,
+} from '@/components/layout/workstationNav'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
@@ -14,15 +18,37 @@ const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
 
-const redirectTarget = computed(() => {
-  const raw = route.query.redirect
-  if (typeof raw !== 'string') return '/workstation-v5'
-  if (raw.startsWith('/workstation-v5')) return raw
-  if (raw.startsWith('/workstation-v4')) {
-    return `/workstation-v5${raw.slice('/workstation-v4'.length)}`
+function resolveExplicitWorkstationRedirect(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.startsWith(WORKSTATION_BASE)
+    ? trimmed
+    : trimmed.startsWith('/workstation-v4')
+      ? `${WORKSTATION_BASE}${trimmed.slice('/workstation-v4'.length)}`
+      : null
+  if (!normalized || normalized === WORKSTATION_BASE || normalized === `${WORKSTATION_BASE}/`) {
+    return null
   }
-  return '/workstation-v5'
-})
+  return normalized
+}
+
+function resolveSignedInRoles(userData?: { roles?: string[]; role?: string } | null): string[] {
+  if (Array.isArray(authStore.userRoles) && authStore.userRoles.length > 0) {
+    return authStore.userRoles
+  }
+  if (Array.isArray(userData?.roles) && userData.roles.length > 0) {
+    return userData.roles
+  }
+  if (typeof userData?.role === 'string' && userData.role.trim()) {
+    return [userData.role.trim()]
+  }
+  return []
+}
+
+const resolvePostLoginTarget = (userData?: { roles?: string[]; role?: string } | null) =>
+  resolveExplicitWorkstationRedirect(route.query.redirect) ??
+  resolveDefaultWorkstationPath(resolveSignedInRoles(userData))
 
 const loginAccountAliases: Record<string, string> = {
   admin: 'admin@medqc.com',
@@ -40,7 +66,7 @@ const demoAccounts = [
   },
 ]
 
-const navigateAfterLogin = async (target = redirectTarget.value) => {
+const navigateAfterLogin = async (target: string) => {
   try {
     await router.replace(target)
   } catch (error) {
@@ -70,7 +96,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     }
 
     message.success('登录成功')
-    await navigateAfterLogin()
+    await navigateAfterLogin(resolvePostLoginTarget(result.data))
   } catch (error) {
     console.error('workstation 登录失败:', error)
     message.error('登录失败，请稍后重试')
