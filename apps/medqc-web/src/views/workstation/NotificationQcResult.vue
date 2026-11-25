@@ -4,9 +4,7 @@
     <a-result v-else-if="error" status="warning" title="结果暂不可用" :sub-title="error">
       <template #extra
         ><a-button @click="load">重试</a-button
-        ><a-button @click="close">{{
-          entryMode === 'task' ? '返回病历池' : '返回消息'
-        }}</a-button></template
+        ><a-button @click="close">{{ closeTarget.label }}</a-button></template
       >
     </a-result>
     <SemanticRulesBatchResultDrawer
@@ -18,6 +16,7 @@
       :batch-job-debug-loading="debugLoading"
       :fetch-batch-job-debug-snapshot="fetchDebug"
       :close="close"
+      :back-label="closeTarget.label"
       :export-batch-job-report="exportResult"
       :review-batch-job-result="reviewResult"
       :review-batch-job-loading="reviewing"
@@ -33,7 +32,12 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { message } from 'ant-design-vue'
-import { MESSAGE_CENTER_PATH } from './notificationNavigation'
+import {
+  resolveAuthorizedWorkstationPath,
+  resolveDefaultWorkstationPath,
+} from '@/components/layout/workstationNav'
+import { effectiveRoles } from '@/utils/effectiveRoles'
+import { canUseMessageCenter, MESSAGE_CENTER_PATH } from './notificationNavigation'
 import {
   getNotificationQcResult,
   getSichuanWorkspaceBatchJob,
@@ -220,11 +224,62 @@ async function reviewResult(): Promise<void> {
   }
 }
 
+const RUNNING_QC_ROLES = ['admin', 'qc_manager', 'sync_admin', 'super_admin']
+const WORKLIST_ROLES = ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin']
+
+const normalizedUserRoles = computed(() => {
+  const raw = Array.isArray(authStore.userRoles)
+    ? authStore.userRoles
+    : Array.isArray(authStore.user?.roles)
+      ? authStore.user.roles
+      : authStore.user?.role
+        ? [authStore.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+
+const canAccessRunningQc = computed(() =>
+  normalizedUserRoles.value.some((role) => RUNNING_QC_ROLES.includes(role)),
+)
+const canAccessWorklist = computed(() =>
+  normalizedUserRoles.value.some((role) => WORKLIST_ROLES.includes(role)),
+)
+const canAccessMessages = computed(() => canUseMessageCenter(normalizedUserRoles.value))
+
+const closeTarget = computed<{ path: string; label: string }>(() => {
+  const roles = normalizedUserRoles.value
+  const from = typeof route.query.from === 'string' ? route.query.from.trim() : ''
+  const defaultPath =
+    resolveAuthorizedWorkstationPath(roles) ?? resolveDefaultWorkstationPath(roles)
+
+  if (props.entryMode === 'notification') {
+    if (canAccessMessages.value) {
+      return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+    }
+    return { path: defaultPath, label: '返回工作台' }
+  }
+
+  if (from === 'final' && canAccessRunningQc.value) {
+    return { path: '/workstation-v5/records/final', label: '返回终末质控' }
+  }
+  if (from === 'worklist' && canAccessWorklist.value) {
+    return { path: '/workstation-v5/worklist', label: '返回病历池' }
+  }
+  if (from === 'messages' && canAccessMessages.value) {
+    return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+  }
+  if (canAccessRunningQc.value) {
+    return { path: '/workstation-v5/records/running', label: '返回运行质控' }
+  }
+  if (canAccessMessages.value) {
+    return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+  }
+  return { path: defaultPath, label: '返回工作台' }
+})
+
 function close() {
   generation += 1
-  void router.push(
-    props.entryMode === 'task' ? '/workstation-v5/records/running' : MESSAGE_CENTER_PATH,
-  )
+  void router.push(closeTarget.value.path)
 }
 
 watch([selectedId, () => props.entryMode, authScope], load, { immediate: true, flush: 'sync' })

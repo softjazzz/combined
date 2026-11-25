@@ -71,8 +71,22 @@ def _reviewer(actor):
     return bool(actor["roles"] & REVIEWERS)
 
 
+def _serialize_value(value):
+    if isinstance(value, datetime):
+        aware = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+        return aware.isoformat()
+    return value
+
+
 def _view(row):
-    return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    return {
+        column.name: _serialize_value(getattr(row, column.name))
+        for column in row.__table__.columns
+    }
 
 
 def _authorized(actor, row):
@@ -172,7 +186,7 @@ class ModernAppealService:
                     appellant_department=department,
                     case_department=department,
                     status="pending",
-                    created_at=now.replace(tzinfo=None),
+                    created_at=now,
                     updated_at=now,
                 )
                 session.add(row)

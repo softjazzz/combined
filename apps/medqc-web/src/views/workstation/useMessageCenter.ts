@@ -1,6 +1,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
-import { useRouter } from 'vue-router'
+import * as vueRouter from 'vue-router'
 import { ApiService } from '@/services/apiService'
 import { useAuthStore } from '@/stores/auth'
 import { normalizeNotification } from '@/views/workstation-v4/normalize'
@@ -19,6 +19,8 @@ export const MESSAGE_TYPE_LABELS: Record<string, string> = {
   remediation: '整改反馈',
   defect_urge: '整改催办',
   appeal_result: '申诉反馈',
+  case_communication: '病历沟通',
+  account_registration: '账号注册审核',
   task_assign: '任务派发',
   drg_alert: 'DRG 提醒',
   system: '系统通知',
@@ -49,8 +51,9 @@ export function messageActionLabel(item: NotificationVM) {
   }
 }
 
-export function messageTime(value: string, type?: string) {
-  const date = type === 'qc_result_ready' ? parseQcTaskTime(value) : new Date(value)
+export function messageTime(value: string, _type?: string) {
+  void _type
+  const date = parseQcTaskTime(value)
   return !date || Number.isNaN(date.getTime())
     ? '时间未知'
     : new Intl.DateTimeFormat('zh-CN', {
@@ -64,16 +67,53 @@ export function messageTime(value: string, type?: string) {
       }).format(date)
 }
 
+type MessageStatusFilter = 'unread' | 'all' | 'read'
+const VALID_MESSAGE_STATUSES = new Set<MessageStatusFilter>(['unread', 'all', 'read'])
+
+function readSingleQuery(query: Record<string, unknown> | undefined, key: string): string {
+  const raw = query?.[key]
+  const value = Array.isArray(raw) ? raw[0] : raw
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseStatusQuery(query: Record<string, unknown> | undefined): MessageStatusFilter {
+  const value = readSingleQuery(query, 'status')
+  return VALID_MESSAGE_STATUSES.has(value as MessageStatusFilter)
+    ? (value as MessageStatusFilter)
+    : 'unread'
+}
+
+function parseTypeQuery(query: Record<string, unknown> | undefined): string {
+  return readSingleQuery(query, 'type')
+}
+
+function parsePageQuery(query: Record<string, unknown> | undefined): number {
+  const raw = readSingleQuery(query, 'page')
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1
+}
+
+function safeUseRoute() {
+  try {
+    return typeof vueRouter.useRoute === 'function' ? vueRouter.useRoute() : undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function useMessageCenter() {
-  const router = useRouter()
+  const router = vueRouter.useRouter()
+  const route = safeUseRoute()
   const auth = useAuthStore()
   const items = ref<NotificationVM[]>([])
   const total = ref(0)
   const unread = ref<number | null>(null)
-  const page = ref(1)
+  const page = ref(parsePageQuery(route?.query as Record<string, unknown> | undefined))
   const pageSize = 20
-  const status = ref<'unread' | 'all' | 'read'>('unread')
-  const type = ref('')
+  const status = ref<MessageStatusFilter>(
+    parseStatusQuery(route?.query as Record<string, unknown> | undefined),
+  )
+  const type = ref(parseTypeQuery(route?.query as Record<string, unknown> | undefined))
   const loading = ref(false)
   const error = ref('')
   const busy = ref('')
@@ -81,9 +121,33 @@ export function useMessageCenter() {
   const mobileReading = ref(false)
   let sequence = 0
   let identity = 0
+  let syncingFromRoute = false
+  let authInitialized = false
+  let disposed = false
   const selected = computed(() => items.value.find((item) => item.id === selectedId.value))
 
+  function syncQueryToUrl() {
+    if (disposed || !route || typeof router?.replace !== 'function') return
+    const currentQuery = (route.query || {}) as Record<string, unknown>
+    const nextStatus = status.value === 'unread' ? undefined : status.value
+    const nextType = type.value || undefined
+    const nextPage = page.value > 1 ? String(page.value) : undefined
+    const curStatus = readSingleQuery(currentQuery, 'status') || undefined
+    const curType = readSingleQuery(currentQuery, 'type') || undefined
+    const curPage = readSingleQuery(currentQuery, 'page') || undefined
+    if (curStatus === nextStatus && curType === nextType && curPage === nextPage) return
+    const nextQuery = { ...route.query }
+    if (nextStatus) nextQuery.status = nextStatus
+    else delete nextQuery.status
+    if (nextType) nextQuery.type = nextType
+    else delete nextQuery.type
+    if (nextPage) nextQuery.page = nextPage
+    else delete nextQuery.page
+    void router.replace({ path: route.path, query: nextQuery })
+  }
+
   async function load() {
+    syncQueryToUrl()
     const token = ++sequence
     loading.value = true
     error.value = ''
@@ -187,13 +251,32 @@ export function useMessageCenter() {
   }
 
   watch([status, type], () => {
+    if (syncingFromRoute) return
     page.value = 1
     items.value = []
     total.value = 0
     selectedId.value = ''
     mobileReading.value = false
+    syncQueryToUrl()
     void load()
   })
+  watch(
+    () => [route?.query?.status, route?.query?.type, route?.query?.page],
+    () => {
+      if (!route) return
+      const query = route.query as Record<string, unknown>
+      const nextStatus = parseStatusQuery(query)
+      const nextType = parseTypeQuery(query)
+      const nextPage = parsePageQuery(query)
+      if (nextStatus === status.value && nextType === type.value && nextPage === page.value) return
+      syncingFromRoute = true
+      status.value = nextStatus
+      type.value = nextType
+      page.value = nextPage
+      syncingFromRoute = false
+      void load()
+    },
+  )
   watch(
     () => [auth.user?.id, auth.userRoles],
     () => {
@@ -205,13 +288,18 @@ export function useMessageCenter() {
       selectedId.value = ''
       mobileReading.value = false
       busy.value = ''
-      page.value = 1
+      if (!authInitialized) {
+        authInitialized = true
+      } else {
+        page.value = 1
+      }
       if (ApiService.isAuthenticated()) void load()
       else loading.value = false
     },
     { deep: true, immediate: true },
   )
   onBeforeUnmount(() => {
+    disposed = true
     ++sequence
     ++identity
   })

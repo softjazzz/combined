@@ -4,9 +4,12 @@
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+import inspect
+import re
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, List, Literal, Optional
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -19,7 +22,7 @@ from app.services.frontpage_qc_v2.config import GRADE_EXCELLENT, GRADE_LABELS, G
 from app.services.frontpage_qc_v2.engine import input_fingerprint
 from app.services.frontpage_qc_v2.jobs import MAX_RECORDS_PER_RUN, refs_from_records, run_frontpage_qc_job
 from app.services.frontpage_qc_v2.model import GROUP_LABELS, SECTION_LABELS, SEVERITY_LABELS
-from app.services.frontpage_qc_v2.reporting import build_analytics, build_export_workbook
+from app.services.frontpage_qc_v2.reporting import ISSUE_LABELS, build_analytics, build_export_workbook
 from app.services.frontpage_qc_v2.scoring_items import SCORE_ITEMS, SECTION_POINTS
 from app.services.frontpage_qc_v2.store import (
     RUN_ACTIVE_STATUSES,
@@ -38,6 +41,8 @@ _RECORD_REF_BATCH_SIZE = 200
 STALLED_AFTER = timedelta(minutes=10)
 RESULT_ISSUE_FILTERS = ("fail", "hint", "required_missing", "data_gap", "clean")
 RULE_IDS = frozenset(rule.rule_id for rule in RULES)
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def _check_rule_id(rule_id: str) -> None:
@@ -45,7 +50,30 @@ def _check_rule_id(rule_id: str) -> None:
         raise HTTPException(422, f"未知的首页质控规则：{rule_id}")
 
 
-async def require_frontpage_qc_user(current_user: Dict[str, Any] = Depends(require_product_activation)) -> Dict[str, Any]:
+def _validate_date_range(start_date: str, end_date: str) -> None:
+    parsed: Dict[str, date] = {}
+    for label, value in (("start_date", start_date), ("end_date", end_date)):
+        if not value:
+            continue
+        if not _DATE_RE.fullmatch(value):
+            raise HTTPException(422, f"{label} 格式必须为 YYYY-MM-DD")
+        try:
+            parsed[label] = date.fromisoformat(value)
+        except ValueError:
+            raise HTTPException(422, f"{label} 不是合法日期：{value}") from None
+    if "start_date" in parsed and "end_date" in parsed and parsed["start_date"] > parsed["end_date"]:
+        raise HTTPException(422, "开始日期不能晚于结束日期")
+
+
+def _supports_kwarg(fn: Any, name: str) -> bool:
+    try:
+        params = inspect.signature(fn).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(param.name == name for param in params)
+
+
+def require_frontpage_qc_user(current_user: Dict[str, Any] = Depends(require_product_activation)) -> Dict[str, Any]:
     from app.services.frontpage_qc_v2.access import resolve_frontpage_access
     from app.services.defect_rectification_service import RectificationError
     try:
@@ -161,6 +189,10 @@ def _scope_institute(data_scope: str, home_institute: str, user: Dict[str, Any])
     return institute if institute is not None else (home_institute if data_scope == "home" else "")
 
 
+def _include_test_records(data_scope: str, user: Dict[str, Any]) -> bool:
+    return user["_frontpage_institute"] is None and data_scope == "all"
+
+
 def _check_refs(user, refs):
     institute = user['_frontpage_institute']
     if institute is not None and any(ref.institute_id != institute for ref in refs):
@@ -206,8 +238,12 @@ def _collect(
     keyword: str = "",
     refs=None,
     institute_id: str = "",
+    include_test_records: bool = False,
 ) -> List[Dict[str, Any]]:
     # 显式引用仍受可信机构范围约束；超大批次按 <=200 分批且排除 record_content 全文。
+    extra_kwargs: Dict[str, Any] = {}
+    if _supports_kwarg(repository.collect_records, "include_test_records"):
+        extra_kwargs["include_test_records"] = include_test_records
     if refs is not None:
         ref_list = list(refs)
         if not ref_list:
@@ -226,6 +262,7 @@ def _collect(
                     record_refs=ref_list[start:start + _RECORD_REF_BATCH_SIZE],
                     institute_id=institute_id or None,
                     _metadata_only=True,
+                    **extra_kwargs,
                 )
             )
         return collected
@@ -240,22 +277,33 @@ def _collect(
         record_refs=None,
         institute_id=institute_id or None,
         _metadata_only=True,
+        **extra_kwargs,
     )
 
 
 def _settle_stalled(store: FrontpageQcStore, run: Dict[str, Any]) -> Dict[str, Any]:
-    """服务重启或线程异常退出时，任务会停在 running；超时后落为失败，前端才能停止轮询。"""
+    """服务重启或线程异常退出时，任务会停在 running；超时后按 updated_at CAS 落为失败，防误杀心跳任务。"""
     if run["status"] not in RUN_ACTIVE_STATUSES or not run.get("updated_at"):
         return run
     updated = datetime.fromisoformat(run["updated_at"])
-    if datetime.now(timezone.utc) - updated < STALLED_AFTER:
+    if updated.tzinfo is None:
+        updated = updated.replace(tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
+    if now - updated < STALLED_AFTER:
         return run
-    store.update_run(
-        run["id"],
-        status="failed",
-        error_message="任务中断（服务重启或执行异常），请重新发起",
-        finished_at=datetime.now(timezone.utc),
-    )
+    if hasattr(store, "settle_stalled_run"):
+        store.settle_stalled_run(
+            run["id"],
+            expected_updated_at=updated,
+            stale_before=now - STALLED_AFTER,
+        )
+    else:
+        store.update_run(
+            run["id"],
+            status="failed",
+            error_message="任务中断（服务重启或执行异常），请重新发起",
+            finished_at=now,
+        )
     return store.get_run(run["id"])
 
 
@@ -263,7 +311,7 @@ def _settle_stalled(store: FrontpageQcStore, run: Dict[str, Any]) -> Dict[str, A
 
 
 @router.get("/rules")
-async def list_rules(request: Request, _user: Dict[str, Any] = Depends(require_frontpage_qc_user)):
+def list_rules(request: Request, _user: Dict[str, Any] = Depends(require_frontpage_qc_user)):
     items = [
         {
             "rule_id": rule.rule_id,
@@ -322,7 +370,7 @@ class RunCreate(BaseModel):
 
 
 @router.post("/runs")
-async def create_run(
+def create_run(
     request: Request,
     payload: RunCreate,
     user: Dict[str, Any] = Depends(require_frontpage_qc_user),
@@ -331,8 +379,10 @@ async def create_run(
     home_institute: str = Depends(get_home_institute),
 ):
     uid = _user_id(user)
+    _validate_date_range(payload.start_date, payload.end_date)
     if payload.record_refs is not None and len(payload.record_refs) == 0:
         raise HTTPException(422, "未选择任何待质控病历")
+    include_test = _include_test_records(payload.data_scope, user)
     try:
         active = [_settle_stalled(store, run) for run in store.list_runs(created_by=uid, statuses=RUN_ACTIVE_STATUSES, limit=5)]
         active = [run for run in active if run["status"] in RUN_ACTIVE_STATUSES]
@@ -359,6 +409,7 @@ async def create_run(
                 end_date=payload.end_date,
                 keyword=payload.keyword,
                 institute_id=_scope_institute(payload.data_scope, home_institute, user),
+                include_test_records=include_test,
             )
             filters = {
                 "mode": "filtered",
@@ -409,7 +460,7 @@ async def create_run(
 
 
 @router.get("/runs")
-async def list_runs(
+def list_runs(
     request: Request,
     active: bool = Query(False),
     user: Dict[str, Any] = Depends(require_frontpage_qc_user),
@@ -426,7 +477,7 @@ async def list_runs(
 
 
 @router.get("/runs/{run_id}")
-async def get_run(
+def get_run(
     request: Request,
     run_id: str,
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
@@ -441,7 +492,7 @@ async def get_run(
 
 
 @router.post("/runs/{run_id}/cancel")
-async def cancel_run(
+def cancel_run(
     request: Request,
     run_id: str,
     user: Dict[str, Any] = Depends(require_frontpage_qc_user),
@@ -462,29 +513,35 @@ async def cancel_run(
 
 
 @router.get("/filters")
-async def get_filters(
+def get_filters(
     request: Request,
     data_scope: Literal["home", "all"] = Query("home"),
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     repository=Depends(get_record_repository),
     home_institute: str = Depends(get_home_institute),
 ):
-    filters = repository.get_record_filters(
-        scope="final", department=None, institute_id=_scope_institute(data_scope, home_institute, _user) or None
-    )
+    include_test = _include_test_records(data_scope, _user)
+    filter_kwargs: Dict[str, Any] = {
+        "scope": "final",
+        "department": None,
+        "institute_id": _scope_institute(data_scope, home_institute, _user) or None,
+    }
+    if _supports_kwarg(repository.get_record_filters, "include_test_records"):
+        filter_kwargs["include_test_records"] = include_test
+    filters = repository.get_record_filters(**filter_kwargs)
     return _ok(
         request,
         {
             "departments": filters.get("departments", []),
             "date_bounds": filters.get("date_bounds", {}),
-            # 为空表示无法区分本院与测试数据，前端不显示“本院 / 全部”切换
-            "home_institute": home_institute,
+            # 非全局院区用户禁止切换全局范围，返回空串让前端隐藏“本院 / 全部”切换
+            "home_institute": home_institute if _user["_frontpage_institute"] is None else "",
         },
     )
 
 
 @router.get("/records")
-async def list_records(
+def list_records(
     request: Request,
     department: str = Query("", max_length=100),
     start_date: str = Query("", max_length=10),
@@ -502,7 +559,9 @@ async def list_records(
     repository=Depends(get_record_repository),
     home_institute: str = Depends(get_home_institute),
 ):
+    _validate_date_range(start_date, end_date)
     institute = _scope_institute(data_scope, home_institute, _user)
+    include_test = _include_test_records(data_scope, _user)
     _check_rule_id(rule_id)
     if rule_id and issue == "unchecked":
         raise HTTPException(422, "按规则筛选时只能查看已质控病历")
@@ -518,10 +577,14 @@ async def list_records(
                     end_date=end_date,
                     keyword=keyword,
                     institute_id=institute,
+                    include_test_records=include_test,
                 )
                 _check_rows(_user, matched)
                 info = {FrontpageRef.from_record(item): _record_public(item) for item in matched}
                 refs = list(info)
+            store_kwargs: Dict[str, Any] = {}
+            if _supports_kwarg(store.query_latest, "include_test_records"):
+                store_kwargs["include_test_records"] = include_test
             results, total = store.query_latest(
                 department=department,
                 start_date=start_date,
@@ -534,12 +597,13 @@ async def list_records(
                 record_refs=refs,
                 page=page,
                 page_size=page_size,
+                **store_kwargs,
             )
             _check_rows(_user, results)
             result_refs = [FrontpageRef.from_record(result) for result in results]
             missing = [ref.as_case_ref() for ref in result_refs if ref not in info]
             if missing:
-                hydrated = _collect(repository, refs=missing)
+                hydrated = _collect(repository, refs=missing, include_test_records=include_test)
                 _check_rows(_user, hydrated)
                 info.update({FrontpageRef.from_record(item): _record_public(item) for item in hydrated})
             items = [
@@ -554,6 +618,7 @@ async def list_records(
                 end_date=end_date,
                 keyword=keyword,
                 institute_id=institute,
+                include_test_records=include_test,
             )
             _check_rows(_user, records)
             latest = store.latest_by_refs(refs_from_records(records))
@@ -562,18 +627,21 @@ async def list_records(
             window = pending[(page - 1) * page_size: page * page_size]
             items = [{**_record_public(item), "result": None} for item in window]
         else:
-            listing = repository.list_records(
-                scope="final",
-                department=department or None,
-                doctor=None,
-                date_field="discharge",
-                start_date=start_date or None,
-                end_date=end_date or None,
-                keyword=keyword or None,
-                page=page,
-                page_size=page_size,
-                institute_id=institute or None,
-            )
+            list_kwargs: Dict[str, Any] = {
+                "scope": "final",
+                "department": department or None,
+                "doctor": None,
+                "date_field": "discharge",
+                "start_date": start_date or None,
+                "end_date": end_date or None,
+                "keyword": keyword or None,
+                "page": page,
+                "page_size": page_size,
+                "institute_id": institute or None,
+            }
+            if _supports_kwarg(repository.list_records, "include_test_records"):
+                list_kwargs["include_test_records"] = include_test
+            listing = repository.list_records(**list_kwargs)
             _check_rows(_user, listing.items)
             latest = store.latest_by_refs(refs_from_records(listing.items))
             total = listing.total
@@ -587,7 +655,7 @@ async def list_records(
 
 
 @router.get("/record")
-async def get_record(
+def get_record(
     request: Request,
     institute_id: str = Query(..., min_length=1, max_length=128),
     patient_id: str = Query(..., min_length=1, max_length=128),
@@ -631,7 +699,7 @@ class ReviewIn(BaseModel):
 
 
 @router.post("/findings/{finding_id}/review")
-async def review_finding(
+def review_finding(
     request: Request,
     finding_id: str,
     payload: ReviewIn,
@@ -650,7 +718,7 @@ async def review_finding(
 
 
 @router.get("/analytics")
-async def analytics(
+def analytics(
     request: Request,
     department: str = Query("", max_length=100),
     start_date: str = Query("", max_length=10),
@@ -660,13 +728,18 @@ async def analytics(
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
     home_institute: str = Depends(get_home_institute),
 ):
+    _validate_date_range(start_date, end_date)
+    include_test = _include_test_records(data_scope, _user)
+    analytics_kwargs: Dict[str, Any] = {
+        "department": department,
+        "start_date": start_date,
+        "end_date": end_date,
+        "institute_id": _scope_institute(data_scope, home_institute, _user),
+    }
+    if _supports_kwarg(store.latest_rows_for_analytics, "include_test_records"):
+        analytics_kwargs["include_test_records"] = include_test
     try:
-        rows = store.latest_rows_for_analytics(
-            department=department,
-            start_date=start_date,
-            end_date=end_date,
-            institute_id=_scope_institute(data_scope, home_institute, _user),
-        )
+        rows = store.latest_rows_for_analytics(**analytics_kwargs)
     except FrontpageQcStoreUnavailable as exc:
         raise _unavailable(exc) from exc
     return _ok(request, build_analytics(rows))
@@ -687,7 +760,7 @@ class ExportIn(BaseModel):
 
 
 @router.post("/records/export")
-async def export_records(
+def export_records(
     payload: ExportIn,
     _user: Dict[str, Any] = Depends(require_frontpage_qc_user),
     store: FrontpageQcStore = Depends(get_frontpage_qc_store),
@@ -695,14 +768,19 @@ async def export_records(
     home_institute: str = Depends(get_home_institute),
 ):
     _check_rule_id(payload.rule_id)
+    _validate_date_range(payload.start_date, payload.end_date)
     if payload.record_refs is not None and len(payload.record_refs) == 0:
         raise HTTPException(422, "未选择任何待导出病历")
+    include_test = _include_test_records(payload.data_scope, _user)
     try:
         if payload.record_refs is not None:
             refs = [FrontpageRef(r.institute_id, r.patient_id, r.visit_id) for r in payload.record_refs]
             _check_refs(_user, refs)
             records = _check_rows(_user, _collect(
-                repository, refs=[ref.as_case_ref() for ref in refs], institute_id=_user['_frontpage_institute'] or ""
+                repository,
+                refs=[ref.as_case_ref() for ref in refs],
+                institute_id=_user['_frontpage_institute'] or "",
+                include_test_records=True,
             ))
             summary = f"所选 {len(refs)} 份病历"
         else:
@@ -713,6 +791,7 @@ async def export_records(
                 end_date=payload.end_date,
                 keyword=payload.keyword,
                 institute_id=_scope_institute(payload.data_scope, home_institute, _user),
+                include_test_records=include_test,
             )
             _check_rows(_user, records)
             refs = refs_from_records(records)
@@ -725,10 +804,15 @@ async def export_records(
                 parts.append(f"关键词 {payload.keyword}")
             if payload.grade:
                 parts.append(f"等级 {GRADE_LABELS[payload.grade]}")
+            if payload.issue:
+                parts.append(f"问题 {ISSUE_LABELS.get(payload.issue, payload.issue)}")
             if payload.rule_id:
                 verdict = "资料不足" if payload.rule_verdict == "data_gap" else "命中"
                 parts.append(f"规则 {payload.rule_id} {verdict}")
             summary = "，".join(parts)
+        store_kwargs: Dict[str, Any] = {}
+        if _supports_kwarg(store.query_latest, "include_test_records"):
+            store_kwargs["include_test_records"] = True if payload.record_refs is not None else include_test
         results, total = store.query_latest(
             grade=payload.grade,
             issue=payload.issue,
@@ -737,6 +821,7 @@ async def export_records(
             record_refs=refs,
             page=1,
             page_size=EXPORT_LIMIT,
+            **store_kwargs,
         )
         findings = store.latest_findings([r["id"] for r in results])
     except FrontpageQcStoreUnavailable as exc:
@@ -746,7 +831,7 @@ async def export_records(
     info = {FrontpageRef.from_record(item): _record_public(item) for item in records}
     info_by_result_id = {result["id"]: info.get(FrontpageRef.from_record(result), {}) for result in results}
     content = build_export_workbook(filters_summary=summary, results=results, findings=findings, record_info=info_by_result_id)
-    filename = f"首页质控结果_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    filename = f"首页质控结果_{datetime.now(_SHANGHAI_TZ).strftime('%Y%m%d_%H%M')}.xlsx"
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

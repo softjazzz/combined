@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 service = DoctorNotificationService()
 
 SHANGHAI_TZ = timezone(timedelta(hours=8))
-BATCH_SUMMARY_ROLES = {"admin", "super_admin", "qc_manager", "qc_staff"}
+BATCH_SUMMARY_ROLES = {"admin", "super_admin", "qc_manager", "qc_staff", "sync_admin"}
 
 
 def _shanghai_day_utc_bounds(date_str: Optional[str]) -> tuple[str, datetime, datetime]:
@@ -256,9 +256,9 @@ async def list_notification_overview(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"查询通知概览失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
+    except Exception:
+        logger.exception("查询通知概览失败")
+        raise HTTPException(status_code=500, detail="查询通知概览失败，请稍后重试")
 
 
 def _load_ready_batch_result(job_id, actor_id):
@@ -412,9 +412,9 @@ async def upsert_qc_batch_summary(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"保存批量汇总消息失败: {e}")
-        raise HTTPException(status_code=500, detail=f"保存批量汇总消息失败: {str(e)}")
+    except Exception:
+        logger.exception("保存批量汇总消息失败")
+        raise HTTPException(status_code=500, detail="保存批量汇总消息失败，请稍后重试")
 
 
 @router.put("/{notification_id}/read")

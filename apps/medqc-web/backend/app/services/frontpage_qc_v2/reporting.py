@@ -3,13 +3,42 @@ from __future__ import annotations
 
 import io
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 from .catalog import RULES_BY_ID
 from .config import GRADE_LABELS
 from .model import GROUP_LABELS, SECTION_LABELS, SEVERITY_LABELS
 
 _JUDGED = ("pass", "fail")
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+ISSUE_LABELS = {
+    "fail": "扣分问题",
+    "hint": "提示问题",
+    "required_missing": "必填缺项",
+    "data_gap": "资料不足",
+    "clean": "无问题",
+}
+
+
+def _format_shanghai_datetime(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return ""
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return text
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_SHANGHAI_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _rate(numerator: int, denominator: int) -> Optional[float]:
@@ -194,6 +223,7 @@ def build_export_workbook(
     sheet.append(headers)
     for cell in sheet[2]:
         cell.font = Font(bold=True)
+    visit_by_result_id = {result["id"]: result.get("visit_id", "") for result in results}
     for result in results:
         info = record_info.get(result["id"], {})
         sheet.append(
@@ -209,7 +239,7 @@ def build_export_workbook(
                 result["required_missing_count"],
                 result["data_gap_count"],
                 f"{round(result['scorable_ratio'] * 100)}%",
-                result.get("created_at", ""),
+                _format_shanghai_datetime(result.get("created_at", "")),
             ])
         )
 
@@ -223,7 +253,7 @@ def build_export_workbook(
         detail_sheet.append(
             _sanitize_row([
                 info.get("patient_name", ""),
-                info.get("inpat_no", ""),
+                info.get("inpat_no") or info.get("visit_id") or visit_by_result_id.get(finding["result_id"], ""),
                 finding["rule_id"],
                 finding["rule_name"],
                 GROUP_LABELS.get(finding["group"], finding["group"]),

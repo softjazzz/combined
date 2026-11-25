@@ -148,6 +148,7 @@ describe('LuxianQcAnalyticsView', () => {
     expect(apiGet).toHaveBeenCalledWith(
       '/api/v1/workstation/analytics/luxian-0609',
       expect.any(Object),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
   })
@@ -188,12 +189,13 @@ describe('LuxianQcAnalyticsView', () => {
   })
 
   it('科室报告以科室条件请求同一Canonical统计，并显示返回全院入口', async () => {
+    const validJobId = '11111111-2222-3333-4444-555555555555'
     routeState.query = {
       view: 'department',
       department: 'ICU',
       completed_from: '2026-08-01T00:00:00',
       completed_to: '2026-08-08T23:59:59',
-      job_id: 'job-1',
+      job_id: validJobId,
     }
 
     const wrapper = mountView()
@@ -205,12 +207,16 @@ describe('LuxianQcAnalyticsView', () => {
     expect(wrapper.text()).not.toContain('聚焦本科室已完成任务中可交付的 Canonical 结果')
     expect(wrapper.find('[data-testid="analytics-scope"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="analytics-return-hospital"]').exists()).toBe(true)
-    expect(apiGet).toHaveBeenCalledWith('/api/v1/workstation/analytics/luxian-0609', {
-      completed_from: '2026-08-01T00:00:00',
-      completed_to: '2026-08-08T23:59:59',
-      department: 'ICU',
-      job_id: 'job-1',
-    })
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/analytics/luxian-0609',
+      {
+        completed_from: '2026-08-01T00:00:00',
+        completed_to: '2026-08-08T23:59:59',
+        department: 'ICU',
+        job_id: validJobId,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.find('[data-testid="analytics-department-chart"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
   })

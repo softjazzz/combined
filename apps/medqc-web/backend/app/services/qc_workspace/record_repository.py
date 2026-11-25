@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import Boolean, String, and_, asc, cast, desc, exists, func, or_, tuple_
+from sqlalchemy import Boolean, String, and_, asc, cast, desc, exists, func, nullslast, or_, tuple_
 from sqlalchemy.exc import OperationalError, ProgrammingError
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, load_only
@@ -41,6 +42,46 @@ _FRONTPAGE_METADATA_COLUMNS = (
 _UNTRUSTED_PROJECTION_SOURCES = frozenset(
     {"", "inpat_registration", "mr", "source_scope_unmatched"}
 )
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _shanghai_today() -> date:
+    return datetime.now(_SHANGHAI_TZ).date()
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _frontpage_order_by():
+    return (
+        nullslast(desc(MedicalRecordFrontpage.discharge_datetime)),
+        nullslast(desc(MedicalRecordFrontpage.admission_datetime)),
+        asc(MedicalRecordFrontpage.institute_id),
+        asc(MedicalRecordFrontpage.patient_id),
+        asc(MedicalRecordFrontpage.visit_id),
+    )
+
+
+def _sort_collected_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    ordered = sorted(
+        records,
+        key=lambda item: (
+            _safe_text(item.get("institute_id")),
+            _safe_text(item.get("patient_id")),
+            _safe_text(item.get("visit_id")),
+        ),
+    )
+    ordered.sort(
+        key=lambda item: (
+            bool(_safe_text(item.get("discharge_datetime"))),
+            _safe_text(item.get("discharge_datetime")),
+            bool(_safe_text(item.get("admission_datetime"))),
+            _safe_text(item.get("admission_datetime")),
+        ),
+        reverse=True,
+    )
+    return ordered
 
 
 class _IsIsoDateText(FunctionElement):
@@ -323,7 +364,7 @@ class RecordRepository:
                     HospitalizationStatusProjection.patient_id == model.patient_id,
                     HospitalizationStatusProjection.visit_id == model.visit_id,
                     HospitalizationStatusProjection.status == "inpatient",
-                    func.date(HospitalizationStatusProjection.verified_at) == date.today(),
+                    func.date(HospitalizationStatusProjection.verified_at) == _shanghai_today(),
                 )))
             for row in query.distinct().all():
                 ref = CaseRef(_safe_text(row.institute_id), _safe_text(row.patient_id), _safe_text(row.visit_id))
@@ -601,58 +642,138 @@ class RecordRepository:
         date_field_value = _normalize_date_field(date_field)
         start = _as_date(start_date)
         end = _as_date(end_date)
+
+        # 按三坐标去重为每例至多一行，避免同一就诊多份入/出院文书 outerjoin 导致重复行与 total 虚高。
+        discharge_one = (
+            session.query(
+                DischargeRecord.institute_id.label("institute_id"),
+                DischargeRecord.patient_id.label("patient_id"),
+                DischargeRecord.visit_id.label("visit_id"),
+                DischargeRecord.dept_name.label("dept_name"),
+                DischargeRecord.discharge_date.label("discharge_date"),
+                DischargeRecord.discharge_time.label("discharge_time"),
+                DischargeRecord.document_status.label("document_status"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        DischargeRecord.institute_id,
+                        DischargeRecord.patient_id,
+                        DischargeRecord.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(DischargeRecord.discharge_time)),
+                        nullslast(desc(DischargeRecord.discharge_date)),
+                        nullslast(desc(DischargeRecord.submit_datetime)),
+                        nullslast(desc(DischargeRecord.update_time)),
+                        nullslast(desc(DischargeRecord.document_id)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("discharge_one")
+        )
+        admission_one = (
+            session.query(
+                AdmissionRecord.institute_id.label("institute_id"),
+                AdmissionRecord.patient_id.label("patient_id"),
+                AdmissionRecord.visit_id.label("visit_id"),
+                AdmissionRecord.dept_name.label("dept_name"),
+                AdmissionRecord.admission_datetime.label("admission_datetime"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        AdmissionRecord.institute_id,
+                        AdmissionRecord.patient_id,
+                        AdmissionRecord.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(AdmissionRecord.admission_datetime)),
+                        nullslast(desc(AdmissionRecord.submit_datetime)),
+                        nullslast(desc(AdmissionRecord.update_time)),
+                        nullslast(desc(AdmissionRecord.document_id)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("admission_one")
+        )
+        registration_one = (
+            session.query(
+                InpatRegistration.institute_id.label("institute_id"),
+                InpatRegistration.patient_id.label("patient_id"),
+                InpatRegistration.visit_id.label("visit_id"),
+                InpatRegistration.admission_datetime.label("admission_datetime"),
+                InpatRegistration.discharge_datetime.label("discharge_datetime"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        InpatRegistration.institute_id,
+                        InpatRegistration.patient_id,
+                        InpatRegistration.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(InpatRegistration.discharge_datetime)),
+                        nullslast(desc(InpatRegistration.admission_datetime)),
+                        nullslast(desc(InpatRegistration.update_time)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("registration_one")
+        )
+
         dept_expr = func.coalesce(
             MedicalRecordFrontpage.discharge_dept_name,
             MedicalRecordFrontpage.admission_dept_name,
-            DischargeRecord.dept_name,
-            AdmissionRecord.dept_name,
+            discharge_one.c.dept_name,
+            admission_one.c.dept_name,
         )
         discharge_dt_expr = func.coalesce(
             # 源库可同时存在 timestamp、date 和 text，先转文本并剔除空串再取业务时间。
-            func.nullif(func.trim(cast(InpatRegistration.discharge_datetime, String)), ""),
+            func.nullif(func.trim(cast(registration_one.c.discharge_datetime, String)), ""),
             func.nullif(func.trim(cast(MedicalRecordFrontpage.discharge_datetime, String)), ""),
-            func.nullif(func.trim(cast(DischargeRecord.discharge_date, String)), ""),
-            func.nullif(func.trim(cast(DischargeRecord.discharge_time, String)), ""),
+            func.nullif(func.trim(cast(discharge_one.c.discharge_date, String)), ""),
+            func.nullif(func.trim(cast(discharge_one.c.discharge_time, String)), ""),
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
-            AdmissionRecord.admission_datetime,
-            InpatRegistration.admission_datetime,
+            admission_one.c.admission_datetime,
+            registration_one.c.admission_datetime,
         )
         query = (
             session.query(
                 MedicalRecordFrontpage,
                 discharge_dt_expr.label("effective_discharge_datetime"),
                 admission_dt_expr.label("effective_admission_datetime"),
-                InpatRegistration.discharge_datetime,
-                DischargeRecord.discharge_date,
-                DischargeRecord.discharge_time,
-                DischargeRecord.document_status,
-                InpatRegistration.admission_datetime,
-                AdmissionRecord.admission_datetime,
+                registration_one.c.discharge_datetime,
+                discharge_one.c.discharge_date,
+                discharge_one.c.discharge_time,
+                discharge_one.c.document_status,
+                registration_one.c.admission_datetime,
+                admission_one.c.admission_datetime,
             )
             .outerjoin(
-                DischargeRecord,
+                discharge_one,
                 and_(
-                    DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                    DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                    DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    discharge_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    discharge_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    discharge_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    discharge_one.c.rn == 1,
                 ),
             )
             .outerjoin(
-                AdmissionRecord,
+                admission_one,
                 and_(
-                    AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                    AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                    AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    admission_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    admission_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    admission_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    admission_one.c.rn == 1,
                 ),
             )
             .outerjoin(
-                InpatRegistration,
+                registration_one,
                 and_(
-                    InpatRegistration.institute_id == MedicalRecordFrontpage.institute_id,
-                    InpatRegistration.patient_id == MedicalRecordFrontpage.patient_id,
-                    InpatRegistration.visit_id == MedicalRecordFrontpage.visit_id,
+                    registration_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    registration_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    registration_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    registration_one.c.rn == 1,
                 ),
             )
         )
@@ -694,7 +815,7 @@ class RecordRepository:
                         == MedicalRecordFrontpage.visit_id,
                         HospitalizationStatusProjection.status == "inpatient",
                         func.date(HospitalizationStatusProjection.verified_at)
-                        == date.today(),
+                        == _shanghai_today(),
                     )
                 )
             )
@@ -702,14 +823,14 @@ class RecordRepository:
             query = query.filter(dept_expr == department)
         if doctor:
             query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
-        if keyword:
-            kw = f"%{keyword.strip()}%"
+        if keyword and keyword.strip():
+            kw = f"%{_escape_like(keyword.strip())}%"
             query = query.filter(
                 or_(
-                    MedicalRecordFrontpage.visit_id.ilike(kw),
-                    MedicalRecordFrontpage.name.ilike(kw),
-                    MedicalRecordFrontpage.mr_no.ilike(kw),
-                    MedicalRecordFrontpage.inpat_no.ilike(kw),
+                    MedicalRecordFrontpage.visit_id.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.name.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.mr_no.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.inpat_no.ilike(kw, escape="\\"),
                 )
             )
 
@@ -854,10 +975,7 @@ class RecordRepository:
                 query.with_entities(func.count()).scalar() or 0
             )
             rows = (
-                query.order_by(
-                    desc(MedicalRecordFrontpage.discharge_datetime),
-                    desc(MedicalRecordFrontpage.admission_datetime),
-                )
+                query.order_by(*_frontpage_order_by())
                 .offset(max(page - 1, 0) * page_size)
                 .limit(page_size)
                 .all()
@@ -1063,10 +1181,10 @@ class RecordRepository:
                                 _metadata_only=_metadata_only,
                             ).all()
                         )
-                    return [
+                    return _sort_collected_records([
                         self._serialize_record_row(row, _metadata_only=_metadata_only)
                         for row in rows
-                    ]
+                    ])
                 if record_ids:
                     normalized_ids = list(
                         dict.fromkeys(_safe_text(item) for item in record_ids if _safe_text(item))
@@ -1093,26 +1211,30 @@ class RecordRepository:
                                     _metadata_only=_metadata_only,
                                 ).all()
                             )
-                        return [
+                        return _sort_collected_records([
                             self._serialize_record_row(row, _metadata_only=_metadata_only)
                             for row in rows
-                        ]
-                rows = self._build_records_query(
-                    session,
-                    scope=scope,
-                    department=department,
-                    doctor=doctor,
-                    date_field=date_field,
-                    start_date=start_date,
-                    end_date=end_date,
-                    keyword=keyword,
-                    record_ids=record_ids,
-                    record_refs=record_refs,
-                    sync_scope=sync_scope,
-                    institute_id=institute_id,
-                    include_test_records=effective_include_test,
-                    _metadata_only=_metadata_only,
-                ).all()
+                        ])
+                rows = (
+                    self._build_records_query(
+                        session,
+                        scope=scope,
+                        department=department,
+                        doctor=doctor,
+                        date_field=date_field,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                        record_ids=record_ids,
+                        record_refs=record_refs,
+                        sync_scope=sync_scope,
+                        institute_id=institute_id,
+                        include_test_records=effective_include_test,
+                        _metadata_only=_metadata_only,
+                    )
+                    .order_by(*_frontpage_order_by())
+                    .all()
+                )
                 return [
                     self._serialize_record_row(row, _metadata_only=_metadata_only)
                     for row in rows
@@ -1156,8 +1278,7 @@ class RecordRepository:
                     _private_identity_collector=_private_identity_collector, _metadata_only=_metadata_only,
                     _load_verified_status=_load_verified_status,
                 ))
-            return sorted(records, key=lambda item: (item["discharge_datetime"], item["admission_datetime"],
-                                                     item["record_key"]), reverse=True)
+            return _sort_collected_records(records)
         finally:
             session.close()
 

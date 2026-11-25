@@ -112,9 +112,20 @@ def _visible(target, person):
         raise RectificationError("缺陷未经正式投影或人工审核确认", 409)
 
 
+def _serialize_value(value):
+    if isinstance(value, datetime):
+        aware = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+        return aware.isoformat()
+    return value
+
+
 def _view(row):
     return {
-        c.name: getattr(row, c.name)
+        c.name: _serialize_value(getattr(row, c.name))
         for c in row.__table__.columns
         if c.name not in {"dispatch_document_snapshot", "submission_document_snapshot"}
     }
@@ -347,15 +358,15 @@ class DefectRectificationService:
                 }
                 recipient = row.assignee_id
             elif action == "urge":
-                if not manager:
-                    raise RectificationError("仅质控人员可催办", 403)
+                if not manager or actor["id"] == row.assignee_id:
+                    raise RectificationError("仅非受领人的质控人员可催办", 403)
                 if old not in {"pending", "rejected"}:
                     raise RectificationError("当前状态无需催办", 409)
                 changes = {}
                 recipient = row.assignee_id
             elif action == "withdraw_urge":
-                if not manager:
-                    raise RectificationError("仅质控人员可撤回催办", 403)
+                if not manager or actor["id"] == row.assignee_id:
+                    raise RectificationError("仅非受领人的质控人员可撤回催办", 403)
                 if old not in {"pending", "rejected"}:
                     raise RectificationError("当前状态没有可撤回催办", 409)
                 events = session.scalars(

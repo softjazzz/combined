@@ -15,20 +15,40 @@
           <template v-if="run.issue_records"> · 有扣分问题 {{ run.issue_records }} 份</template>
           <template v-if="run.failed_count"> · 未能质控 {{ run.failed_count }} 份</template>
         </span>
-        <div class="fpqc-run__actions">
+        <div class="fpqc-run__actions" style="display: flex; gap: 8px;">
           <button
-            v-if="active"
+            v-if="active && !pollStopped"
             type="button"
             class="mq-btn fpqc-run__btn"
             :disabled="cancelling || run.cancel_requested"
+            data-testid="fpqc-run-cancel"
             @click="emit('cancel')"
           >
             {{ run.cancel_requested ? '正在取消…' : '取消任务' }}
           </button>
+          <template v-else-if="active && pollStopped">
+            <button
+              type="button"
+              class="mq-btn fpqc-run__btn"
+              data-testid="fpqc-run-retry-poll"
+              @click="emit('retry-poll')"
+            >
+              重新检查
+            </button>
+            <button
+              type="button"
+              class="mq-btn fpqc-run__btn"
+              data-testid="fpqc-run-dismiss"
+              @click="emit('dismiss')"
+            >
+              关闭
+            </button>
+          </template>
           <button
             v-else
             type="button"
             class="mq-btn fpqc-run__btn"
+            data-testid="fpqc-run-dismiss"
             @click="emit('dismiss')"
           >
             关闭
@@ -83,8 +103,13 @@ import { isFrontpageQcRunActive, type FrontpageQcRun } from '@/services/frontpag
 
 import { RUN_STATUS_LABELS, runProgressPercent, runTone } from './presentation'
 
-const props = defineProps<{ run: FrontpageQcRun | null; error: string; cancelling: boolean }>()
-const emit = defineEmits<{ cancel: []; dismiss: [] }>()
+const props = defineProps<{
+  run: FrontpageQcRun | null
+  error: string
+  cancelling: boolean
+  pollStopped?: boolean
+}>()
+const emit = defineEmits<{ cancel: []; dismiss: []; 'retry-poll': [] }>()
 
 const { confirmedResultsOnly } = useQcResultVisibility()
 const active = computed(() => isFrontpageQcRunActive(props.run))

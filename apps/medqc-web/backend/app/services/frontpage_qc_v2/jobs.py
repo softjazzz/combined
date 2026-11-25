@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from contextlib import nullcontext
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Optional
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 
 MAX_RECORDS_PER_RUN = 500
 PROGRESS_EVERY = 10
+CANCEL_CHECK_EVERY = 5
+CANCEL_CHECK_INTERVAL_SECONDS = 1.0
 _FAILED_SAMPLE_LIMIT = 50
 
 RecordMeta = Dict[FrontpageRef, Dict[str, str]]
@@ -27,6 +30,23 @@ RecordMeta = Dict[FrontpageRef, Dict[str, str]]
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _safe_record_error_message(exc: Exception) -> str:
+    """对单份病历异常做脱敏摘要，禁止将底层原始异常详情写入持久化任务记录。"""
+    if isinstance(exc, LookupError) and str(exc) == "未找到病案首页":
+        return "未找到病案首页"
+    return f"首页质控执行异常（{type(exc).__name__}）"
+
+
+def _end_readonly_tx(session: Any) -> None:
+    """及时结束只读会话事务，避免后台长任务持有 PostgreSQL idle in transaction。"""
+    rollback = getattr(session, "rollback", None)
+    if callable(rollback):
+        try:
+            rollback()
+        except Exception:  # noqa: BLE001
+            logger.debug("结束 CDM 只读事务失败", exc_info=True)
 
 
 def run_frontpage_qc_job(
@@ -58,15 +78,26 @@ def run_frontpage_qc_job(
         else nullcontext()
     )
     try:
+        last_cancel_check = 0.0
         with source_ctx:
             with cdm_session_factory() as cdm_session:
                 for index, ref in enumerate(refs):
-                    if store.is_cancel_requested(run_id):
-                        cancelled = True
-                        break
+                    now_mono = time.monotonic()
+                    if (
+                        index == 0
+                        or index % CANCEL_CHECK_EVERY == 0
+                        or (now_mono - last_cancel_check >= CANCEL_CHECK_INTERVAL_SECONDS)
+                    ):
+                        last_cancel_check = now_mono
+                        if store.is_cancel_requested(run_id):
+                            cancelled = True
+                            break
                     try:
                         kwargs = {} if cdm_schema is ... else {"schema": cdm_schema}
-                        raw = load_frontpage_raw(cdm_session, ref, **kwargs)
+                        try:
+                            raw = load_frontpage_raw(cdm_session, ref, **kwargs)
+                        finally:
+                            _end_readonly_tx(cdm_session)
                         if raw is None:
                             raise LookupError("未找到病案首页")
                         outcome = evaluate_frontpage(build_frontpage_doc(raw))
@@ -82,11 +113,15 @@ def run_frontpage_qc_job(
                         gap_records += 1 if outcome.data_gap_count else 0
                     except Exception as exc:  # noqa: BLE001 - 单份失败记录后继续
                         failed += 1
-                        rollback = getattr(cdm_session, "rollback", None)
-                        if callable(rollback):
-                            rollback()
+                        _end_readonly_tx(cdm_session)
                         if len(failed_records) < _FAILED_SAMPLE_LIMIT:
-                            failed_records.append({**ref.__dict__, "error": type(exc).__name__, "message": str(exc)[:120]})
+                            failed_records.append(
+                                {
+                                    **ref.__dict__,
+                                    "error": type(exc).__name__,
+                                    "message": _safe_record_error_message(exc),
+                                }
+                            )
                         logger.warning("首页质控单份失败 run=%s error=%s", run_id, type(exc).__name__)
                     processed += 1
                     if processed % PROGRESS_EVERY == 0:

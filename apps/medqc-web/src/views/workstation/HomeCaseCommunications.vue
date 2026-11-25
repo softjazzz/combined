@@ -335,11 +335,15 @@ async function show(id: string) {
   detailError.value = ''
   detailLoading.value = true
   try {
-    // 详情授权成功后才发送已读，不从列表旧对象推断接收权限。
+    // 详情授权成功后才发送已读，不从列表旧对象推断接收权限；服务端已确认已读则跳过重复 POST。
     const detail = await getCommunication(id)
     if (token !== detailGeneration) return
     validateDetail(detail, id)
     selected.value = detail
+    if (detail.is_read) {
+      items.value = items.value.map((value) => (value.id === id ? detail : value))
+      return
+    }
     const data = await readCommunication(id)
     if (token !== detailGeneration) return
     validateDetail(data, id)

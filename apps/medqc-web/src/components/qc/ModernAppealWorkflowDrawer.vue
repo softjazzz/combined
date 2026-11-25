@@ -23,9 +23,17 @@
             rows="3"
             minlength="10"
             maxlength="2000"
+            placeholder="请输入申诉原因（至少 10 字）"
             :disabled="saving || uncertain"
             required
           />
+          <span class="appeal-field-hint" data-testid="appeal-reason-hint">
+            {{
+              reason.trim().length >= 10
+                ? `至少 10 字 · 当前已输入 ${reason.trim().length} 字`
+                : `至少 10 字（当前 ${reason.trim().length}/10 字）`
+            }}
+          </span>
         </label>
         <button
           class="mq-btn mq-btn--primary"
@@ -104,8 +112,16 @@
               class="mq-input"
               rows="3"
               maxlength="2000"
+              placeholder="请输入处理意见（至少 10 字）"
               :disabled="saving || uncertain"
             />
+            <span class="appeal-field-hint" data-testid="appeal-comment-hint">
+              {{
+                comment.trim().length >= 10
+                  ? `至少 10 字 · 当前已输入 ${comment.trim().length} 字`
+                  : `至少 10 字（当前 ${comment.trim().length}/10 字）`
+              }}
+            </span>
           </label>
           <div class="appeal-toolbar">
             <button
@@ -124,7 +140,7 @@
         <ul>
           <li v-for="event in selected.events" :key="event.id">
             {{ actionLabels[event.action] || event.action }} · {{ event.reviewer_name }} · {{ event.comment
-            }}<time class="appeal-time mq-mono">{{ event.created_at }}</time>
+            }}<time class="appeal-time mq-mono">{{ formatTime(event.created_at) }}</time>
           </li>
         </ul>
       </article>
@@ -136,6 +152,7 @@ import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
 import { effectiveRoles } from '@/utils/effectiveRoles'
+import { parseQcTaskTime, QC_TASK_TIME_ZONE } from '@/views/workstation-v4/utils/qcTaskTime'
 import {
   actOnModernAppeal,
   createModernAppeal,
@@ -151,6 +168,22 @@ import type { Rectification } from '@/api/defectRectifications'
 const props = defineProps<{ open: boolean; source?: Rectification | null; appealId?: string }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const auth = useAuthStore()
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: QC_TASK_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+function formatTime(value?: string | null): string {
+  if (!value) return '时间未知'
+  const parsed = parseQcTaskTime(value)
+  if (!parsed) return value
+  return shanghaiDateTimeFormatter.format(parsed)
+}
 const effectiveUserRoles = computed(() => {
   const raw = Array.isArray(auth.userRoles)
     ? auth.userRoles
@@ -394,6 +427,11 @@ onUnmounted(reset)
   color: var(--mq-danger);
 }
 .appeal-time {
+  display: block;
+  color: var(--mq-text-muted);
+  font-size: 12px;
+}
+.appeal-field-hint {
   display: block;
   color: var(--mq-text-muted);
   font-size: 12px;

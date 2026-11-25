@@ -10,7 +10,7 @@
       正在统计…
     </p>
     <p
-      v-else-if="error"
+      v-else-if="error && !data"
       class="fpqc-analysis__placeholder fpqc-analysis__placeholder--danger"
       role="alert"
     >
@@ -24,14 +24,31 @@
         重试分析
       </button>
     </p>
-    <p
-      v-else-if="data && !data.summary.records"
-      class="fpqc-analysis__placeholder"
-    >
-      当前范围内还没有已质控的首页。
-    </p>
 
     <template v-else-if="data">
+      <p
+        v-if="error"
+        class="fpqc-analysis__placeholder fpqc-analysis__placeholder--danger"
+        role="alert"
+        style="margin: 0;"
+      >
+        {{ error }}
+        <button
+          class="mq-btn"
+          type="button"
+          data-testid="fpqc-retry-analysis"
+          @click="load"
+        >
+          重试分析
+        </button>
+      </p>
+      <p
+        v-if="!data.summary.records"
+        class="fpqc-analysis__placeholder"
+      >
+        当前范围内还没有已质控的首页。
+      </p>
+      <template v-else>
       <section
         class="mq-card fpqc-analysis__indicators"
         aria-label="首页质控指标"
@@ -55,7 +72,7 @@
       <div class="fpqc-analysis__grid">
         <article class="mq-card mq-card--padded fpqc-analysis__card">
           <h3 class="mq-card__title">
-            扣分问题 Top {{ data.top_rules.length }}
+            {{ data.top_rules.length ? `扣分问题 Top ${data.top_rules.length}` : '扣分问题' }}
           </h3>
           <p class="mq-card__desc">
             按命中病历数排序，含必填缺项；点击查看对应病历
@@ -149,7 +166,7 @@
           data-testid="fpqc-analysis-hints"
         >
           <h3 class="mq-card__title">
-            提示 Top {{ data.top_hints.length }}
+            {{ data.top_hints.length ? `提示 Top ${data.top_hints.length}` : '提示' }}
           </h3>
           <p class="mq-card__desc">
             不扣分，需人工核实
@@ -221,16 +238,18 @@
           </p>
         </article>
       </div>
+      </template>
     </template>
   </section>
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onBeforeUnmount, ref, watch } from 'vue'
 
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   getFrontpageQcAnalytics,
+  isFrontpageQcAbortError,
   type FrontpageQcAnalytics,
   type FrontpageQcRuleRank,
   type FrontpageQcScopeFilters,
@@ -261,26 +280,32 @@ const data = ref<FrontpageQcAnalytics | null>(null)
 const loading = ref(false)
 const error = ref('')
 let seq = 0
+let controller: AbortController | null = null
+let disposed = false
 
 function barWidth(rate: number | null) {
   return `${Math.max(2, Math.round((rate ?? 0) * 100))}%`
 }
 
 async function load() {
+  controller?.abort()
+  const nextController = new AbortController()
+  controller = nextController
   const current = ++seq
   loading.value = true
   error.value = ''
-  const filters = props.filters
+  const filters: FrontpageQcScopeFilters = { ...props.filters }
   try {
-    const next = await getFrontpageQcAnalytics(filters)
-    if (current === seq) {
-      data.value = next
-      emit('summary-loaded', filters, next.summary)
-    }
+    const next = await getFrontpageQcAnalytics(filters, { signal: nextController.signal })
+    if (disposed || current !== seq || nextController.signal.aborted) return
+    data.value = next
+    emit('summary-loaded', filters, next.summary)
   } catch (err) {
-    if (current === seq) error.value = err instanceof Error ? err.message : '读取首页质控统计失败'
+    if (disposed || current !== seq || nextController.signal.aborted || isFrontpageQcAbortError(err)) return
+    error.value = err instanceof Error ? err.message : '读取首页质控统计失败'
   } finally {
-    if (current === seq) loading.value = false
+    if (!disposed && current === seq) loading.value = false
+    if (controller === nextController) controller = null
   }
 }
 
@@ -291,6 +316,13 @@ watch(
   },
   { immediate: true },
 )
+
+onBeforeUnmount(() => {
+  disposed = true
+  seq += 1
+  controller?.abort()
+  controller = null
+})
 </script>
 
 <style scoped src="../styles/frontpage-qc-analysis.css"></style>

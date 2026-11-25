@@ -2167,6 +2167,15 @@ watch(
   () => analyticsDrilldownSignature(route.query),
   (signature, previous) => {
     if (signature === previous) return
+    const rawDept = route.query.department
+    const routeDept = Array.isArray(rawDept)
+      ? typeof rawDept[0] === 'string'
+        ? rawDept[0].trim()
+        : ''
+      : typeof rawDept === 'string'
+        ? rawDept.trim()
+        : ''
+    activeDept.value = routeDept || '全部科室'
     clearSelectedRecords()
     currentPage.value = 1
     void fetchData(1)
@@ -2182,6 +2191,7 @@ function backToAnalytics() {
 }
 
 function clearAnalyticsDrilldown() {
+  activeDept.value = '全部科室'
   // 查询变化由上面的 watch 统一触发重新加载
   void router.replace({ path: route.path, query: withoutAnalyticsDrilldown(route.query) })
 }

@@ -45,11 +45,14 @@ describe('analyticsDrilldown', () => {
     expect(withoutAnalyticsDrilldown(DRILLDOWN_QUERY)).toEqual({ keyword: 'C01' })
   })
 
-  it('签名只随统计参数变化，用于返回/前进时重新查询', () => {
+  it('签名只随统计参数与科室变化，用于返回/前进时重新查询', () => {
     const base = analyticsDrilldownSignature(DRILLDOWN_QUERY)
     expect(analyticsDrilldownSignature({ ...DRILLDOWN_QUERY, keyword: 'C02' })).toBe(base)
     expect(
       analyticsDrilldownSignature({ ...DRILLDOWN_QUERY, analytics_rule_id: 'LX0609-03-01-04' }),
+    ).not.toBe(base)
+    expect(
+      analyticsDrilldownSignature({ ...DRILLDOWN_QUERY, department: '心内科' }),
     ).not.toBe(base)
   })
 

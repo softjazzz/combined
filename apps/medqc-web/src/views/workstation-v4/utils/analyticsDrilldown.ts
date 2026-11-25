@@ -86,9 +86,12 @@ export function readAnalyticsDrilldown(query: QueryLike): AnalyticsDrilldown | n
   }
 }
 
-/** 下钻参数的稳定签名：用于在同一页面内（返回/前进）检测下钻条件变化并重新加载。 */
+/** 下钻参数的稳定签名：用于在同一页面内（返回/前进）检测下钻条件与科室变化并重新加载。 */
 export function analyticsDrilldownSignature(query: QueryLike): string {
-  return ANALYTICS_DRILLDOWN_KEYS.map((key) => drilldownKeyText(query, key)).join('|')
+  return [
+    ...ANALYTICS_DRILLDOWN_KEYS.map((key) => drilldownKeyText(query, key)),
+    queryText(query, 'department'),
+  ].join('|')
 }
 
 /** 清除下钻后保留的查询：去掉 source、department 与全部统计参数，其余筛选保持不变。 */

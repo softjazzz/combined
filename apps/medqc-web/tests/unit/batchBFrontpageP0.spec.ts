@@ -743,7 +743,7 @@ describe('Batch B Frontpage QC P0: apiService 拦截器与 frontpage-qc-v2-servi
     expect(postRaw).toHaveBeenLastCalledWith(
       '/api/v1/frontpage-qc/records/export',
       { department: '内科' },
-      { responseType: 'blob', skipErrorToast: true },
+      { responseType: 'blob', skipErrorToast: true, timeout: 120_000 },
     )
   })
 })

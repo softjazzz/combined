@@ -87,7 +87,7 @@ describe('frontpage-qc-v2-service', () => {
     expect(postRaw).toHaveBeenCalledWith(
       '/api/v1/frontpage-qc/records/export',
       { department: '内科' },
-      { responseType: 'blob', skipErrorToast: true },
+      { responseType: 'blob', skipErrorToast: true, timeout: 120_000 },
     )
   })
 

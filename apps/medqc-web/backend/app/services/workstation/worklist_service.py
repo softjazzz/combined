@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import json
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+from threading import RLock
 from typing import Any, Dict, Iterable, List, Mapping, Optional
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import MetaData, Table, and_, desc, func, or_, select
+from sqlalchemy import MetaData, Table, and_, desc, func, or_, select, tuple_
 from sqlalchemy.orm import Session
 
 from ...database.connection import SessionLocal, engine
@@ -112,6 +115,47 @@ ALLOWED_SORT_FIELDS = {
 
 
 _ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
+
+_ANALYTICS_CACHE_LOCK = RLock()
+_ANALYTICS_WATERMARK_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_ANALYTICS_WATERMARK_CACHE_MAX = 64
+_ANALYTICS_CACHE_EVICTION_REGISTERED = False
+_ANALYTICS_IDENTITY_CHUNK_SIZE = 200
+_ANALYTICS_IDENTITY_PUSHDOWN_LIMIT = 2000
+
+
+def _evict_luxian_analytics_cache_for_scope(scope_key: str) -> None:
+    with _ANALYTICS_CACHE_LOCK:
+        stale_keys = [
+            key
+            for key in _ANALYTICS_WATERMARK_CACHE
+            if key and key[0] == scope_key
+        ]
+        for key in stale_keys:
+            _ANALYTICS_WATERMARK_CACHE.pop(key, None)
+
+
+def clear_luxian_0609_analytics_caches() -> None:
+    """清空统计分析只读水印缓存（供测试或运维手动重置）。"""
+    with _ANALYTICS_CACHE_LOCK:
+        _ANALYTICS_WATERMARK_CACHE.clear()
+
+
+def _ensure_analytics_cache_eviction_registered(workspace_module: Any) -> None:
+    global _ANALYTICS_CACHE_EVICTION_REGISTERED
+    if _ANALYTICS_CACHE_EVICTION_REGISTERED:
+        return
+    with _ANALYTICS_CACHE_LOCK:
+        if _ANALYTICS_CACHE_EVICTION_REGISTERED:
+            return
+        register = getattr(
+            workspace_module,
+            "register_summary_cache_scope_eviction_callback",
+            None,
+        )
+        if callable(register):
+            register(_evict_luxian_analytics_cache_for_scope)
+        _ANALYTICS_CACHE_EVICTION_REGISTERED = True
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -449,6 +493,88 @@ class WorkstationAggregationService:
         finally:
             session.close()
 
+    def _is_default_loader(self, method_name: str) -> bool:
+        if method_name in getattr(self, "__dict__", {}):
+            return False
+        cls_attr = getattr(type(self), method_name, None)
+        base_attr = getattr(WorkstationAggregationService, method_name, None)
+        return cls_attr is base_attr
+
+    def _build_luxian_analytics_cache_key(
+        self,
+        session: Session,
+        *,
+        completed_from_utc: Optional[datetime],
+        completed_to_utc: Optional[datetime],
+        department: Optional[str],
+        job_id: Optional[str],
+        institute_id: Optional[str],
+        case_scope: Any,
+    ) -> Optional[tuple[Any, ...]]:
+        if not (
+            self._is_default_loader("_load_luxian_home_records")
+            and self._is_default_loader("_load_luxian_0609_analytics_events")
+        ):
+            return None
+        if not hasattr(session, "get_bind"):
+            return None
+        try:
+            from ...database import clinical_connection
+            from .. import custom_qc_workspace_service as _workspace_module
+
+            _ensure_analytics_cache_eviction_registered(_workspace_module)
+            db_scope = _workspace_module._session_cache_scope_key(session)
+            if db_scope is None:
+                return None
+            workspace_service = self._get_readonly_custom_qc_workspace_service()
+            watermark_reader = getattr(
+                workspace_service, "_read_luxian_summary_watermark", None
+            )
+            if not callable(watermark_reader):
+                return None
+            watermark = watermark_reader(session)
+            if watermark is None:
+                return None
+            active_sel = clinical_connection.current_selection()
+            source_key = (
+                bool(clinical_connection.configured()),
+                None
+                if active_sel is None
+                else (
+                    _safe_text(active_sel.get("id")).strip(),
+                    active_sel.get("version"),
+                    _safe_text(active_sel.get("binding")).strip(),
+                ),
+            )
+            if case_scope is None:
+                case_scope_key: Any = None
+            elif _is_doctor_case_scope(case_scope):
+                case_scope_key = (
+                    "doctor",
+                    _safe_text(getattr(case_scope, "institute_id", None)).strip(),
+                    _safe_text(getattr(case_scope, "department", None)).strip(),
+                    _safe_text(getattr(case_scope, "doctor_name", None)).strip(),
+                    tuple(sorted(getattr(case_scope, "case_refs", ()))),
+                )
+            elif _is_institute_case_scope(case_scope):
+                case_scope_key = (
+                    "institute",
+                    _safe_text(getattr(case_scope, "institute_id", None)).strip(),
+                )
+            else:
+                return None
+            filter_key = (
+                completed_from_utc.isoformat() if completed_from_utc is not None else None,
+                completed_to_utc.isoformat() if completed_to_utc is not None else None,
+                department,
+                job_id,
+                institute_id,
+                case_scope_key,
+            )
+            return (db_scope, source_key, watermark, filter_key)
+        except Exception:
+            return None
+
     def get_luxian_0609_analytics(
         self,
         *,
@@ -465,15 +591,34 @@ class WorkstationAggregationService:
         该入口不读取 legacy items、Bundle 或结果文案，也不返回任何病历正文。
         """
 
-        if completed_from and completed_to and _bound_to_utc(completed_from) > _bound_to_utc(completed_to):
+        completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
+        completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
+        if completed_from_utc and completed_to_utc and completed_from_utc > completed_to_utc:
             raise ValueError("completed_from 不能晚于 completed_to")
         normalized_job_id = _safe_text(job_id).strip() or None
         normalized_institute_id = _safe_text(institute_id).strip() or None
         normalized_department = _safe_text(department).strip() or None
         session: Session = self._session_factory()
+        cache_key: Optional[tuple[Any, ...]] = None
         try:
+            cache_key = self._build_luxian_analytics_cache_key(
+                session,
+                completed_from_utc=completed_from_utc,
+                completed_to_utc=completed_to_utc,
+                department=normalized_department,
+                job_id=normalized_job_id,
+                institute_id=normalized_institute_id,
+                case_scope=case_scope,
+            )
+            if cache_key is not None:
+                with _ANALYTICS_CACHE_LOCK:
+                    cached = _ANALYTICS_WATERMARK_CACHE.get(cache_key)
+                    if cached is not None:
+                        _ANALYTICS_WATERMARK_CACHE.move_to_end(cache_key)
+                        return deepcopy(cached)
+
             load_kwargs: Dict[str, Any] = {
-                "department": None,
+                "department": normalized_department,
                 "keyword": None,
             }
             if case_scope is not None:
@@ -481,7 +626,7 @@ class WorkstationAggregationService:
             if normalized_institute_id is not None:
                 load_kwargs["institute_id"] = normalized_institute_id
             records = self._load_luxian_home_records(session, **load_kwargs)
-            records_by_identity = {
+            scoped_by_identity = {
                 (
                     _safe_text(record.get("institute_id")).strip(),
                     _safe_text(record.get("patient_id")).strip(),
@@ -494,21 +639,44 @@ class WorkstationAggregationService:
                 )
             }
             if normalized_institute_id is not None:
-                records_by_identity = {
+                scoped_by_identity = {
                     identity: record
-                    for identity, record in records_by_identity.items()
+                    for identity, record in scoped_by_identity.items()
                     if identity[0] == normalized_institute_id
                 }
             if case_scope is not None:
-                records_by_identity = {
+                scoped_by_identity = {
                     identity: record
-                    for identity, record in records_by_identity.items()
+                    for identity, record in scoped_by_identity.items()
                     if _matches_case_scope_identity(identity, case_scope)
                 }
-            if normalized_department:
+
+            # 科室下拉选项不受当前 department 筛选影响，避免选中单科后下拉自毁。
+            if normalized_department is None:
+                department_options = sorted(
+                    {
+                        _normalized_department_label(record.get("department"))
+                        for record in scoped_by_identity.values()
+                    }
+                )
+                records_by_identity = scoped_by_identity
+            else:
+                if self._is_default_loader("_load_luxian_home_records"):
+                    department_options = self._load_luxian_department_options(
+                        session,
+                        case_scope=case_scope,
+                        institute_id=normalized_institute_id,
+                    )
+                else:
+                    department_options = sorted(
+                        {
+                            _normalized_department_label(record.get("department"))
+                            for record in scoped_by_identity.values()
+                        }
+                    )
                 records_by_identity = {
                     identity: record
-                    for identity, record in records_by_identity.items()
+                    for identity, record in scoped_by_identity.items()
                     if _normalized_department_label(record.get("department"))
                     == normalized_department
                 }
@@ -523,11 +691,15 @@ class WorkstationAggregationService:
             }
             if scoped_filter_active:
                 event_loader_kwargs["scoped_filter_active"] = True
+            if normalized_institute_id is not None:
+                event_loader_kwargs["institute_id"] = normalized_institute_id
+            if case_scope is not None:
+                event_loader_kwargs["case_scope"] = case_scope
             events, invalid_total = self._load_luxian_0609_analytics_events(
                 session,
                 **event_loader_kwargs,
             )
-            if normalized_institute_id is not None or case_scope is not None:
+            if normalized_institute_id is not None or case_scope is not None or normalized_department is not None:
                 events = [
                     event
                     for event in events
@@ -732,7 +904,7 @@ class WorkstationAggregationService:
             if len(time_buckets) >= 2
             else None
         )
-        return {
+        payload = {
             "scope": {
                 "time_basis": "qc_completed_at",
                 "completed_from": completed_from.isoformat() if completed_from else None,
@@ -759,6 +931,7 @@ class WorkstationAggregationService:
                 {"status": status, "count": status_counts[status]}
                 for status in status_order
             ],
+            "department_options": department_options,
             "department_distribution": department_distribution,
             "physician_distribution": physician_distribution,
             "rule_distribution": rule_distribution[:10],
@@ -767,6 +940,13 @@ class WorkstationAggregationService:
                 "canonical_invalid_or_missing_total": invalid_total,
             },
         }
+        if cache_key is not None:
+            with _ANALYTICS_CACHE_LOCK:
+                _ANALYTICS_WATERMARK_CACHE[cache_key] = deepcopy(payload)
+                _ANALYTICS_WATERMARK_CACHE.move_to_end(cache_key)
+                while len(_ANALYTICS_WATERMARK_CACHE) > _ANALYTICS_WATERMARK_CACHE_MAX:
+                    _ANALYTICS_WATERMARK_CACHE.popitem(last=False)
+        return payload
 
     def _load_luxian_0609_analytics_events(
         self,
@@ -784,22 +964,29 @@ class WorkstationAggregationService:
 
         from ...database import clinical_connection
         from .. import clinical_sources
-        from ..custom_qc_workspace_service import CustomQCWorkspaceService
         from ..qc_workspace.canonical_result_store import (
             CANONICAL_RESULT_DELIVERY_MODE as _CANONICAL_RESULT_DELIVERY_MODE,
             _CUSTOMER_STATUSES,
             RECORD_RESULT_ENVELOPE_SCHEMA as _RECORD_RESULT_ENVELOPE_SCHEMA,
         )
 
-        workspace_service = CustomQCWorkspaceService()
+        if scoped_filter_active and records_by_identity is not None and not records_by_identity:
+            return [], 0
+
+        workspace_service = self._get_readonly_custom_qc_workspace_service()
+        finished_at_col = workspace_service._batch_job_table.c.finished_at
+        finished_at_is_tz = bool(getattr(getattr(finished_at_col, "type", None), "timezone", False))
+        completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
+        completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
         jobs_query = select(
             workspace_service._batch_job_table.c.id,
-            workspace_service._batch_job_table.c.finished_at,
+            finished_at_col,
             workspace_service._batch_job_table.c.filters_json,
             workspace_service._batch_job_table.c.record_ids_json,
         ).where(
             and_(
                 workspace_service._batch_job_table.c.status == "completed",
+                finished_at_col.is_not(None),
                 or_(
                     workspace_service._batch_job_table.c.parent_job_id.is_(None),
                     workspace_service._batch_job_table.c.parent_job_id == "",
@@ -808,8 +995,12 @@ class WorkstationAggregationService:
         )
         if job_id:
             jobs_query = jobs_query.where(workspace_service._batch_job_table.c.id == job_id)
-        completed_from_utc = _bound_to_utc(completed_from) if completed_from is not None else None
-        completed_to_utc = _bound_to_utc(completed_to) if completed_to is not None else None
+        if completed_from_utc is not None:
+            from_bound = completed_from_utc if finished_at_is_tz else completed_from_utc.replace(tzinfo=None)
+            jobs_query = jobs_query.where(finished_at_col >= from_bound)
+        if completed_to_utc is not None:
+            to_bound = completed_to_utc if finished_at_is_tz else completed_to_utc.replace(tzinfo=None)
+            jobs_query = jobs_query.where(finished_at_col <= to_bound)
         jobs: Dict[str, Dict[str, Any]] = {}
         legacy_candidates: Dict[str, Dict[str, Any]] = {}
         for raw_row in session.execute(jobs_query).mappings().all():
@@ -896,24 +1087,50 @@ class WorkstationAggregationService:
             )
             or None
         )
+        envelope_table = workspace_service._record_result_envelope_table
         envelope_conditions = [
-            workspace_service._record_result_envelope_table.c.root_job_id.in_(list(jobs)),
-            workspace_service._record_result_envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-            workspace_service._record_result_envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
+            envelope_table.c.root_job_id.in_(list(jobs)),
+            envelope_table.c.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+            envelope_table.c.rule_set_version == LUXIAN_0609_RULE_SET_VERSION,
         ]
         if scope_institute_id is not None:
             envelope_conditions.append(
-                workspace_service._record_result_envelope_table.c.institute_id == scope_institute_id
+                envelope_table.c.institute_id == scope_institute_id
             )
-        envelope_rows = session.execute(
-            select(
-                workspace_service._record_result_envelope_table.c.root_job_id,
-                workspace_service._record_result_envelope_table.c.institute_id,
-                workspace_service._record_result_envelope_table.c.patient_id,
-                workspace_service._record_result_envelope_table.c.visit_id,
-                workspace_service._record_result_envelope_table.c.envelope_json,
-            ).where(and_(*envelope_conditions))
-        ).mappings().all()
+        envelope_cols = (
+            envelope_table.c.root_job_id,
+            envelope_table.c.institute_id,
+            envelope_table.c.patient_id,
+            envelope_table.c.visit_id,
+            envelope_table.c.envelope_json,
+        )
+        if (
+            scoped_filter_active
+            and records_by_identity is not None
+            and 0 < len(records_by_identity) <= _ANALYTICS_IDENTITY_PUSHDOWN_LIMIT
+        ):
+            scoped_identities = sorted(records_by_identity)
+            envelope_rows = []
+            for start in range(0, len(scoped_identities), _ANALYTICS_IDENTITY_CHUNK_SIZE):
+                chunk = scoped_identities[start : start + _ANALYTICS_IDENTITY_CHUNK_SIZE]
+                envelope_rows.extend(
+                    session.execute(
+                        select(*envelope_cols).where(
+                            and_(
+                                *envelope_conditions,
+                                tuple_(
+                                    envelope_table.c.institute_id,
+                                    envelope_table.c.patient_id,
+                                    envelope_table.c.visit_id,
+                                ).in_(chunk),
+                            )
+                        )
+                    ).mappings().all()
+                )
+        else:
+            envelope_rows = session.execute(
+                select(*envelope_cols).where(and_(*envelope_conditions))
+            ).mappings().all()
         rows_by_event: Dict[tuple[str, str, str, str], list[Dict[str, Any]]] = {}
         for raw_row in envelope_rows:
             row = dict(raw_row)
@@ -1610,6 +1827,172 @@ class WorkstationAggregationService:
                 )
         return list(records_by_identity.values())
 
+    def _load_luxian_department_options(
+        self,
+        session: Session,
+        *,
+        case_scope=None,
+        institute_id: Optional[str] = None,
+    ) -> List[str]:
+        """读取不受当前 department 筛选影响的科室下拉列表（轻量 DISTINCT 查询）。"""
+        from ...database import clinical_connection
+
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        if clinical_connection.configured():
+            from sqlalchemy import inspect as sa_inspect
+            from .. import clinical_case_catalog as catalog_service
+
+            effective_case_scope = case_scope
+            effective_institute_id = normalized_institute_id
+            if _is_institute_case_scope(case_scope):
+                scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip() or None
+                if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+                    return []
+                effective_institute_id = scope_inst or effective_institute_id
+                effective_case_scope = None
+            elif _is_doctor_case_scope(case_scope):
+                scope_inst = _safe_text(getattr(case_scope, "institute_id", None)).strip() or None
+                if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+                    return []
+                if not getattr(case_scope, "case_refs", ()):
+                    return []
+
+            clinical_engine = clinical_connection.get_engine()
+            if clinical_engine is None:
+                return []
+            inspector = sa_inspect(clinical_engine)
+            has_catalog = (
+                inspector.has_table("admission_record", schema="cdm")
+                and inspector.has_table("discharge_record", schema="cdm")
+            )
+            if not has_catalog:
+                with Session(clinical_engine) as cdm_session:
+                    return self._load_single_db_luxian_department_options(
+                        cdm_session,
+                        case_scope=case_scope,
+                        institute_id=normalized_institute_id,
+                    )
+            source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+            predicates = catalog_service._predicates(
+                source,
+                dept=None,
+                doctor=None,
+                keyword=None,
+                hospital_status="all",
+                case_scope=effective_case_scope,
+                institute_id=effective_institute_id,
+            )
+            with clinical_engine.connect() as connection:
+                rows = connection.execute(
+                    select(source.c.department).distinct().where(*predicates)
+                ).scalars().all()
+            return sorted({_normalized_department_label(value) for value in rows})
+
+        return self._load_single_db_luxian_department_options(
+            session,
+            case_scope=case_scope,
+            institute_id=normalized_institute_id,
+        )
+
+    def _load_single_db_luxian_department_options(
+        self,
+        session: Session,
+        *,
+        case_scope=None,
+        institute_id: Optional[str] = None,
+    ) -> List[str]:
+        from ..medical_records.query_service import (
+            MedicalRecordFrontpage,
+            _apply_workstation_filters,
+            _filter_indexed_registration_records,
+            _load_hospitalization_projection_map,
+            _load_indexed_registration_records,
+            _workstation_department_expr,
+            _workstation_discharge_join_condition,
+            _workstation_discharge_summary_subquery,
+        )
+        from ..clinical_read import clinical_query
+
+        normalized_institute_id = _safe_text(institute_id).strip() or None
+        discharge_summary = _workstation_discharge_summary_subquery(session)
+        if isinstance(session, Session) or hasattr(session, "get_bind"):
+            query = clinical_query(session, MedicalRecordFrontpage)
+        else:
+            try:
+                query = clinical_query(session, MedicalRecordFrontpage)
+            except AttributeError:
+                query = session.query(MedicalRecordFrontpage)
+
+        if case_scope is not None:
+            query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
+        if normalized_institute_id is not None:
+            query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+        if discharge_summary is not None:
+            query = query.outerjoin(
+                discharge_summary,
+                _workstation_discharge_join_condition(discharge_summary),
+            )
+        query = _apply_workstation_filters(
+            query,
+            dept=None,
+            doctor=None,
+            keyword=None,
+            start_date=None,
+            end_date=None,
+            date_field="visit",
+            hospital_status="all",
+            sync_scope="all",
+            include_department=False,
+            include_doctor=False,
+            discharge_summary=discharge_summary,
+        )
+        dept_expr = _workstation_department_expr(discharge_summary)
+        departments: set[str] = {
+            _normalized_department_label(row[0])
+            for row in query.with_entities(dept_expr.label("department")).distinct().all()
+        }
+        indexed_raw: list[Any] = []
+        if isinstance(session, Session) or hasattr(session, "get_bind"):
+            try:
+                indexed_raw = _load_indexed_registration_records(session)
+            except Exception:
+                indexed_raw = []
+        if indexed_raw:
+            try:
+                projection_map = _load_hospitalization_projection_map(session)
+            except Exception:
+                projection_map = {}
+            indexed_records = _filter_indexed_registration_records(
+                indexed_raw,
+                dept=None,
+                doctor=None,
+                keyword=None,
+                start_date=None,
+                end_date=None,
+                date_field="visit",
+                hospital_status="all",
+                sync_scope="all",
+                hospitalization_projection_map=projection_map,
+            )
+            for record in indexed_records:
+                identity = (
+                    _safe_text(record.institute_id).strip(),
+                    _safe_text(record.patient_id).strip(),
+                    _safe_text(record.visit_id).strip(),
+                )
+                if not all(identity):
+                    continue
+                if normalized_institute_id is not None and identity[0] != normalized_institute_id:
+                    continue
+                if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+                    continue
+                departments.add(
+                    _normalized_department_label(
+                        record.discharge_dept_name or record.admission_dept_name
+                    )
+                )
+        return sorted(departments)
+
     def _get_readonly_custom_qc_workspace_service(self) -> Any:
         from ..custom_qc_workspace_service import CustomQCWorkspaceService
 
@@ -1617,7 +2000,10 @@ class WorkstationAggregationService:
         cached_svc = getattr(self, "_custom_qc_workspace_service", None)
         if cached_svc is not None and cached_cls is CustomQCWorkspaceService:
             return cached_svc
-        svc = CustomQCWorkspaceService(readonly=True)
+        try:
+            svc = CustomQCWorkspaceService(readonly=True)
+        except TypeError:
+            svc = CustomQCWorkspaceService()
         self._custom_qc_workspace_service_cls = CustomQCWorkspaceService
         self._custom_qc_workspace_service = svc
         return svc

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from threading import RLock
 from typing import Any
+import weakref
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Session
@@ -10,6 +12,24 @@ from sqlalchemy.orm import Session
 from ..database.connection import DB_SEARCH_PATH
 
 USER_SCHEMAS = ("sys", "public")
+
+_USER_OWNER_CACHE_LOCK = RLock()
+_USER_OWNER_SCHEMA_CACHE: dict[tuple[int, tuple[str, ...]], str] = {}
+_USER_OWNER_FINALIZERS: set[int] = set()
+
+
+def _evict_user_owner_cache_for_engine(engine_id: int) -> None:
+    with _USER_OWNER_CACHE_LOCK:
+        stale_keys = [key for key in _USER_OWNER_SCHEMA_CACHE if key[0] == engine_id]
+        for key in stale_keys:
+            _USER_OWNER_SCHEMA_CACHE.pop(key, None)
+        _USER_OWNER_FINALIZERS.discard(engine_id)
+
+
+def clear_user_owner_schema_cache() -> None:
+    """清空按 engine/schema 缓存的用户表 owner 解析结果。"""
+    with _USER_OWNER_CACHE_LOCK:
+        _USER_OWNER_SCHEMA_CACHE.clear()
 
 
 class UserOwnerUnavailable(RuntimeError):
@@ -47,12 +67,20 @@ def select_user_owner_schema(
 
 
 def resolve_user_owner_schema(session: Session) -> str | None:
-    """返回 PostgreSQL owner schema；SQLite 单测返回 None。"""
+    """返回 PostgreSQL owner schema（按 engine 与 search_path 缓存）；SQLite 单测返回 None。"""
     bind = session.get_bind()
     if bind.dialect.name != "postgresql":
         return None
-    inspector = sa.inspect(bind)
+    engine_obj = getattr(bind, "engine", bind)
+    engine_id = id(engine_obj)
     configured = configured_search_path()
+    cache_key = (engine_id, tuple(configured))
+    with _USER_OWNER_CACHE_LOCK:
+        cached = _USER_OWNER_SCHEMA_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
+    inspector = sa.inspect(bind)
     schemas = list(dict.fromkeys([*configured, *USER_SCHEMAS]))
     if not configured:
         schemas = list(dict.fromkeys([*inspector.get_schema_names(), *schemas]))
@@ -61,9 +89,18 @@ def resolve_user_owner_schema(session: Session) -> str | None:
     ]
     if not existing:
         raise UserOwnerUnavailable("账号持久表不存在")
-    return select_user_owner_schema(
+    resolved = select_user_owner_schema(
         search_path=configured, schemas_with_user_table=existing
     )
+    with _USER_OWNER_CACHE_LOCK:
+        if engine_id not in _USER_OWNER_FINALIZERS:
+            try:
+                weakref.finalize(engine_obj, _evict_user_owner_cache_for_engine, engine_id)
+                _USER_OWNER_FINALIZERS.add(engine_id)
+            except TypeError:
+                pass
+        _USER_OWNER_SCHEMA_CACHE[cache_key] = resolved
+    return resolved
 
 
 def user_owner_options(session: Session) -> dict[str, Any]:
@@ -74,6 +111,7 @@ def user_owner_options(session: Session) -> dict[str, Any]:
 __all__ = [
     "USER_SCHEMAS",
     "UserOwnerUnavailable",
+    "clear_user_owner_schema_cache",
     "configured_search_path",
     "resolve_user_owner_schema",
     "select_user_owner_schema",

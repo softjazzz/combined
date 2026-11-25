@@ -54,21 +54,44 @@
       </dl>
 
       <div
-        v-if="loading"
+        v-if="loading && !activeDetail"
         class="fpqc-preview__state"
         role="status"
       >
         正在读取质控结果…
       </div>
       <div
-        v-else-if="loadError"
-        class="fpqc-preview__state"
+        v-else-if="loadError && !activeDetail"
+        class="fpqc-preview__state fpqc-preview__state--action"
         role="alert"
       >
-        {{ loadError }}
+        <p>{{ loadError }}</p>
+        <button
+          type="button"
+          class="mq-btn"
+          data-testid="fpqc-preview-retry"
+          @click="load()"
+        >
+          重试
+        </button>
       </div>
 
       <template v-else-if="activeDetail">
+        <div
+          v-if="loadError"
+          class="fpqc-preview__notice"
+          role="alert"
+        >
+          <p>{{ loadError }}</p>
+          <button
+            type="button"
+            class="mq-btn fpqc-preview__notice-btn"
+            data-testid="fpqc-preview-retry"
+            @click="load({ preserveEdit: true })"
+          >
+            重试
+          </button>
+        </div>
         <div
           v-if="activeDetail.stale"
           class="fpqc-preview__notice"
@@ -181,11 +204,14 @@
                 class="fpqc-finding__edit"
               >
                 <input
+                  :ref="setNoteInputRef"
                   v-model="noteDraft"
                   class="mq-input"
                   maxlength="500"
                   placeholder="填写误报原因（必填）"
                   aria-label="误报原因"
+                  @keydown.enter.prevent="submitFalseAlarm(finding)"
+                  @keydown.esc.prevent="cancelEdit"
                 >
                 <div class="fpqc-finding__edit-actions">
                   <button
@@ -198,7 +224,7 @@
                   <button
                     type="button"
                     class="mq-btn mq-btn--primary"
-                    :disabled="!noteDraft.trim() || savingId === finding.id"
+                    :disabled="!noteDraft.trim() || isSaving(finding.id)"
                     @click="saveReview(finding, 'false_alarm', noteDraft)"
                   >
                     保存为误报
@@ -213,7 +239,7 @@
                   v-if="finding.review_status !== 'confirmed'"
                   type="button"
                   class="fpqc-finding__link"
-                  :disabled="savingId === finding.id"
+                  :disabled="isSaving(finding.id)"
                   @click="saveReview(finding, 'confirmed', '')"
                 >
                   确认问题
@@ -222,7 +248,7 @@
                   v-if="finding.review_status !== 'false_alarm'"
                   type="button"
                   class="fpqc-finding__link"
-                  :disabled="savingId === finding.id"
+                  :disabled="isSaving(finding.id)"
                   @click="startFalseAlarm(finding)"
                 >
                   标记误报
@@ -231,7 +257,7 @@
                   v-if="finding.review_status !== 'pending'"
                   type="button"
                   class="fpqc-finding__link"
-                  :disabled="savingId === finding.id"
+                  :disabled="isSaving(finding.id)"
                   @click="saveReview(finding, 'pending', '')"
                 >
                   撤回复核
@@ -289,11 +315,12 @@
 
 <script setup lang="ts">
 import { message } from 'ant-design-vue'
-import { computed, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   getFrontpageQcRecord,
+  isFrontpageQcAbortError,
   reviewFrontpageQcFinding,
   type FrontpageQcFinding,
   type FrontpageQcRecordDetail,
@@ -329,8 +356,26 @@ const loading = ref(false)
 const loadError = ref('')
 const editingId = ref('')
 const noteDraft = ref('')
-const savingId = ref('')
+const savingIds = ref<Set<string>>(new Set())
+let noteInputEl: HTMLInputElement | null = null
 let requestSeq = 0
+let controller: AbortController | null = null
+let disposed = false
+
+function isSaving(id: string): boolean {
+  return savingIds.value.has(id)
+}
+
+function setSaving(id: string, active: boolean) {
+  const next = new Set(savingIds.value)
+  if (active) next.add(id)
+  else next.delete(id)
+  savingIds.value = next
+}
+
+function setNoteInputRef(el: unknown) {
+  noteInputEl = el instanceof HTMLInputElement ? el : null
+}
 
 const recordRef = computed<FrontpageQcRef>(() => ({
   institute_id: props.record?.institute_id ?? '',
@@ -377,45 +422,84 @@ function reviewTone(status: FrontpageQcReviewStatus): string {
   return ''
 }
 
-async function load() {
+async function load(options: { preserveEdit?: boolean } = {}) {
+  const preserveEdit = Boolean(options.preserveEdit)
+  controller?.abort()
+  controller = null
   const seq = ++requestSeq
-  editingId.value = ''
-  noteDraft.value = ''
-  detail.value = null
   loadError.value = ''
+  if (!preserveEdit) {
+    cancelEdit()
+    detail.value = null
+  }
   if (!props.record) {
+    cancelEdit()
+    detail.value = null
     loading.value = false
     return
   }
   const expectedKey = props.record.record_key
   const refToLoad = { ...recordRef.value }
+  const nextController = new AbortController()
+  controller = nextController
   loading.value = true
   try {
-    const next = await getFrontpageQcRecord(refToLoad)
-    if (seq === requestSeq && props.record?.record_key === expectedKey) {
-      detail.value = next
+    const next = await getFrontpageQcRecord(refToLoad, { signal: nextController.signal })
+    if (
+      disposed ||
+      seq !== requestSeq ||
+      nextController.signal.aborted ||
+      props.record?.record_key !== expectedKey
+    ) {
+      return
+    }
+    detail.value = next
+    if (preserveEdit && editingId.value) {
+      const stillExists =
+        next.record.record_key === expectedKey &&
+        Boolean(next.result?.findings.some((item) => item.id === editingId.value))
+      if (!stillExists) cancelEdit()
     }
   } catch (error) {
-    if (seq === requestSeq && props.record?.record_key === expectedKey) {
-      detail.value = null
-      loadError.value = error instanceof Error ? error.message : '读取首页质控详情失败'
+    if (
+      disposed ||
+      seq !== requestSeq ||
+      nextController.signal.aborted ||
+      isFrontpageQcAbortError(error) ||
+      props.record?.record_key !== expectedKey
+    ) {
+      return
     }
+    if (!preserveEdit) detail.value = null
+    loadError.value = error instanceof Error ? error.message : '读取首页质控详情失败'
   } finally {
-    if (seq === requestSeq) loading.value = false
+    if (!disposed && seq === requestSeq) loading.value = false
+    if (controller === nextController) controller = null
   }
 }
 
 watch(
-  () => [props.record?.record_key, props.refreshKey],
-  () => {
-    void load()
+  () => [props.record?.record_key, props.refreshKey] as const,
+  ([nextKey, nextRefresh], prev) => {
+    const prevKey = prev?.[0]
+    const isSameRecordRefresh = Boolean(
+      nextKey && prevKey && nextKey === prevKey && nextRefresh !== prev?.[1],
+    )
+    void load({ preserveEdit: isSameRecordRefresh })
   },
   { immediate: true },
 )
 
-function startFalseAlarm(finding: FrontpageQcFinding) {
+async function startFalseAlarm(finding: FrontpageQcFinding) {
   editingId.value = finding.id
   noteDraft.value = finding.review_note || ''
+  await nextTick()
+  noteInputEl?.focus()
+}
+
+function submitFalseAlarm(finding: FrontpageQcFinding) {
+  if (!noteDraft.value.trim() || savingIds.value.has(finding.id)) return
+  void saveReview(finding, 'false_alarm', noteDraft.value)
 }
 
 function cancelEdit() {
@@ -424,27 +508,43 @@ function cancelEdit() {
 }
 
 async function saveReview(finding: FrontpageQcFinding, status: FrontpageQcReviewStatus, note: string) {
+  if (disposed || savingIds.value.has(finding.id)) return
+  const trimmedNote = note.trim()
+  if (status === 'false_alarm' && !trimmedNote) return
   const expectedKey = props.record?.record_key ?? ''
-  savingId.value = finding.id
+  setSaving(finding.id, true)
   try {
-    const saved = await reviewFrontpageQcFinding(finding.id, { status, note: note.trim() })
-    if (props.record?.record_key === expectedKey) {
-      const findings = result.value?.findings ?? []
+    const saved = await reviewFrontpageQcFinding(finding.id, { status, note: trimmedNote })
+    if (
+      !disposed &&
+      props.record?.record_key === expectedKey &&
+      activeDetail.value?.record.record_key === expectedKey
+    ) {
+      const findings = activeDetail.value.result?.findings ?? []
       const index = findings.findIndex((item) => item.id === saved.id)
       if (index >= 0) findings.splice(index, 1, saved)
-      cancelEdit()
+      if (editingId.value === finding.id) cancelEdit()
     }
-    emit('reviewed')
+    if (!disposed) emit('reviewed')
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '保存复核失败')
+    if (!disposed) {
+      message.error(error instanceof Error ? error.message : '保存复核失败')
+    }
     // 结果被重新质控替换时，重新读取最新结果
-    if (props.record?.record_key === expectedKey) {
-      void load()
+    if (!disposed && props.record?.record_key === expectedKey) {
+      void load({ preserveEdit: true })
     }
   } finally {
-    savingId.value = ''
+    setSaving(finding.id, false)
   }
 }
+
+onBeforeUnmount(() => {
+  disposed = true
+  requestSeq += 1
+  controller?.abort()
+  controller = null
+})
 </script>
 
 <style scoped src="../styles/frontpage-qc-preview.css"></style>

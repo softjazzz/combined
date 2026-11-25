@@ -164,7 +164,7 @@ def create_app() -> FastAPI:
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
         # 任务详情 409 时附带任务状态，跨域部署下前端也需能读取
-        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Special-Classification-Version",
+        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Export-Total", "X-Special-Classification-Version",
                         "X-Special-Standard-Id", "X-Special-Standard-Version", "X-Special-Binding-Version"],
     )
 

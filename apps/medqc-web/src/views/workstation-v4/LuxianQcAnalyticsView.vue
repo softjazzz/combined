@@ -50,7 +50,7 @@
             <a-button
               type="primary"
               :loading="loading"
-              @click="fetchAnalytics()"
+              @click="handleQuery()"
             >
               查询
             </a-button>
@@ -297,7 +297,7 @@
                   <p>责任归属</p>
                   <h2>主治医师风险排行</h2>
                 </div>
-                <span class="panel-note">按首页主治医师签名归属</span>
+                <span class="panel-note">按病历主治医师归属</span>
               </header>
               <div
                 v-if="physicianItems.length"
@@ -399,7 +399,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
@@ -455,6 +455,7 @@ interface AnalyticsPayload {
     canonical_invalid_or_missing_total: number
   }
   status_distribution: Array<{ status: Status; count: number }>
+  department_options?: string[]
   department_distribution: Array<RiskDistributionMetrics & { department: string }>
   physician_distribution: Array<RiskDistributionMetrics & { physician: string }>
   rule_distribution: Array<{
@@ -470,6 +471,8 @@ interface AnalyticsPayload {
 }
 
 const DEMO_HIDDEN_STATUSES = new Set<Status>(['data_gap', 'uncertain'])
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const router = useRouter()
 const route = useRoute()
@@ -480,7 +483,26 @@ const payload = ref<AnalyticsPayload | null>(null)
 const dateRange = ref<[string, string]>()
 const department = ref<string>()
 const jobId = ref('')
+const cachedDepartmentOptions = ref<string[]>([])
 const routeScopeInitialized = ref(false)
+let lastSyncedRouteSignature = ''
+
+function cleanDateValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function normalizeDepartmentList(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return [
+    ...new Set(
+      values
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean),
+    ),
+  ]
+}
 
 function routeQueryText(name: string) {
   const value = route.query[name]
@@ -576,12 +598,22 @@ function resolveRiskMetrics(item: RiskDistributionMetrics): ResolvedRiskMetrics 
   }
 }
 
-const departmentOptions = computed(() =>
-  (payload.value?.department_distribution || []).map((item) => ({
-    label: item.department,
-    value: item.department,
-  })),
-)
+const departmentOptions = computed(() => {
+  const fromPayloadOptions = normalizeDepartmentList(payload.value?.department_options)
+  const fromDistribution = normalizeDepartmentList(
+    (payload.value?.department_distribution || []).map((item) => item.department),
+  )
+  const selected = department.value?.trim() ? [department.value.trim()] : []
+  const merged = [
+    ...new Set([
+      ...cachedDepartmentOptions.value,
+      ...fromPayloadOptions,
+      ...fromDistribution,
+      ...selected,
+    ]),
+  ]
+  return merged.map((dept) => ({ label: dept, value: dept }))
+})
 const statusItems = computed(() =>
   STATUS_META.filter((meta) => !confirmedResultsOnly.value || !DEMO_HIDDEN_STATUSES.has(meta.status))
     .map((meta) => ({
@@ -649,7 +681,7 @@ const physicianMax = computed(() =>
 )
 const ruleItems = computed(() =>
   [...(payload.value?.rule_distribution || [])]
-    .filter((item) => (!confirmedResultsOnly.value ? true : item.non_compliant_count > 0))
+    .filter((item) => ruleConcernTotal(item) > 0)
     .sort((a, b) =>
       confirmedResultsOnly.value
         ? b.non_compliant_count - a.non_compliant_count || a.rule_id.localeCompare(b.rule_id)
@@ -709,34 +741,93 @@ function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
   if (confirmedResultsOnly.value) return item.non_compliant_count
   return item.non_compliant_count + item.data_gap_count + item.uncertain_count
 }
-function resetFilters() {
+function querySignature(query: Record<string, unknown>): string {
+  const pick = (key: string) => {
+    const raw = query[key]
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return typeof value === 'string' ? value.trim() : ''
+  }
+  return [
+    pick('view'),
+    pick('department'),
+    pick('completed_from'),
+    pick('completed_to'),
+    pick('job_id'),
+  ].join('|')
+}
+
+function buildSyncedQuery(): Record<string, string | undefined> {
+  const completedFrom = cleanDateValue(dateRange.value?.[0])
+  const completedTo = cleanDateValue(dateRange.value?.[1])
+  const dept = department.value?.trim() || undefined
+  const trimmedJobId = jobId.value.trim() || undefined
+  const nextQuery: Record<string, string | undefined> = {}
+  if (isDepartmentReport.value && dept) nextQuery.view = 'department'
+  if (dept) nextQuery.department = dept
+  if (completedFrom) nextQuery.completed_from = completedFrom
+  if (completedTo) nextQuery.completed_to = completedTo
+  if (trimmedJobId) nextQuery.job_id = trimmedJobId
+  return nextQuery
+}
+
+async function syncFiltersToRoute() {
+  if (typeof router.replace !== 'function') return
+  const nextQuery = buildSyncedQuery()
+  const nextSig = querySignature(nextQuery)
+  const currentSig = querySignature((route.query || {}) as Record<string, unknown>)
+  if (nextSig === currentSig) return
+  lastSyncedRouteSignature = nextSig
+  await router.replace({
+    path: route.path || '/workstation-v5/stats',
+    query: nextQuery,
+  })
+}
+
+async function handleQuery() {
+  const trimmedJobId = jobId.value.trim()
+  if (trimmedJobId && !UUID_PATTERN.test(trimmedJobId)) {
+    analyticsAbortController?.abort()
+    analyticsAbortController = null
+    loading.value = false
+    error.value = '任务 ID 格式不正确，请输入有效的 UUID'
+    return
+  }
+  await syncFiltersToRoute()
+  await fetchAnalytics()
+}
+
+async function resetFilters() {
   dateRange.value = undefined
   department.value = isDepartmentReport.value ? activeDepartmentName.value : undefined
   jobId.value = ''
-  void fetchAnalytics()
+  await syncFiltersToRoute()
+  await fetchAnalytics()
 }
+
 function openDepartmentReport(departmentName: string) {
   void router.push({
     path: '/workstation-v5/stats',
     query: {
       view: 'department',
       department: departmentName,
-      completed_from: dateRange.value?.[0],
-      completed_to: dateRange.value?.[1],
-      job_id: jobId.value || undefined,
+      completed_from: cleanDateValue(dateRange.value?.[0]),
+      completed_to: cleanDateValue(dateRange.value?.[1]),
+      job_id: jobId.value.trim() || undefined,
     },
   })
 }
+
 function returnToHospitalAnalytics() {
   void router.push({
     path: '/workstation-v5/stats',
     query: {
-      completed_from: dateRange.value?.[0],
-      completed_to: dateRange.value?.[1],
-      job_id: jobId.value || undefined,
+      completed_from: cleanDateValue(dateRange.value?.[0]),
+      completed_to: cleanDateValue(dateRange.value?.[1]),
+      job_id: jobId.value.trim() || undefined,
     },
   })
 }
+
 function drillDown(filters: {
   department?: string
   rule_id?: string
@@ -755,9 +846,9 @@ function drillDown(filters: {
       source: 'analytics',
       analytics_scope: 'final',
       department: filters.department || department.value,
-      analytics_completed_from: dateRange.value?.[0],
-      analytics_completed_to: dateRange.value?.[1],
-      analytics_job_id: jobId.value || undefined,
+      analytics_completed_from: cleanDateValue(dateRange.value?.[0]),
+      analytics_completed_to: cleanDateValue(dateRange.value?.[1]),
+      analytics_job_id: jobId.value.trim() || undefined,
       analytics_rule_id: filters.rule_id,
       analytics_result_status: resultStatus,
       // 仅供病历池展示下钻上下文，不参与后端筛选
@@ -765,32 +856,66 @@ function drillDown(filters: {
     },
   })
 }
+
 let analyticsRequestSeq = 0
+let analyticsAbortController: AbortController | null = null
 
 async function fetchAnalytics() {
+  const trimmedJobId = jobId.value.trim()
+  if (trimmedJobId && !UUID_PATTERN.test(trimmedJobId)) {
+    analyticsAbortController?.abort()
+    analyticsAbortController = null
+    loading.value = false
+    error.value = '任务 ID 格式不正确，请输入有效的 UUID'
+    return
+  }
+
   const requestSeq = ++analyticsRequestSeq
+  analyticsAbortController?.abort()
+  const controller = new AbortController()
+  analyticsAbortController = controller
   loading.value = true
   error.value = ''
   try {
+    const completedFrom = cleanDateValue(dateRange.value?.[0])
+    const completedTo = cleanDateValue(dateRange.value?.[1])
+    const selectedDept = department.value?.trim() || undefined
     const response = await ApiService.get<AnalyticsPayload>(
       '/api/v1/workstation/analytics/luxian-0609',
       {
-        completed_from: dateRange.value?.[0],
-        completed_to: dateRange.value?.[1],
-        department: department.value,
-        job_id: jobId.value || undefined,
+        completed_from: completedFrom,
+        completed_to: completedTo,
+        department: selectedDept,
+        job_id: trimmedJobId || undefined,
       },
+      { signal: controller.signal },
     )
-    if (requestSeq !== analyticsRequestSeq) return
+    if (controller.signal.aborted || requestSeq !== analyticsRequestSeq) return
     if (!response.success || !response.data) {
       throw new Error(String(response.error || '统计接口未返回数据'))
     }
     payload.value = response.data
+    const incomingOptions = normalizeDepartmentList(response.data.department_options)
+    if (incomingOptions.length > 0) {
+      cachedDepartmentOptions.value = incomingOptions
+    } else {
+      const fromDist = normalizeDepartmentList(
+        (response.data.department_distribution || []).map((item) => item.department),
+      )
+      if (fromDist.length > 0) {
+        cachedDepartmentOptions.value = selectedDept
+          ? [...new Set([...cachedDepartmentOptions.value, ...fromDist])]
+          : fromDist
+      }
+    }
   } catch (caught) {
-    if (requestSeq !== analyticsRequestSeq) return
+    if (controller.signal.aborted || requestSeq !== analyticsRequestSeq) return
     payload.value = null
     error.value = caught instanceof Error ? caught.message : '请稍后重试'
   } finally {
+    if (analyticsAbortController === controller) {
+      analyticsAbortController = null
+    }
     if (requestSeq === analyticsRequestSeq) {
       loading.value = false
     }
@@ -800,11 +925,17 @@ async function fetchAnalytics() {
 watch(
   () => route.fullPath,
   () => {
-    const selectedDepartment = isDepartmentReport.value ? routeQueryText('department') : ''
+    const currentSig = querySignature((route.query || {}) as Record<string, unknown>)
+    if (routeScopeInitialized.value && lastSyncedRouteSignature && currentSig === lastSyncedRouteSignature) {
+      lastSyncedRouteSignature = ''
+      return
+    }
+    lastSyncedRouteSignature = ''
+    const selectedDepartment = routeQueryText('department')
     const completedFrom = routeQueryText('completed_from')
     const completedTo = routeQueryText('completed_to')
     department.value = selectedDepartment || undefined
-    dateRange.value = completedFrom && completedTo ? [completedFrom, completedTo] : undefined
+    dateRange.value = completedFrom || completedTo ? [completedFrom, completedTo] : undefined
     jobId.value = routeQueryText('job_id')
     if (routeScopeInitialized.value) {
       void fetchAnalytics()
@@ -816,6 +947,12 @@ watch(
 
 onMounted(() => {
   void fetchAnalytics()
+})
+
+onBeforeUnmount(() => {
+  ++analyticsRequestSeq
+  analyticsAbortController?.abort()
+  analyticsAbortController = null
 })
 </script>
 

@@ -461,6 +461,32 @@
               </tr>
             </tbody>
           </table>
+          <nav
+            v-if="visibleRecordTotal > recordPageSize"
+            class="qc-result-analysis__pagination"
+            data-testid="qc-result-analysis-pagination"
+            aria-label="下钻病历分页"
+          >
+            <button
+              type="button"
+              class="qc-result-analysis__page-btn"
+              :disabled="loading || recordPage <= 1"
+              @click="void changeRecordPage(recordPage - 1)"
+            >
+              上一页
+            </button>
+            <span class="qc-result-analysis__page-info">
+              第 {{ recordPage }} / {{ recordTotalPages }} 页 · 共 {{ visibleRecordTotal }} 份
+            </span>
+            <button
+              type="button"
+              class="qc-result-analysis__page-btn"
+              :disabled="loading || recordPage >= recordTotalPages"
+              @click="void changeRecordPage(recordPage + 1)"
+            >
+              下一页
+            </button>
+          </nav>
         </div>
         <div
           v-else
@@ -522,17 +548,38 @@ const doctor = ref('')
 const activeStatus = ref<StatusNavigatorKey>('all')
 const selectedRuleId = ref('')
 const expandedRuleId = ref('')
+const cachedDepartments = ref<string[]>([])
+const recordPage = ref(1)
+const recordPageSize = 20
 let activeRequest = 0
+
+function extractDepartmentsFromPayload(nextPayload: LuxianQcResultAnalysisPayload | null): string[] {
+  if (!nextPayload) return []
+  const extraOptions = (nextPayload as LuxianQcResultAnalysisPayload & {
+    department_options?: unknown
+  }).department_options
+  const fromOptions = Array.isArray(extraOptions)
+    ? extraOptions.map((item) => (typeof item === 'string' ? item.trim() : '')).filter(Boolean)
+    : []
+  const fromRules = (nextPayload.rule_distribution || []).flatMap((item) =>
+    (item.department_distribution || [])
+      .map((row) => String(row.department || '').trim())
+      .filter(Boolean),
+  )
+  return [...new Set([...fromOptions, ...fromRules])].sort((left, right) =>
+    left.localeCompare(right, 'zh-CN'),
+  )
+}
 
 const carePhaseLabel = computed(() => (props.carePhase === 'inpatient' ? '在院病历' : '已出院病历'))
 const selectedRule = computed(() => payload.value?.selected_rule || null)
 const departmentOptions = computed(() =>
   [
-    ...new Set(
-      payload.value?.rule_distribution.flatMap((item) =>
-        item.department_distribution.map((row) => row.department),
-      ) || [],
-    ),
+    ...new Set([
+      ...cachedDepartments.value,
+      ...extractDepartmentsFromPayload(payload.value),
+      ...(department.value.trim() ? [department.value.trim()] : []),
+    ]),
   ].sort((left, right) => left.localeCompare(right, 'zh-CN')),
 )
 const physicianOptions = computed(() =>
@@ -583,6 +630,9 @@ const visibleRecordTotal = computed(() => {
   const hiddenCount = rawItems.filter((record) => DEMO_HIDDEN_STATUSES.has(record.status)).length
   return hiddenCount > 0 ? visibleRecordItems.value.length : payload.value.record_page.total
 })
+const recordTotalPages = computed(() =>
+  Math.max(1, Math.ceil(visibleRecordTotal.value / recordPageSize)),
+)
 
 function statusLabel(status: LuxianQcAnalysisStatus): string {
   if (confirmedResultsOnly.value && DEMO_HIDDEN_STATUSES.has(status)) return '暂未显示'
@@ -592,8 +642,9 @@ function statusLabel(status: LuxianQcAnalysisStatus): string {
   )
 }
 
-async function queryAnalysis(options: { resetRule?: boolean } = {}) {
+async function queryAnalysis(options: { resetRule?: boolean; preservePage?: boolean } = {}) {
   if (options.resetRule) selectedRuleId.value = ''
+  if (!options.preservePage) recordPage.value = 1
   if (
     confirmedResultsOnly.value &&
     activeStatus.value !== 'all' &&
@@ -613,9 +664,20 @@ async function queryAnalysis(options: { resetRule?: boolean } = {}) {
       resultStatus: activeStatus.value === 'all' ? undefined : activeStatus.value,
       completedFrom: completedFrom.value,
       completedTo: completedTo.value,
+      page: recordPage.value,
+      pageSize: recordPageSize,
     })
     if (request !== activeRequest) return
     payload.value = nextPayload
+    const incomingDepts = extractDepartmentsFromPayload(nextPayload)
+    if (incomingDepts.length > 0) {
+      cachedDepartments.value = [...new Set([...cachedDepartments.value, ...incomingDepts])].sort(
+        (a, b) => a.localeCompare(b, 'zh-CN'),
+      )
+    }
+    if (nextPayload.record_page?.page && nextPayload.record_page.page >= 1) {
+      recordPage.value = nextPayload.record_page.page
+    }
     if (selectedRuleId.value && !nextPayload.selected_rule) selectedRuleId.value = ''
     if (
       expandedRuleId.value &&
@@ -630,6 +692,13 @@ async function queryAnalysis(options: { resetRule?: boolean } = {}) {
   } finally {
     if (request === activeRequest) loading.value = false
   }
+}
+
+async function changeRecordPage(nextPage: number) {
+  const clamped = Math.min(Math.max(1, nextPage), recordTotalPages.value)
+  if (clamped === recordPage.value || loading.value) return
+  recordPage.value = clamped
+  await queryAnalysis({ preservePage: true })
 }
 
 async function selectStatus(status: StatusNavigatorKey) {
@@ -682,12 +751,14 @@ async function resetFilters() {
   activeStatus.value = 'all'
   selectedRuleId.value = ''
   expandedRuleId.value = ''
+  recordPage.value = 1
   await queryAnalysis()
 }
 
 watch(
   () => props.carePhase,
   async () => {
+    cachedDepartments.value = []
     await resetFilters()
   },
 )
@@ -1336,6 +1407,34 @@ onMounted(() => {
   .qc-result-analysis__rule-table td:first-child {
     min-width: 200px;
   }
+}
+.qc-result-analysis__pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+.qc-result-analysis__page-btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 6px;
+  background: #fff;
+  color: rgba(29, 29, 31, 0.85);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.qc-result-analysis__page-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.qc-result-analysis__page-info {
+  color: rgba(29, 29, 31, 0.6);
+  font-size: 12px;
 }
 .sr-only {
   position: absolute;

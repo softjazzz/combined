@@ -122,8 +122,10 @@
       :run="run"
       :error="runError"
       :cancelling="cancelling"
+      :poll-stopped="pollStopped"
       @cancel="cancel"
       @dismiss="dismiss"
+      @retry-poll="retryPoll"
     />
 
     <section class="fpqc-toolbar">
@@ -133,6 +135,7 @@
         @submit.prevent="applyFilters"
       >
         <input
+          v-if="activeView === 'records'"
           v-model="draft.keyword"
           class="fpqc-toolbar__control fpqc-toolbar__search"
           type="search"
@@ -159,6 +162,7 @@
           class="fpqc-toolbar__control fpqc-toolbar__dates"
           role="group"
           aria-label="出院日期范围"
+          :aria-invalid="dateRangeInvalid || undefined"
         >
           <span>出院</span>
           <label class="sr-only" for="fpqc-start-date">开始日期</label>
@@ -182,6 +186,7 @@
           />
         </div>
         <select
+          v-if="activeView === 'records'"
           v-model="draft.grade"
           class="fpqc-toolbar__control"
           aria-label="等级筛选"
@@ -200,6 +205,7 @@
           </option>
         </select>
         <select
+          v-if="activeView === 'records'"
           v-model="draft.issue"
           class="fpqc-toolbar__control"
           aria-label="问题筛选"
@@ -233,7 +239,7 @@
           </option>
         </select>
         <span
-          v-if="ruleFilter && (!confirmedResultsOnly || ruleFilter.rule_verdict !== 'data_gap')"
+          v-if="activeView === 'records' && ruleFilter && (!confirmedResultsOnly || ruleFilter.rule_verdict !== 'data_gap')"
           class="fpqc-toolbar__rule"
           data-testid="fpqc-rule-filter"
         >
@@ -293,6 +299,16 @@
     </section>
 
     <p
+      v-if="dateRangeError"
+      class="fpqc-page__notice"
+      role="alert"
+      data-testid="fpqc-date-error"
+      style="color: var(--mq-danger-text);"
+    >
+      {{ dateRangeError }}
+    </p>
+
+    <p
       v-if="notice"
       class="fpqc-page__notice"
       role="status"
@@ -334,14 +350,15 @@
           <template #action>
             <Button
               size="small"
-              @click="loadList()"
+              data-testid="fpqc-retry-list"
+              @click="loadList(lastRequestedPage)"
             >
               重试
             </Button>
           </template>
         </Alert>
         <Spin
-          v-else
+          v-if="rows.length || listBusy || !loadError"
           :spinning="listBusy"
           tip="正在加载病历列表…"
         >
@@ -351,7 +368,7 @@
             :selected="selectedKeys"
             :active-key="activeKey"
             empty-message=""
-            @select="activeKey = $event"
+            @select="selectRecord"
             @update:selected="updateSelection"
           />
           <Empty
@@ -392,7 +409,7 @@
       :refresh-key="analyticsRefreshKey"
       @drill-rule="drillRule"
       @drill-department="drillDepartment"
-      @summary-loaded="recoverSummaryFromAnalysis"
+      @summary-loaded="syncSummaryFromAnalysis"
     />
 
     <!-- 质控当前筛选：页面内弹窗，跟随工作台主题（静态 Modal.confirm 拿不到嵌套主题） -->
@@ -465,6 +482,7 @@
 <script setup lang="ts">
 import { Alert, Button, DatePicker as ADatePicker, Empty, Modal, Pagination, Spin } from 'ant-design-vue'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter, type LocationQuery, type LocationQueryValue } from 'vue-router'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 
@@ -474,6 +492,7 @@ import {
   exportFrontpageQcRecords,
   getFrontpageQcAnalytics,
   getFrontpageQcFilters,
+  isFrontpageQcAbortError,
   isFrontpageQcRunActive,
   listFrontpageQcRecords,
   type FrontpageQcAnalytics,
@@ -504,7 +523,39 @@ interface FilterState extends Required<FrontpageQcScopeFilters> {
   issue: FrontpageQcIssueFilter
 }
 
+interface RuleFilterState {
+  rule_id: string
+  rule_name: string
+  rule_verdict: 'fail' | 'data_gap'
+}
+
 const UNFILLED_DEPARTMENT = '未填科室'
+const DATE_RANGE_ERROR_TEXT = '开始日期不能晚于结束日期'
+const VALID_GRADES = new Set<FrontpageQcGrade>(['excellent', 'qualified', 'unqualified'])
+const VALID_ISSUES = new Set<FrontpageQcIssueFilter>([
+  'fail',
+  'hint',
+  'required_missing',
+  'data_gap',
+  'clean',
+  'unchecked',
+])
+const VALID_PAGE_SIZES = new Set<number>(WORKSTATION_LIST_PAGE_SIZE_OPTIONS.map((value) => Number(value)))
+const SYNCED_QUERY_KEYS = [
+  'view',
+  'data_scope',
+  'department',
+  'start_date',
+  'end_date',
+  'keyword',
+  'grade',
+  'issue',
+  'rule_id',
+  'rule_verdict',
+  'page',
+  'page_size',
+  'record_key',
+] as const
 
 const emptyFilters = (): FilterState => ({
   data_scope: 'home',
@@ -516,6 +567,41 @@ const emptyFilters = (): FilterState => ({
   issue: '',
 })
 
+function safeUseRoute() {
+  try {
+    const current = useRoute()
+    return current && typeof current === 'object' && 'query' in current ? current : null
+  } catch {
+    return null
+  }
+}
+
+function safeUseRouter() {
+  try {
+    const current = useRouter()
+    return current && typeof current === 'object' && typeof current.replace === 'function' ? current : null
+  } catch {
+    return null
+  }
+}
+
+function readQueryString(value: LocationQueryValue | LocationQueryValue[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value
+  return typeof raw === 'string' ? raw.trim() : ''
+}
+
+function sameScopeFilters(a: FrontpageQcScopeFilters, b: FrontpageQcScopeFilters): boolean {
+  return (
+    (a.data_scope || 'home') === (b.data_scope || 'home') &&
+    (a.department || '') === (b.department || '') &&
+    (a.start_date || '') === (b.start_date || '') &&
+    (a.end_date || '') === (b.end_date || '')
+  )
+}
+
+const route = safeUseRoute()
+const router = safeUseRouter()
+
 const activeView = ref<'records' | 'analysis'>('records')
 const draft = reactive<FilterState>(emptyFilters())
 const applied = reactive<FilterState>(emptyFilters())
@@ -525,6 +611,7 @@ const scopeChanging = ref(false)
 const rows = ref<FrontpageQcRecordItem[]>([])
 const total = ref(0)
 const page = ref(1)
+const lastRequestedPage = ref(1)
 const pageSize = ref(WORKSTATION_LIST_PAGE_SIZE)
 const loading = ref(false)
 const listBusy = computed(() => loading.value || scopeChanging.value)
@@ -554,8 +641,25 @@ const isGlobalAdmin = computed(() => {
 const canSwitchDataScope = computed(
   () => Boolean(homeInstitute.value) && !confirmedResultsOnly.value && isGlobalAdmin.value,
 )
+const dateRangeInvalid = computed(() =>
+  Boolean(draft.start_date && draft.end_date && draft.start_date > draft.end_date),
+)
+const dateRangeError = computed(() => (dateRangeInvalid.value ? DATE_RANGE_ERROR_TEXT : ''))
+
+let alive = true
 let exportGeneration = 0
 let exportAlive = true
+let listSeq = 0
+let summarySeq = 0
+let filterSeq = 0
+let summaryLoading = false
+let recordsDirty = false
+let syncingFromRoute = false
+let listController: AbortController | null = null
+let summaryController: AbortController | null = null
+let filterController: AbortController | null = null
+let exportController: AbortController | null = null
+
 const activeKey = ref('')
 const previewRefreshKey = ref(0)
 const analyticsRefreshKey = ref(0)
@@ -565,20 +669,22 @@ const selectedKeys = ref<string[]>([])
 const selectedRefs = ref<Record<string, FrontpageQcRef>>({})
 const confirmOpen = ref(false)
 /** 从结果分析下钻的规则筛选；与等级、问题筛选叠加，不影响“质控当前筛选”的范围 */
-const ruleFilter = ref<{ rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' } | null>(null)
+const ruleFilter = ref<RuleFilterState | null>(null)
 const exportIdentity = computed(() => JSON.stringify([
   auth.user?.id, auth.user?.institute_id, auth.user?.hospital_id, auth.user?.roles,
   auth.userRoles, auth.user?.is_active, draft, applied, ruleFilter.value,
 ]))
-watch(exportIdentity, () => { exportGeneration++; exporting.value = false })
-onBeforeUnmount(() => { exportAlive = false; exportGeneration++ })
-let listSeq = 0
-let summarySeq = 0
+watch(exportIdentity, () => {
+  exportGeneration++
+  exportController?.abort()
+  exportController = null
+  exporting.value = false
+})
 
-const { run, starting, cancelling, error: runError, start, cancel, resume, dismiss } =
+const { run, starting, cancelling, pollStopped, error: runError, start, cancel, resume, retryPoll, dismiss } =
   useFrontpageQcRun(handleRunFinished)
 
-const runBusy = computed(() => starting.value || isFrontpageQcRunActive(run.value))
+const runBusy = computed(() => starting.value || (isFrontpageQcRunActive(run.value) && !pollStopped.value))
 const activeRow = computed(() => rows.value.find((row) => row.record_key === activeKey.value) ?? null)
 const scopeFilters = computed<FrontpageQcScopeFilters>(() => ({
   data_scope: applied.data_scope,
@@ -612,84 +718,301 @@ const metrics = computed<
   ]
 })
 
+function parseQueryState(query: LocationQuery) {
+  const view: 'records' | 'analysis' = readQueryString(query.view) === 'analysis' ? 'analysis' : 'records'
+  const rawScope = readQueryString(query.data_scope)
+  const data_scope: FrontpageQcDataScope =
+    rawScope === 'all' && !confirmedResultsOnly.value && isGlobalAdmin.value ? 'all' : 'home'
+  const department = readQueryString(query.department)
+  const start_date = readQueryString(query.start_date)
+  const end_date = readQueryString(query.end_date)
+  const keyword = readQueryString(query.keyword)
+  const rawGrade = readQueryString(query.grade)
+  const grade: FrontpageQcGrade | '' = VALID_GRADES.has(rawGrade as FrontpageQcGrade)
+    ? (rawGrade as FrontpageQcGrade)
+    : ''
+  const rawIssue = readQueryString(query.issue)
+  let issue: FrontpageQcIssueFilter = VALID_ISSUES.has(rawIssue as FrontpageQcIssueFilter)
+    ? (rawIssue as FrontpageQcIssueFilter)
+    : ''
+  if (confirmedResultsOnly.value && (issue === 'hint' || issue === 'data_gap')) {
+    issue = ''
+  }
+  const rawRuleId = readQueryString(query.rule_id)
+  const rawVerdict = readQueryString(query.rule_verdict)
+  const ruleVerdict: 'fail' | 'data_gap' = rawVerdict === 'data_gap' ? 'data_gap' : 'fail'
+  let parsedRule: RuleFilterState | null = null
+  if (rawRuleId && !(confirmedResultsOnly.value && ruleVerdict === 'data_gap')) {
+    const preservedName =
+      ruleFilter.value?.rule_id === rawRuleId && ruleFilter.value.rule_verdict === ruleVerdict
+        ? ruleFilter.value.rule_name
+        : ''
+    parsedRule = { rule_id: rawRuleId, rule_name: preservedName, rule_verdict: ruleVerdict }
+    if (issue === 'unchecked') issue = ''
+  }
+  const parsedPage = Number.parseInt(readQueryString(query.page), 10)
+  const nextPage = Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1
+  const parsedPageSize = Number.parseInt(readQueryString(query.page_size), 10)
+  const nextPageSize = VALID_PAGE_SIZES.has(parsedPageSize) ? parsedPageSize : WORKSTATION_LIST_PAGE_SIZE
+  const recordKey = readQueryString(query.record_key)
+
+  const invalidDates = Boolean(start_date && end_date && start_date > end_date)
+  const draftState: FilterState = {
+    data_scope,
+    keyword,
+    department,
+    start_date,
+    end_date,
+    grade,
+    issue,
+  }
+  const appliedState: FilterState = invalidDates
+    ? { ...draftState, start_date: '', end_date: '' }
+    : { ...draftState }
+
+  return {
+    view,
+    draftState,
+    appliedState,
+    rule: parsedRule,
+    page: nextPage,
+    pageSize: nextPageSize,
+    recordKey,
+  }
+}
+
+function hydrateFromQuery(query: LocationQuery) {
+  const parsed = parseQueryState(query)
+  activeView.value = parsed.view
+  Object.assign(draft, parsed.draftState)
+  Object.assign(applied, parsed.appliedState)
+  ruleFilter.value = parsed.rule
+  page.value = parsed.page
+  lastRequestedPage.value = parsed.page
+  pageSize.value = parsed.pageSize
+  activeKey.value = parsed.recordKey
+}
+
+function buildStateQueryValues(): Record<(typeof SYNCED_QUERY_KEYS)[number], string> {
+  return {
+    view: activeView.value === 'analysis' ? 'analysis' : '',
+    data_scope: applied.data_scope === 'all' ? 'all' : '',
+    department: applied.department || '',
+    start_date: applied.start_date || '',
+    end_date: applied.end_date || '',
+    keyword: applied.keyword || '',
+    grade: applied.grade || '',
+    issue: applied.issue || '',
+    rule_id: ruleFilter.value?.rule_id || '',
+    rule_verdict: ruleFilter.value ? ruleFilter.value.rule_verdict : '',
+    page: page.value > 1 ? String(page.value) : '',
+    page_size: pageSize.value !== WORKSTATION_LIST_PAGE_SIZE ? String(pageSize.value) : '',
+    record_key: activeKey.value || '',
+  }
+}
+
+function normalizedQuerySignature(query: LocationQuery): string {
+  const parsed = parseQueryState(query)
+  return JSON.stringify({
+    view: parsed.view === 'analysis' ? 'analysis' : '',
+    data_scope: parsed.appliedState.data_scope === 'all' ? 'all' : '',
+    department: parsed.appliedState.department || '',
+    start_date: parsed.appliedState.start_date || '',
+    end_date: parsed.appliedState.end_date || '',
+    keyword: parsed.appliedState.keyword || '',
+    grade: parsed.appliedState.grade || '',
+    issue: parsed.appliedState.issue || '',
+    rule_id: parsed.rule?.rule_id || '',
+    rule_verdict: parsed.rule ? parsed.rule.rule_verdict : '',
+    page: parsed.page > 1 ? String(parsed.page) : '',
+    page_size: parsed.pageSize !== WORKSTATION_LIST_PAGE_SIZE ? String(parsed.pageSize) : '',
+    record_key: parsed.recordKey || '',
+  })
+}
+
+function stateQuerySignature(): string {
+  return JSON.stringify(buildStateQueryValues())
+}
+
+function listQuerySignature(): string {
+  return JSON.stringify({
+    ...applied,
+    ...ruleQuery(),
+    page: page.value,
+    page_size: pageSize.value,
+  })
+}
+
+function syncUrlFromState() {
+  if (!router || !route || syncingFromRoute || !alive) return
+  const nextValues = buildStateQueryValues()
+  if (normalizedQuerySignature(route.query) === JSON.stringify(nextValues)) return
+  const nextQuery: Record<string, LocationQueryValue | LocationQueryValue[]> = { ...route.query }
+  for (const key of SYNCED_QUERY_KEYS) {
+    const val = nextValues[key]
+    if (val) nextQuery[key] = val
+    else delete nextQuery[key]
+  }
+  void Promise.resolve(router.replace({ query: nextQuery })).catch(() => undefined)
+}
+
+if (route?.query) {
+  hydrateFromQuery(route.query)
+}
+
 async function loadList(targetPage = page.value) {
+  listController?.abort()
+  const controller = new AbortController()
+  listController = controller
   const seq = ++listSeq
+  lastRequestedPage.value = targetPage
   loading.value = true
   loadError.value = ''
   try {
-    const data = await listFrontpageQcRecords({
-      ...applied,
-      ...ruleQuery(),
-      page: targetPage,
-      page_size: pageSize.value,
-    })
-    if (seq !== listSeq) return
+    const data = await listFrontpageQcRecords(
+      {
+        ...applied,
+        ...ruleQuery(),
+        page: targetPage,
+        page_size: pageSize.value,
+      },
+      { signal: controller.signal },
+    )
+    if (!alive || seq !== listSeq || controller.signal.aborted) return
     rows.value = data.items
     total.value = data.total
     page.value = data.page
+    lastRequestedPage.value = data.page
     if (!rows.value.some((row) => row.record_key === activeKey.value)) {
       activeKey.value = rows.value[0]?.record_key ?? ''
     }
     rememberRefs(data.items)
+    syncUrlFromState()
   } catch (error) {
-    if (seq !== listSeq) return
-    rows.value = []
-    total.value = 0
+    if (!alive || seq !== listSeq || controller.signal.aborted || isFrontpageQcAbortError(error)) return
     loadError.value = error instanceof Error ? error.message : '读取首页质控结果失败'
   } finally {
-    if (seq === listSeq) loading.value = false
+    if (alive && seq === listSeq) loading.value = false
+    if (listController === controller) listController = null
   }
 }
 
 async function loadSummary() {
+  summaryController?.abort()
+  const controller = new AbortController()
+  summaryController = controller
   const seq = ++summarySeq
+  summaryLoading = true
   try {
-    const data = await getFrontpageQcAnalytics(scopeFilters.value)
-    if (seq !== summarySeq) return
+    const data = await getFrontpageQcAnalytics(scopeFilters.value, { signal: controller.signal })
+    if (!alive || seq !== summarySeq || controller.signal.aborted) return
     summary.value = data.summary
     summaryUnavailable.value = false
-  } catch {
-    if (seq !== summarySeq) return
+  } catch (error) {
+    if (!alive || seq !== summarySeq || controller.signal.aborted || isFrontpageQcAbortError(error)) return
     summary.value = null
     summaryUnavailable.value = true
+  } finally {
+    if (seq === summarySeq) summaryLoading = false
+    if (summaryController === controller) summaryController = null
   }
 }
 
-function recoverSummaryFromAnalysis(filters: FrontpageQcScopeFilters, next: FrontpageQcAnalytics['summary']) {
-  if (!summaryUnavailable.value || filters !== scopeFilters.value) return
+function syncSummaryFromAnalysis(
+  filters: FrontpageQcScopeFilters,
+  next: FrontpageQcAnalytics['summary'],
+) {
+  if (!sameScopeFilters(filters, scopeFilters.value)) return
   summary.value = next
   summaryUnavailable.value = false
 }
 
-async function loadFilterOptions() {
+async function loadFilterOptions(
+  targetScope: FrontpageQcDataScope = applied.data_scope,
+  options: { pruneApplied?: boolean; reloadOnPrune?: boolean } = {},
+): Promise<string[] | null> {
+  const { pruneApplied = true, reloadOnPrune = false } = options
+  filterController?.abort()
+  const controller = new AbortController()
+  filterController = controller
+  const seq = ++filterSeq
   try {
-    const data = await getFrontpageQcFilters({ data_scope: applied.data_scope })
+    const data = await getFrontpageQcFilters({ data_scope: targetScope }, { signal: controller.signal })
+    if (!alive || seq !== filterSeq || controller.signal.aborted) return null
     departments.value = data.departments
     homeInstitute.value = data.home_institute
-    if (!departments.value.includes(draft.department)) draft.department = ''
-    if (!departments.value.includes(applied.department)) applied.department = ''
-  } catch {
+    if (pruneApplied) {
+      let appliedChanged = false
+      if (draft.department && !departments.value.includes(draft.department)) draft.department = ''
+      if (applied.department && !departments.value.includes(applied.department)) {
+        applied.department = ''
+        appliedChanged = true
+      }
+      if (!canSwitchDataScope.value && (draft.data_scope !== 'home' || applied.data_scope !== 'home')) {
+        draft.data_scope = 'home'
+        applied.data_scope = 'home'
+        appliedChanged = true
+      }
+      if (appliedChanged) {
+        syncUrlFromState()
+        if (reloadOnPrune) {
+          if (activeView.value === 'records') {
+            void loadList(1)
+            void loadSummary()
+          } else {
+            recordsDirty = true
+          }
+        }
+      }
+    }
+    return data.departments
+  } catch (error) {
+    if (!alive || seq !== filterSeq || controller.signal.aborted || isFrontpageQcAbortError(error)) return null
     departments.value = []
     notice.value = '读取筛选项失败，请重试'
+    return null
+  } finally {
+    if (filterController === controller) filterController = null
   }
 }
 
 async function changeDataScope(scope: FrontpageQcDataScope) {
   if (!canSwitchDataScope.value || scopeChanging.value || scope === applied.data_scope) return
   scopeChanging.value = true
-  draft.data_scope = scope
-  applied.data_scope = scope
   clearSelection()
   // 使旧范围的在途请求失效，避免切换期间回填旧结果。
   listSeq += 1
   summarySeq += 1
+  listController?.abort()
+  summaryController?.abort()
   try {
-    await loadFilterOptions()
-    await Promise.all([loadList(1), loadSummary()])
-    analyticsRefreshKey.value += 1
+    const nextDepartments = await loadFilterOptions(scope, { pruneApplied: false })
+    if (!alive) return
+    draft.data_scope = scope
+    applied.data_scope = scope
+    if (nextDepartments && draft.department && !nextDepartments.includes(draft.department)) {
+      draft.department = ''
+    }
+    if (nextDepartments && applied.department && !nextDepartments.includes(applied.department)) {
+      applied.department = ''
+    }
+    page.value = 1
+    lastRequestedPage.value = 1
+    syncUrlFromState()
+    if (activeView.value === 'records') {
+      recordsDirty = false
+      await Promise.all([loadList(1), loadSummary()])
+    } else {
+      recordsDirty = true
+    }
   } finally {
-    scopeChanging.value = false
+    if (alive) scopeChanging.value = false
   }
+}
+
+function selectRecord(key: string) {
+  activeKey.value = key
+  syncUrlFromState()
 }
 
 function rememberRefs(items: FrontpageQcRecordItem[]) {
@@ -727,10 +1050,13 @@ function ruleQuery() {
 function clearRuleFilter() {
   ruleFilter.value = null
   clearSelection()
+  page.value = 1
+  lastRequestedPage.value = 1
+  syncUrlFromState()
   void loadList(1)
 }
 
-function drillRule(rule: { rule_id: string; rule_name: string; rule_verdict: 'fail' | 'data_gap' }) {
+function drillRule(rule: RuleFilterState) {
   if (confirmedResultsOnly.value && rule.rule_verdict === 'data_gap') return
   ruleFilter.value = rule
   // 按规则只能看已质控病历；“未质控”与之冲突时清掉
@@ -738,6 +1064,10 @@ function drillRule(rule: { rule_id: string; rule_name: string; rule_verdict: 'fa
   if (applied.issue === 'unchecked') applied.issue = ''
   activeView.value = 'records'
   clearSelection()
+  page.value = 1
+  lastRequestedPage.value = 1
+  recordsDirty = false
+  syncUrlFromState()
   void loadList(1)
 }
 
@@ -750,41 +1080,76 @@ function drillDepartment(department: string) {
 }
 
 function applyFilters() {
+  if (dateRangeInvalid.value) return
   if (ruleFilter.value && draft.issue === 'unchecked') ruleFilter.value = null
+  const scopeChanged = !sameScopeFilters(applied, draft)
   Object.assign(applied, draft)
   clearSelection()
-  void loadList(1)
-  void loadSummary()
-  analyticsRefreshKey.value += 1
+  page.value = 1
+  lastRequestedPage.value = 1
+  syncUrlFromState()
+  if (activeView.value === 'records') {
+    recordsDirty = false
+    void loadList(1)
+    void loadSummary()
+  } else {
+    recordsDirty = true
+    if (!scopeChanged) analyticsRefreshKey.value += 1
+  }
 }
 
 async function resetFilters() {
   if (scopeChanging.value) return
   const scopeChanged = applied.data_scope !== 'home'
-  Object.assign(draft, emptyFilters())
-  Object.assign(applied, draft)
-  ruleFilter.value = null
-  clearSelection()
+  const hadScopeDiff = !sameScopeFilters(applied, emptyFilters())
   if (scopeChanged) {
     scopeChanging.value = true
     listSeq += 1
     summarySeq += 1
-    await loadFilterOptions()
-    scopeChanging.value = false
+    listController?.abort()
+    summaryController?.abort()
+    try {
+      await loadFilterOptions('home', { pruneApplied: false })
+    } finally {
+      if (alive) scopeChanging.value = false
+    }
+    if (!alive) return
   }
-  applyFilters()
+  Object.assign(draft, emptyFilters())
+  Object.assign(applied, emptyFilters())
+  ruleFilter.value = null
+  clearSelection()
+  page.value = 1
+  lastRequestedPage.value = 1
+  syncUrlFromState()
+  if (activeView.value === 'records') {
+    recordsDirty = false
+    void loadList(1)
+    void loadSummary()
+  } else {
+    recordsDirty = true
+    if (!hadScopeDiff) analyticsRefreshKey.value += 1
+  }
 }
 
 function refreshAll() {
-  void loadList()
-  void loadSummary()
-  previewRefreshKey.value += 1
-  analyticsRefreshKey.value += 1
+  void resume()
+  if (activeView.value === 'records') {
+    recordsDirty = false
+    void loadList()
+    void loadSummary()
+    previewRefreshKey.value += 1
+  } else {
+    recordsDirty = true
+    analyticsRefreshKey.value += 1
+  }
 }
 
 function handlePageChange(nextPage: number, nextSize: number) {
   if (nextSize !== pageSize.value) {
     pageSize.value = nextSize
+    page.value = 1
+    syncUrlFromState()
     void loadList(1)
     return
   }
@@ -833,16 +1198,22 @@ async function exportWith(body: Parameters<typeof exportFrontpageQcRecords>[0], 
   const identity = exportIdentity.value
   const current = () => exportAlive && generation === exportGeneration && identity === exportIdentity.value
   const frozenBody = JSON.parse(JSON.stringify(body)) as typeof body
+  exportController?.abort()
+  const controller = new AbortController()
+  exportController = controller
   exporting.value = true
   notice.value = ''
   try {
-    const blob = await exportFrontpageQcRecords(frozenBody)
-    if (!current()) return
+    const blob = await exportFrontpageQcRecords(frozenBody, { signal: controller.signal })
+    if (!current() || controller.signal.aborted) return
     downloadBlob(blob, filename)
     notice.value = '已开始下载'
   } catch (error) {
-    if (current()) notice.value = error instanceof Error ? error.message : '导出失败'
+    if (current() && !controller.signal.aborted && !isFrontpageQcAbortError(error)) {
+      notice.value = error instanceof Error ? error.message : '导出失败'
+    }
   } finally {
+    if (exportController === controller) exportController = null
     if (current()) exporting.value = false
   }
 }
@@ -865,6 +1236,7 @@ watch(canSwitchDataScope, (allowed) => {
   if (!allowed && (draft.data_scope !== 'home' || applied.data_scope !== 'home')) {
     draft.data_scope = 'home'
     applied.data_scope = 'home'
+    syncUrlFromState()
   }
 })
 
@@ -873,17 +1245,87 @@ watch(confirmedResultsOnly, (onlyConfirmed) => {
   if (draft.issue === 'hint' || draft.issue === 'data_gap') draft.issue = ''
   if (applied.issue === 'hint' || applied.issue === 'data_gap') applied.issue = ''
   if (ruleFilter.value?.rule_verdict === 'data_gap') ruleFilter.value = null
+  syncUrlFromState()
 })
 
 watch(activeView, (view) => {
-  if (view === 'analysis') analyticsRefreshKey.value += 1
+  syncUrlFromState()
+  if (view === 'records') {
+    if (recordsDirty) {
+      recordsDirty = false
+      void loadList(page.value)
+    }
+    if (!summaryLoading && (!summary.value || summaryUnavailable.value)) {
+      void loadSummary()
+    }
+  }
 })
 
-onMounted(async () => {
+if (route) {
+  watch(
+    () => route.query,
+    (nextQuery) => {
+      if (!alive || !nextQuery) return
+      if (normalizedQuerySignature(nextQuery) === stateQuerySignature()) return
+      const prevScope = applied.data_scope
+      const prevScopeFilters: FrontpageQcScopeFilters = { ...scopeFilters.value }
+      const prevListSig = listQuerySignature()
+      syncingFromRoute = true
+      try {
+        hydrateFromQuery(nextQuery)
+      } finally {
+        syncingFromRoute = false
+      }
+      const scopeChanged = applied.data_scope !== prevScope
+      const scopeFiltersChanged = !sameScopeFilters(prevScopeFilters, scopeFilters.value)
+      const listChanged = listQuerySignature() !== prevListSig
+      if (scopeChanged) {
+        void loadFilterOptions(applied.data_scope, { reloadOnPrune: false })
+      }
+      if (activeView.value === 'records') {
+        if (listChanged || recordsDirty) {
+          recordsDirty = false
+          void loadList(page.value)
+        }
+        if (scopeFiltersChanged || (!summaryLoading && !summary.value)) {
+          void loadSummary()
+        }
+      } else if (listChanged) {
+        recordsDirty = true
+      }
+    },
+  )
+}
+
+onMounted(() => {
   void resume()
-  void loadSummary()
-  await loadList(1)
-  await loadFilterOptions()
+  if (activeView.value === 'records') {
+    void loadSummary()
+    void Promise.all([
+      loadFilterOptions(applied.data_scope, { reloadOnPrune: true }),
+      loadList(page.value),
+    ])
+  } else {
+    recordsDirty = true
+    void loadFilterOptions(applied.data_scope, { reloadOnPrune: true })
+  }
+})
+
+onBeforeUnmount(() => {
+  alive = false
+  exportAlive = false
+  exportGeneration++
+  listSeq += 1
+  summarySeq += 1
+  filterSeq += 1
+  listController?.abort()
+  listController = null
+  summaryController?.abort()
+  summaryController = null
+  filterController?.abort()
+  filterController = null
+  exportController?.abort()
+  exportController = null
 })
 </script>
 

@@ -12,7 +12,7 @@
         <div class="drawer-title-group">
           <a-button class="drawer-back-button" @click="close">
             <MqIcon name="back" :size="16" />
-            返回样本验证
+            {{ props.backLabel || '返回样本验证' }}
           </a-button>
           <div>
             <p class="drawer-eyebrow">批量任务结果</p>
@@ -2024,7 +2024,7 @@ import {
   type SemanticRulesBatchResultDrawerProps,
 } from '@/views/workstation-v4/semantic-rules/useSemanticRulesBatchResultDrawerController'
 
-const props = defineProps<SemanticRulesBatchResultDrawerProps>()
+const props = defineProps<SemanticRulesBatchResultDrawerProps & { backLabel?: string }>()
 
 const showFailureDetail = ref(false)
 
