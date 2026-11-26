@@ -226,3 +226,95 @@ def test_host_change_requires_key_reconfirmation_on_first_and_second_edit(setup)
     runtime = loader.build_provider_runtime_config('ollama')
     assert runtime['api_endpoint'] == 'http://new-host.test/v1'
     assert runtime['api_key'] == 'new-host-secret'
+
+
+@pytest.mark.parametrize(
+    'local_endpoint',
+    [
+        'http://127.0.0.1:11434/v1',
+        'http://localhost:11434/v1',
+        'http://10.10.2.8:11434/v1',
+        'http://172.16.4.12:11434/v1',
+        'http://192.168.1.50:11434/v1',
+    ],
+)
+def test_ollama_allows_local_loopback_and_rfc1918_intranet_endpoints(setup, monkeypatch, local_endpoint):
+    client, cfg, _, _ = setup
+    cfg.OUTBOUND_ALLOWLIST = ['dashscope.aliyuncs.com', 'api.deepseek.com']
+    monkeypatch.setattr('app.core.settings.get_settings', lambda: cfg)
+
+    resp = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(0, endpoint=local_endpoint, clear_key=True),
+    )
+    assert resp.status_code == 200
+    row = next(item for item in resp.json()['data']['providers'] if item['provider_code'] == 'ollama')
+    assert row['endpoint'] == local_endpoint
+    assert row['host_allowed'] is True
+    assert loader.build_provider_runtime_config('ollama')['api_endpoint'] == local_endpoint
+
+
+@pytest.mark.parametrize(
+    'blocked_metadata_endpoint',
+    [
+        'http://169.254.169.254/latest/meta-data',
+        'http://100.100.100.200/latest/meta-data',
+        'http://metadata.google.internal/computeMetadata/v1',
+        'http://0.0.0.0:11434/v1',
+        'http://[::ffff:169.254.169.254]/v1',
+    ],
+)
+def test_ollama_still_blocks_cloud_metadata_with_host_not_allowed(setup, monkeypatch, blocked_metadata_endpoint):
+    client, cfg, _, _ = setup
+    cfg.OUTBOUND_ALLOWLIST = ['dashscope.aliyuncs.com', 'api.deepseek.com']
+    monkeypatch.setattr('app.core.settings.get_settings', lambda: cfg)
+
+    resp = client.put(
+        '/api/v1/llm/endpoints/ollama',
+        json=payload(0, endpoint=blocked_metadata_endpoint, api_key='synthetic-do-not-echo'),
+    )
+    assert resp.status_code == 422
+    assert 'llm_endpoint_host_not_allowed' in resp.text
+    assert 'synthetic-do-not-echo' not in resp.text
+    assert blocked_metadata_endpoint not in resp.text
+
+
+def test_cloud_providers_still_block_private_ips_with_host_not_allowed(setup, monkeypatch):
+    client, cfg, _, _ = setup
+    cfg.OUTBOUND_ALLOWLIST = ['dashscope.aliyuncs.com', 'api.deepseek.com']
+    monkeypatch.setattr('app.core.settings.get_settings', lambda: cfg)
+
+    for private_url in ('http://127.0.0.1:11434/v1', 'http://192.168.1.50/v1'):
+        resp = client.put(
+            '/api/v1/llm/endpoints/deepseek',
+            json=payload(0, endpoint=private_url, api_key='synthetic-cloud-key'),
+        )
+        assert resp.status_code == 422
+        assert 'llm_endpoint_host_not_allowed' in resp.text
+        assert 'synthetic-cloud-key' not in resp.text
+
+    # 加入 OUTBOUND_ALLOWLIST 后云端服务放行
+    cfg.OUTBOUND_ALLOWLIST = ['dashscope.aliyuncs.com', 'api.deepseek.com', '192.168.1.50']
+    allowed_resp = client.put(
+        '/api/v1/llm/endpoints/deepseek',
+        json=payload(0, endpoint='http://192.168.1.50/v1', api_key='synthetic-cloud-key'),
+    )
+    assert allowed_resp.status_code == 200
+
+
+def test_public_view_preserves_deployment_ollama_local_endpoint_and_strips_credentials(setup, monkeypatch):
+    client, cfg, _, _ = setup
+    cfg.OUTBOUND_ALLOWLIST = ['dashscope.aliyuncs.com']
+    cfg.OLLAMA_API_ENDPOINT = 'http://127.0.0.1:11434/v1'
+    monkeypatch.setattr('app.core.settings.get_settings', lambda: cfg)
+
+    view = client.get('/api/v1/llm/endpoints').json()['data']
+    ollama_row = next(row for row in view['providers'] if row['provider_code'] == 'ollama')
+    assert ollama_row['endpoint'] == 'http://127.0.0.1:11434/v1'
+    assert ollama_row['host_allowed'] is True
+
+    # 含 userinfo 凭据的旧部署 URL 仍禁止暴露
+    cfg.OLLAMA_API_ENDPOINT = 'http://user:secret@127.0.0.1:11434/v1'
+    sanitized_view = client.get('/api/v1/llm/endpoints').json()['data']
+    sanitized_row = next(row for row in sanitized_view['providers'] if row['provider_code'] == 'ollama')
+    assert sanitized_row['endpoint'] == ''

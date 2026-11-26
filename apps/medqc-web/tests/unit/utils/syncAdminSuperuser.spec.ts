@@ -17,6 +17,24 @@ describe('sync_admin超级管理员', () => {
     expect(effectiveRoles(['doctor'])).toEqual(['doctor'])
   })
 
+  it('纯 super_admin 展开管理角色但不附加 sync_admin 或 doctor，不修改原角色', () => {
+    const roles = ['super_admin']
+    const expanded = effectiveRoles(roles)
+    expect(expanded).toEqual(['super_admin', 'admin', 'qc_manager', 'developer'])
+    expect(expanded).not.toContain('sync_admin')
+    expect(expanded).not.toContain('doctor')
+    expect(roles).toEqual(['super_admin'])
+  })
+
+  it('纯 super_admin 具备全部已定义资源操作权限', () => {
+    const superUser: User = { id: 'super-test', roles: ['super_admin'], department: 'ops', hospital_id: 'test' }
+    const permissions = Object.values(PERMISSIONS).flatMap((group) => Object.values(group))
+    for (const permission of permissions) {
+      expect(hasPermission(superUser, permission.resource, permission.action)).toBe(true)
+    }
+    expect(getUserPermissions(superUser)).toHaveLength(permissions.length)
+  })
+
   it('具备全部已定义资源操作权限', () => {
     const permissions = Object.values(PERMISSIONS).flatMap((group) => Object.values(group))
     for (const permission of permissions) {

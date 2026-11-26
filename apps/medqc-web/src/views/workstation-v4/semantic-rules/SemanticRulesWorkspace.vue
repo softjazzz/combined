@@ -97,6 +97,8 @@
       :batch-job-detail-loading="batchJobDetailLoading"
       :close="closeBatchJobDrawer"
       :export-batch-job-report="exportBatchJobReport"
+      :review-batch-job-result="confirmedResultsOnly ? undefined : handleReviewBatchJobResult"
+      :review-batch-job-loading="reviewBatchJobLoading"
       :cancel-batch-job="executeCancelBatchJob"
       :cancel-batch-job-loading="Boolean(cancellingBatchJobId)"
       :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
@@ -108,6 +110,9 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { message } from 'ant-design-vue'
+import { reviewSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import { useSemanticRulesWorkspace } from './composables/useSemanticRulesWorkspace'
 import SemanticRulesTableSection from './components/SemanticRulesTableSection.vue'
 import SemanticRulesBatchResultDrawer from './components/SemanticRulesBatchResultDrawer.vue'
@@ -199,6 +204,30 @@ function handleStartTestFromDetail() {
   if (!selectedRule.value) return
   closeRuleDetail()
   startRuleTest(selectedRule.value)
+}
+
+const reviewBatchJobLoading = ref(false)
+
+async function handleReviewBatchJobResult() {
+  const current = batchJobDetail.value
+  if (!current?.id || reviewBatchJobLoading.value) return
+  reviewBatchJobLoading.value = true
+  try {
+    const result = await reviewSichuanWorkspaceBatchJob(current.id)
+    if (!result.success || !result.data?.job) {
+      message.error(result.message || '复核本次结果失败')
+      return
+    }
+    if (batchJobDetail.value?.id === result.data.job.id) {
+      batchJobDetail.value = result.data.job
+    }
+    const count = Number(result.data.review_report?.summary?.total_findings || 0)
+    message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '复核本次结果失败')
+  } finally {
+    reviewBatchJobLoading.value = false
+  }
 }
 </script>
 

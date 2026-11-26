@@ -2,11 +2,14 @@ import { nextTick } from 'vue'
 import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const roles = vi.hoisted(() => ({ value: ['doctor'] as string[] }))
+const authState = vi.hoisted(() => ({
+  userRoles: ['doctor'] as string[],
+  user: null as { institute_id?: string | null } | null,
+}))
 const getExtractionSettings = vi.hoisted(() => vi.fn())
 
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({ userRoles: roles.value }),
+  useAuthStore: () => authState,
 }))
 
 vi.mock('@/api/frontpage', () => ({
@@ -67,24 +70,38 @@ describe('FrontpageExtractionSettingsPanel 权限', () => {
     })
   })
 
-  it.each(['admin', 'qc_manager', 'sync_admin', 'super_admin'])(
-    '%s 可以编辑首页抽取配置',
-    async (role) => {
-      roles.value = [role]
-      const wrapper = await mountPanel()
-
-      expect(
-        wrapper.get('[data-testid="frontpage-settings-save"]').attributes('disabled'),
-      ).toBeUndefined()
-    },
-  )
-
-  it('doctor 只能查看首页抽取配置', async () => {
-    roles.value = ['doctor']
+  it.each([
+    { role: 'admin', institute_id: '' },
+    { role: 'sync_admin', institute_id: 'H1' },
+    { role: 'super_admin', institute_id: '' },
+    { role: 'super_admin', institute_id: 'H1' },
+  ])('$role (institute_id=$institute_id) 可以编辑首页抽取配置', async ({ role, institute_id }) => {
+    authState.userRoles = [role]
+    authState.user = { institute_id }
     const wrapper = await mountPanel()
 
     expect(
       wrapper.get('[data-testid="frontpage-settings-save"]').attributes('disabled'),
+    ).toBeUndefined()
+    expect(
+      wrapper.get('[data-testid="frontpage-settings-reset"]').attributes('disabled'),
+    ).toBeUndefined()
+  })
+
+  it.each([
+    { label: 'qc_manager', roles: ['qc_manager'], institute_id: '' },
+    { label: '绑定院区 admin', roles: ['admin'], institute_id: 'H1' },
+    { label: 'doctor', roles: ['doctor'], institute_id: '' },
+  ])('$label 只能查看首页抽取配置（只读模式）', async ({ roles: testRoles, institute_id }) => {
+    authState.userRoles = testRoles
+    authState.user = { institute_id }
+    const wrapper = await mountPanel()
+
+    expect(
+      wrapper.get('[data-testid="frontpage-settings-save"]').attributes('disabled'),
+    ).toBeDefined()
+    expect(
+      wrapper.get('[data-testid="frontpage-settings-reset"]').attributes('disabled'),
     ).toBeDefined()
     expect(wrapper.text()).toContain('当前账号仅可查看')
   })

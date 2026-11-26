@@ -3716,13 +3716,14 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def get_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+    def get_batch_job(self, *, job_id: str, created_by: Optional[str] = None) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            clauses = [self._batch_job_table.c.id == job_id]
+            if created_by is not None:
+                clauses.append(self._batch_job_table.c.created_by == created_by)
             row = session.execute(
-                select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                select(self._batch_job_table).where(and_(*clauses))
             ).mappings().first()
             if not row:
                 return None
@@ -3734,15 +3735,16 @@ class CustomQCWorkspaceService:
         self,
         *,
         job_id: str,
-        created_by: str,
+        created_by: Optional[str] = None,
         review_report: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            clauses = [self._batch_job_table.c.id == job_id]
+            if created_by is not None:
+                clauses.append(self._batch_job_table.c.created_by == created_by)
             row = session.execute(
-                select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                select(self._batch_job_table).where(and_(*clauses))
             ).mappings().first()
             if not row:
                 return None
@@ -3758,7 +3760,7 @@ class CustomQCWorkspaceService:
             }
             session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by))
+                .where(and_(*clauses))
                 .values(summary_json=_safe_json_dumps(next_summary), updated_at=now)
             )
             session.commit()
@@ -3837,7 +3839,7 @@ class CustomQCWorkspaceService:
     def _batch_job_list_where(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         draft_id: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
@@ -3849,7 +3851,9 @@ class CustomQCWorkspaceService:
     ):
         """任务列表的筛选条件；完整列表与概览列表共用，保证两者筛选口径一致。"""
 
-        clauses = [self._batch_job_table.c.created_by == created_by]
+        clauses = []
+        if created_by is not None:
+            clauses.append(self._batch_job_table.c.created_by == created_by)
         if not include_children:
             clauses.append(
                 or_(
@@ -3895,12 +3899,12 @@ class CustomQCWorkspaceService:
                     escape="\\",
                 )
             )
-        return and_(*clauses)
+        return and_(*clauses) if clauses else sa.true()
 
     def list_batch_job_overviews(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
         query: Optional[str] = None,
@@ -4059,7 +4063,7 @@ class CustomQCWorkspaceService:
     def list_batch_jobs(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         draft_id: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
@@ -6014,12 +6018,17 @@ class CustomQCWorkspaceService:
                     )
         return items
 
-    def cancel_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+    def cancel_batch_job(self, *, job_id: str, created_by: Optional[str] = None) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            owner_clauses = (
+                [self._batch_job_table.c.created_by == created_by]
+                if created_by is not None
+                else []
+            )
             row = session.execute(
                 select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(self._batch_job_table.c.id == job_id, *owner_clauses)
                 ).with_for_update()
             ).mappings().first()
             if not row:
@@ -6045,7 +6054,7 @@ class CustomQCWorkspaceService:
                 .where(
                     and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                         self._batch_job_table.c.status.in_(["queued", "running"]),
                     )
                 )
@@ -6062,7 +6071,7 @@ class CustomQCWorkspaceService:
                                 "step_label": "已停止",
                             },
                             "user_cancelled": True,
-                            "cancelled_by": created_by,
+                            "cancelled_by": created_by or "super_admin",
                             "cancelled_at": now.isoformat(),
                             "updated_at": now.isoformat(),
                         }
@@ -6095,7 +6104,7 @@ class CustomQCWorkspaceService:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
                 active_child_scope = and_(
                     child_where,
-                    self._batch_job_table.c.created_by == created_by,
+                    *owner_clauses,
                     self._batch_job_table.c.status.in_(["queued", "running"]),
                 )
                 child_cancel_values = {
@@ -6116,7 +6125,7 @@ class CustomQCWorkspaceService:
                             update(self._batch_job_table)
                             .where(and_(
                                 self._batch_job_table.c.id == child_row["id"],
-                                self._batch_job_table.c.created_by == created_by,
+                                *owner_clauses,
                                 self._batch_job_table.c.status.in_(["queued", "running"]),
                             ))
                             .values(
@@ -6271,7 +6280,7 @@ class CustomQCWorkspaceService:
         self,
         *,
         job_id: str,
-        created_by: str,
+        created_by: Optional[str] = None,
         automatic: bool = False,
         expected_attempt_filters_json: str | None = None,
         retry_delay_seconds: float = 0.0,
@@ -6281,9 +6290,14 @@ class CustomQCWorkspaceService:
             raise ValueError("retry_delay_seconds must not be negative")
         session = _session()
         try:
+            owner_clauses = (
+                [self._batch_job_table.c.created_by == created_by]
+                if created_by is not None
+                else []
+            )
             row = session.execute(
                 select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(self._batch_job_table.c.id == job_id, *owner_clauses)
                 ).with_for_update()
             ).mappings().first()
             if not row:
@@ -6305,7 +6319,7 @@ class CustomQCWorkspaceService:
                     raise ValueError("MQ任务持久调度身份损坏，禁止回退legacy重试")
             current = _row_to_batch_job(dict(row))
             formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
-            if formal_0609:
+            if formal_0609 and created_by is not None:
                 from .saved_result_access import require_retry_record_institutes
                 require_retry_record_institutes(created_by, current["filters"].get("record_refs"))
             dispatch_mode = (
@@ -6412,7 +6426,7 @@ class CustomQCWorkspaceService:
                 child_rows = session.execute(
                     select(self._batch_job_table).where(and_(
                         child_where,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                     ))
                 ).mappings().all()
                 retryable_children = 0
@@ -6681,12 +6695,12 @@ class CustomQCWorkspaceService:
                 .where(
                     and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                         self._batch_job_table.c.status == current.get("status"),
                         self._batch_job_table.c.filters_json == original_filters_json,
                     ) if formal_0609 else and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                         self._batch_job_table.c.status == current.get("status"),
                     )
                 )
@@ -6710,7 +6724,7 @@ class CustomQCWorkspaceService:
                 parent_row = session.execute(
                     select(self._batch_job_table).where(
                         and_(self._batch_job_table.c.id == parent_job_id,
-                             self._batch_job_table.c.created_by == created_by)
+                             *owner_clauses)
                     )
                 ).mappings().first()
                 if parent_row:
@@ -6739,7 +6753,7 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                child_scope = and_(child_where, self._batch_job_table.c.created_by == created_by)
+                child_scope = and_(child_where, *owner_clauses)
                 child_reset = {key: value for key, value in reset_values.items() if key != "filters_json"}
                 if formal_0609:
                     child_rows = session.execute(
@@ -6796,7 +6810,7 @@ class CustomQCWorkspaceService:
         session = _session()
         try:
             clauses = [self._batch_job_table.c.parent_job_id == parent_job_id]
-            if created_by:
+            if created_by is not None:
                 clauses.append(self._batch_job_table.c.created_by == created_by)
             rows = (
                 session.execute(

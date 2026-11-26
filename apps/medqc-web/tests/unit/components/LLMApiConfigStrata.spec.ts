@@ -47,12 +47,26 @@ const Input = defineComponent({
   setup: (props, { emit }) => () => h('input', { value: props.value, disabled: props.disabled,
     onInput: (event: Event) => emit('update:value', (event.target as HTMLInputElement).value) }),
 })
+const InputNumber = defineComponent({
+  props: { value: { type: [Number, String] as PropType<number | string | null>, default: null }, disabled: Boolean },
+  emits: ['update:value', 'blur'],
+  setup: (props, { emit }) => () => h('input', {
+    type: 'number',
+    value: props.value ?? '',
+    disabled: props.disabled,
+    onInput: (event: Event) => {
+      const raw = (event.target as HTMLInputElement).value
+      emit('update:value', raw === '' ? null : Number(raw))
+    },
+    onBlur: () => emit('blur'),
+  }),
+})
 
 async function render() {
   const wrapper = mount(LLMApiConfig, { global: { stubs: {
     LLMEndpointSettings: true, 'a-select': Select, 'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
     'a-alert': Alert, 'a-button': Button, 'a-tag': Slot, 'a-space-compact': Slot,
-    'a-segmented': Segmented, 'a-slider': true, 'a-input': Input, 'a-input-number': true,
+    'a-segmented': Segmented, 'a-slider': true, 'a-input': Input, 'a-input-number': InputNumber,
   } } })
   await flushPromises()
   return wrapper
@@ -272,6 +286,85 @@ describe('后台云端与Strata选择', () => {
     await flushPromises()
     expect(wrapper.findAll('select')[1].element.value).toBe('cloud-model')
     expect(service.saveConfig).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
+  it('默认服务不可用时展示告警横幅，且允许切换至其他已启用服务并保存', async () => {
+    service.getDefaultSummary
+      .mockResolvedValueOnce({
+        provider_code: 'alibaba',
+        model_code: 'qwen3.8-flash',
+        custom_parameters: {},
+        source: 'database+env',
+        readonly: false,
+        provider_unavailable: true,
+        provider_unavailable_reason: 'explicit LLM provider is not enabled',
+      })
+      .mockResolvedValueOnce({
+        provider_code: 'deepseek',
+        model_code: 'deepseek-chat',
+        custom_parameters: {},
+        source: 'database+env',
+        readonly: false,
+        provider_unavailable: false,
+        provider_unavailable_reason: null,
+      })
+    service.getProviders.mockResolvedValue([
+      { provider_code: 'deepseek', provider_name: 'DeepSeek 官方 API' },
+    ])
+    service.getModelsByProvider.mockImplementation(async (provider: string) => (
+      provider === 'deepseek'
+        ? [{ model_code: 'deepseek-chat', model_name: 'DeepSeek Chat' }]
+        : []
+    ))
+
+    const wrapper = await render()
+    expect(wrapper.find('[data-testid="provider-unavailable-alert"]').exists()).toBe(true)
+    expect(wrapper.text()).toContain('当前默认推理服务不可用')
+
+    await wrapper.findAll('select')[0].setValue('deepseek')
+    await flushPromises()
+    const saveBtn = wrapper.findAll('button').find((item) => item.text() === '保存配置')
+    expect(saveBtn?.element.disabled).toBe(false)
+
+    await saveBtn?.trigger('click')
+    await flushPromises()
+    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      provider_code: 'deepseek',
+      model_code: 'deepseek-chat',
+    }))
+    expect(wrapper.find('[data-testid="provider-unavailable-alert"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('清空数值输入框为 null 时不会提交 0 导致 422，且 saveDraft 调用 reloadAll 不自中止', async () => {
+    const wrapper = await render()
+    const numInputs = wrapper.findAll('input[type="number"]')
+    expect(numInputs.length).toBe(4)
+    for (const input of numInputs) {
+      await input.setValue('')
+    }
+    await flushPromises()
+
+    // 切换模型以触发脏态并保存
+    await wrapper.get('button[aria-pressed="false"]').trigger('click')
+    await flushPromises()
+    await wrapper.findAll('select')[1].setValue('Local/OtherModel')
+    await flushPromises()
+
+    const saveBtn = wrapper.findAll('button').find((item) => item.text() === '保存配置')
+    await saveBtn?.trigger('click')
+    await flushPromises()
+
+    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
+      custom_parameters: expect.objectContaining({ max_tokens: 4000 }),
+      execution_concurrency: {
+        max_parallel_records: 16,
+        family_max_concurrency: 4,
+        http_max_concurrency: 40,
+      },
+    }))
+    expect(wrapper.emitted('config-updated')).toHaveLength(1)
     wrapper.unmount()
   })
 })

@@ -49,19 +49,27 @@ def _workspace_job(
 class _WorkspaceStub:
     def __init__(self, jobs_by_owner: dict[str, dict[str, Any]] | None = None):
         self.jobs_by_owner = jobs_by_owner or {}
-        self.get_calls: list[tuple[str, str]] = []
-        self.cancel_calls: list[tuple[str, str]] = []
+        self.get_calls: list[tuple[str, str | None]] = []
+        self.cancel_calls: list[tuple[str, str | None]] = []
 
-    def get_batch_job(self, *, job_id: str, created_by: str):
+    def get_batch_job(self, *, job_id: str, created_by: str | None = None):
         self.get_calls.append((job_id, created_by))
+        if created_by is None:
+            for candidate in self.jobs_by_owner.values():
+                if candidate and candidate.get("id") == job_id:
+                    return deepcopy(candidate)
+            return None
         job = self.jobs_by_owner.get(created_by)
         if not job or job.get("id") != job_id:
             return None
         return deepcopy(job)
 
-    def cancel_batch_job(self, *, job_id: str, created_by: str):
+    def cancel_batch_job(self, *, job_id: str, created_by: str | None = None):
         self.cancel_calls.append((job_id, created_by))
         return None
+
+    def _load_batch_job_canonical_items(self, *, job: dict[str, Any], allow_partial: bool = False):
+        return list(job.get("items") or [])
 
 
 class _SharedPoolStub:
@@ -84,7 +92,7 @@ def _auth_override(client):
     client.app.dependency_overrides.clear()
 
 
-def _set_user(client, *, role: str, user_id: str = "sync-admin-001") -> None:
+def _set_user(client, *, role: str, user_id: str = "admin-reader-001") -> None:
     client.app.dependency_overrides[get_current_user] = lambda: {
         "id": user_id,
         "email": f"{role}@test.local",
@@ -93,19 +101,22 @@ def _set_user(client, *, role: str, user_id: str = "sync-admin-001") -> None:
 
 
 def _install_services(monkeypatch, *, workspace: _WorkspaceStub, pool: _SharedPoolStub) -> None:
+    from app.services import saved_result_access
+
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "_shared_sample_pool_service", lambda: pool, raising=False)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _uid: None)
 
 
 @pytest.mark.unit
 @pytest.mark.api
 def test_owner_can_read_ordinary_workspace_job_without_shared_pool_fallback(client, monkeypatch):
-    owner_id = "sync-admin-001"
+    owner_id = "admin-reader-001"
     job = _workspace_job(created_by=owner_id)
     workspace = _WorkspaceStub({owner_id: job})
     pool = _SharedPoolStub((SHARED_POOL_ID, SHARED_JOB_OWNER))
     _install_services(monkeypatch, workspace=workspace, pool=pool)
-    _set_user(client, role="sync_admin", user_id=owner_id)
+    _set_user(client, role="admin", user_id=owner_id)
 
     response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}")
 
@@ -117,7 +128,7 @@ def test_owner_can_read_ordinary_workspace_job_without_shared_pool_fallback(clie
 
 @pytest.mark.unit
 @pytest.mark.api
-@pytest.mark.parametrize("role", ["admin", "qc_manager", "sync_admin"])
+@pytest.mark.parametrize("role", ["admin", "qc_manager"])
 @pytest.mark.parametrize(
     "source",
     ["manual_problem_sample_pool", "manual_sample_formal_fast_screen_full"],
@@ -153,7 +164,7 @@ def test_authorized_role_can_read_shared_pool_latest_job_created_by_another_admi
     assert "created_by" not in response_data
     assert "filters" not in response_data
     assert workspace.get_calls == [
-        (SHARED_JOB_ID, "sync-admin-001"),
+        (SHARED_JOB_ID, "admin-reader-001"),
         (SHARED_JOB_ID, SHARED_JOB_OWNER),
     ]
 
@@ -180,7 +191,7 @@ def test_shared_luxian_0916_job_preserves_independent_result_contract(client, mo
     workspace = _WorkspaceStub({SHARED_JOB_OWNER: job})
     pool = _SharedPoolStub((SHARED_POOL_ID, SHARED_JOB_OWNER))
     _install_services(monkeypatch, workspace=workspace, pool=pool)
-    _set_user(client, role="sync_admin")
+    _set_user(client, role="admin")
 
     response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}")
 
@@ -224,7 +235,7 @@ def test_cross_owner_job_fails_closed_without_exact_shared_latest_contract(
     workspace = _WorkspaceStub({SHARED_JOB_OWNER: candidate})
     pool = _SharedPoolStub(resolved)
     _install_services(monkeypatch, workspace=workspace, pool=pool)
-    _set_user(client, role="sync_admin")
+    _set_user(client, role="admin")
 
     response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}")
 
@@ -252,7 +263,7 @@ def test_shared_pool_fallback_does_not_open_cancel_or_export(client, monkeypatch
     workspace = _WorkspaceStub({SHARED_JOB_OWNER: _workspace_job()})
     pool = _SharedPoolStub((SHARED_POOL_ID, SHARED_JOB_OWNER))
     _install_services(monkeypatch, workspace=workspace, pool=pool)
-    _set_user(client, role="sync_admin")
+    _set_user(client, role="admin")
 
     cancel_response = client.post(
         f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}/cancel"
@@ -264,3 +275,25 @@ def test_shared_pool_fallback_does_not_open_cancel_or_export(client, monkeypatch
     assert cancel_response.status_code == 404
     assert export_response.status_code == 404
     assert pool.calls == []
+
+
+@pytest.mark.unit
+@pytest.mark.api
+@pytest.mark.parametrize("role", ["super_admin", "sync_admin"])
+def test_super_admin_reads_cross_owner_job_directly_without_shared_pool_fallback(
+    client,
+    monkeypatch,
+    role,
+):
+    job = _workspace_job(created_by=SHARED_JOB_OWNER, source="ordinary_workspace")
+    workspace = _WorkspaceStub({SHARED_JOB_OWNER: job})
+    pool = _SharedPoolStub(None)
+    _install_services(monkeypatch, workspace=workspace, pool=pool)
+    _set_user(client, role=role, user_id=f"{role}-001")
+
+    response = client.get(f"/api/v1/qc/sichuan/workspace/batch-jobs/{SHARED_JOB_ID}")
+
+    assert response.status_code == 200
+    assert "read_only" not in response.json()["data"]
+    assert pool.calls == []
+    assert workspace.get_calls == [(SHARED_JOB_ID, None)]

@@ -15,7 +15,7 @@
           type="info"
           show-icon
           message="当前为只读模式"
-          description="当前账号仅可查看，需管理员或质控主管（admin / qc_manager / sync_admin / super_admin）角色方可修改。"
+          description="当前账号仅可查看，需全局系统管理员（admin / sync_admin / super_admin）角色方可修改。"
           class="mb-3"
         />
 
@@ -236,11 +236,19 @@ const form = reactive<FrontpageExtractionSettings>({
   default_preview_tab: 'preview',
 })
 
-const canManageFrontpageConfig = computed(() =>
-  authStore.userRoles.some((role) =>
-    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role),
-  ),
-)
+const canManageFrontpageConfig = computed(() => {
+  const roles = authStore.userRoles || []
+  if (roles.some((role) => ['sync_admin', 'super_admin'].includes(role))) {
+    return true
+  }
+  if (roles.includes('admin')) {
+    const instituteId = String(
+      (authStore.user as { institute_id?: string | null } | null)?.institute_id ?? '',
+    ).trim()
+    return !instituteId
+  }
+  return false
+})
 const isReadonly = computed(() => !canManageFrontpageConfig.value)
 
 function patchForm(payload: FrontpageExtractionSettings) {

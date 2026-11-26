@@ -455,6 +455,14 @@ export function useSemanticRulesBatchResultDrawerController(
             text === null || text === undefined ? '-' : text ? 'true' : 'false',
         },
       )
+      if (!confirmedResultsOnly.value) {
+        columns.push({
+          title: '操作',
+          key: 'actions',
+          width: 152,
+          fixed: 'right',
+        })
+      }
     }
     return columns
   })
@@ -558,9 +566,10 @@ export function useSemanticRulesBatchResultDrawerController(
   const resultTraceLoading = ref(false)
   const resultTraceError = ref('')
   const resultTraceData = ref<SichuanBatchJobResultTrace | null>(null)
+  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
 
   const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
-  const canShowResultTrace = computed(() => !confirmedResultsOnly.value && issueViewMode.value === 'advanced')
+  const canShowResultTrace = computed(() => !confirmedResultsOnly.value)
 
   type ResultTraceRow = {
     key: string
@@ -1303,23 +1312,32 @@ export function useSemanticRulesBatchResultDrawerController(
   const allBusinessIssueCards = computed(() => displayIssueItems.value.map(enrichBusinessIssueCard))
 
   const recordCompareCoordinates = computed(() => {
-    const candidates = [
-      allBusinessIssueCards.value.find(
-        (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
-      ),
-      ...allBusinessIssueCards.value,
-    ].filter(Boolean)
+    const selectedCard = allBusinessIssueCards.value.find(
+      (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
+    )
+    const candidates = [selectedCard, ...allBusinessIssueCards.value].filter(Boolean)
+    const matchedRecordRef =
+      normalizedFocusRecordRef.value ||
+      String(selectedCard?.record_ref || '').trim() ||
+      candidates.map((item) => String(item?.record_ref || '').trim()).find(Boolean) ||
+      ''
+    const matchedIdentity = matchedRecordRef
+      ? recordIdentities.value.get(matchedRecordRef)
+      : undefined
     const visitId =
       normalizedFocusVisitId.value ||
       candidates.map((item) => String(item?.visit_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.visit_id || '').trim() ||
       ''
     const instituteId =
       String(props.focusInstituteId || '').trim() ||
       candidates.map((item) => String(item?.institute_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.institute_id || '').trim() ||
       ''
     const patientId =
       String(props.focusPatientId || '').trim() ||
       candidates.map((item) => String(item?.patient_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.patient_id || '').trim() ||
       ''
     return { visitId, instituteId, patientId }
   })
@@ -1988,7 +2006,6 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   // ---- 客户视图（2026-10-23 改版）：病历标识回查 + 按病历、按章节的结果模型 ----
-  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
   let recordIdentityJobId = ''
   watch(
     () => [props.open, props.batchJobDetail?.id, isLuxian0609BatchJob.value] as const,
@@ -2890,6 +2907,7 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   async function openIssueTrace(item: SichuanBatchIssueItem) {
+    if (confirmedResultsOnly.value) return
     const jobId = props.batchJobDetail?.id
     if (!jobId) {
       message.warning('当前任务缺少任务 ID，无法查看诊断追踪。')
@@ -2900,6 +2918,7 @@ export function useSemanticRulesBatchResultDrawerController(
     resultTraceError.value = ''
     resultTraceData.value = null
     const response = await getSichuanWorkspaceBatchJobResultTrace(jobId, {
+      record_ref: String(item.record_ref || '').trim() || undefined,
       record_id: String(item.record_id || '').trim() || undefined,
       visit_id: String(item.visit_id || '').trim() || undefined,
       rule_id: String(item.qc_point_id || item.rule_id || item.rule_code || '').trim() || undefined,
@@ -2921,15 +2940,31 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   async function openIssueDeepReview(item: SichuanBatchIssueItem) {
+    if (confirmedResultsOnly.value) return
     selectedDeepReviewIssue.value = item
     deepReviewModalOpen.value = true
     deepReviewLoading.value = true
     deepReviewError.value = ''
     deepReviewResult.value = null
     const ruleId = String(item.rule_id || item.rule_code || '').trim()
-    const instituteId = String(item.institute_id || '').trim()
-    const patientId = String(item.patient_id || '').trim()
-    const visitId = String(item.visit_id || '').trim()
+    const itemRecordRef = String(item.record_ref || '').trim()
+    const matchedIdentity = itemRecordRef ? recordIdentities.value.get(itemRecordRef) : undefined
+    const canFallbackToCompareCoords =
+      !itemRecordRef ||
+      !isMultiRecordIssueMode.value ||
+      itemRecordRef === normalizedFocusRecordRef.value
+    const instituteId =
+      String(item.institute_id || '').trim() ||
+      String(matchedIdentity?.institute_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.instituteId : '')
+    const patientId =
+      String(item.patient_id || '').trim() ||
+      String(matchedIdentity?.patient_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.patientId : '')
+    const visitId =
+      String(item.visit_id || '').trim() ||
+      String(matchedIdentity?.visit_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.visitId : '')
     if (!ruleId || !instituteId || !patientId || !visitId) {
       deepReviewLoading.value = false
       deepReviewError.value = '当前结果缺少单条复核所需病历主键，无法发起深度复核。'

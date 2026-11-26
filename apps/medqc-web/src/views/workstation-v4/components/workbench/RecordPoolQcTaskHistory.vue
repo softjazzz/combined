@@ -100,6 +100,10 @@
     :fetch-batch-job-debug-snapshot="fetchDebugSnapshot"
     :close="closeDetail"
     :export-batch-job-report="exportReport"
+    :review-batch-job-result="confirmedResultsOnly ? undefined : reviewBatchJob"
+    :review-batch-job-loading="reviewLoading"
+    :cancel-batch-job="cancelBatchJob"
+    :cancel-batch-job-loading="cancelLoading"
     :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
     :get-batch-job-status-text="getBatchJobStatusText"
     :format-date-time="formatPaddedQcTaskDateTime"
@@ -113,10 +117,12 @@ import { ChevronRight, History, RefreshCw } from 'lucide-vue-next'
 import { onBeforeUnmount, ref } from 'vue'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
+  reviewSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
 import { formatPaddedQcTaskDateTime } from '../../utils/qcTaskTime'
 import SemanticRulesBatchResultDrawer from '../../semantic-rules/components/SemanticRulesBatchResultDrawer.vue'
@@ -138,6 +144,8 @@ const detailOpen = ref(false)
 const loading = ref(false)
 const detailLoading = ref(false)
 const debugLoading = ref(false)
+const reviewLoading = ref(false)
+const cancelLoading = ref(false)
 const jobs = ref<SichuanBatchJob[]>([])
 const batchJobDetail = ref<SichuanBatchJob | null>(null)
 const debugSnapshot = ref<SichuanBatchJobDebugSnapshot | null>(null)
@@ -289,6 +297,61 @@ async function exportReport(format: 'xlsx' | 'csv' | 'html' = 'html') {
     downloadBlob(blob, `病历池质控任务_${job.id}.${format}`)
   } catch (error) {
     message.error(error instanceof Error ? error.message : '导出任务报告失败')
+  }
+}
+
+async function reviewBatchJob() {
+  const job = batchJobDetail.value
+  if (!job?.id || reviewLoading.value) return
+  reviewLoading.value = true
+  try {
+    const response = await reviewSichuanWorkspaceBatchJob(job.id)
+    if (!response.success || !response.data?.job) {
+      message.error(response.message || '复核本次结果失败')
+      return
+    }
+    const updatedJob = response.data.job
+    if (batchJobDetail.value?.id === updatedJob.id) {
+      batchJobDetail.value = updatedJob
+    }
+    jobs.value = jobs.value.map((item) =>
+      item.id === updatedJob.id ? { ...item, ...updatedJob } : item,
+    )
+    const count = Number(response.data.review_report?.summary?.total_findings || 0)
+    message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '复核本次结果失败')
+  } finally {
+    reviewLoading.value = false
+  }
+}
+
+async function cancelBatchJob(jobId: string) {
+  if (!jobId || cancelLoading.value) return
+  cancelLoading.value = true
+  try {
+    const response = await cancelSichuanWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      throw new Error(response.message || '停止批量任务失败')
+    }
+    if (batchJobDetail.value?.id === response.data.id) {
+      batchJobDetail.value = {
+        ...batchJobDetail.value,
+        ...response.data,
+      }
+    }
+    await loadJobs()
+    if (detailOpen.value && batchJobDetail.value?.id === jobId) {
+      const detailResponse = await getSichuanWorkspaceBatchJob(jobId)
+      if (detailOpen.value && detailResponse.success && detailResponse.data?.id === jobId) {
+        batchJobDetail.value = detailResponse.data
+      }
+    }
+    message.success('批量任务已停止')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '停止批量任务失败')
+  } finally {
+    cancelLoading.value = false
   }
 }
 

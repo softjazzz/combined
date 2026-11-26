@@ -95,6 +95,7 @@ def test_hospitalization_status_verify_rejects_unprivileged_roles(monkeypatch, d
     [
         ("admin", None),
         ("super_admin", ""),
+        ("super_admin", "H1"),
         ("sync_admin", "H1"),
     ],
 )
@@ -129,7 +130,6 @@ def test_hospitalization_status_verify_allows_privileged_roles(monkeypatch, allo
     [
         ("qc_manager", "H1"),
         ("admin", "H1"),
-        ("super_admin", "H1"),
     ],
 )
 def test_hospitalization_status_verify_rejects_non_global_roles(monkeypatch, role, institute_id):

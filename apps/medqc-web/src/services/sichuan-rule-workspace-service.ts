@@ -164,6 +164,10 @@ export type BatchJobRecordIdentity = {
   doctor: string
   admission_date: string
   discharge_date: string
+  /** 仅超级管理员回查返回，用于单条深度复核与病历对照定位，不含患者姓名。 */
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
 }
 
 export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string) {
@@ -345,6 +349,7 @@ export async function getSichuanWorkspaceBatchJobDebugSnapshot(
 export async function getSichuanWorkspaceBatchJobResultTrace(
   jobId: string,
   params: {
+    record_ref?: string
     record_id?: string
     visit_id?: string
     rule_id?: string

@@ -57,6 +57,15 @@
       description="仅系统配置管理员可修改并保存模型配置。"
     />
 
+    <a-alert
+      v-if="providerUnavailable"
+      data-testid="provider-unavailable-alert"
+      type="warning"
+      show-icon
+      message="当前默认推理服务不可用"
+      :description="providerUnavailableDescription"
+    />
+
     <LLMEndpointSettings @saved="reloadAll" />
 
     <ol
@@ -285,7 +294,7 @@
                 </div>
                 <div class="slider-wrap">
                   <div class="slider-value">
-                    {{ draft.temperature.toFixed(1) }}
+                    {{ Number(draft.temperature ?? 0.2).toFixed(1) }}
                   </div>
                   <a-slider
                     v-model:value="draft.temperature"
@@ -309,7 +318,7 @@
                 </div>
                 <div class="slider-wrap">
                   <div class="slider-value">
-                    {{ draft.top_p.toFixed(1) }}
+                    {{ Number(draft.top_p ?? 0.9).toFixed(1) }}
                   </div>
                   <a-slider
                     v-model:value="draft.top_p"
@@ -338,6 +347,7 @@
                   :min="1000"
                   :max="32768"
                   :step="1000"
+                  @blur="normalizeNumericDraftField('max_tokens')"
                 />
               </div>
             </div>
@@ -362,6 +372,7 @@
                   :min="1"
                   :max="32"
                   :step="1"
+                  @blur="normalizeNumericDraftField('max_parallel_records')"
                 />
               </div>
 
@@ -381,6 +392,7 @@
                   :min="1"
                   :max="4"
                   :step="1"
+                  @blur="normalizeNumericDraftField('family_max_concurrency')"
                 />
               </div>
 
@@ -400,6 +412,7 @@
                   :min="1"
                   :max="64"
                   :step="1"
+                  @blur="normalizeNumericDraftField('http_max_concurrency')"
                 />
               </div>
             </div>
@@ -508,6 +521,13 @@ let disposed = false
 let modelRequestVersion = 0
 let reloadRequestVersion = 0
 let reloadController: AbortController | null = null
+let mutationController: AbortController | null = null
+
+type LLMConfigSummaryWithStatus = LLMConfigSummary & {
+  provider_unavailable?: boolean
+  provider_unavailable_reason?: string | null
+  api_key_configured?: boolean
+}
 
 const providers = ref<Array<Pick<LLMProvider, 'provider_code' | 'provider_name'>>>([])
 const localProviders = ref<LLMLocalProvider[]>([])
@@ -519,9 +539,17 @@ const inferenceModeOptions = [
 ]
 const isLocalProvider = (code: string) => code === 'strata' || code === 'ollama'
 const models = ref<LLMModel[]>([])
-const serverSnapshot = ref<LLMConfigSummary | null>(null)
+const serverSnapshot = ref<LLMConfigSummaryWithStatus | null>(null)
 const backendReadonly = ref(false)
 const testResult = ref<{ success: boolean; message: string; description: string } | null>(null)
+
+const providerUnavailable = computed(() => Boolean(serverSnapshot.value?.provider_unavailable))
+const providerUnavailableDescription = computed(() => {
+  const providerCode = serverSnapshot.value?.provider_code || '默认服务'
+  const reason = String(serverSnapshot.value?.provider_unavailable_reason || '').trim()
+  const reasonNote = reason ? `（原因：${reason}）` : ''
+  return `当前已保存或默认的推理服务「${providerCode}」已被禁用或配置不可用${reasonNote}。您可以在上方「推理服务连接」中重新启用该服务，或在下方切换至其他已启用的推理服务与模型并保存配置。`
+})
 
 const inheritedRoles = (): LLMTaskRoleModels => ({ fact_extraction: null, judgment_analysis: null, specialty_verification: null })
 const cloneRoles = (value: LLMTaskRoleModels = inheritedRoles()): LLMTaskRoleModels => ({
@@ -543,11 +571,66 @@ const draft = reactive({
   model_code: '',
   temperature: 0.2,
   top_p: 0.9,
-  max_tokens: 4000,
-  max_parallel_records: 16,
-  family_max_concurrency: 4,
-  http_max_concurrency: 40,
+  max_tokens: 4000 as number | null,
+  max_parallel_records: 16 as number | null,
+  family_max_concurrency: 4 as number | null,
+  http_max_concurrency: 40 as number | null,
 })
+
+function resolveBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === null || value === undefined || value === '') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.trunc(parsed)))
+}
+
+function resolveBoundedFloat(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === null || value === undefined || value === '') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
+}
+
+function snapshotNumericDefaults() {
+  const snap = serverSnapshot.value
+  return {
+    temperature: resolveBoundedFloat(snap?.custom_parameters?.temperature, 0.2, 0, 2),
+    top_p: resolveBoundedFloat(snap?.custom_parameters?.top_p, 0.9, 0, 1),
+    max_tokens: resolveBoundedInt(snap?.custom_parameters?.max_tokens, 4000, 1000, 32768),
+    max_parallel_records: resolveBoundedInt(
+      snap?.execution_concurrency?.max_parallel_records,
+      16,
+      1,
+      32,
+    ),
+    family_max_concurrency: resolveBoundedInt(
+      snap?.execution_concurrency?.family_max_concurrency,
+      4,
+      1,
+      4,
+    ),
+    http_max_concurrency: resolveBoundedInt(
+      snap?.execution_concurrency?.http_max_concurrency,
+      40,
+      1,
+      64,
+    ),
+  }
+}
+
+function normalizeNumericDraftField(
+  field: 'max_tokens' | 'max_parallel_records' | 'family_max_concurrency' | 'http_max_concurrency',
+) {
+  const defaults = snapshotNumericDefaults()
+  const bounds: Record<typeof field, [number, number]> = {
+    max_tokens: [1000, 32768],
+    max_parallel_records: [1, 32],
+    family_max_concurrency: [1, 4],
+    http_max_concurrency: [1, 64],
+  }
+  const [min, max] = bounds[field]
+  draft[field] = resolveBoundedInt(draft[field], defaults[field], min, max)
+}
 
 const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
 const isReadonly = computed(() => backendReadonly.value || !isAdmin.value)
@@ -573,50 +656,83 @@ const canTest = computed(() => !isReadonly.value && !loading.value && !saving.va
 const dirty = computed(() => {
   const snap = serverSnapshot.value
   if (!snap) return false
+  const defaults = snapshotNumericDefaults()
   return (
     JSON.stringify(taskRoles.value) !== JSON.stringify(snap.custom_parameters?.task_role_models || inheritedRoles()) ||
     draft.provider_code !== snap.provider_code ||
     draft.model_code !== snap.model_code ||
-    Number(draft.temperature) !== Number(snap.custom_parameters?.temperature ?? 0.2) ||
-    Number(draft.top_p) !== Number(snap.custom_parameters?.top_p ?? 0.9) ||
-    Number(draft.max_tokens) !== Number(snap.custom_parameters?.max_tokens ?? 4000) ||
-    Number(draft.max_parallel_records) !==
-      Number(snap.execution_concurrency?.max_parallel_records ?? 16) ||
-    Number(draft.family_max_concurrency) !==
-      Number(snap.execution_concurrency?.family_max_concurrency ?? 4) ||
-    Number(draft.http_max_concurrency) !==
-      Number(snap.execution_concurrency?.http_max_concurrency ?? 40)
+    resolveBoundedFloat(draft.temperature, defaults.temperature, 0, 2) !== defaults.temperature ||
+    resolveBoundedFloat(draft.top_p, defaults.top_p, 0, 1) !== defaults.top_p ||
+    resolveBoundedInt(draft.max_tokens, defaults.max_tokens, 1000, 32768) !== defaults.max_tokens ||
+    resolveBoundedInt(draft.max_parallel_records, defaults.max_parallel_records, 1, 32) !==
+      defaults.max_parallel_records ||
+    resolveBoundedInt(draft.family_max_concurrency, defaults.family_max_concurrency, 1, 4) !==
+      defaults.family_max_concurrency ||
+    resolveBoundedInt(draft.http_max_concurrency, defaults.http_max_concurrency, 1, 64) !==
+      defaults.http_max_concurrency
   )
 })
 
-function patchDraftFromSummary(summary: LLMConfigSummary) {
+function patchDraftFromSummary(summary: LLMConfigSummaryWithStatus) {
   taskRoles.value = cloneRoles(summary.custom_parameters?.task_role_models)
   draft.provider_code = summary.provider_code
   inferenceMode.value = isLocalProvider(summary.provider_code) ? 'local' : 'cloud'
   draft.model_code = summary.model_code
-  draft.temperature = Number(summary.custom_parameters?.temperature ?? 0.2)
-  draft.top_p = Number(summary.custom_parameters?.top_p ?? 0.9)
-  draft.max_tokens = Number(summary.custom_parameters?.max_tokens ?? 4000)
-  draft.max_parallel_records = Number(summary.execution_concurrency?.max_parallel_records ?? 16)
-  draft.family_max_concurrency = Number(summary.execution_concurrency?.family_max_concurrency ?? 4)
-  draft.http_max_concurrency = Number(summary.execution_concurrency?.http_max_concurrency ?? 40)
+  draft.temperature = resolveBoundedFloat(summary.custom_parameters?.temperature, 0.2, 0, 2)
+  draft.top_p = resolveBoundedFloat(summary.custom_parameters?.top_p, 0.9, 0, 1)
+  draft.max_tokens = resolveBoundedInt(summary.custom_parameters?.max_tokens, 4000, 1000, 32768)
+  draft.max_parallel_records = resolveBoundedInt(
+    summary.execution_concurrency?.max_parallel_records,
+    16,
+    1,
+    32,
+  )
+  draft.family_max_concurrency = resolveBoundedInt(
+    summary.execution_concurrency?.family_max_concurrency,
+    4,
+    1,
+    4,
+  )
+  draft.http_max_concurrency = resolveBoundedInt(
+    summary.execution_concurrency?.http_max_concurrency,
+    40,
+    1,
+    64,
+  )
 }
 
 function buildCustomParameters() {
+  const defaults = snapshotNumericDefaults()
   return {
     ...(serverSnapshot.value?.custom_parameters || {}),
     task_role_models: cloneRoles(taskRoles.value),
-    temperature: Number(draft.temperature),
-    top_p: Number(draft.top_p),
-    max_tokens: Number(draft.max_tokens),
+    temperature: resolveBoundedFloat(draft.temperature, defaults.temperature, 0, 2),
+    top_p: resolveBoundedFloat(draft.top_p, defaults.top_p, 0, 1),
+    max_tokens: resolveBoundedInt(draft.max_tokens, defaults.max_tokens, 1000, 32768),
   }
 }
 
 function buildExecutionConcurrency(): LLMExecutionConcurrency {
+  const defaults = snapshotNumericDefaults()
   return {
-    max_parallel_records: Number(draft.max_parallel_records),
-    family_max_concurrency: Number(draft.family_max_concurrency),
-    http_max_concurrency: Number(draft.http_max_concurrency),
+    max_parallel_records: resolveBoundedInt(
+      draft.max_parallel_records,
+      defaults.max_parallel_records,
+      1,
+      32,
+    ),
+    family_max_concurrency: resolveBoundedInt(
+      draft.family_max_concurrency,
+      defaults.family_max_concurrency,
+      1,
+      4,
+    ),
+    http_max_concurrency: resolveBoundedInt(
+      draft.http_max_concurrency,
+      defaults.http_max_concurrency,
+      1,
+      64,
+    ),
   }
 }
 
@@ -795,8 +911,10 @@ async function testConnection() {
 async function saveDraft() {
   if (isReadonly.value || loadingModels.value || saving.value || resetting.value || !canTest.value || !dirty.value) return
   reloadController?.abort()
-  const controller = new AbortController()
-  reloadController = controller
+  reloadController = null
+  mutationController?.abort()
+  const saveController = new AbortController()
+  mutationController = saveController
   saving.value = true
   try {
     const payload: LLMConfigInput = {
@@ -808,20 +926,20 @@ async function saveDraft() {
       is_active: true,
     }
     const saved = await llmConfigService.saveConfig(payload)
-    if (disposed || controller.signal.aborted) return
+    if (disposed || saveController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
+      signal: saveController.signal,
     })
-    if (disposed || controller.signal.aborted) return
+    if (disposed || saveController.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
 
     await reloadAll()
-    if (disposed) return
+    if (disposed || saveController.signal.aborted) return
     const eventPayload = {
       selectedProviderCode: draft.provider_code,
       selectedModelCode: draft.model_code,
@@ -832,10 +950,11 @@ async function saveDraft() {
     emit('config-updated', saved || eventPayload)
     message.success('LLM 配置保存成功')
   } catch (error) {
-    if (disposed || controller.signal.aborted) return
+    if (disposed || saveController.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`保存配置失败：${text}`)
   } finally {
+    if (mutationController === saveController) mutationController = null
     if (!disposed) saving.value = false
   }
 }
@@ -872,34 +991,50 @@ async function resetDefault() {
   if (!confirmed || disposed || isReadonly.value || saving.value || resetting.value) return
 
   reloadController?.abort()
-  const controller = new AbortController()
-  reloadController = controller
+  reloadController = null
+  mutationController?.abort()
+  const resetController = new AbortController()
+  mutationController = resetController
   resetting.value = true
   try {
-    const summary = await llmConfigService.resetDefaultSummary()
-    if (disposed || controller.signal.aborted) return
+    const summary = (await llmConfigService.resetDefaultSummary()) as LLMConfigSummaryWithStatus
+    if (disposed || resetController.signal.aborted) return
     source.value = summary.source || 'database+env'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
+    if (summary.provider_unavailable) {
+      await loadProviders()
+      if (disposed || resetController.signal.aborted) return
+      await loadModelsByProvider(draft.provider_code, draft.model_code)
+      if (disposed || resetController.signal.aborted) return
+      const warnText = '默认推理服务当前不可用，请先重新启用或切换到其他已启用的推理服务'
+      if (typeof message.warning === 'function') {
+        message.warning(warnText)
+      } else {
+        message.error(warnText)
+      }
+      return
+    }
     await loadModelsByProvider(draft.provider_code, draft.model_code)
-    if (disposed || controller.signal.aborted) return
+    if (disposed || resetController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      signal: controller.signal,
+      signal: resetController.signal,
     })
-    if (disposed || controller.signal.aborted) return
+    if (disposed || resetController.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
     message.success('已恢复默认配置')
   } catch (error) {
-    if (disposed || controller.signal.aborted) return
+    if (disposed || resetController.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`恢复默认失败：${text}`)
   } finally {
+    if (mutationController === resetController) mutationController = null
     if (!disposed) resetting.value = false
   }
 }
@@ -975,6 +1110,8 @@ onBeforeUnmount(() => {
   ++reloadRequestVersion
   reloadController?.abort()
   reloadController = null
+  mutationController?.abort()
+  mutationController = null
   if (typeof window !== 'undefined') {
     window.removeEventListener('beforeunload', handleBeforeUnload)
   }

@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
+from ..core.security import require_roles
 from ..services.drg import config_service
 
 router = APIRouter()
+
+_DRG_CONFIG_WRITE_ROLES = ("admin", "qc_manager", "super_admin", "sync_admin")
 
 
 def _drg_router():
@@ -65,7 +68,7 @@ async def get_grouper_config_current() -> Dict[str, Any]:
     return {"success": True, "data": config_service.get_current_config(store)}
 
 
-@router.put("/config")
+@router.put("/config", dependencies=[Depends(require_roles(*_DRG_CONFIG_WRITE_ROLES))])
 async def save_grouper_config(payload: SaveConfigRequest) -> Dict[str, Any]:
     store = _drg_router().get_drg_config_store()
     saved = config_service.save_draft_config(
@@ -77,7 +80,7 @@ async def save_grouper_config(payload: SaveConfigRequest) -> Dict[str, Any]:
     return {"success": True, "data": saved, "message": "配置草稿已保存"}
 
 
-@router.post("/config/publish")
+@router.post("/config/publish", dependencies=[Depends(require_roles(*_DRG_CONFIG_WRITE_ROLES))])
 async def publish_grouper_config(payload: PublishConfigRequest) -> Dict[str, Any]:
     store = _drg_router().get_drg_config_store()
     version = config_service.publish_config(
@@ -104,7 +107,7 @@ async def get_grouper_config_version_detail(version_id: str) -> Dict[str, Any]:
     return {"success": True, "data": detail}
 
 
-@router.post("/config/rollback")
+@router.post("/config/rollback", dependencies=[Depends(require_roles(*_DRG_CONFIG_WRITE_ROLES))])
 async def rollback_grouper_config(payload: RollbackConfigRequest) -> Dict[str, Any]:
     store = _drg_router().get_drg_config_store()
     try:

@@ -579,7 +579,6 @@ def test_bound_institute_admin_rejected_across_all_global_system_config_routers(
             for stub in (
                 {"id": "bound-admin", "roles": ["admin"], "institute_id": "H-A"},
                 {"id": "bound-admin", "roles": ["admin"]},  # 令牌省略 institute_id
-                {"id": "bound-super", "roles": ["super_admin"], "institute_id": "H-A"},
             ):
                 actor.clear()
                 actor.update(stub)
@@ -587,10 +586,11 @@ def test_bound_institute_admin_rejected_across_all_global_system_config_routers(
                     resp = client.request(method, path, json=body)
                     assert resp.status_code == 403, f"{stub} {method} {path} expected 403, got {resp.status_code}"
 
-            # 2. 非绑定全局 admin / super_admin / sync_admin 均放行（以代表性端点验证）
+            # 2. 全局 admin 与任意 super_admin / sync_admin 均放行（以代表性端点验证）
             for stub in (
                 {"id": "global-admin", "roles": ["admin"], "institute_id": ""},
                 {"id": "global-super", "roles": ["super_admin"], "institute_id": ""},
+                {"id": "bound-super", "roles": ["super_admin"], "institute_id": "H-A"},
                 {"id": "sync-bound", "roles": ["sync_admin"], "institute_id": "H-A"},
             ):
                 actor.clear()

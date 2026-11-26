@@ -166,34 +166,35 @@ def is_global_system_admin_principal(
     roles: Iterable[str] | None,
     institute_id: object = None,
 ) -> bool:
-    """判定是否为全局系统管理员：sync_admin 或未绑定院区的 admin/super_admin。"""
+    """判定是否为全局系统管理员：sync_admin / super_admin（不受院区绑定限制），或未绑定院区的 admin。"""
     raw = {str(r).strip().lower() for r in (roles or []) if str(r).strip()}
     expanded = {
         str(r).strip().lower()
-        for r in effective_roles(list(raw))
+        for r in effective_roles(raw)
         if str(r).strip()
     }
     inst = str(institute_id or "").strip()
-    return ("sync_admin" in raw or "sync_admin" in expanded) or (
-        bool(expanded & {"admin", "super_admin"}) and not inst
+    return bool((raw | expanded) & {"sync_admin", "super_admin"}) or (
+        "admin" in expanded and not inst
     )
 
 
 def _verify_persistent_global_admin_scope(actor_id: str) -> None:
-    """若持久账号表存在该账号，以持久角色与院区绑定为准复核全局范围。"""
+    """若持久账号表存在该账号，以持久角色与院区绑定为准复核全局范围；DB 异常时 fail-closed 返回 503。"""
     if not actor_id:
         return
+    from ..database import connection as db_conn
+
+    session_factory = getattr(db_conn, "SessionLocal", None)
+    if session_factory is None:
+        return
+    from sqlalchemy import select
+    from sqlalchemy.exc import OperationalError, SQLAlchemyError
+    from ..database.models.v36_reports import SysUser
+    from ..services.user_scope_owner import user_owner_options
+    from ..services.defect_rectification_service import _effective_persistent_roles
+
     try:
-        from ..database import connection as db_conn
-
-        session_factory = getattr(db_conn, "SessionLocal", None)
-        if session_factory is None:
-            return
-        from sqlalchemy import select
-        from ..database.models.v36_reports import SysUser
-        from ..services.user_scope_owner import user_owner_options
-        from ..services.defect_rectification_service import _effective_persistent_roles
-
         with session_factory() as session:
             row = session.execute(
                 select(
@@ -205,9 +206,27 @@ def _verify_persistent_global_admin_scope(actor_id: str) -> None:
                 ).where(SysUser.id == actor_id),
                 execution_options=user_owner_options(session),
             ).first()
+    except OperationalError as exc:
+        msg = str(exc).lower()
+        # 仅兼容离线 SQLite 单测环境中未建 sys_users 表/列时的回退；其余 DB 故障 fail-closed 返回 503
+        if "no such table" in msg or "no such column" in msg:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="账号全局权限复核服务暂不可用",
+        ) from None
+    except SQLAlchemyError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="账号全局权限复核服务暂不可用",
+        ) from None
+    except HTTPException:
+        raise
     except Exception:
-        # 兼容离线单测环境中无 sys_users 表或未配置数据库时的无 institute_id stub
-        return
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="账号全局权限复核服务暂不可用",
+        ) from None
     if row is None:
         return
     _uid, db_role, db_roles_json, db_institute_id, db_is_active = row
@@ -225,7 +244,7 @@ def _verify_persistent_global_admin_scope(actor_id: str) -> None:
 
 
 def verify_global_system_admin(current_user: dict) -> dict:
-    """校验全局系统管理员权限：拒绝非管理员及任何绑定院区的管理员。"""
+    """校验全局系统管理员权限：允许 sync_admin / super_admin 或未绑定院区的 admin，拒绝非管理员及绑定院区的普通 admin。"""
     roles = _extract_principal_roles(current_user)
     institute_id = current_user.get("institute_id") if isinstance(current_user, dict) else None
     if not is_global_system_admin_principal(roles, institute_id):
@@ -239,7 +258,7 @@ def verify_global_system_admin(current_user: dict) -> dict:
 
 
 async def require_global_system_admin(current_user: dict = Depends(get_current_user)) -> dict:
-    """FastAPI 依赖：要求当前用户为全局系统管理员（sync_admin 或无院区绑定的 admin/super_admin）。"""
+    """FastAPI 依赖：要求当前用户为全局系统管理员（sync_admin / super_admin 或无院区绑定的 admin）。"""
     return verify_global_system_admin(current_user)
 
 

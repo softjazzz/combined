@@ -25,9 +25,9 @@ def get_endpoints(request: Request, user: dict = Depends(super_admin)):
 def save_endpoint(provider: str, request: Request, payload: Any = Body(...), user: dict = Depends(super_admin)):
     try:
         # 不把Pydantic包含原始输入的错误回显给浏览器或日志。
-        proposed = endpoints.EndpointUpdate.model_validate(payload)
-    except ValidationError:
-        raise HTTPException(422, "llm_endpoint_configuration_invalid") from None
+        proposed = endpoints.EndpointUpdate.model_validate(payload, context={"provider": provider})
+    except ValidationError as exc:
+        raise HTTPException(422, endpoints.classify_validation_error(exc)) from None
     try:
         endpoints.save(provider, proposed, str(user.get("id") or user.get("sub") or "unknown"), get_settings())
         view = endpoints.public_view(get_settings(), _deployed_provider_codes())

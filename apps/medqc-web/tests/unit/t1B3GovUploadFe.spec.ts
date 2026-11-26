@@ -905,7 +905,7 @@ describe('Fix 4: 保存失败不死锁、只读文案修正、恢复默认确认
     expect(readonlyWrapper.text()).not.toContain('当前为只读模式（qc_manager）')
     readonlyWrapper.unmount()
 
-    mockAuthState.userRoles = ['qc_manager']
+    mockAuthState.userRoles = ['admin']
     const mgrWrapper = mount(FrontpageExtractionSettingsPanel, {
       global: {
         provide: { [WORKSTATION_CONFIRMATION as symbol]: createMockConfirmation() },

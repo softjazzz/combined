@@ -1156,8 +1156,20 @@ def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
 
 
 _DEMO_FULL_RESULT_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_BATCH_JOB_SUPER_ADMIN_ROLES = frozenset({"super_admin", "sync_admin"})
 _QC_SICHUAN_ADMIN_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
 _QC_SICHUAN_OPERATOR_ROLES = frozenset({"admin", "qc_manager", "sync_admin", "super_admin"})
+
+
+def _is_batch_job_super_admin(current_user: Optional[Dict[str, Any]]) -> bool:
+    """超级管理员（super_admin / sync_admin）允许跨用户诊断与管理批量质控任务。"""
+    if not isinstance(current_user, dict):
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_BATCH_JOB_SUPER_ADMIN_ROLES))
+
+
+def _batch_job_owner_filter(current_user: Dict[str, Any]) -> Optional[str]:
+    return None if _is_batch_job_super_admin(current_user) else _current_user_id(current_user)
 
 
 def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
@@ -1603,8 +1615,11 @@ def _matches_trace_item(
     *,
     record_id: Optional[str] = None,
     visit_id: Optional[str] = None,
+    record_ref: Optional[str] = None,
     rule_id: Optional[str] = None,
 ) -> bool:
+    if record_ref and str(item.get("record_ref") or "").strip() != str(record_ref).strip():
+        return False
     if record_id and str(item.get("record_id") or "").strip() != str(record_id).strip():
         return False
     if visit_id and str(item.get("visit_id") or "").strip() != str(visit_id).strip():
@@ -1626,6 +1641,7 @@ def _find_result_trace_item(
     *,
     record_id: Optional[str] = None,
     visit_id: Optional[str] = None,
+    record_ref: Optional[str] = None,
     rule_id: Optional[str] = None,
     item_index: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -1639,7 +1655,13 @@ def _find_result_trace_item(
         (
             item
             for item in items
-            if _matches_trace_item(item, record_id=record_id, visit_id=visit_id, rule_id=rule_id)
+            if _matches_trace_item(
+                item,
+                record_id=record_id,
+                visit_id=visit_id,
+                record_ref=record_ref,
+                rule_id=rule_id,
+            )
         ),
         None,
     )
@@ -1701,6 +1723,7 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
             "rule_code",
             "qc_point_id",
             "rule_name",
+            "record_ref",
             "record_id",
             "visit_id",
             "patient_name",
@@ -1708,8 +1731,10 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
             "status",
             "display_status",
             "result_status",
+            "reason_code",
             "is_compliant",
             "defect_level",
+            "conclusion",
             "findings",
             "evidence",
             "suggestion",
@@ -2982,11 +3007,12 @@ async def list_workspace_batch_jobs(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service(readonly=True)
+    owner_filter = _batch_job_owner_filter(current_user)
     exclude_validation_flag = exclude_validation is True
     if str(view or "").strip().lower() == "overview":
         # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
         overview_kwargs: Dict[str, Any] = {
-            "created_by": _current_user_id(current_user),
+            "created_by": owner_filter,
             "status": status,
             "scope": scope,
             "query": q,
@@ -3035,7 +3061,7 @@ async def list_workspace_batch_jobs(
         cache_hit_filter = False
 
     list_kwargs: Dict[str, Any] = {
-        "created_by": _current_user_id(current_user),
+        "created_by": owner_filter,
         "draft_id": None,
         "status": status,
         "scope": scope,
@@ -3113,11 +3139,12 @@ async def get_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    owner_filter = _batch_job_owner_filter(current_user)
     shared_read = False
     job = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,
-        created_by=_current_user_id(current_user),
+        created_by=owner_filter,
     )
     if not job:
         job = await run_in_threadpool(
@@ -3582,13 +3609,18 @@ async def get_workspace_batch_job_record_identities(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """结果页病历身份回查（2026-10-23）：权限与任务详情一致，只返回住院号、科室、主治医生与入出院日期。"""
-    from ..services.qc_workspace.batch_record_identity import build_batch_job_record_identities
+    from ..services.qc_workspace.batch_record_identity import (
+        _job_case_refs,
+        build_batch_job_record_identities,
+    )
+    from ..services.qc_workspace.canonical_result_store import keyed_ref
 
     workspace = _sichuan_workspace_service()
+    owner_filter = _batch_job_owner_filter(current_user)
     job = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,
-        created_by=_current_user_id(current_user),
+        created_by=owner_filter,
     )
     if not job:
         job = await run_in_threadpool(
@@ -3608,6 +3640,20 @@ async def get_workspace_batch_job_record_identities(
         collect_records=workspace.collect_records,
         case_refs=case_refs,
     )
+    if _is_batch_job_super_admin(current_user):
+        resolved_refs = list(dict.fromkeys(case_refs or ())) or _job_case_refs(job)
+        projection_key = customer_safe_projection_key()
+        coords_by_record_ref = {
+            keyed_ref("rec", ref.as_key(), hmac_key=projection_key): ref.as_dict()
+            for ref in resolved_refs
+        }
+        identities = [
+            {
+                **item,
+                **coords_by_record_ref.get(str(item.get("record_ref") or ""), {}),
+            }
+            for item in identities
+        ]
     return success_response(
         data={"items": identities},
         message="获取病历标识成功",
@@ -3629,8 +3675,8 @@ async def review_workspace_batch_job(
         _resolve_batch_job_institute_scope_sync, current_user
     )
     workspace = _sichuan_workspace_service()
-    created_by = _current_user_id(current_user)
-    job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if not _job_belongs_to_institute_scope(job, institute_scope):
@@ -3654,7 +3700,7 @@ async def review_workspace_batch_job(
         raise HTTPException(status_code=422, detail="当前复核 Loop 仅支持泸县0609质控任务")
     updated_job = workspace.update_batch_job_review_report(
         job_id=job_id,
-        created_by=created_by,
+        created_by=owner_filter,
         review_report=review_report,
     )
     if not _is_workspace_batch_job(updated_job):
@@ -3689,7 +3735,8 @@ async def cancel_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
-    job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.cancel_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
@@ -3707,7 +3754,8 @@ async def retry_workspace_batch_job(
 ):
     _reject_restricted_demo_account(current_user, "演示账号禁止重试批量任务")
     workspace = _sichuan_workspace_service()
-    existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    existing = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(existing):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     try:
@@ -3725,14 +3773,14 @@ async def retry_workspace_batch_job(
             )
             if not _job_belongs_to_institute_scope(existing, institute_scope):
                 raise HTTPException(status_code=403, detail="无权重试其他机构批量任务")
-        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user),
+        job = workspace.retry_batch_job(job_id=job_id, created_by=owner_filter,
                                         task_runtime_snapshot=runtime_snapshot)
     except QCDispatchSchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not _is_workspace_batch_job(job):
-        existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+        existing = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
         if _is_workspace_batch_job(existing) and (
             (existing.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
         ):
@@ -3743,7 +3791,7 @@ async def retry_workspace_batch_job(
     if submit_legacy and str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])
         if not child_jobs:
-            child_jobs = workspace.get_child_batch_jobs(parent_job_id=new_job_id, created_by=_current_user_id(current_user))
+            child_jobs = workspace.get_child_batch_jobs(parent_job_id=new_job_id, created_by=owner_filter)
         if not all(should_submit_detached_qc_task(child_job) for child_job in child_jobs):
             raise HTTPException(status_code=503, detail="父子任务调度身份不一致")
         for child_job in child_jobs:
@@ -3783,7 +3831,8 @@ async def get_workspace_batch_job_debug(
         _resolve_batch_job_institute_scope_sync, current_user
     )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if not _job_belongs_to_institute_scope(job, institute_scope):
@@ -3801,6 +3850,7 @@ async def get_workspace_batch_job_result_trace(
     job_id: str,
     record_id: Optional[str] = Query(None),
     visit_id: Optional[str] = Query(None),
+    record_ref: Optional[str] = Query(None),
     rule_id: Optional[str] = Query(None),
     item_index: Optional[int] = Query(None, ge=0),
     current_user: Dict[str, Any] = Depends(get_current_user),
@@ -3813,15 +3863,24 @@ async def get_workspace_batch_job_result_trace(
         _resolve_batch_job_institute_scope_sync, current_user
     )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if not _job_belongs_to_institute_scope(job, institute_scope):
         raise HTTPException(status_code=403, detail="无权查看其他机构批量任务诊断追踪")
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+        job = await run_in_threadpool(
+            _hydrate_luxian_canonical_batch_job_or_409,
+            workspace=workspace,
+            job=job,
+        )
     trace_item = _find_result_trace_item(
         job,
         record_id=record_id,
         visit_id=visit_id,
+        record_ref=record_ref,
         rule_id=rule_id,
         item_index=item_index,
     )
@@ -3849,7 +3908,8 @@ async def export_workspace_batch_job(
         _resolve_batch_job_institute_scope_sync, current_user
     )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if not _job_belongs_to_institute_scope(job, institute_scope):

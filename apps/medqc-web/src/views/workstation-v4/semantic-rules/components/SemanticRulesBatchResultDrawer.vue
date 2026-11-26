@@ -898,6 +898,7 @@
                     }}
                   </a-button>
                   <a-button
+                    v-if="!confirmedResultsOnly"
                     type="link"
                     size="small"
                     @click="openIssueDeepReview(selectedBusinessIssueCard)"
@@ -1363,7 +1364,12 @@
                         <a-button type="link" size="small" @click="toggleIssueExpanded(item)">
                           {{ isIssueExpanded(item) ? '收起完整说明' : '展开完整说明' }}
                         </a-button>
-                        <a-button type="link" size="small" @click="openIssueDeepReview(item)">
+                        <a-button
+                          v-if="!confirmedResultsOnly"
+                          type="link"
+                          size="small"
+                          @click="openIssueDeepReview(item)"
+                        >
                           深度复核
                         </a-button>
                         <a-button
@@ -1449,12 +1455,35 @@
             :data-source="displayIssueItems"
             :row-key="resolveIssueStableKey"
             size="small"
-            :scroll="{ x: 1700 }"
+            :scroll="{ x: 1850 }"
             :pagination="issuePagination"
             :row-class-name="resolveIssueRowClassName"
             :locale="{ emptyText: emptyIssueText }"
             @change="handleIssueTableChange"
-          />
+          >
+            <template #bodyCell="{ column, record }">
+              <div v-if="column.key === 'actions'" class="issue-table-actions">
+                <a-button
+                  v-if="canShowResultTrace"
+                  type="link"
+                  size="small"
+                  data-testid="advanced-issue-trace-btn"
+                  @click="openIssueTrace(record as SichuanBatchIssueItem)"
+                >
+                  诊断追踪
+                </a-button>
+                <a-button
+                  v-if="!confirmedResultsOnly"
+                  type="link"
+                  size="small"
+                  data-testid="advanced-issue-deep-review-btn"
+                  @click="openIssueDeepReview(record as SichuanBatchIssueItem)"
+                >
+                  深度复核
+                </a-button>
+              </div>
+            </template>
+          </a-table>
         </div>
 
         <a-collapse
@@ -2014,6 +2043,7 @@
 <script setup lang="ts">
 import BatchTaskFailureSummary from './BatchTaskFailureSummary.vue'
 import { ref } from 'vue'
+import type { SichuanBatchIssueItem } from '@/views/workstation-v4/semantic-rules/types'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import RecordViewCloseIcon from '../../components/RecordViewCloseIcon.vue'
 import BatchRecordReviewPanel from '@/views/workstation-v4/semantic-rules/components/BatchRecordReviewPanel.vue'

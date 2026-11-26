@@ -65,6 +65,13 @@
             />
           </a-form-item>
           <p>当前来源：{{ selected?.source === 'saved' ? '超级管理员配置' : '部署配置' }} · 版本 {{ view.version }}</p>
+          <a-alert
+            v-if="selected && selected.host_allowed === false"
+            data-testid="endpoint-host-warning"
+            type="warning"
+            show-icon
+            message="当前部署地址的主机未在允许范围内，如需编辑保存或发起调用，请将其加入部署白名单 OUTBOUND_ALLOWLIST 或更换为允许的服务地址。"
+          />
           <a-form-item label="沿用部署配置">
             <a-switch
               v-model:checked="draft.use_deployment"
@@ -106,7 +113,11 @@
             </a-checkbox>
           </a-form-item>
           <p class="mq-field__hint">
-            地址从业务服务器访问；127.0.0.1 指业务服务器本机。启用不会启动或安装模型服务。
+            {{
+              provider === 'ollama'
+                ? '地址从业务服务器访问；127.0.0.1 指业务服务器本机。本地 Ollama 支持本机回环及院内私网（10.x / 172.16-31.x / 192.168.x），实际出站调用需确保主机已加入部署白名单 OUTBOUND_ALLOWLIST。启用不会启动或安装模型服务。'
+                : '地址从业务服务器访问；云端服务仅允许公网地址或已加入部署白名单 OUTBOUND_ALLOWLIST 的主机。更换主机或端口时需重新输入 API 密钥或勾选清除密钥。启用不会启动或安装模型服务。'
+            }}
           </p>
           <a-button
             data-testid="endpoint-save"
@@ -232,7 +243,8 @@ async function save() {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     const errMsg = err instanceof Error ? err.message : '保存失败'
     submitError.value = errMsg
-    conflictBlocked.value = errMsg.includes('配置已变化') || errMsg.includes('409')
+    conflictBlocked.value =
+      errMsg.includes('配置已变化') || errMsg.includes('受控 Gateway') || errMsg.includes('409')
   } finally {
     secret.value = ''
     if (!disposed && seq === requestSeq && activeController === controller) {

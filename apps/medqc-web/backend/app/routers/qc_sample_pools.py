@@ -789,7 +789,9 @@ async def import_manual_sheet_upload(
 @router.get("/sheet2-exact-review/acceptance-package")
 async def get_sheet2_exact_review_acceptance_package(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin", "sync_admin")
+    ),
 ):
     if not _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON.exists():
         raise HTTPException(status_code=404, detail="Sheet2 精确复核验收包尚未生成")
