@@ -137,7 +137,11 @@ def _project_customer_safe_source_refs(payload: Dict[str, Any]) -> Dict[str, Any
         if source_document_id:
             document["source_ref"] = source_ref(source_document_id)
         exam_coordinates = document.pop("exam_evidence_coordinates", None)
-        if source_document_id and exam_coordinates and document.get("doc_type") == "exam_item_report":
+        if (
+            source_document_id
+            and exam_coordinates
+            and document.get("doc_type") in {"exam_item_report", "labtest_item_report"}
+        ):
             document["source_document_aliases"] = [
                 {
                     "source_document_id": source_document_id,

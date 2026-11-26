@@ -1937,18 +1937,35 @@ def _build_grouped_lab_reports(
         grouped.setdefault(group_key, (report_id, []))[1].append(row)
 
     master_index = _index_report_masters(master_rows, id_fields=("test_id", "test_no"))
+    report_id_counts = Counter(report_id for report_id, _ in grouped.values())
+    master_link_counts = Counter(
+        (field, _normalize_text(row[field]))
+        for row in master_rows
+        for field in ("test_id", "test_no")
+        if row.get(field)
+    )
     consumed_master_indexes: set[int] = set()
     reports: list[dict[str, Any]] = []
     for report_id, rows in grouped.values():
         rows.sort(key=_report_item_sort_key)
         first = rows[0]
         matched_master: dict[str, Any] = {}
+        master_evidence_ids: set[str] = set()
         for field_name in ("test_id", "test_no"):
             value = _normalize_text(first.get(field_name))
             matched = master_index.get((field_name, value)) if value else None
             if matched:
                 consumed_master_indexes.add(matched[0])
                 matched_master = matched[1]
+                if master_link_counts[(field_name, value)] == 1 and all(
+                    _normalize_text(row.get(field_name)) == value for row in rows
+                ):
+                    version_key = _normalize_text(matched_master.get("source_version_key"))
+                    # 原生检验/培养规则可能引用 test_id/test_no 或目录 document_id。
+                    master_evidence_ids = {version_key} if version_key else {
+                        _normalize_text(matched_master.get(field))
+                        for field in ("document_id", "test_id", "test_no")
+                    }
                 break
         subject = _first_report_value(
             first,
@@ -2037,14 +2054,26 @@ def _build_grouped_lab_reports(
             "report_time": report_time,
             "record_content": "\n".join([*header_lines, *result_lines]),
         }
-        reports.append(
-            _inventory_entry(
-                table_name="labtest_item_report",
-                row=synthetic_row,
-                report_items=report_items,
-                report_metadata=metadata,
-            )
+        report = _inventory_entry(
+            table_name="labtest_item_report",
+            row=synthetic_row,
+            report_items=report_items,
+            report_metadata=metadata,
         )
+        if report_id_counts[report_id] == 1:
+            coordinates = {
+                ("labtest_item_report", _first_report_value(
+                    row, fields=("source_version_key", "document_id", "test_id", "id")
+                ))
+                for row in rows
+            }
+            coordinates.update(("labtest_master", source_id) for source_id in master_evidence_ids)
+            report["exam_evidence_coordinates"] = [
+                {"source_type": source_type, "source_document_id": source_id}
+                for source_type, source_id in sorted(coordinates)
+                if source_id
+            ]
+        reports.append(report)
     return reports, consumed_master_indexes
 
 

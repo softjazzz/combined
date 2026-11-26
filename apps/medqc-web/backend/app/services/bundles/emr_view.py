@@ -8,6 +8,7 @@ from ..document_assembly.assembler import INDEPENDENT_DOCUMENT_FIELDS, PERIOPERA
 
 from .assembly import (
     _build_grouped_exam_reports,
+    _build_grouped_lab_reports,
     assemble_domain_bundle,
     load_domain_bundle,
     load_domain_bundle_document_index,
@@ -1017,21 +1018,18 @@ def _collapse_summary_only_documents(documents: list[dict[str, Any]]) -> list[di
     return [doc for doc in visible if doc.get("doc_type") != "labtest_master"] + [summary]
 
 
-def restore_frozen_exam_evidence_coordinates(
-    documents: list[dict[str, Any]], tables: dict[str, Any],
+def _restore_grouped_report_coordinates(
+    documents: list[dict[str, Any]],
+    *,
+    doc_type: str,
+    rebuilt: list[dict[str, Any]],
 ) -> None:
-    """只用同份快照的表行补齐旧报告坐标，保留当时保存的正文。"""
     pending = [
         doc for doc in documents
-        if doc.get("doc_type") == "exam_item_report" and not doc.get("exam_evidence_coordinates")
+        if doc.get("doc_type") == doc_type and not doc.get("exam_evidence_coordinates")
     ]
-    if not pending or not tables.get("exam_item_report"):
+    if not pending:
         return
-    rebuilt, _ = _build_grouped_exam_reports(
-        list(tables.get("exam_master") or []),
-        list(tables.get("exam_item") or []),
-        list(tables["exam_item_report"]),
-    )
     candidates: dict[str, list[dict[str, Any]]] = {}
     for report in rebuilt:
         candidates.setdefault(report["document_id"], []).append(report)
@@ -1044,6 +1042,35 @@ def restore_frozen_exam_evidence_coordinates(
             doc.get(field) == report.get(field) for field in ("content", "report_items", "report_metadata")
         ):
             doc["exam_evidence_coordinates"] = report["exam_evidence_coordinates"]
+
+
+def restore_frozen_exam_evidence_coordinates(
+    documents: list[dict[str, Any]], tables: dict[str, Any],
+) -> None:
+    """只用同份快照的表行补齐旧检查/检验报告坐标，保留当时保存的正文。"""
+    if tables.get("exam_item_report") and any(
+        doc.get("doc_type") == "exam_item_report" and not doc.get("exam_evidence_coordinates")
+        for doc in documents
+    ):
+        rebuilt_exams, _ = _build_grouped_exam_reports(
+            list(tables.get("exam_master") or []),
+            list(tables.get("exam_item") or []),
+            list(tables["exam_item_report"]),
+        )
+        _restore_grouped_report_coordinates(
+            documents, doc_type="exam_item_report", rebuilt=rebuilt_exams,
+        )
+    if tables.get("labtest_item_report") and any(
+        doc.get("doc_type") == "labtest_item_report" and not doc.get("exam_evidence_coordinates")
+        for doc in documents
+    ):
+        rebuilt_labs, _ = _build_grouped_lab_reports(
+            list(tables.get("labtest_master") or []),
+            list(tables["labtest_item_report"]),
+        )
+        _restore_grouped_report_coordinates(
+            documents, doc_type="labtest_item_report", rebuilt=rebuilt_labs,
+        )
 
 
 def summarize_frozen_documents(*, documents: list[dict[str, Any]], execution_domain: str | None = None, daily_material_status=None, primary_material_status=None) -> dict[str, Any]:
