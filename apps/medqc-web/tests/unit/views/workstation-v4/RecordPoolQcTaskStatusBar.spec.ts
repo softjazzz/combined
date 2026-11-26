@@ -456,3 +456,44 @@ it('紧凑单行进度条默认折叠详情、0% 显示活态微光类并支持�
   expect((panel.element as HTMLElement).style.display).toBe('none')
   wrapper.unmount()
 })
+
+it('多病历并发仍有执行中病历时，不将已完成单份的 76/76 重复计入导致提前显示 100%', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      autoPoll: false,
+      job: job({
+        status: 'running',
+        total_records: 2,
+        success_count: 1,
+        failed_count: 0,
+        summary: {
+          total_records: 2,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 1,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          rule_count: 76,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 76,
+            rule_count: 76,
+            processed_records: 1,
+            total_records: 2,
+            max_parallel_records: 2,
+            active_record_count: 1,
+            queued_record_count: 0,
+          },
+        },
+      }),
+    },
+  })
+
+  expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('50')
+  expect(wrapper.text()).toContain('50%')
+  expect(wrapper.text()).toContain('已处理 1 / 2 份病历')
+  expect(wrapper.text()).not.toContain('处理进度已达 100%')
+  expect(wrapper.text()).not.toContain('当前单份规则进度 76 / 76')
+  wrapper.unmount()
+})

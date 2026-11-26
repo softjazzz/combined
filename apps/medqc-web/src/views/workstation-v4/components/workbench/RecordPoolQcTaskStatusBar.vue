@@ -342,14 +342,6 @@ const totalRules = computed(() =>
   ),
 )
 
-const ruleProgressText = computed(() => {
-  if (processedRules.value === null || totalRules.value === null) return ''
-  const prefix = currentJob.value?.summary?.material_failure
-    ? '已返回规则结果'
-    : (totalRecords.value ?? 0) > 1 ? '当前单份规则进度' : '已执行'
-  return `${prefix} ${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
-})
-
 const multiRecordRuntime = computed(() => {
   if (!currentJob.value || currentJob.value.status !== 'running' || (totalRecords.value ?? 0) <= 1)
     return null
@@ -366,19 +358,58 @@ const multiRecordRuntime = computed(() => {
   }
 })
 
+const hasUnfinishedMultiRecords = computed(() => {
+  const total = totalRecords.value ?? 0
+  if (total <= 1) return false
+  const completed = processedRecords.value ?? 0
+  const active = multiRecordRuntime.value?.active ?? 0
+  const queued = multiRecordRuntime.value?.queued ?? 0
+  return completed < total || active > 0 || queued > 0
+})
+
+// 多病历并发时，上一份病历刚完成会把 processed_rule_count 留在 76/76；
+// 若仍有未完成病历，不能把它当成下一份的实时进度，否则会重复计入并提前显示 100%。
+const isStaleCompletedRuleSnapshot = computed(
+  () =>
+    isActive.value &&
+    hasUnfinishedMultiRecords.value &&
+    (processedRecords.value ?? 0) > 0 &&
+    processedRules.value !== null &&
+    totalRules.value !== null &&
+    totalRules.value > 0 &&
+    processedRules.value >= totalRules.value,
+)
+
+const ruleProgressText = computed(() => {
+  if (processedRules.value === null || totalRules.value === null) return ''
+  if (isStaleCompletedRuleSnapshot.value) return ''
+  const prefix = currentJob.value?.summary?.material_failure
+    ? '已返回规则结果'
+    : (totalRecords.value ?? 0) > 1 ? '当前单份规则进度' : '已执行'
+  return `${prefix} ${Math.min(processedRules.value, totalRules.value)} / ${totalRules.value} 个质控点`
+})
+
 const progressPercent = computed(() => {
   if (currentJob.value?.status === 'completed') return 100
+  const total = totalRecords.value
+  const completed = Math.min(processedRecords.value ?? 0, total ?? 0)
   const reported = finiteCount(currentJob.value?.summary?.progress_percent)
-  if (reported !== null && reported > 0) return Math.min(100, reported)
-  if (!totalRecords.value) return null
+  if (reported !== null && reported > 0) {
+    if (hasUnfinishedMultiRecords.value && reported >= 100) {
+      return Math.min(99, total ? Math.round((completed / total) * 100) : 99)
+    }
+    return Math.min(100, reported)
+  }
+  if (!total) return null
   const currentRuleFraction =
-    processedRules.value !== null && totalRules.value
+    !isStaleCompletedRuleSnapshot.value && processedRules.value !== null && totalRules.value
       ? Math.min(1, processedRules.value / totalRules.value)
       : 0
-  return Math.min(
-    100,
-    Math.round((((processedRecords.value ?? 0) + currentRuleFraction) / totalRecords.value) * 100),
-  )
+  const computedPercent = Math.round(((completed + currentRuleFraction) / total) * 100)
+  if (hasUnfinishedMultiRecords.value) {
+    return Math.min(99, computedPercent)
+  }
+  return Math.min(100, computedPercent)
 })
 
 const statusTitle = computed(() => {
