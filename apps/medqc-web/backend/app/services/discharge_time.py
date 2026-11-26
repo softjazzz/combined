@@ -34,8 +34,9 @@ class DischargeTime:
 
 
 def select_discharge_time(*, registration=None, frontpage=None,
-                          document_date=None, document_time=None, document_status=None) -> DischargeTime:
-    """登记 > 首页 > 出院文书；同一文书日期与精确时刻须同日。
+                          document_date=None, document_time=None, document_status=None,
+                          death_time=None, death_status=None) -> DischargeTime:
+    """登记 > 首页 > 出院文书 > 死亡文书；同一文书日期与精确时刻须同日。
 
     非空但无效的高优先级值不能被低优先级值掩盖；不取同步、打印或提交时间。
     """
@@ -60,6 +61,16 @@ def select_discharge_time(*, registration=None, frontpage=None,
                 return DischargeTime(day, source, True)
         if precise is not None:
             return DischargeTime(precise, source)
-        return DischargeTime(day, "discharge_record.discharge_date" if day else "")
+        if day is not None:
+            return DischargeTime(day, "discharge_record.discharge_date")
     except (TypeError, ValueError, OverflowError):
         return DischargeTime(document_time or document_date, source, True)
+    if death_time is not None and str(death_time).strip():
+        death_source = "death_record.death_datetime"
+        if is_explicitly_invalid_document_status(death_status):
+            return DischargeTime(death_time, death_source, True)
+        try:
+            return DischargeTime(hospital_business_time(death_time), death_source)
+        except (TypeError, ValueError, OverflowError):
+            return DischargeTime(death_time, death_source, True)
+    return DischargeTime()

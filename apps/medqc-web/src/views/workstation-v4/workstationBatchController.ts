@@ -6,6 +6,10 @@ import type { PatientRecord } from './types'
 import type { SichuanBatchJob } from './semantic-rules/types'
 import { buildCaseRecordKey } from './utils/caseRecordKey'
 import {
+  formatCaseSceneAdmissionError,
+  type SelectedCaseLabelSource,
+} from './utils/sceneAdmissionError'
+import {
   requestFrontpageDraft as requestFrontpageDraftAction,
   persistBatchFrontpageDraft as persistBatchFrontpageDraftAction,
   requestCodingQc as requestCodingQcAction,
@@ -77,6 +81,7 @@ function recordPoolQcError(
   selectedRecordKeys: string[],
   setSelectedWorkbenchKeys: (keys: string[]) => void,
   preserveSelection = false,
+  duration?: number,
 ) {
   if (!preserveSelection) {
     setSelectedWorkbenchKeys(selectedRecordKeys)
@@ -84,6 +89,7 @@ function recordPoolQcError(
   message.error({
     key: RECORD_POOL_QC_MESSAGE_KEY,
     content,
+    ...(typeof duration === 'number' ? { duration } : {}),
   })
 }
 
@@ -105,6 +111,7 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
   if (!selectedRecordKeys.length) return
 
   const recordRefs: Array<{ institute_id: string; patient_id: string; visit_id: string }> = []
+  const selectedCaseLabels: SelectedCaseLabelSource[] = []
   const identityOwners = new Map<string, string>()
   for (const recordKey of selectedRecordKeys) {
     const record = findBatchRecordByKey(recordKey)
@@ -148,6 +155,10 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       patient_id: patientId,
       visit_id: visitId,
     })
+    selectedCaseLabels.push({
+      patientName: String(record.name || '').trim() || undefined,
+      visitId,
+    })
   }
 
   setBatchExtracting(true)
@@ -164,11 +175,17 @@ export async function runRecordPoolQc(params: RunRecordPoolQcParams): Promise<vo
       record_refs: recordRefs,
     })
     if (!response.success || !response.data) {
-      recordPoolQcError(
+      const errorMessage = formatCaseSceneAdmissionError(
+        response.errorDetail,
+        selectedCaseLabels,
         response.message || '质控任务创建失败，请稍后重试。',
+      )
+      recordPoolQcError(
+        errorMessage,
         selectedRecordKeys,
         setSelectedWorkbenchKeys,
         preserveSelection,
+        response.errorDetail?.code === 'case_scene_admission_failed' ? 8 : undefined,
       )
       return
     }

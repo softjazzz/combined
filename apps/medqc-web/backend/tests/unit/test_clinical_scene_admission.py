@@ -217,3 +217,57 @@ async def test_creation_uses_same_admission_as_candidates_and_freezes_reason(sou
         assert error.value.detail["cases"][0]["selection_index"] == 0
         assert "SYNTHETIC_PATIENT" not in str(error.value.detail)
         assert workspace.created_job is None
+
+
+def test_valid_death_record_confirms_final_scene_without_discharge_record(source):
+    engine, repository = source
+    repo_module.DeathRecord.__table__.create(engine)
+    with Session(engine) as session:
+        session.add(repo_module.DeathRecord(
+            **REF.as_dict(),
+            document_id="SYNTHETIC_DEATH",
+            document_status="Save",
+            death_datetime=datetime(2026, 7, 29, 14, 34),
+        ))
+        session.commit()
+    [row] = repository.collect_records(**FILTERS)
+    assert row["scope"] == row["qc_scope"] == "final"
+    assert row["qc_discharge_state"] == "discharged"
+    assert row["qc_scene_reason"] == "discharge_business_time"
+    assert row["qc_scene_source"] == "death_record.death_datetime"
+    assert row["qc_discharge_datetime"] == "2026-07-29 14:34:00"
+
+
+def test_invalid_death_record_does_not_confirm_final_scene(source):
+    engine, repository = source
+    repo_module.DeathRecord.__table__.create(engine)
+    with Session(engine) as session:
+        session.add(repo_module.DeathRecord(
+            **REF.as_dict(),
+            document_id="SYNTHETIC_DEATH_VOID",
+            document_status="作废",
+            death_datetime=datetime(2026, 7, 29, 14, 34),
+        ))
+        session.commit()
+    [row] = repository.collect_records(**FILTERS)
+    assert row["qc_scope"] == "unknown"
+    assert row["qc_discharge_state"] == "unknown"
+    assert row["qc_discharge_time_status"] == "conflict"
+
+
+def test_valid_death_record_recovers_empty_discharge_record(source):
+    engine, repository = source
+    repo_module.DeathRecord.__table__.create(engine)
+    with Session(engine) as session:
+        session.add(repo_module.DischargeRecord(**REF.as_dict(), document_id="SYNTHETIC_EMPTY_DISC"))
+        session.add(repo_module.DeathRecord(
+            **REF.as_dict(),
+            document_id="SYNTHETIC_DEATH",
+            document_status="Save",
+            death_datetime=datetime(2026, 1, 1, 17, 16),
+        ))
+        session.commit()
+    [row] = repository.collect_records(**FILTERS)
+    assert row["qc_scope"] == "final"
+    assert row["qc_scene_source"] == "death_record.death_datetime"
+    assert row["qc_discharge_datetime"] == "2026-01-01 17:16:00"

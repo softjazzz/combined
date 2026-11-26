@@ -112,6 +112,7 @@ import {
 } from '@/services/sichuan-rule-workspace-service'
 import { useAuthStore } from '@/stores/auth'
 import { buildCaseRecordKey } from '../../utils/caseRecordKey'
+import { formatCaseSceneAdmissionError } from '../../utils/sceneAdmissionError'
 import {
   getBatchJobRetryMessage,
   isBatchJobFinished,
@@ -348,7 +349,12 @@ async function startSelectedQc() {
     })
     if (disposed || generation !== sessionGeneration) return
     if (!response.success || !response.data?.id) {
-      fail(localDataFailureMessage(response.message || '质控任务创建失败，请稍后重试。'), key)
+      const errorMessage = formatCaseSceneAdmissionError(
+        response.errorDetail,
+        frozenRecordRefs.value.map((item) => ({ visitId: item.visit_id })),
+        response.message || '质控任务创建失败，请稍后重试。',
+      )
+      fail(localDataFailureMessage(errorMessage), key)
       return
     }
     taskJob.value = response.data as SichuanBatchJob

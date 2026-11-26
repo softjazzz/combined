@@ -13,6 +13,7 @@ from sqlalchemy.sql.expression import FunctionElement
 
 from ...database.models.cdm import (
     AdmissionRecord,
+    DeathRecord,
     DischargeRecord,
     HospitalizationStatusProjection,
     InpatRegistration,
@@ -492,6 +493,56 @@ class RecordRepository:
             ref = CaseRef.from_mapping(row.__dict__)
             anchor_by_ref.setdefault(ref, row)
 
+        death_by_ref: Dict[CaseRef, Any] = {}
+        if _load_verified_status:
+            refs_needing_death = []
+            for ref in missing_refs:
+                if ref not in anchor_by_ref:
+                    continue
+                reg_row = registration_by_ref.get(ref)
+                disc_row = discharge_by_ref.get(ref)
+                if (
+                    getattr(reg_row, "discharge_datetime", None) in (None, "")
+                    and getattr(disc_row, "discharge_time", None) in (None, "")
+                    and getattr(disc_row, "discharge_date", None) in (None, "")
+                ):
+                    refs_needing_death.append(ref)
+            if refs_needing_death:
+                death_rows: List[Any] = []
+                try:
+                    for start in range(0, len(refs_needing_death), _RECORD_REF_BATCH_SIZE):
+                        batch = refs_needing_death[start:start + _RECORD_REF_BATCH_SIZE]
+                        query = session.query(DeathRecord).filter(exact_clause(DeathRecord, batch))
+                        if _metadata_only:
+                            query = query.options(load_only(
+                                DeathRecord.institute_id,
+                                DeathRecord.patient_id,
+                                DeathRecord.visit_id,
+                                DeathRecord.death_datetime,
+                                DeathRecord.document_status,
+                            ))
+                        if hasattr(session, "begin_nested"):
+                            with session.begin_nested():
+                                death_rows.extend(query.all())
+                        else:
+                            death_rows.extend(query.all())
+                except (OperationalError, ProgrammingError):
+                    death_rows = []
+                for row in death_rows:
+                    ref = CaseRef.from_mapping(row.__dict__)
+                    existing = death_by_ref.get(ref)
+                    row_valid = not is_explicitly_invalid_document_status(getattr(row, "document_status", None))
+                    row_has_time = getattr(row, "death_datetime", None) not in (None, "")
+                    if existing is None:
+                        death_by_ref[ref] = row
+                        continue
+                    existing_valid = not is_explicitly_invalid_document_status(getattr(existing, "document_status", None))
+                    existing_has_time = getattr(existing, "death_datetime", None) not in (None, "")
+                    if (row_valid and row_has_time) and not (existing_valid and existing_has_time):
+                        death_by_ref[ref] = row
+                    elif row_has_time and not existing_has_time and row_valid == existing_valid:
+                        death_by_ref[ref] = row
+
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
         start = _as_date(start_date)
@@ -515,11 +566,14 @@ class RecordRepository:
                 return None
 
             discharge_source = discharge_by_ref.get(ref)
+            death_source = death_by_ref.get(ref)
             discharge_selection = select_discharge_time(
                 registration=getattr(registration_source, "discharge_datetime", None),
                 document_date=getattr(discharge_source, "discharge_date", None),
                 document_time=getattr(discharge_source, "discharge_time", None),
                 document_status=getattr(discharge_source, "document_status", None),
+                death_time=getattr(death_source, "death_datetime", None),
+                death_status=getattr(death_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
             verified_status, verified_source, verified_at = _resolve_verified_projection_status(
@@ -527,7 +581,7 @@ class RecordRepository:
             )
             scene = resolve_scene(
                 discharge=discharge_selection,
-                document_present=discharge_source is not None,
+                document_present=(discharge_source is not None or death_source is not None),
                 document_invalid=is_explicitly_invalid_document_status(
                     getattr(discharge_source, "document_status", None)
                 ),

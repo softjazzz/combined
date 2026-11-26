@@ -34,9 +34,29 @@ export function extractApiErrorMessage(value: unknown, fallback = '请求失败'
   if (typeof detail === 'string' && detail.trim()) {
     return detail
   }
+  if (isObject(detail)) {
+    const nestedMessage = detail.message
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
+      return nestedMessage
+    }
+    const nestedError = detail.error
+    if (typeof nestedError === 'string' && nestedError.trim()) {
+      return nestedError
+    }
+  }
   const error = value.error
   if (typeof error === 'string' && error.trim()) {
     return error
+  }
+  if (isObject(error)) {
+    const nestedMessage = error.message
+    if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
+      return nestedMessage
+    }
+    const nestedDetail = error.detail
+    if (typeof nestedDetail === 'string' && nestedDetail.trim()) {
+      return nestedDetail
+    }
   }
   const message = value.message
   if (typeof message === 'string' && message.trim()) {
