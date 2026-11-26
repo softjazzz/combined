@@ -117,7 +117,8 @@ async def test_pathology_valid_response_stays_ready():
     (_json.dumps(_payload(document="d9"), ensure_ascii=False), "stop", "document_reference", "-"),
     (_json.dumps(_payload(quote="术中取胃体组织送冰冻。"), ensure_ascii=False), "stop", "same_document_quote", "not_in_sent_body"),
     (_json.dumps(_payload(quote="今日复查血常规"), ensure_ascii=False), "stop", "same_document_quote", "other_document"),
-    (_json.dumps(_payload(quote="术中取胃窦组织 送病理检查"), ensure_ascii=False), "stop", "same_document_quote", "whitespace_difference"),
+    # 拆开数字词元（79 -> 7 9）的空白差异仍必须拒绝并保留 whitespace_difference 诊断类别。
+    (_json.dumps(_payload(quote="7 9岁，术中取胃窦组织送病理检查"), ensure_ascii=False), "stop", "same_document_quote", "whitespace_difference"),
     (_json.dumps(_payload(state="not_documented"), ensure_ascii=False), "stop", "unexpected_quote", "-"),
     (_json.dumps(_payload(), ensure_ascii=False), "length", "incomplete_response", "-"),
 ])
@@ -125,7 +126,7 @@ async def test_pathology_rejection_keeps_safe_subcategory(caplog, content, finis
     with caplog.at_level("WARNING"):
         result = await _pathology(_PathologyClient(content, finish=finish))
     assert (result.state, result.reason_code) == ("technical_error", "tumor_llm_invalid_output")
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == 2
     line = next(r.getMessage() for r in caplog.records if "pathology_documentation parse rejected" in r.getMessage())
     assert f"category={category} " in line and f"quote_kind={quote_kind} " in line
     for text in ("张三", "胃窦", "血常规", "doc-key", "李四", "not json"):

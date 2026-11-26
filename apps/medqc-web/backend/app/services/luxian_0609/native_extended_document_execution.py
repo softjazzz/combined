@@ -124,6 +124,7 @@ from .extended_document_critical_value import (
     CriticalValueInput,
     CriticalValueItem,
     CriticalValueOutcome,
+    effective_disposition_elapsed_seconds,
     evaluate_critical_value_rules,
     select_critical_value_fact_refs,
 )
@@ -255,10 +256,10 @@ _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
     "感染专家", "专家会诊", "专家查房", "同意特殊级",
 )
 # 感染科副主任医师及以上的会诊署名（用户口径 2026-10-17：主治医师、临床药师不算授权专家）。
-# 兼容“感染性疾病科”、署名括号、署名后直接接“会诊/意见/指出/建议/查房/冒号/逗号”等写法；
+# 兼容“感染性疾病科”、署名括号、“副主任/主任”简写、署名后直接接“会诊/意见/指出/建议/查房/冒号/逗号”等写法；
 # 科室与职称之间不得出现其他科室，避免把他科医师意见算作感染科。
 _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN = re.compile(
-    r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任医师|主任医师)"
+    r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任(?:医师)?|主任(?:医师)?)"
     r"[\]】）)]?\s*(?:会诊|意见|指出|建议|查房|[:：,，])"
 )
 # 医院电子《请会诊执行记录》常写作“感染性疾病科[姓名],2026-04-07,09:59:00病史敬悉同意使用”
@@ -272,6 +273,29 @@ _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN = re.compile(
 _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN = re.compile(
     r"(?:ICU|重症医学科)[^。；;\n科]{0,20}?(?:副主任医师|主任医师)"
     r"[\]】）)]?[^。；;\n]{0,20}?(?:抗生素|抗菌药(?:物)?|特殊级)[^。；;\n]{0,12}?会诊"
+)
+# 医院电子特殊级抗菌药用药申请会诊单（常无 document_title，以“本病人建议使用…使用目的为…”起头）
+# 紧接高级职称医师（主任/副主任医师，排除明确他科或初级/主治/药师）会诊意见。
+_SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN = re.compile(
+    r"本病人建议使用[^。；;\n]{0,80}?使用目的为[^。\n]{0,120}?[。；;\n,，]\s*"
+    r"(?!(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|临床药学)[^。；;\n]{0,8}?(?:科|学))"
+    r"[\u4e00-\u9fff]{2,4}(?:副主任医师|主任医师)[\]】）)]?\s*(?:会诊(?:意见)?|意见|[:：])"
+)
+# 正式《请会诊执行记录》中邀请感染科或重症医学科/ICU医师协助诊治（省略打印职称但非主治/住院/规培/实习医师）。
+_SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN = re.compile(
+    r"(?:故)?邀请\s*(?:感染(?:性疾病)?科|重症医学科|ICU)"
+    r"(?!.{0,12}(?:主治医师|住院医师|实习医师|规培医师))"
+    r"[\u4e00-\u9fff]{2,4}(?:医生|医师)?\s*(?:协助诊治|会诊(?:意见)?)\s*[:：]"
+)
+_SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN = re.compile(
+    r"本病人建议使用|主治医师|住院医师|实习医师|规培医师|主管药师|临床药师|临床药学"
+)
+_LAB_ORDER_CLASS_VALUES = frozenset({"检验", "检验类", "化验"})
+_LAB_ORDER_CANCELLED_STATUSES = ("取消", "作废", "撤销", "未执行")
+_LAB_ORDER_NAME_PATTERN = re.compile(
+    r"培养|药敏|病原|涂片|血常规|尿常规|尿液分析|血气分析|降钙素原|G试验|GM试验|真菌|细菌|微生物"
+    r"|(?:病毒|细菌|真菌|支原体|衣原体|结核|HBV|HCV|HIV).{0,20}(?:核酸|DNA|RNA)",
+    re.IGNORECASE,
 )
 # 危急值病程处置识别（合并扫描 daily_course_record / senior_course_record）。
 _CRITICAL_VALUE_TITLE_PATTERN = re.compile(r"危急值")
@@ -931,8 +955,8 @@ def _course_critical_value_dispositions(
             for row, item in pairs
         )
         for course_index, (disposition_time, title, body, lower_body, is_crisis_doc) in enumerate(parsed_courses):
-            delta_seconds = (disposition_time - report_time).total_seconds()
-            if delta_seconds < 0:
+            delta_seconds = effective_disposition_elapsed_seconds(disposition_time, report_time)
+            if delta_seconds is None:
                 continue
             delta_hours = delta_seconds / 3600.0
             item_hit = any(
@@ -1639,12 +1663,18 @@ def _lx0609_058_row_time(row: Mapping[str, Any]) -> datetime | None:
 
 
 def _has_authorized_special_antimicrobial_expert(text: str) -> bool:
-    """结构识别授权专家会诊/查房（感染科副高及以上、电子感染科会诊落款、ICU高年资抗菌药权限会诊）。"""
+    """结构识别授权专家会诊/查房（感染科副高及以上、电子感染科会诊落款、ICU高年资抗菌药权限会诊、
+    电子用药申请单副高及以上会诊意见、正式《请会诊执行记录》邀请感染科/ICU医师会诊）。"""
 
     return bool(
         _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN.search(text)
         or _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN.search(text)
         or _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN.search(text)
+        or _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN.search(text)
+        or (
+            "请会诊执行记录" in text
+            and _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN.search(text)
+        )
         or any(marker in text for marker in _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
     )
 
@@ -1679,6 +1709,22 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
             between = extended_context[match.end(): position - extended_start]
             if "本病人建议使用" not in between and "\n\n" not in between:
                 return True
+    # 电子特殊级抗菌药申请单（常无 document_title）紧接副主任/主任医师会诊意见，
+    # 允许“本病人建议使用…使用目的为…”在会诊意见前文出现，但引文本身不得为申请段且专家落款须位于引文之前。
+    prefix_text = text[: position + len(quote)]
+    for match in _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN.finditer(prefix_text):
+        if match.end() <= position and position - match.end() <= 160:
+            between = text[match.end(): position]
+            if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
+                return True
+    # 正式《请会诊执行记录》中邀请感染科/ICU医师协助诊治（正文中常粘贴数百字影像与检验摘要后再写给药建议）；
+    # 同一会诊意见内未切换至申请段或非授权发言人时，归属该受邀专项医师。
+    if "请会诊执行记录" in text:
+        for match in _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN.finditer(prefix_text):
+            if match.end() <= position and position - match.end() <= 600:
+                between = text[match.end(): position]
+                if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
+                    return True
     return False
 
 
@@ -1834,6 +1880,22 @@ def _is_pathogen_lab(row: Mapping[str, Any]) -> bool:
         re.search(r"培养|药敏|病原", text)
         or re.search(r"(?:病毒|细菌|真菌|支原体|衣原体|结核|HBV|HCV|HIV).{0,20}(?:核酸|DNA|RNA)", text, re.I)
     )
+
+
+def _has_unsynced_lab_orders(nondrug_order_rows: Sequence[Mapping[str, Any]]) -> bool:
+    """检测非药品医嘱中是否存在有效检验/病原学/培养医嘱（用于 labtest_master=0 时的未同步守卫）。"""
+    for row in nondrug_order_rows:
+        status = _clean(row.get("order_status"))
+        if any(marker in status for marker in _LAB_ORDER_CANCELLED_STATUSES):
+            continue
+        order_type = _clean(row.get("order_type"))
+        order_class = _clean(row.get("order_class"))
+        if order_type in _LAB_ORDER_CLASS_VALUES or order_class in _LAB_ORDER_CLASS_VALUES:
+            return True
+        name = _clean(row.get("order_name") or row.get("record_content"))
+        if name and _LAB_ORDER_NAME_PATTERN.search(name):
+            return True
+    return False
 
 
 def _is_prophylactic_antimicrobial_clause(clause: str) -> bool:
@@ -3357,16 +3419,26 @@ async def _execute_extended_document_group(
                         f"D{len(documents) + 1}", source_key, row, _lx0609_058_row_time(row), text,
                     ))
         # 文书带关联医嘱号时只能支持该医嘱所属药物，不能借给其他事件。
-        per_event = {
-            event.event_id: tuple(
-                doc.doc_ref for doc in documents
-                if not (linked := _linked_order_id(doc.row))
-                or linked in {_clean(order.get("order_id")) for order in event.orders}
+        # 当首次用药24小时窗内已存在明确提及该目标药的授权专家会诊/查房时，优先只送审窗内候选，
+        # 避免数周后的续用/调整会诊覆盖启用前或24小时内的有效会诊。
+        per_event: dict[str, tuple[str, ...]] = {}
+        for event in events:
+            order_ids = {_clean(order.get("order_id")) for order in event.orders}
+            eligible_docs = tuple(
+                doc for doc in documents
+                if not (linked := _linked_order_id(doc.row)) or linked in order_ids
             )
-            for event in events
-        }
+            timely_named_docs = tuple(
+                doc for doc in eligible_docs
+                if event.antimicrobial in doc.text
+                and (doc.time is None or doc.time <= event.time + _LX0609_058_SUPPORT_WINDOW)
+            )
+            chosen_docs = timely_named_docs or eligible_docs
+            per_event[event.event_id] = tuple(doc.doc_ref for doc in chosen_docs)
+        referenced_doc_refs = {ref for refs in per_event.values() for ref in refs}
+        prompt_documents = [doc for doc in documents if doc.doc_ref in referenced_doc_refs]
         special_approval_extraction = await extract_special_antimicrobial_approvals(
-            events, documents, per_event, llm_client,
+            events, prompt_documents, per_event, llm_client,
         )
         extraction = special_approval_extraction
         if extraction.state == "technical_error":
@@ -4147,6 +4219,10 @@ async def _execute_extended_document_group(
                     final_state, reason_code = "not_applicable", "trigger_absent_complete"
                 elif lab_master_error or lab_item_error:
                     final_state, reason_code = "data_gap", lab_master_error or lab_item_error
+                elif not lab_master_rows and _has_unsynced_lab_orders(nondrug_order_rows):
+                    # 检验主表为 0 行但非药品医嘱中存在有效检验/培养医嘱，说明检验报告数据源未同步，
+                    # 不得误判为“未送检病原学”不合规，规范降级为资料不足。
+                    final_state, reason_code = "data_gap", "source_unavailable"
                 else:
                     special_order_times = tuple(order_start_time(row) for row in special_orders)
                     first_order = (

@@ -33,6 +33,7 @@ from .course_quality.rule_018 import (
     _lx018_primary_diagnosis_available,
     _lx018_primary_diagnosis_resolution,
     _lx018_prompt,
+    _lx018_retry_prompt,
     _lx018_unknown_semantic_result,
     _parse_lx018_diagnostic_rationale_code,  # noqa: F401 (legacy test helper)
 )
@@ -1115,9 +1116,69 @@ async def execute_luxian_0609_native_course_quality_rules(
             api_time += elapsed
             is_compliant = _parse_is_compliant(response)
             if rule_id == "LX0609-01-01-02":
+                chief_complaint = _lx018_complaint_text(typed_documents)
                 atomic_result = _lx018_atomic_semantic_result(
-                    response, chief_complaint=_lx018_complaint_text(typed_documents),
+                    response, chief_complaint=chief_complaint,
                 )
+                if atomic_result is None:
+                    # 018 原子事实协议解析失败时定向纠偏重试 1 次（强调主诉原文逐字截取与合法枚举），
+                    # 仍失败则失败关闭为 model_invalid_output。
+                    llm_call_count += 1
+                    try:
+                        retry_response = await llm_client.generate(
+                            _lx018_retry_prompt(
+                                context=context,
+                                previous_response=response,
+                                chief_complaint=chief_complaint,
+                            ),
+                            max_completion_tokens=600,
+                            allow_length_retry=False,
+                            **structured_output_kwargs(llm_client),
+                        )
+                    except Exception as retry_error:
+                        unresolved_semantic = _lx018_unknown_semantic_result(
+                            luxian_0609_llm_call_failure_reason(retry_error)
+                        )
+                        emit_course_semantic(
+                            _CourseSemanticOutcome(
+                                rule_id=rule_id,
+                                status=(
+                                    "non_compliant"
+                                    if length_result is not None
+                                    and length_result.status is CriterionStatus.FAILED
+                                    else "technical_error"
+                                ),
+                                reason_code=(
+                                    "requirement_violated"
+                                    if length_result is not None
+                                    and length_result.status is CriterionStatus.FAILED
+                                    else luxian_0609_llm_call_failure_reason(retry_error)
+                                ),
+                                executor_type="llm",
+                                prompt_tokens=prompt,
+                                completion_tokens=completion,
+                                total_tokens=total,
+                                api_time=elapsed,
+                                criterion_results=(
+                                    (length_result, unresolved_semantic)
+                                    if length_result is not None
+                                    else ()
+                                ),
+                            )
+                        )
+                        return
+                    r_prompt, r_completion, r_total, r_elapsed = _usage(retry_response)
+                    prompt += r_prompt
+                    completion += r_completion
+                    total += r_total
+                    elapsed += r_elapsed
+                    prompt_tokens += r_prompt
+                    completion_tokens += r_completion
+                    total_tokens += r_total
+                    api_time += r_elapsed
+                    atomic_result = _lx018_atomic_semantic_result(
+                        retry_response, chief_complaint=chief_complaint,
+                    )
                 if atomic_result is None:
                     unresolved_semantic = _lx018_unknown_semantic_result(
                         "model_invalid_output"
@@ -1513,9 +1574,67 @@ async def execute_luxian_0609_native_course_quality_rules(
             )
             return
         if rule_id == "LX0609-01-01-02":
+            chief_complaint = _lx018_complaint_text(documents)
             atomic_result = _lx018_atomic_semantic_result(
-                response, chief_complaint=_lx018_complaint_text(documents),
+                response, chief_complaint=chief_complaint,
             )
+            if atomic_result is None:
+                llm_call_count += 1
+                try:
+                    retry_response = await llm_client.generate(
+                        _lx018_retry_prompt(
+                            context=context,
+                            previous_response=response,
+                            chief_complaint=chief_complaint,
+                        ),
+                        max_completion_tokens=600,
+                        allow_length_retry=False,
+                        **structured_output_kwargs(llm_client),
+                    )
+                except Exception as retry_error:
+                    unresolved_semantic = _lx018_unknown_semantic_result(
+                        luxian_0609_llm_call_failure_reason(retry_error)
+                    )
+                    results.append(
+                        _result(
+                            rule_id,
+                            (
+                                "non_compliant"
+                                if length_result is not None
+                                and length_result.status is CriterionStatus.FAILED
+                                else "technical_error"
+                            ),
+                            (
+                                "requirement_violated"
+                                if length_result is not None
+                                and length_result.status is CriterionStatus.FAILED
+                                else luxian_0609_llm_call_failure_reason(retry_error)
+                            ),
+                            executor_type="llm",
+                            prompt_tokens=prompt,
+                            completion_tokens=completion,
+                            total_tokens=total,
+                            api_time=elapsed,
+                            criterion_results=(
+                                (length_result, unresolved_semantic)
+                                if length_result is not None
+                                else ()
+                            ),
+                        )
+                    )
+                    return
+                r_prompt, r_completion, r_total, r_elapsed = _usage(retry_response)
+                prompt += r_prompt
+                completion += r_completion
+                total += r_total
+                elapsed += r_elapsed
+                prompt_tokens += r_prompt
+                completion_tokens += r_completion
+                total_tokens += r_total
+                api_time += r_elapsed
+                atomic_result = _lx018_atomic_semantic_result(
+                    retry_response, chief_complaint=chief_complaint,
+                )
             if atomic_result is None:
                 unresolved_semantic = _lx018_unknown_semantic_result(
                     "model_invalid_output"

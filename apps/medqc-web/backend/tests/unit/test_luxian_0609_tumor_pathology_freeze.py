@@ -440,7 +440,8 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
 
     assert returned_client is client
     assert execution.results == ()
-    assert execution.llm_call_count == 2
+    expected_calls = 4 if expected_reason == "model_invalid_output" else 2
+    assert execution.llm_call_count == expected_calls
     assert [item.final_state.value for item in reduced] == [
         "technical_error",
         "technical_error",
@@ -460,7 +461,7 @@ async def test_tumor_pathology_semantic_failures_are_technical_errors_through_bi
         ("surgery_record", "surgery-1"),
         ("daily_course_record", "course-1"),
     }
-    assert len(client.prompts) == 2
+    assert len(client.prompts) == expected_calls
 
 
 @pytest.mark.asyncio

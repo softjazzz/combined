@@ -83,6 +83,33 @@ def _is_critical_item(item: CriticalValueItem) -> bool:
     return bool(_critical_markers(item))
 
 
+def effective_disposition_elapsed_seconds(
+    disposition_time: datetime | None,
+    report_time: datetime | None,
+) -> float | None:
+    """计算处置相对危急值报告的耗时秒数；同分钟分钟截断(:00)按 0.0 秒计，早于报告返回 None。
+
+    病程/危急值记录的 record_time 常截断至分钟（second=0, microsecond=0，如 15:28:00），
+    而检验报告时间精确到秒（如 15:28:16）。仅当两者处于同一分钟且处置时间为整分 :00 时，
+    按 0 秒同步处置处理；任何跨分钟提前（如 13:59:00 vs 14:00:00）或带秒提前仍视为时间冲突。
+    """
+
+    if disposition_time is None or report_time is None:
+        return None
+    delta = (disposition_time - report_time).total_seconds()
+    if delta >= 0:
+        return delta
+    if (
+        disposition_time.second == 0
+        and disposition_time.microsecond == 0
+        and 0 < -delta < 60
+        and disposition_time.replace(second=0, microsecond=0)
+        == report_time.replace(second=0, microsecond=0)
+    ):
+        return 0.0
+    return None
+
+
 @dataclass(frozen=True)
 class _CriticalValueEvent:
     items: tuple[CriticalValueItem, ...]
@@ -222,11 +249,9 @@ def select_critical_value_fact_refs(
         else:
             unmatched_disposition = True
             continue
-        if (
-            event.report_time is not None
-            and disposition.disposition_time is not None
-            and disposition.disposition_time >= event.report_time
-        ):
+        if effective_disposition_elapsed_seconds(
+            disposition.disposition_time, event.report_time
+        ) is not None:
             matched_dispositions_by_event[event_indexes[id(event)]].append(
                 (disposition.disposition_time, reference)
             )
@@ -524,18 +549,25 @@ def evaluate_critical_value_rules(
             timing_issues: dict[str | None, str] = {}
             for event in events:
                 values = dispositions_by_event[event.event_key]
-                valid = [value for value in values if value is not None
-                         and event.report_time is not None and value >= event.report_time]
+                valid = [
+                    (value, elapsed)
+                    for value in values
+                    if (elapsed := effective_disposition_elapsed_seconds(value, event.report_time)) is not None
+                ]
                 sufficient = bool(valid) if rule_id == "LX0609-06-04-02" else any(
-                    (value - event.report_time).total_seconds() <= 6 * 3600
-                    for value in valid
+                    elapsed <= 6 * 3600
+                    for _value, elapsed in valid
                 )
                 if sufficient:
                     continue
                 if any(value is None for value in values):
                     timing_issues[event.event_key] = "authoritative_time_missing"
-                elif any(value is not None and event.report_time is not None
-                         and value < event.report_time for value in values):
+                elif any(
+                    value is not None
+                    and event.report_time is not None
+                    and effective_disposition_elapsed_seconds(value, event.report_time) is None
+                    for value in values
+                ):
                     timing_issues[event.event_key] = "authoritative_time_conflict"
 
             if unmatched_dispositions:
@@ -552,12 +584,14 @@ def evaluate_critical_value_rules(
                 final_state, reason_code = "data_gap", next(iter(timing_issues.values()))
                 results = []
                 for event in events:
-                    valid_times = [value for value in dispositions_by_event[event.event_key]
-                                   if value is not None and event.report_time is not None
-                                   and value >= event.report_time]
-                    first = min(valid_times, default=None)
-                    interval = ((first - event.report_time).total_seconds() / 3600
-                                if first is not None and event.report_time is not None else None)
+                    valid_pairs = [
+                        (value, elapsed)
+                        for value in dispositions_by_event[event.event_key]
+                        if (elapsed := effective_disposition_elapsed_seconds(value, event.report_time)) is not None
+                    ]
+                    first_pair = min(valid_pairs, key=lambda pair: pair[0], default=None)
+                    first = first_pair[0] if first_pair is not None else None
+                    interval = (first_pair[1] / 3600 if first_pair is not None else None)
                     issue = timing_issues.get(event.event_key)
                     event_outcome = issue or (
                         ("handled" if first is not None else "unhandled")
@@ -586,14 +620,14 @@ def evaluate_critical_value_rules(
                             (
                                 value
                                 for value in dispositions_by_event[event.event_key]
-                                if event.report_time is not None and value is not None and value >= event.report_time
+                                if effective_disposition_elapsed_seconds(value, event.report_time) is not None
                             ),
                             default=None,
                         ),
                         outcome=(
                             "handled"
                             if any(
-                                event.report_time is not None and value is not None and value >= event.report_time
+                                effective_disposition_elapsed_seconds(value, event.report_time) is not None
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "unhandled"
@@ -617,7 +651,7 @@ def evaluate_critical_value_rules(
                                 (
                                     value
                                     for value in dispositions_by_event[event.event_key]
-                                    if event.report_time is not None and value is not None and value >= event.report_time
+                                    if effective_disposition_elapsed_seconds(value, event.report_time) is not None
                                 ),
                                 default=None,
                             )
@@ -625,9 +659,9 @@ def evaluate_critical_value_rules(
                         interval_hours=(
                             min(
                                 (
-                                    (value - event.report_time).total_seconds() / 3600
+                                    elapsed / 3600
                                     for value in dispositions_by_event[event.event_key]
-                                    if event.report_time is not None and value is not None and value >= event.report_time
+                                    if (elapsed := effective_disposition_elapsed_seconds(value, event.report_time)) is not None
                                 ),
                                 default=None,
                             )
@@ -635,14 +669,13 @@ def evaluate_critical_value_rules(
                         outcome=(
                             "timely"
                             if any(
-                                event.report_time is not None
-                                and value is not None
-                                and 0 <= (value - event.report_time).total_seconds() / 3600 <= 6
+                                (elapsed := effective_disposition_elapsed_seconds(value, event.report_time)) is not None
+                                and 0 <= elapsed / 3600 <= 6
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "overdue"
                             if any(
-                                event.report_time is not None and value is not None and value >= event.report_time
+                                effective_disposition_elapsed_seconds(value, event.report_time) is not None
                                 for value in dispositions_by_event[event.event_key]
                             )
                             else "unhandled"
@@ -753,6 +786,7 @@ __all__ = [
     "CriticalValueItem",
     "CriticalValueDisposition",
     "CriticalValueOutcome",
+    "effective_disposition_elapsed_seconds",
     "evaluate_critical_value_rules",
     "select_critical_value_fact_refs",
 ]

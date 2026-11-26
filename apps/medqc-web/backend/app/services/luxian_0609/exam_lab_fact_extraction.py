@@ -951,6 +951,26 @@ def build_exam_lab_text_projection(
             if family == "exam"
             else _EXPLICIT_NON_TARGET_CULTURE_PATTERN
         )
+        reason_anchor_time = order_time or exam_time or report_time
+        # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免；
+        # 缺少医嘱开立时间而回退到检查时间/报告时间时，同样适用入院 24 小时内豁免。
+        within_admission_window = (
+            family == "exam"
+            and admission_time is not None
+            and reason_anchor_time is not None
+            and (
+                (
+                    order_time is not None
+                    and order_time <= admission_time + timedelta(hours=24)
+                )
+                or (
+                    order_time is None
+                    and admission_time
+                    <= reason_anchor_time
+                    <= admission_time + timedelta(hours=24)
+                )
+            )
+        )
         return ExamLabSingleEvent(
             family=family,
             document_refs=tuple(row_refs),
@@ -958,12 +978,7 @@ def build_exam_lab_text_projection(
             report_time=report_time,
             order_time=order_time,
             order_names=order_names,
-            # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免。
-            within_admission_window=(
-                admission_time is not None
-                and order_time is not None
-                and order_time <= admission_time + timedelta(hours=24)
-            ),
+            within_admission_window=within_admission_window,
             conflict_roles=frozenset(conflicts),
             positive_hint=positive_hint,
             target_confirmed=target_confirmed,

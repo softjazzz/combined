@@ -34,6 +34,10 @@ SOURCE_KEYS = (
     *COURSE_SOURCES,
     "evaluation_context.horizon",
 )
+OPTIONAL_ORDER_SOURCES = (
+    "inpat_nondrug_order",
+    "inpat_nondrug_order.exam_lab_order",
+)
 BLOOD_ITEMS = dict(
     zip(
         (f"AA{x:03}" for x in range(1, 25)),
@@ -85,6 +89,14 @@ URINE_ITEMS = dict(
 _PENDING = re.compile(
     r"待|未(?:完成|审核|发布)|初步|取消|撤销|作废|pending|preliminary|cancel", re.I
 )
+_CANCELLED_ORDER = re.compile(r"撤销|取消|作废|cancel", re.I)
+_LAB_ORDER_CLASS = re.compile(r"检验|\blab(?:oratory)?\b", re.I)
+_LAB_ORDER_NAME = re.compile(
+    r"血常规|尿常规|尿液分析|尿沉渣|大便常规|粪常规|"
+    r"(?:细菌|真菌|血|痰|尿|分泌物|大便|腹水|胸水|灌洗液|结核菌)?培养|药敏|"
+    r"血气分析|肝功|肾功|生化|电解质|凝血|降钙素原|C反应蛋白|CRP",
+    re.I,
+)
 _NUMBER = re.compile(r"^[<>≤≥]?\s*[+-]?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?%?$")
 _QUALITATIVE = frozenset(
     {
@@ -130,6 +142,28 @@ def _text(value: Any) -> str:
 
 def _item_name(value: Any) -> str:
     return re.sub(r"\s+", "", _text(value)).lstrip("*＊")
+
+
+def _is_active_lab_order(row: Mapping[str, Any]) -> bool:
+    """识别有效检验类非药医嘱，排除已撤销/取消及纯影像/治疗/护理医嘱。"""
+    if row.get("validation_material_state") in {"held", "version_review"}:
+        return False
+    if _CANCELLED_ORDER.search(_text(row.get("order_status"))):
+        return False
+    for field in ("order_type", "order_class"):
+        if _LAB_ORDER_CLASS.search(_text(row.get(field))):
+            return True
+    return bool(_LAB_ORDER_NAME.search(_text(row.get("order_name"))))
+
+
+def _has_active_lab_orders(
+    sources: Mapping[str, Sequence[tuple[str, Mapping[str, Any]]]],
+) -> bool:
+    for source_key in OPTIONAL_ORDER_SOURCES:
+        for _, row in sources.get(source_key, ()):
+            if isinstance(row, Mapping) and _is_active_lab_order(row):
+                return True
+    return False
 
 
 def _gap(reason: str) -> RoutineLabOutcome:
@@ -442,11 +476,18 @@ def evaluate_routine_lab_presence(
             },
             (ref,),
         )
-    return (
-        _gap("required_field_missing")
-        if unresolved
-        else RoutineLabOutcome("non_compliant", "required_document_missing", facts)
-    )
+    if unresolved:
+        return _gap("required_field_missing")
+    # 检验主表与明细均为空但本次住院存在有效检验医嘱（血常规/尿液分析/培养等）时，
+    # 说明检验报告数据源未同步，降级资料缺口而非误判临床未查。
+    if (
+        not sources.get("labtest_master")
+        and not sources.get(ITEM_SOURCE)
+        and not sources.get("labtest_item_report")
+        and _has_active_lab_orders(sources)
+    ):
+        return _gap("source_empty")
+    return RoutineLabOutcome("non_compliant", "required_document_missing", facts)
 
 
 def safe_routine_lab_facts(rule_id: str, raw: Any) -> dict[str, Any] | None:

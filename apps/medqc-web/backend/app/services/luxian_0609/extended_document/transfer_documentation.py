@@ -36,6 +36,9 @@ _NON_CURRENT_TRANSFER_PREFIX = re.compile(
     r"拟|计划|准备|考虑|建议|暂不|暂缓|不予|无需|未予|取消|拒绝|"
     r"(?:待|等|若|如|如果).*(?:再|后)|(?:稳定|好转)后再"
 )
+# 多次转科且转出记录未填科室字段时，医师常在提交转科医嘱前数分钟至2小时内先写转出记录；
+# 仅当距离上一转科已超24小时（不与上一次24小时窗口冲突）时，允许归属到紧随其后的本次转科事件。
+_MULTI_EVENT_UNLABELLED_EARLY_OUT_TOLERANCE = timedelta(hours=2)
 
 
 def _has_current_transfer_clause(text: str) -> bool:
@@ -403,6 +406,20 @@ def evaluate_transfer_documentation(
                         "transfer_in_count": len(transfer_in_rows), "transfer_out_count": len(transfer_out_rows),
                     })
                 owner = early_indexes[0] if early_indexes else normal
+                if (
+                    not early_indexes
+                    and not any(_clean(row.get(field)) for field in ("transferin_department", "transferout_department"))
+                    and (normal is None or moment > grouped[normal][0] + timedelta(hours=24))
+                ):
+                    row_transfer_date = _date_value(row.get("transfer_date"))
+                    near_early_indexes = [
+                        index
+                        for index, (start, _order) in enumerate(grouped)
+                        if start - _MULTI_EVENT_UNLABELLED_EARLY_OUT_TOLERANCE <= moment < start
+                        and (row_transfer_date is None or row_transfer_date >= start.date())
+                    ]
+                    if len(near_early_indexes) == 1:
+                        owner = near_early_indexes[0]
                 if owner is None and grouped[0][0] - timedelta(hours=24) <= moment < grouped[0][0]:
                     owner = 0
                 if owner is not None:

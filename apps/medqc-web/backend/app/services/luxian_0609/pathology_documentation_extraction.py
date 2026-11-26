@@ -15,6 +15,10 @@ import re
 from time import perf_counter
 from typing import Any, Mapping, Sequence
 
+from .course_body_fact_extraction import (
+    _quote_mismatch_kind,
+    _restore_whitespace_quote,
+)
 from .llm_prompt_privacy import classify_luxian_0609_llm_call_failure
 from .llm_prompt_privacy import locate_luxian_0609_redacted_quote
 from .llm_prompt_privacy import redact_luxian_0609_patient_privacy
@@ -29,6 +33,7 @@ MAX_DOCUMENTS = 40
 MAX_BODY_CHARS = 8000
 MAX_TOTAL_BODY_CHARS = 40000
 MAX_COMPLETION_TOKENS = 2048
+PROTOCOL_ATTEMPTS = 2
 _STATES = frozenset({"documented", "not_documented", "unknown"})
 _SENTENCE_SPLIT = re.compile(r"[。；;！？!?\n]+")
 logger = logging.getLogger(__name__)
@@ -89,24 +94,55 @@ def documentation_scope_issue(
     return ""
 
 
-def _quote_grounded(quote: str, doc: Mapping[str, Any]) -> bool:
-    """引用逐字来自所指文书；跨句拼接时逐句均须逐字出现在该文书。
+def _restore_grounded_quote(quote: str, doc: Mapping[str, Any]) -> str | None:
+    """引用逐字来自所指文书（仅排版空白差异时按同份正文唯一还原）；跨句拼接时逐句均须 grounded。
 
-    模型只看到脱敏正文：每句须逐字出现在实际发送正文中；原文侧含本系统脱敏占位的
-    句子按共用合同唯一回映（不跨标点、占位只对应有界片段），其余须逐字出现在原文。
+    模型只看到脱敏正文：每句须出现在实际发送正文中（仅排版空白差异时按同份正文唯一连续片段还原，
+    不得拆开或拼合字母/数字词元）；原文侧含本系统脱敏占位的句子按共用合同唯一回映
+    （不跨标点、占位只对应有界片段），其余须逐字出现在原文。
     """
 
+    if not isinstance(quote, str) or not quote.strip():
+        return None
+
+    def _ground_piece(piece: str) -> str | None:
+        restored = _restore_whitespace_quote(piece, doc["body"])
+        if restored is None:
+            return None
+        if (
+            restored in doc["original_body"]
+            or locate_luxian_0609_redacted_quote(restored, doc["original_body"]) is not None
+        ):
+            return restored
+        return None
+
+    whole = _ground_piece(quote.strip())
+    if whole is not None:
+        return whole
+
     fragments = [part.strip() for part in _SENTENCE_SPLIT.split(quote) if part.strip()]
-    return bool(fragments) and all(
-        fragment in doc["body"] and (
-            fragment in doc["original_body"]
-            or locate_luxian_0609_redacted_quote(fragment, doc["original_body"]) is not None
-        )
-        for fragment in fragments
-    )
+    if not fragments:
+        return None
+    restored_fragments: list[str] = []
+    for fragment in fragments:
+        restored = _ground_piece(fragment)
+        if restored is None:
+            return None
+        restored_fragments.append(restored)
+    if len(restored_fragments) == 1:
+        return restored_fragments[0]
+    return "。".join(restored_fragments)
 
 
-def _log_rejection(error: BaseException, response: Any, *, stage: str, sampling: bool) -> None:
+def _quote_grounded(quote: str, doc: Mapping[str, Any]) -> bool:
+    """引用逐字来自所指文书（支持仅排版空白差异唯一还原）；跨句拼接时逐句均须 grounded。"""
+
+    return _restore_grounded_quote(quote, doc) is not None
+
+
+def _log_rejection(
+    error: BaseException, response: Any, *, stage: str, sampling: bool, attempt: int = 1,
+) -> None:
     """只记录固定类别与数值，禁止输出原异常消息、模型输出、引文、标识或正文。"""
     choices = response.get("choices") if isinstance(response, Mapping) else None
     choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
@@ -124,9 +160,43 @@ def _log_rejection(error: BaseException, response: Any, *, stage: str, sampling:
         category = "response_shape"
     logger.warning(
         "pathology_documentation parse rejected category=%s quote_kind=%s quote_chars=%d stage=%s sampling=%s"
-        " finish=%s content_length=%d",
+        " finish=%s content_length=%d attempt=%d",
         category, getattr(error, "quote_kind", "-"), getattr(error, "quote_chars", 0), stage,
         "true" if sampling else "false", safe_finish, len(content) if isinstance(content, str) else 0,
+        attempt,
+    )
+
+
+def _retry_prompt(prompt: str, error: BaseException, response: Mapping[str, Any]) -> str:
+    """仅附固定纠偏提示，不回显未脱敏原文或引文。"""
+    choices = response.get("choices") if isinstance(response, Mapping) else None
+    choice = choices[0] if isinstance(choices, list) and choices and isinstance(choices[0], Mapping) else {}
+    category = error.category if isinstance(error, _PathologyViolation) else ""
+    if choice.get("finish_reason") == "length" or category == "incomplete_response":
+        hint = "上次输出不完整或超长被截断；quote只取最短必要的单句连续原文（不超过40字），重新输出完整严格JSON"
+    elif category == "same_document_quote":
+        hint = (
+            "上次quote未在所指document的body中逐字命中（不得改写、不得跨文书引用、不得删字拼接或更改字母数字词元间空白）；"
+            "请直接从所指document的body中逐字复制一段最短连续原文（不超过40字），"
+            "若文书确无相关记录请改为not_documented或unknown并将document与quote设为null"
+        )
+    elif category == "document_reference":
+        hint = "上次document编号无效；documented时document必须使用INPUT_JSON中给出的文书编号（如d1）"
+    elif category == "unexpected_quote":
+        hint = "not_documented和unknown时document与quote必须均为null"
+    elif category in {"event_coverage", "event_identity"}:
+        hint = "events数组必须严格覆盖INPUT_JSON中的每一次检查，每次检查恰好一项且event编号完全一致"
+    elif isinstance(error, json.JSONDecodeError):
+        hint = "上次输出不是合法JSON对象；请只输出严格JSON对象"
+    else:
+        hint = (
+            "输出必须严格符合JSON约定（顶层仅schema_version和events，"
+            "每项仅event、state、document、quote，state仅允许documented、not_documented、unknown）"
+        )
+    return prompt.replace(
+        "\nINPUT_JSON=",
+        "\n上一次输出未通过校验：" + hint + "。请修正后重新输出完整JSON。\nINPUT_JSON=",
+        1,
     )
 
 
@@ -188,14 +258,18 @@ def _parsed_events(
         if state == "documented":
             if not isinstance(document, str) or document not in documents:
                 raise _PathologyViolation("document_reference")
-            if not isinstance(quote, str) or not _quote_grounded(quote, documents[document]):
-                from .course_body_fact_extraction import _quote_mismatch_kind
+            restored_quote = (
+                _restore_grounded_quote(quote, documents[document])
+                if isinstance(quote, str)
+                else None
+            )
+            if restored_quote is None:
                 raise _PathologyViolation(
                     "same_document_quote",
                     quote_kind=_quote_mismatch_kind(quote, documents[document], tuple(documents.values())),
                     quote_chars=len(quote) if isinstance(quote, str) else 0,
                 )
-            result[event] = (state, document, quote)
+            result[event] = (state, document, restored_quote)
         else:
             if document is not None or quote is not None:
                 raise _PathologyViolation("unexpected_quote")
@@ -206,7 +280,7 @@ def _parsed_events(
 async def extract_pathology_documentation_facts(
     *, sampling: bool, events: Sequence[PathologyEvent], documents: Sequence[PathologyDocument], llm_client: Any,
 ) -> PathologyDocumentationExtraction:
-    """一次逻辑调用；协议或引用任一不合格，整批作废，不部分采信。"""
+    """受控逻辑抽取；协议或引用违规至多定向纠偏重试 1 次，仍不合格整批作废。"""
 
     issue = documentation_scope_issue(events, documents)
     if issue:
@@ -231,36 +305,52 @@ async def extract_pathology_documentation_facts(
     ]
     by_alias = {item["document"]: item for item in document_inputs}
     key_by_alias = {f"d{index}": doc.document_key for index, doc in enumerate(documents, 1)}
+    base_prompt = _prompt(sampling=sampling, events=event_inputs, documents=document_inputs)
+    attempt_prompt = base_prompt
     started = perf_counter()
-    usage = (0, 0, 0, 0.0)
-    try:
-        response = await llm_client.generate(
-            _prompt(sampling=sampling, events=event_inputs, documents=document_inputs),
-            max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
-            **structured_output_kwargs(llm_client),
-        )
-    except Exception as error:
-        return PathologyDocumentationExtraction(
-            "technical_error", classify_luxian_0609_llm_call_failure(error), llm_call_count=1, api_time=perf_counter() - started,
-        )
-    stage = "usage"
-    try:
-        usage = _usage(response)
-        stage = "parse"
-        parsed = _parsed_events(response, event_ids=[event.event_id for event in events], documents=by_alias)
-    except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
-        _log_rejection(error, response, stage=stage, sampling=sampling)
-        return PathologyDocumentationExtraction(
-            "technical_error", "tumor_llm_invalid_output", llm_call_count=1,
-            prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
-            api_time=perf_counter() - started,
-        )
+    calls = prompt_tokens = completion_tokens = total_tokens = 0
+    api_time = 0.0
+    parsed: dict[str, tuple[str, str, str]] = {}
+    for attempt in range(PROTOCOL_ATTEMPTS):
+        calls += 1
+        try:
+            response = await llm_client.generate(
+                attempt_prompt,
+                max_completion_tokens=MAX_COMPLETION_TOKENS, allow_length_retry=False,
+                **structured_output_kwargs(llm_client),
+            )
+        except Exception as error:
+            return PathologyDocumentationExtraction(
+                "technical_error", classify_luxian_0609_llm_call_failure(error),
+                llm_call_count=calls,
+                prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                total_tokens=total_tokens, api_time=api_time or perf_counter() - started,
+            )
+        stage = "usage"
+        try:
+            usage = _usage(response)
+            prompt_tokens += usage[0]
+            completion_tokens += usage[1]
+            total_tokens += usage[2]
+            api_time += usage[3]
+            stage = "parse"
+            parsed = _parsed_events(response, event_ids=[event.event_id for event in events], documents=by_alias)
+            break
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, OverflowError, RecursionError) as error:
+            _log_rejection(error, response, stage=stage, sampling=sampling, attempt=attempt + 1)
+            if attempt + 1 == PROTOCOL_ATTEMPTS:
+                return PathologyDocumentationExtraction(
+                    "technical_error", "tumor_llm_invalid_output", llm_call_count=calls,
+                    prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+                    total_tokens=total_tokens, api_time=api_time or perf_counter() - started,
+                )
+            attempt_prompt = _retry_prompt(base_prompt, error, response)
     return PathologyDocumentationExtraction(
         "ready",
         events={
             event_id: EventFact(state, key_by_alias.get(alias), quote)
             for event_id, (state, alias, quote) in parsed.items()
         },
-        llm_call_count=1, prompt_tokens=usage[0], completion_tokens=usage[1], total_tokens=usage[2],
-        api_time=usage[3] or perf_counter() - started,
+        llm_call_count=calls, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens,
+        total_tokens=total_tokens, api_time=api_time or perf_counter() - started,
     )

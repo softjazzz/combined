@@ -536,6 +536,7 @@ _NATIVE_SOURCE_FIELDS = {
     "death_record": (
         "document_id",
         "document_title",
+        "visit_type",
         *AUTHORITATIVE_DOCUMENT_TIME_FIELDS,
         "death_datetime",
         "death_time",

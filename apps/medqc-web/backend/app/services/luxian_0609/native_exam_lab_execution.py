@@ -94,6 +94,7 @@ from .ct_order_course_consistency import (
 )
 from .native_execution import build_luxian_0609_native_result
 from .routine_lab_presence import (
+    OPTIONAL_ORDER_SOURCES as ROUTINE_OPTIONAL_ORDER_SOURCES,
     ROUTINE_RULES, SOURCE_KEYS as ROUTINE_SOURCES, RoutineLabOutcome,
     evaluate_routine_lab_presence, routine_lab_decision,
 )
@@ -1581,6 +1582,13 @@ def _single_text_fact_outcome(
         and event.guidance_only
     ):
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
+    if (
+        rule_id == "LX0609-06-01-02"
+        and event is not None
+        and event.target_confirmed
+        and event.within_admission_window
+    ):
+        return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
     if fact.applicability == "not_applicable":
         return _ExamLabOutcome(rule_id, "not_applicable", "exam_lab_text_fact_absent", refs)
     if (rule_id == "LX0609-06-03-04" and event is not None
@@ -2912,6 +2920,13 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         source_error = source_error or "source_truncated"
                     except EvidenceMaterialUnavailable:
                         source_error = source_error or "source_unavailable"
+                for order_source in ROUTINE_OPTIONAL_ORDER_SOURCES:
+                    try:
+                        routine_rows[order_source] = evidence_materials.document_rows(
+                            order_source, snapshot=evidence_snapshot
+                        )
+                    except (EvidenceMaterialTruncated, EvidenceMaterialUnavailable):
+                        pass
                 outcome = evaluate_routine_lab_presence(rule_id=routine_id, sources=routine_rows, source_error=source_error)
             except Exception:
                 outcome = RoutineLabOutcome("technical_error", "executor_exception")

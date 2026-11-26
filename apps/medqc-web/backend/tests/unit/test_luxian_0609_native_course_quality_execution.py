@@ -6803,7 +6803,7 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output] if isinstance(model_output, str) else [model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-01-02",),
         decision_rule_ids=("LX0609-01-01-02",),
@@ -6822,14 +6822,15 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == criterion_reason
     assert result.results == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 45 if isinstance(model_output, str) else result.total_tokens == 0
+    expected_calls = 2 if isinstance(model_output, str) else 1
+    assert result.llm_call_count == expected_calls
+    assert result.total_tokens == (45 * expected_calls if isinstance(model_output, str) else 0)
     criterion = reduced[0].criterion_results[-1]
     assert criterion.reason_code == "semantic_low_confidence"
     assert criterion.rationale_code == criterion_reason
     assert client.calls == [
         {"max_completion_tokens": 600, "allow_length_retry": False}
-    ]
+    ] * expected_calls
 
 
 @pytest.mark.asyncio
@@ -6872,7 +6873,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output] if isinstance(model_output, str) else [model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-01-02",),
         decision_rule_ids=("LX0609-01-01-02",),
@@ -6890,7 +6891,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (2 if isinstance(model_output, str) else 1)
 
 
 _017_SPECIFIC_REPEAT = (
