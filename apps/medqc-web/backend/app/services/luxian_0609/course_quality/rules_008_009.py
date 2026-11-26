@@ -130,6 +130,26 @@ def _authoritative_natural_date(value: Any) -> date | None:
             return None
 
 
+_SEVERITY_ORDER_END_TIME_FIELDS = (
+    "stop_datetime",
+    "order_stop_datetime",
+    "stop_time",
+    "end_datetime",
+    "order_end_time",
+    "planned_end_datetime",
+)
+
+
+def _severity_order_end_raw_value(row: Mapping[str, Any]) -> Any:
+    """提取医嘱行上的有效停止/计划结束时间原值（优先级：停止时间 > 计划结束时间）。"""
+
+    for field_name in _SEVERITY_ORDER_END_TIME_FIELDS:
+        value = row.get(field_name)
+        if value is not None and (not isinstance(value, str) or value.strip()):
+            return value
+    return None
+
+
 def _severity_active_date_intervals(
     rows: Sequence[Mapping[str, Any]],
     *,
@@ -164,11 +184,13 @@ def _severity_active_date_intervals(
         if event_time is None:
             return None
         events.append((event_time, 0 if event_kind == "start" else 1, index, event_kind))
-        if event_kind == "start" and row.get("lifecycle_state") == "stopped":
-            end_time = local_datetime(row.get("planned_end_datetime"))
-            if end_time is None or end_time < event_time:
-                return None
-            events.append((end_time, 1, index, "own_end"))
+        if event_kind == "start":
+            raw_end = _severity_order_end_raw_value(row)
+            if row.get("lifecycle_state") == "stopped" or raw_end is not None:
+                end_time = local_datetime(raw_end)
+                if end_time is None or end_time < event_time:
+                    return None
+                events.append((end_time, 1, index, "own_end"))
     # 不同医嘱行在同一权威时刻解除和重开时，无法证明先后；不能让
     # start/end 类型排序把重开静默丢弃。复用既有时间资料不足合同。
     # 同一 stopped 行自身的开始/结束则有明确生命周期关系，仍可配对。
@@ -241,11 +263,13 @@ def _critical_active_intervals(
         ):
             continue
         events.append((clock, 0 if kind == "start" else 1, index, kind))
-        if kind == "start" and row.get("lifecycle_state") == "stopped":
-            end = parse_authoritative_datetime(row.get("planned_end_datetime"))
-            if end is None or end < clock:
-                return None
-            events.append((end, 1, index, "own_end"))
+        if kind == "start":
+            raw_end = _severity_order_end_raw_value(row)
+            if row.get("lifecycle_state") == "stopped" or raw_end is not None:
+                end = parse_authoritative_datetime(raw_end)
+                if end is None or end < clock:
+                    return None
+                events.append((end, 1, index, "own_end"))
     simultaneous: dict[datetime, tuple[set[int], set[int]]] = {}
     active: set[int] = set()
     start: datetime | None = None

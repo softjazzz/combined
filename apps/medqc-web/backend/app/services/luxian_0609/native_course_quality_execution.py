@@ -734,9 +734,15 @@ async def execute_luxian_0609_native_course_quality_rules(
 ) -> NativeCourseQualityExecutionResult:
     """按客户目录顺序执行；每条适用语义规则最多调用模型一次。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
     selected = tuple(
-        rule_id for rule_id in COURSE_QUALITY_RULE_IDS if rule_id in requested
+        rule_id for rule_id in requested if rule_id in COURSE_QUALITY_RULE_IDS
     )
     if not selected:
         return NativeCourseQualityExecutionResult((), ())

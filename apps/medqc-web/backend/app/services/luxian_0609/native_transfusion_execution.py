@@ -3490,8 +3490,16 @@ async def execute_luxian_0609_native_transfusion_rules(
 ) -> NativeTransfusionExecutionResult:
     """先证明本次存在专用输血来源，再按客户规则逐条裁剪执行。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
-    selected = tuple(rule_id for rule_id in TRANSFUSION_RULE_IDS if rule_id in requested)
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
+    selected = tuple(
+        rule_id for rule_id in requested if rule_id in TRANSFUSION_RULE_IDS
+    )
     typed_requested = {
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     }

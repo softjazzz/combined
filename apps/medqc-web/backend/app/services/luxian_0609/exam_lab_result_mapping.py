@@ -28,9 +28,11 @@ from .exam_lab_course_time import (
 from .exam_lab_fact_extraction import (
     ExamLabEventFact,
     ExamLabTextProjection,
+    _course_refs_for_rule_event,
     event_for_fact,
     event_result_carried_by_course,
     events_for_family,
+    exam_reason_window,
 )
 from .handbook_exam_lab import REPORT_RULES as HANDBOOK_REPORT_RULES, safe_handbook_display_facts
 from .routine_lab_presence import ROUTINE_RULES, safe_routine_lab_facts
@@ -127,6 +129,18 @@ _ANALYSIS_GAP_KEY = "analysis_gap_notes"
 ANALYSIS_GAP_KINDS = frozenset({"listing_only", "conclusion_without_basis", "plan_without_basis"})
 
 _REPORT_RESULT_TEXTS_KEY = "report_result_texts"
+_EXEMPT_REASONS = frozenset({"admission_window", "guidance_only"})
+
+
+def _safe_exam_name(value: Any) -> str | None:
+    """06-01-02 检查/医嘱名称：单行非空短文本，最多 200 字。"""
+
+    if not isinstance(value, str):
+        return None
+    text = _clean(value)
+    if not text or len(text) > 200 or "\n" in value or "\r" in value or text != value:
+        return None
+    return text
 
 
 def _safe_report_result_texts(value: Any) -> list[str] | None:
@@ -377,6 +391,17 @@ def safe_exam_lab_customer_display_facts(
         "source_document_ids",
         "source_document_refs",
     }
+    if normalized_rule_id == "LX0609-06-01-02":
+        allowed_event_keys.update(
+            {
+                "exam_name",
+                "order_time",
+                "exam_time",
+                "window_start_time",
+                "window_end_time",
+                "exempt_reason",
+            }
+        )
     if normalized_rule_id == "LX0609-06-01-04":
         allowed_event_keys.add(_CONFLICT_TIMES_KEY)
     if normalized_rule_id == "LX0609-06-01-05":
@@ -466,7 +491,14 @@ def safe_exam_lab_customer_display_facts(
         ):
             return None
         facts["positive_state"] = positive_state
-    for key in ("report_time", "response_record_time"):
+    for key in (
+        "report_time",
+        "response_record_time",
+        "order_time",
+        "exam_time",
+        "window_start_time",
+        "window_end_time",
+    ):
         value = raw.get(key)
         if value is not None:
             if not isinstance(value, str) or not re.fullmatch(
@@ -474,6 +506,16 @@ def safe_exam_lab_customer_display_facts(
             ):
                 return None
             facts[key] = value
+    if "exam_name" in raw:
+        exam_name = _safe_exam_name(raw["exam_name"])
+        if exam_name is None:
+            return None
+        facts["exam_name"] = exam_name
+    if "exempt_reason" in raw:
+        exempt_reason = raw["exempt_reason"]
+        if exempt_reason not in _EXEMPT_REASONS:
+            return None
+        facts["exempt_reason"] = exempt_reason
     threshold_hours = raw.get("threshold_hours")
     if threshold_hours is not None:
         if threshold_hours != 24:
@@ -496,7 +538,12 @@ def safe_exam_lab_customer_display_facts(
         facts["response_time_state"] = response_time_state
     reviewed_record_scope = raw.get("reviewed_record_scope")
     if reviewed_record_scope is not None:
-        if reviewed_record_scope != "首次病程记录及后续病程记录":
+        allowed_scopes = (
+            {"首次病程记录及后续病程记录", "检查前48小时内病程记录"}
+            if normalized_rule_id == "LX0609-06-01-02"
+            else {"首次病程记录及后续病程记录"}
+        )
+        if reviewed_record_scope not in allowed_scopes:
             return None
         facts["reviewed_record_scope"] = reviewed_record_scope
     if _CONFLICT_TIMES_KEY in raw:
@@ -545,6 +592,17 @@ def safe_exam_lab_customer_display_facts(
             "applicable",
             "requirement_met",
         }
+        if normalized_rule_id == "LX0609-06-01-02":
+            allowed_event_keys.update(
+                {
+                    "exam_name",
+                    "order_time",
+                    "exam_time",
+                    "window_start_time",
+                    "window_end_time",
+                    "exempt_reason",
+                }
+            )
         if normalized_rule_id == "LX0609-06-01-04":
             allowed_event_keys.add(_CONFLICT_TIMES_KEY)
         if normalized_rule_id == "LX0609-06-01-05":
@@ -586,7 +644,14 @@ def safe_exam_lab_customer_display_facts(
                 "event_position": expected_position,
                 "event_status": item["event_status"],
             }
-            for key in ("report_time", "response_record_time"):
+            for key in (
+                "report_time",
+                "response_record_time",
+                "order_time",
+                "exam_time",
+                "window_start_time",
+                "window_end_time",
+            ):
                 value = item.get(key)
                 if value is not None:
                     if not isinstance(value, str) or not re.fullmatch(
@@ -594,6 +659,16 @@ def safe_exam_lab_customer_display_facts(
                     ):
                         return None
                     safe_item[key] = value
+            if "exam_name" in item:
+                item_exam_name = _safe_exam_name(item["exam_name"])
+                if item_exam_name is None:
+                    return None
+                safe_item["exam_name"] = item_exam_name
+            if "exempt_reason" in item:
+                item_exempt_reason = item["exempt_reason"]
+                if item_exempt_reason not in _EXEMPT_REASONS:
+                    return None
+                safe_item["exempt_reason"] = item_exempt_reason
             event_positive_state = item.get("positive_state")
             if event_positive_state is not None:
                 if event_positive_state not in {
@@ -895,10 +970,16 @@ def build_text_outcome_display_facts(
     event_source_document_refs: Sequence[Mapping[str, str]] = (),
     include_data_gap: bool = False,
 ) -> Mapping[str, Any] | None:
-    """输出报告事件、响应病程和24小时计算事实；仅公开报告结果，不公开病程正文。"""
+    """输出报告/检查事件、响应病程和时窗事实；仅公开受控元数据，不公开病程正文。"""
 
     if (
-        rule_id not in {"LX0609-06-01-04", "LX0609-06-01-05", "LX0609-06-03-03", "LX0609-06-03-04"}
+        rule_id not in {
+            "LX0609-06-01-02",
+            "LX0609-06-01-04",
+            "LX0609-06-01-05",
+            "LX0609-06-03-03",
+            "LX0609-06-03-04",
+        }
         or (
             status not in {"compliant", "non_compliant", "not_applicable"}
             and not (
@@ -908,10 +989,101 @@ def build_text_outcome_display_facts(
         )
     ):
         return None
-    is_exam_rule = rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
+    is_reason_rule = rule_id == "LX0609-06-01-02"
+    is_exam_rule = rule_id in {"LX0609-06-01-02", "LX0609-06-01-04", "LX0609-06-01-05"}
     event = event_for_fact(projection, fact)
     if event is None:
         return None
+    if is_reason_rule:
+        window = exam_reason_window(event)
+        raw_exam_name = "、".join(
+            dict.fromkeys(_clean(name) for name in event.order_names if _clean(name))
+        ) or _clean(event.identity_text)
+        exam_name = raw_exam_name[:200].strip() if raw_exam_name else ""
+        if status == "compliant":
+            matched_times = sorted(
+                value
+                for ref in fact.course_doc_refs
+                if (value := projection.course_times.get(ref)) is not None
+                and (window is None or window[0] <= value <= window[1])
+            )
+            response_count = len(matched_times)
+            first_response = matched_times[0] if matched_times else None
+        elif status == "non_compliant":
+            window_refs = _course_refs_for_rule_event(
+                projection,
+                rule_id=rule_id,
+                event_position=fact.event_position,
+            )
+            response_count = len(window_refs)
+            first_response = None
+        else:
+            response_count = 0
+            first_response = None
+        facts: dict[str, Any] = {
+            ("failure_kind" if status == "non_compliant" else "verification_kind"): (
+                "exam_lab_requirement_not_documented"
+                if status == "non_compliant"
+                else "exam_lab_event_review_incomplete"
+                if status in {"data_gap", "evaluation_unknown"}
+                else "exam_lab_requirement_checked"
+            ),
+            "subject": "ct_mri",
+            "requirement": "reason_before_order",
+            "event_phase": "order",
+            "checked_sources": ["exam_lab_order", "course_record"],
+            "positive_state": "not_relevant",
+            "reviewed_record_scope": "检查前48小时内病程记录",
+            "response_record_count": response_count,
+            "event_count": len(events_for_family(projection, "exam")),
+            "event_position": fact.event_position,
+        }
+        if status != "data_gap":
+            facts["applicable"] = status != "not_applicable"
+        if status in {"compliant", "non_compliant"}:
+            facts["requirement_met"] = status == "compliant"
+        if exam_name:
+            facts["exam_name"] = exam_name
+        if event.order_time is not None:
+            facts["order_time"] = event.order_time.strftime("%Y-%m-%d %H:%M:%S")
+        if event.exam_time is not None:
+            facts["exam_time"] = event.exam_time.strftime("%Y-%m-%d %H:%M:%S")
+        if event.report_time is not None:
+            facts["report_time"] = event.report_time.strftime("%Y-%m-%d %H:%M:%S")
+        if window is not None:
+            facts["window_start_time"] = window[0].strftime("%Y-%m-%d %H:%M:%S")
+            facts["window_end_time"] = window[1].strftime("%Y-%m-%d %H:%M:%S")
+        if first_response is not None:
+            facts["response_record_time"] = first_response.strftime("%Y-%m-%d %H:%M:%S")
+        if status == "not_applicable":
+            if event.within_admission_window:
+                facts["exempt_reason"] = "admission_window"
+            elif event.guidance_only:
+                facts["exempt_reason"] = "guidance_only"
+        source_document_refs = projection.source_document_refs or {}
+        located_documents = [
+            {"source_type": source_type, "source_document_id": source_document_id}
+            for ref in dict.fromkeys(event.document_refs)
+            if (located := source_document_refs.get(ref)) is not None
+            for source_type, source_document_id in (located,)
+        ]
+        all_located_documents = [*located_documents, *event_source_document_refs]
+        if all_located_documents:
+            facts["source_document_refs"] = list(
+                {
+                    (str(item["source_type"]), str(item["source_document_id"])): {
+                        "source_type": str(item["source_type"]),
+                        "source_document_id": str(item["source_document_id"]),
+                    }
+                    for item in all_located_documents
+                    if isinstance(item, Mapping)
+                    and item.get("source_type")
+                    and item.get("source_document_id")
+                }.values()
+            )[:8]
+        if event_results:
+            facts["event_results"] = [dict(item) for item in event_results]
+        return facts
     subject = "ct_mri" if is_exam_rule else "culture_susceptibility"
     analysis_rule = rule_id in {"LX0609-06-01-05", "LX0609-06-03-04"}
     requirement = (

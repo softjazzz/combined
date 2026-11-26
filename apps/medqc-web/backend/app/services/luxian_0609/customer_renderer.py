@@ -769,6 +769,11 @@ _RULE_DATA_GAP_REASON_MESSAGES = {
         "已读取本次住院相关病程及检查检验资料；本次仅因自动核对候选范围超过安全容量而停止，不能据此判断病历资料缺失。",
         "无需补充病历资料，请重新执行本项质控，如仍出现请联系系统管理员。",
     ),
+    ("LX0609-06-02-02", "source_empty"): (
+        "存在手术切除病理报告，但未读取到手术记录，暂无法核对手术病理取材情况",
+        "当前病理报告提示存在手术切除标本，但本次就诊未读取到手术记录，且已核对日常病程记录未见对应取材记载，暂不能据此判定为取材未记录。",
+        "请核对并补齐手术记录同步后重新质控。",
+    ),
     ("LX0609-06-01-05", "positive_assertion_not_explicit"): (
         "检查报告未明确写明阳性，暂无法启动阳性结果分析核对",
         "当前报告虽有影像描述，但未明确标注“阳性”；按本规则口径，不能据此判断是否需要在24小时内完成分析。",
@@ -2670,6 +2675,94 @@ def customer_finding_from_controlled_facts(
             return "已核对CT/MRI医嘱、病程、检查主记录及报告，三项记录一致且检查前已说明原因。"
         if kind == "exam_order_contract_data_gap":
             return "CT/MRI医嘱、检查主记录、报告或病程资料不完整，暂无法完成一致性核对。"
+        if kind in {
+            "exam_lab_requirement_not_documented",
+            "exam_lab_requirement_checked",
+            "exam_lab_event_review_incomplete",
+        }:
+            def reason_event_header(source: Mapping[str, Any]) -> str:
+                exam_name = source.get("exam_name")
+                order_time = source.get("order_time")
+                exam_time = source.get("exam_time")
+                report_time = source.get("report_time")
+                if isinstance(order_time, str) and order_time.strip():
+                    time_label = f"开立时间 {order_time.strip()}"
+                elif isinstance(exam_time, str) and exam_time.strip():
+                    time_label = f"检查时间 {exam_time.strip()}"
+                elif isinstance(report_time, str) and report_time.strip():
+                    time_label = f"报告时间 {report_time.strip()}"
+                else:
+                    time_label = ""
+                name_label = exam_name.strip() if isinstance(exam_name, str) and exam_name.strip() else "CT/MRI检查"
+                return f"{name_label}（{time_label}）" if time_label else name_label
+
+            def reason_window_note(source: Mapping[str, Any]) -> str:
+                ws = source.get("window_start_time")
+                we = source.get("window_end_time")
+                if isinstance(ws, str) and ws.strip() and isinstance(we, str) and we.strip():
+                    return f"（{ws.strip()} 至 {we.strip()}）"
+                return ""
+
+            event_results = facts.get("event_results")
+            if isinstance(event_results, list) and len(event_results) > 1:
+                details: list[str] = []
+                missing_count = 0
+                for index, item in enumerate(event_results, start=1):
+                    if not isinstance(item, Mapping):
+                        return ""
+                    header = reason_event_header(item)
+                    event_status = str(item.get("event_status") or "")
+                    response_time = item.get("response_record_time")
+                    response_count = item.get("response_record_count")
+                    window_note = reason_window_note(item)
+                    if event_status == "compliant":
+                        timing = (
+                            f"（相关病程 {response_time}）"
+                            if isinstance(response_time, str) and response_time.strip()
+                            else ""
+                        )
+                        conclusion = f"检查前病程已记录检查原因{timing}"
+                    elif event_status == "non_compliant":
+                        missing_count += 1
+                        if isinstance(response_count, int) and response_count > 0:
+                            conclusion = (
+                                f"已核对检查前窗口{window_note}内 {response_count} 份病程，未找到检查原因"
+                            )
+                        else:
+                            conclusion = f"检查前窗口{window_note}内无病程记录，未记录检查原因"
+                    elif event_status == "not_applicable":
+                        exempt = str(item.get("exempt_reason") or "")
+                        if exempt == "admission_window":
+                            conclusion = "入院24小时内开立，本项豁免"
+                        elif exempt == "guidance_only":
+                            conclusion = "CT引导操作，本项不适用"
+                        else:
+                            conclusion = "本次检查不适用"
+                    elif event_status in {"data_gap", "evaluation_unknown"}:
+                        conclusion = "资料待核实，暂无法确认检查前是否记录检查原因"
+                    else:
+                        return ""
+                    details.append(f"{index}）{header}：{conclusion}")
+                summary_suffix = f"（其中{missing_count}次未见检查前原因）" if missing_count else ""
+                return f"共核对{len(details)}次CT/MRI检查{summary_suffix}：" + "；".join(details) + "。"
+
+            header = reason_event_header(facts)
+            window_note = reason_window_note(facts)
+            response_count = facts.get("response_record_count")
+            response_time = facts.get("response_record_time")
+            if kind == "exam_lab_requirement_not_documented" or facts.get("requirement_met") is False:
+                if isinstance(response_count, int) and response_count > 0:
+                    return (
+                        f"{header}：已核对检查前48小时窗口{window_note}内 {response_count} 份病程，未找到检查原因。"
+                    )
+                if isinstance(response_count, int) and response_count == 0:
+                    return f"{header}：检查前48小时窗口{window_note}内无病程记录，未找到检查原因。"
+                return f"{header}：已核对检查前病程记录，未找到检查原因。"
+            if kind == "exam_lab_requirement_checked" and facts.get("requirement_met") is True:
+                # 单次检查合规时回退到受控脱敏短句（与 06-01-04/06-01-05 一致，不外露原始时间戳）。
+                return ""
+            if kind == "exam_lab_event_review_incomplete":
+                return f"{header}：资料待核实，暂无法确认检查前是否记录检查原因。"
         return ""
 
     if rule_id == "LX0609-11-01-01":
@@ -2956,7 +3049,10 @@ def customer_finding_from_controlled_facts(
         else:
             return ""
         conclusion = "已找到病理结果记录" if requirement_met else "未找到病理结果记录"
-        return f"病理报告于 {facts.get('report_time')} 出具；已核对{scope}，{conclusion}。"
+        report_time = facts.get("report_time")
+        if isinstance(report_time, str) and report_time.strip() and report_time.strip().lower() != "none":
+            return f"病理报告于 {report_time.strip()} 出具；已核对{scope}，{conclusion}。"
+        return f"已核对{scope}，{conclusion}。"
 
     if rule_id == "LX0609-06-02-02" and kind == "pathology_sampling_not_documented":
         checked_sources = facts.get("checked_target_sources")

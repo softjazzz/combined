@@ -2198,10 +2198,14 @@ async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkey
         ),
     ]
     client = _Client(
-        [
-            {"is_compliant": index % 2 == 0}
-            for index in range(len(surgery.SURGERY_GATE_RULE_IDS))
-        ]
+        list(
+            reversed(
+                [
+                    {"is_compliant": index % 2 == 0}
+                    for index in range(len(surgery.SURGERY_GATE_RULE_IDS))
+                ]
+            )
+        )
     )
 
     result = await surgery.execute_luxian_0609_native_surgery_gate_rules(
@@ -2219,15 +2223,15 @@ async def test_strong_facts_execute_selected_rules_once_in_customer_order(monkey
     )
 
     assert [item["rule_id"] for item in result.results] == list(
-        surgery.SURGERY_GATE_RULE_IDS
+        reversed(surgery.SURGERY_GATE_RULE_IDS)
     )
     assert [item["status"] for item in result.results] == [
-        "compliant",
         "non_compliant",
         "compliant",
         "non_compliant",
         "compliant",
         "non_compliant",
+        "compliant",
     ]
     assert result.llm_call_count == 6
     assert result.total_tokens == 660

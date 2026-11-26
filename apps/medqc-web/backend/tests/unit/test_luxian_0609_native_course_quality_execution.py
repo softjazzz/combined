@@ -2192,7 +2192,7 @@ async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() ->
                 "status_state": "effective",
                 "lifecycle_state": "active",
                 "planned_start_datetime": "2026-01-01 09:00:00",
-                "planned_end_datetime": "2026-01-02 10:00:00",
+                "planned_end_datetime": "2026-01-05 10:00:00",
                 "row_ref": "c" * 64,
             }
         ],
@@ -2205,7 +2205,7 @@ async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() ->
 
     result, reduced = await _run_typed_severity(session)
 
-    # 未停止的医嘱仍有效，但冻结当天尚未结束，不能提前报当天缺失。
+    # 计划结束时间晚于冻结评价日时医嘱仍有效，但冻结当天尚未结束，不能提前报当天缺失。
     assert reduced[1].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[1].reason_code == "evaluation_window_not_mature"
     assert result.llm_call_count == 0
@@ -3973,9 +3973,9 @@ async def test_selected_rules_keep_customer_catalog_order_and_missing_projection
     )
     assert course.EXECUTOR_KEY == "course_quality"
     assert [item["rule_id"] for item in result.results] == [
+        "LX0609-01-01-02",
         "LX0609-02-01-03",
         "LX0609-12-01-01",
-        "LX0609-01-01-02",
     ]
     assert [item["status"] for item in result.results] == ["data_gap"] * 3
     assert result.llm_call_count == 0

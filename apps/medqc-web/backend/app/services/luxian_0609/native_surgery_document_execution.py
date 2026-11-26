@@ -2825,15 +2825,21 @@ async def execute_luxian_0609_native_surgery_document_rules(
 ) -> NativeSurgeryDocumentExecutionResult:
     """按客户目录顺序执行；强事实不足时零模型并保守降级。"""
 
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
     typed_requested = frozenset(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     )
     # 029 没有 typed evidence session 时必须留给旧兼容链，避免同一规则重复执行。
     selected = tuple(
         rule_id
-        for rule_id in SURGERY_DOCUMENT_RULE_IDS
-        if rule_id in requested
+        for rule_id in requested
+        if rule_id in SURGERY_DOCUMENT_RULE_IDS
         and (rule_id != "LX0609-04-01-01" or rule_id in typed_requested)
     )
     if (

@@ -3219,13 +3219,16 @@ async def test_complete_empty_course_only_uses_one_model_call_for_imaging_state(
     assert result.total_tokens == 110
     assert len(client.prompts) == 1
     facts = dict(result.customer_display_facts)
-    assert facts["LX0609-06-01-02"] == {
-        "failure_kind": "exam_lab_requirement_not_documented",
-        "subject": "ct_mri",
-        "requirement": "reason_before_order",
-        "event_phase": "order",
-        "checked_sources": ["exam_lab_order", "course_record"],
-    }
+    assert facts["LX0609-06-01-02"]["failure_kind"] == "exam_lab_requirement_not_documented"
+    assert facts["LX0609-06-01-02"]["subject"] == "ct_mri"
+    assert facts["LX0609-06-01-02"]["requirement"] == "reason_before_order"
+    assert facts["LX0609-06-01-02"]["event_phase"] == "order"
+    assert facts["LX0609-06-01-02"]["checked_sources"] == ["exam_lab_order", "course_record"]
+    assert facts["LX0609-06-01-02"]["exam_name"] == "胸部CT"
+    assert facts["LX0609-06-01-02"]["exam_time"] == "2026-04-26 08:00:00"
+    assert facts["LX0609-06-01-02"]["report_time"] == "2026-04-26 12:00:00"
+    assert facts["LX0609-06-01-02"]["response_record_count"] == 0
+    assert facts["LX0609-06-01-02"]["requirement_met"] is False
     assert facts["LX0609-06-01-04"]["requirement"] == "result_recording_within_24h"
     assert facts["LX0609-06-01-05"]["requirement"] == "positive_result_analysis_within_24h"
     assert facts["LX0609-06-03-03"]["subject"] == "culture_susceptibility"

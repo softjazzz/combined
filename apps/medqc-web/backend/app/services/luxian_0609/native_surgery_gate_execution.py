@@ -2425,9 +2425,15 @@ async def execute_luxian_0609_native_surgery_gate_rules(
     decision_rule_ids: Sequence[str] = (),
     malignancy_resolver: MalignancyFactResolver | None = None,
 ) -> NativeSurgeryGateExecutionResult:
-    requested = {str(rule_id or "").strip().upper() for rule_id in rule_ids}
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
     selected = tuple(
-        rule_id for rule_id in SURGERY_GATE_RULE_IDS if rule_id in requested
+        rule_id for rule_id in requested if rule_id in SURGERY_GATE_RULE_IDS
     )
     if not selected:
         return NativeSurgeryGateExecutionResult((), ())
@@ -3054,7 +3060,7 @@ async def execute_luxian_0609_native_surgery_gate_rules(
                 for rule_id in legacy_selected
             ),
             selected,
-            decisions,
+            tuple(sorted(decisions, key=lambda item: selected.index(item.rule_id))),
         )
     facts = _facts(evidence_payload)
     performed_state = _resolve_performed_state(

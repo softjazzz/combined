@@ -5121,8 +5121,16 @@ async def _execute_consultation_episode_rules(
     opinion_freeze_dir: str | Path | None = None,
     opinion_freeze_rebuild: bool = False,
 ) -> NativeConsultationEpisodeExecutionResult:
-    requested = {str(item or "").strip().upper() for item in rule_ids}
-    selected = tuple(rule_id for rule_id in CONSULTATION_EPISODE_RULE_IDS if rule_id in requested)
+    requested = tuple(
+        dict.fromkeys(
+            str(item or "").strip().upper()
+            for item in rule_ids
+            if str(item or "").strip()
+        )
+    )
+    selected = tuple(
+        rule_id for rule_id in requested if rule_id in CONSULTATION_EPISODE_RULE_IDS
+    )
     typed = frozenset(str(rule_id or "").strip().upper() for rule_id in decision_rule_ids)
     if not typed.issubset(set(selected)):
         raise ValueError("unsupported typed consultation episode scope")
@@ -6539,32 +6547,46 @@ async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
     opinion_freeze_rebuild: bool = False,
 ) -> NativeConsultationEpisodeExecutionResult:
     """原会诊执行证据与新增处置书写质量分别执行，结论不互相替代。"""
-    requested = {str(value or "").strip().upper() for value in rule_ids}
+    requested = tuple(
+        dict.fromkeys(
+            str(value or "").strip().upper()
+            for value in rule_ids
+            if str(value or "").strip()
+        )
+    )
+    selected = tuple(
+        rule_id for rule_id in requested if rule_id in CONSULTATION_EPISODE_RULE_IDS
+    )
     typed = {str(value or "").strip().upper() for value in decision_rule_ids}
-    if not typed.issubset(requested.intersection(CONSULTATION_EPISODE_RULE_IDS)):
+    if not typed.issubset(set(selected)):
         raise ValueError("unsupported typed consultation episode scope")
+    if not selected:
+        return NativeConsultationEpisodeExecutionResult((), ())
     shared = dict(institute_id=institute_id, patient_id=patient_id, visit_id=visit_id,
                   source_schema=source_schema, llm_client=llm_client, evidence_materials=evidence_materials,
                   evidence_snapshot=evidence_snapshot)
-    async def timed(selected, operation):
+    async def timed(part_selected, operation):
         try:
             with execution_time_budget(CONSULTATION_RULE_BUDGET_SECONDS):
                 return await asyncio.wait_for(operation(), timeout=CONSULTATION_RULE_BUDGET_SECONDS)
         except asyncio.TimeoutError:
             return replace(_finish(
-                selected=tuple(sorted(selected)), status='technical_error', reason_code='executor_timeout',
+                selected=part_selected, status='technical_error', reason_code='executor_timeout',
                 evidence_snapshot=evidence_snapshot,
-                decision_rule_ids=frozenset(typed.intersection(selected)),
+                decision_rule_ids=frozenset(typed.intersection(part_selected)),
             ), usage_observation_complete=False)
 
     jobs = []
-    old_selected = requested - {DISPOSITION_RECORD_RULE_ID}
+    old_selected = tuple(
+        rule_id for rule_id in selected if rule_id != DISPOSITION_RECORD_RULE_ID
+    )
     if old_selected:
         jobs.append(timed(old_selected, lambda: _execute_consultation_episode_rules(
-            rule_ids=tuple(sorted(old_selected)), decision_rule_ids=tuple(sorted(typed.intersection(old_selected))),
+            rule_ids=old_selected,
+            decision_rule_ids=tuple(rule_id for rule_id in old_selected if rule_id in typed),
             opinion_freeze_dir=opinion_freeze_dir, opinion_freeze_rebuild=opinion_freeze_rebuild, **shared)))
-    if DISPOSITION_RECORD_RULE_ID in requested:
-        jobs.append(timed({DISPOSITION_RECORD_RULE_ID}, lambda: _execute_disposition_rule(
+    if DISPOSITION_RECORD_RULE_ID in selected:
+        jobs.append(timed((DISPOSITION_RECORD_RULE_ID,), lambda: _execute_disposition_rule(
             decision_rule_ids=tuple(typed.intersection({DISPOSITION_RECORD_RULE_ID})), **shared)))
     # 两条规则独立取消；外层取消仍须清理全部任务，不能留下继续调用模型的孤儿任务。
     tasks = [asyncio.create_task(job) for job in jobs]
@@ -6575,11 +6597,27 @@ async def _execute_luxian_0609_native_consultation_episode_rules_uncached(
             if not task.done():
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+    order = {rule_id: index for index, rule_id in enumerate(selected)}
     return NativeConsultationEpisodeExecutionResult(
-        results=tuple(item for part in parts for item in part.results),
-        planned_rule_ids=tuple(item for part in parts for item in part.planned_rule_ids),
-        decisions=tuple(item for part in parts for item in part.decisions),
-        customer_display_facts=tuple(item for part in parts for item in part.customer_display_facts),
+        results=tuple(
+            sorted(
+                (item for part in parts for item in part.results),
+                key=lambda item: order[item["rule_id"]],
+            )
+        ),
+        planned_rule_ids=selected,
+        decisions=tuple(
+            sorted(
+                (item for part in parts for item in part.decisions),
+                key=lambda item: order[item.rule_id],
+            )
+        ),
+        customer_display_facts=tuple(
+            sorted(
+                (item for part in parts for item in part.customer_display_facts),
+                key=lambda item: order[item[0]],
+            )
+        ),
         diagnostic_semantic_snapshot=next((part.diagnostic_semantic_snapshot for part in parts
                                            if part.diagnostic_semantic_snapshot is not None), None),
         llm_call_count=sum(part.llm_call_count for part in parts),

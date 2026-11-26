@@ -690,7 +690,14 @@ async def evaluate_preop_content_rules(
     materials: Luxian0609EvidenceMaterialStore,
     llm_client: PreopContentLLMClient | None,
 ) -> PreopContentExecution:
-    selected = tuple(rule_id for rule_id in RULE_FIELDS if rule_id in set(rule_ids))
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
+    selected = tuple(rule_id for rule_id in requested if rule_id in RULE_FIELDS)
     if not selected:
         return PreopContentExecution(())
     records: dict[str, list[tuple[str, Mapping[str, Any], str]]] = {}

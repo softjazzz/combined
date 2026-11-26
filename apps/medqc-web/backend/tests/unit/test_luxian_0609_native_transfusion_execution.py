@@ -1520,16 +1520,16 @@ async def test_dedicated_record_keeps_customer_order_and_only_semantic_rules_cal
         llm_client=client,
     )
 
-    assert [item["rule_id"] for item in result.results] == list(transfusion.TRANSFUSION_RULE_IDS)
+    assert [item["rule_id"] for item in result.results] == list(reversed(transfusion.TRANSFUSION_RULE_IDS))
     assert [item["status"] for item in result.results] == [
         "data_gap",
-        "data_gap",
-        "data_gap",
-        "compliant",
-        "compliant",
-        "non_compliant",
-        "data_gap",
         # 默认夹具的手术/麻醉/术后正文只是“含术中输血信息”的占位，无法判断是否实施。
+        "data_gap",
+        "data_gap",
+        "non_compliant",
+        "compliant",
+        "compliant",
+        "data_gap",
         "data_gap",
         "data_gap",
     ]

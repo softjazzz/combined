@@ -71,6 +71,8 @@ _TRUSTED_ADMISSION_TIME_BASES = frozenset(
     {
         "cdm_inpat_registration_admission_datetime",
         "timeline_primary_admission_datetime",
+        "cdm_admission_record_admission_datetime",
+        "admission_record_admission_datetime",
     }
 )
 _CUSTOMER_APPROVED_ADMISSION_TIME_BASES = frozenset(
@@ -78,6 +80,12 @@ _CUSTOMER_APPROVED_ADMISSION_TIME_BASES = frozenset(
         # 0426 存量数据无住院登记时间；入院记录源的 record_time
         # 是当前客户批准的入院时限锨点，仅限该固定来源基础。
         "admission_record_record_time_fallback",
+    }
+)
+_ADMISSION_RECORD_DATETIME_FALLBACK_BASES = frozenset(
+    {
+        "cdm_admission_record_admission_datetime",
+        "admission_record_admission_datetime",
     }
 )
 _FIRST_COURSE_BODY_FIELDS = (
@@ -246,22 +254,58 @@ def _first_course_data_gap_result() -> dict[str, Any]:
     )
 
 
-def _approved_admission_anchor_available(
+def _extract_admission_record_datetime_anchor(
+    admission_rows: Any,
+) -> str | None:
+    """从入院记录文档行提取唯一权威 admission_datetime（不含 record_time/authored_at）。"""
+
+    if not isinstance(admission_rows, (list, tuple)):
+        return None
+    parsed_candidates: list[tuple[datetime, str]] = []
+    seen_times: set[datetime] = set()
+    for row in admission_rows:
+        if not isinstance(row, Mapping):
+            continue
+        source_table = str(row.get("source_table") or "").strip().lower()
+        if source_table and source_table != "admission_record":
+            continue
+        for field in ("admission_datetime", "admission_time"):
+            raw_value = row.get(field)
+            parsed = parse_authoritative_datetime(raw_value)
+            if parsed is not None and parsed not in seen_times:
+                seen_times.add(parsed)
+                parsed_candidates.append((parsed, parsed.strftime("%Y-%m-%d %H:%M:%S")))
+    if len(parsed_candidates) == 1:
+        return parsed_candidates[0][1]
+    return None
+
+
+def _resolve_approved_admission_anchor(
     evidence_payload: dict[str, Any] | None,
-) -> bool:
+) -> tuple[bool, str | None, str]:
+    """返回 (是否可用, 需回填的入院时间或None, 锚点来源标识)。"""
+
     if not isinstance(evidence_payload, dict):
-        return False
+        return False, None, ""
     timeline = evidence_payload.get("programmatic_timeline")
     if not isinstance(timeline, dict):
-        return False
-    basis = timeline.get("admission_time_basis")
+        return False, None, ""
+    basis = str(timeline.get("admission_time_basis") or "").strip()
     admission_time = str(timeline.get("admission_time") or "").strip()
     documents = timeline.get("documents")
     admission_rows = (
         documents.get("admission_record") if isinstance(documents, dict) else None
     )
+    if (
+        admission_time
+        and timeline.get("admission_time_trusted") is True
+        and basis in _TRUSTED_ADMISSION_TIME_BASES
+    ):
+        return True, None, basis
+
     approved_record_time_bound = (
-        basis in _CUSTOMER_APPROVED_ADMISSION_TIME_BASES
+        bool(admission_time)
+        and basis in _CUSTOMER_APPROVED_ADMISSION_TIME_BASES
         and isinstance(admission_rows, (list, tuple))
         and any(
             isinstance(row, dict)
@@ -271,13 +315,28 @@ def _approved_admission_anchor_available(
             for row in admission_rows
         )
     )
-    return bool(admission_time) and (
-        (
-            timeline.get("admission_time_trusted") is True
-            and basis in _TRUSTED_ADMISSION_TIME_BASES
-        )
-        or approved_record_time_bound
+    if approved_record_time_bound:
+        return True, None, basis
+
+    fallback_dt = _extract_admission_record_datetime_anchor(admission_rows)
+    if fallback_dt is not None:
+        if not admission_time:
+            return True, fallback_dt, "admission_record.admission_datetime"
+        if basis in _ADMISSION_RECORD_DATETIME_FALLBACK_BASES:
+            parsed_claimed = parse_authoritative_datetime(admission_time)
+            parsed_fallback = parse_authoritative_datetime(fallback_dt)
+            if parsed_claimed is not None and parsed_claimed == parsed_fallback:
+                return True, None, "admission_record.admission_datetime"
+    return False, None, ""
+
+
+def _approved_admission_anchor_available(
+    evidence_payload: dict[str, Any] | None,
+) -> bool:
+    available, _fallback_dt, _anchor_source = _resolve_approved_admission_anchor(
+        evidence_payload
     )
+    return available
 
 
 def _admission_anchor_data_gap_result(rule_id: str) -> dict[str, Any]:
@@ -590,12 +649,47 @@ def _typed_basic_decisions(
             if frozen_row.get("basis") == "discharge_date":
                 # 出院是临床观察终点，不是文书可见性截止：出院后补写但在任务冻结前
                 # 完成的记录仍须按原24/8/48/72小时合同判定。
-                horizon_date_for_filter = date.fromisoformat(str(frozen_row["task_frozen_date"]))
+                if "task_frozen_date" in frozen_row:
+                    horizon_date_for_filter = date.fromisoformat(str(frozen_row["task_frozen_date"]))
+                else:
+                    # 单病历/终末直评场景下 discharge_date 终点未携带 task_frozen_date：
+                    # 仍校验 horizon_date/horizon_datetime 合法与一致，再以不早于出院日的快照创建日作为可见性截止。
+                    parsed_horizon_date = (
+                        date.fromisoformat(str(frozen_row["horizon_date"]))
+                        if frozen_row.get("horizon_date")
+                        else None
+                    )
+                    parsed_horizon_dt = parse_authoritative_datetime(
+                        frozen_row.get("horizon_datetime")
+                    )
+                    if frozen_row.get("horizon_datetime") and parsed_horizon_dt is None:
+                        horizon_filter_issue = "authoritative_time_missing"
+                    elif (
+                        parsed_horizon_dt is not None
+                        and parsed_horizon_date is not None
+                        and parsed_horizon_dt.date() != parsed_horizon_date
+                    ):
+                        horizon_filter_issue = "authoritative_time_conflict"
+                    elif parsed_horizon_date is not None or parsed_horizon_dt is not None:
+                        base_date = (
+                            parsed_horizon_date
+                            if parsed_horizon_date is not None
+                            else parsed_horizon_dt.date()
+                        )
+                        created_dt = parse_authoritative_datetime(snapshot.created_at)
+                        horizon_date_for_filter = (
+                            max(base_date, created_dt.date())
+                            if created_dt is not None
+                            else base_date
+                        )
             else:
                 horizon_datetime_for_filter = parse_authoritative_datetime(frozen_row.get("horizon_datetime"))
                 if frozen_row.get("horizon_date"):
                     horizon_date_for_filter = date.fromisoformat(str(frozen_row["horizon_date"]))
-            if horizon_datetime_for_filter is not None or horizon_date_for_filter is not None:
+            if (
+                horizon_filter_issue == "authoritative_time_missing"
+                and (horizon_datetime_for_filter is not None or horizon_date_for_filter is not None)
+            ):
                 horizon_filter_issue = ""
             if frozen_row.get("basis") != "discharge_date" and frozen_row.get("horizon_datetime") and horizon_datetime_for_filter is None:
                 horizon_filter_issue = "authoritative_time_missing"
@@ -864,7 +958,7 @@ def _typed_basic_decisions(
             decisions.append(gap(rule_id, horizon_filter_issue))
             continue
         if rule_id == "LX0609-01-02-01":
-            anchor, _anchor_date, _anchor_source, anchor_gap = admission_anchor(rule_id)
+            anchor, _anchor_date, anchor_source, anchor_gap = admission_anchor(rule_id)
             if anchor_gap is not None or anchor is None:
                 decisions.append(
                     anchor_gap or gap(rule_id, "authoritative_time_missing")
@@ -944,9 +1038,10 @@ def _typed_basic_decisions(
             ]
             if timely_events:
                 sources = None
-                if observation_by_source["inpat_registration"].query_state.value == "empty":
-                    # 入院记录提供精确锚点，首次病程证明按时完成，空登记不参与结论。
-                    sources = ("admission_record", EVALUATION_HORIZON_SOURCE_KEY, "first_course_record")
+                if anchor_source == "admission_record":
+                    # 入院记录提供精确锚点（如住院登记为空或入院时间为 NULL），首次病程证明按时完成，
+                    # 仅在登记表无读取异常时排除未参与判定的住院登记。
+                    sources = timely_sources(rule_id, anchor_source, "first_course_record")
                 observed, source_document_id, selected_row = min(timely_events, key=lambda item: item[0])
                 decision = attach_selected_row(
                     conclusive(
@@ -1804,9 +1899,33 @@ def _execute_luxian_0609_native_basic_timeliness(
             _FIRST_COURSE_RULE_ID in selected
             and not _has_substantive_first_course_body(evidence_payload)
         )
-        admission_anchor_data_gap_ids = _ADMISSION_ANCHOR_RULE_IDS.intersection(
-            selected_set - typed_set
-        ) if not _approved_admission_anchor_available(evidence_payload) else set()
+        anchor_available, fallback_admission_time, legacy_anchor_source = (
+            _resolve_approved_admission_anchor(evidence_payload)
+        )
+        effective_evidence_payload = evidence_payload
+        if fallback_admission_time and isinstance(evidence_payload, dict):
+            payload_copy = dict(evidence_payload)
+            timeline_copy = dict(payload_copy.get("programmatic_timeline") or {})
+            timeline_copy["admission_time"] = fallback_admission_time
+            timeline_copy["admission_time_basis"] = "admission_record_admission_datetime"
+            timeline_copy["admission_time_trusted"] = True
+            payload_copy["programmatic_timeline"] = timeline_copy
+            effective_evidence_payload = payload_copy
+            if course_evidence_payload is not None:
+                course_timeline_copy = dict(
+                    course_evidence_payload.get("programmatic_timeline") or {}
+                )
+                course_timeline_copy["admission_time"] = fallback_admission_time
+                course_timeline_copy["admission_time_basis"] = (
+                    "admission_record_admission_datetime"
+                )
+                course_timeline_copy["admission_time_trusted"] = True
+                course_evidence_payload["programmatic_timeline"] = course_timeline_copy
+        admission_anchor_data_gap_ids = (
+            _ADMISSION_ANCHOR_RULE_IDS.intersection(selected_set - typed_set)
+            if not anchor_available
+            else set()
+        )
         evaluated_rule_ids = selected_set - typed_set - (
             {_FIRST_COURSE_RULE_ID} if first_course_data_gap else set()
         ) - admission_anchor_data_gap_ids - course_source_data_gap_ids
@@ -1829,7 +1948,7 @@ def _execute_luxian_0609_native_basic_timeliness(
         ]
         evaluated = evaluate_luxian_0609_programmatic_rules(
             wrapper_rules=non_course_wrappers,
-            evidence_payload=evidence_payload,
+            evidence_payload=effective_evidence_payload,
         )
         if course_wrappers and course_evidence_payload is not None:
             evaluated.extend(
@@ -1879,6 +1998,11 @@ def _execute_luxian_0609_native_basic_timeliness(
                 "prompt_tokens": 0,
                 "completion_tokens": 0,
                 "total_tokens": 0,
+                **(
+                    {"admission_anchor_source": legacy_anchor_source}
+                    if legacy_anchor_source and rule_id in _ADMISSION_ANCHOR_RULE_IDS
+                    else {}
+                ),
             }
         )
         item["metadata"] = metadata

@@ -1979,7 +1979,13 @@ def _display_facts_for_text_outcome(
             "event_status": event_outcome.status,
         }
         for key in (
+            "exam_name",
+            "order_time",
+            "exam_time",
             "report_time",
+            "window_start_time",
+            "window_end_time",
+            "exempt_reason",
             "positive_state",
             "report_result_texts",
             "response_record_count",
