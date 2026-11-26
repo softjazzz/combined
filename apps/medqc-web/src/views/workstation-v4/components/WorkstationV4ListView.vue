@@ -415,6 +415,7 @@
                     :job="recordPoolQcTask"
                     :inline-result-viewer="true"
                     @dismiss="emit('dismiss-qc-task')"
+                    @canceled="emit('canceled-qc-task', $event)"
                     @results-updated="handleQcTaskRefresh"
                     @completed="handleQcTaskRefresh"
                     @view-results="emit('view-qc-results', $event)"
@@ -557,6 +558,7 @@ const emit = defineEmits<{
   'preview-run-qc': [recordKey: string]
   'filter-qc': []
   'dismiss-qc-task': []
+  'canceled-qc-task': [job: SichuanBatchJob]
   'view-qc-results': [job: SichuanBatchJob]
   'open-batch-qc-result': [payload: { item: BatchResultRecordItem; queue: BatchResultRecordItem[]; index: number }]
   'exit-batch-qc-results': []

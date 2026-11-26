@@ -294,6 +294,7 @@ export async function cancelSichuanWorkspaceBatchJob(jobId: string) {
     {
       method: 'POST',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/cancel`,
+      skipErrorToast: true,
     },
     '停止四川规则批量任务失败',
   )

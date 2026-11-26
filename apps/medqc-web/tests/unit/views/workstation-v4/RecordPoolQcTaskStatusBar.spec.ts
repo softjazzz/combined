@@ -1,8 +1,10 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { Popconfirm } from 'ant-design-vue'
 import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  cancelSichuanWorkspaceBatchJob: vi.fn(),
   downloadBlob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
@@ -13,6 +15,7 @@ vi.mock('@/composables/useQcResultVisibility', () => ({
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  cancelSichuanWorkspaceBatchJob: mocks.cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob: mocks.exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
 }))
@@ -495,5 +498,48 @@ it('多病历并发仍有执行中病历时，不将已完成单份的 76/76 重
   expect(wrapper.text()).toContain('已处理 1 / 2 份病历')
   expect(wrapper.text()).not.toContain('处理进度已达 100%')
   expect(wrapper.text()).not.toContain('当前单份规则进度 76 / 76')
+  wrapper.unmount()
+})
+
+it('执行中/排队中展示停止按钮，确认停止后调用取消接口并切换为已停止状态', async () => {
+  const canceledJob = job({
+    status: 'canceled',
+    success_count: 0,
+    failed_count: 0,
+  })
+  mocks.cancelSichuanWorkspaceBatchJob.mockResolvedValue({
+    success: true,
+    data: canceledJob,
+  })
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: { job: job({ status: 'running' }), autoPoll: false, inlineResultViewer: true },
+  })
+
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(true)
+  expect(wrapper.get('[data-testid="record-pool-qc-cancel-btn"]').text()).toContain('停止')
+
+  await wrapper.findComponent(Popconfirm).vm.$emit('confirm')
+  await flushPromises()
+
+  expect(mocks.cancelSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
+  expect(wrapper.text()).toContain('质控任务已停止')
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(false)
+  expect(wrapper.emitted('canceled')).toEqual([[canceledJob]])
+  expect(wrapper.emitted('results-updated')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('已停止但已有完成病历时保留查看本次质控结果入口', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      job: job({ status: 'canceled', total_records: 3, success_count: 1, failed_count: 0 }),
+      autoPoll: false,
+      inlineResultViewer: true,
+    },
+  })
+
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(true)
   wrapper.unmount()
 })

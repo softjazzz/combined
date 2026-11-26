@@ -59,6 +59,7 @@
         @preview-run-qc="handlePreviewRecordQc"
         @filter-qc="handleFilterQc"
         @dismiss-qc-task="handleDismissRecordPoolQcTask"
+        @canceled-qc-task="handleCanceledRecordPoolQcTask"
         @view-qc-results="handleViewRecordPoolQcResults"
         @open-batch-qc-result="handleOpenBatchQcResult"
         @exit-batch-qc-results="exitBatchQcResults"
@@ -2441,6 +2442,10 @@ function handleDismissRecordPoolQcTask() {
   if (dismissedJobId && batchQcResults.value?.jobId === dismissedJobId) {
     exitBatchQcResults()
   }
+}
+
+function handleCanceledRecordPoolQcTask(job: SichuanBatchJob) {
+  recordPoolQcTask.value = job
 }
 
 function handleOpenBatchQcResult(payload: {

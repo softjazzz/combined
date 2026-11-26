@@ -52,6 +52,30 @@
       </div>
 
       <div class="record-pool-qc-status__actions">
+        <Popconfirm
+          v-if="canCancel"
+          title="确认停止当前质控任务？已完成的病历结果会保留，未执行的病历将不再继续。"
+          ok-text="确认停止"
+          cancel-text="继续执行"
+          :ok-button-props="{ danger: true, loading: canceling }"
+          placement="bottomRight"
+          :disabled="canceling"
+          @confirm="cancelCurrentBatch"
+        >
+          <button
+            type="button"
+            class="record-pool-qc-status__cancel"
+            :disabled="canceling"
+            data-testid="record-pool-qc-cancel-btn"
+          >
+            <Square
+              :size="11"
+              aria-hidden="true"
+            />
+            <span>{{ canceling ? '停止中…' : '停止' }}</span>
+          </button>
+        </Popconfirm>
+
         <button
           type="button"
           class="record-pool-qc-status__details-toggle"
@@ -70,7 +94,7 @@
 
         <template v-if="!isActive">
           <button
-            v-if="inlineResultViewer"
+            v-if="inlineResultViewer && canViewResults"
             type="button"
             class="record-pool-qc-status__detail-link"
             data-testid="qc-task-detail-link"
@@ -79,7 +103,7 @@
             {{ confirmedResultsOnly ? '查看本次质控结果' : '查看本次结果与失败原因' }}
           </button>
           <RouterLink
-            v-else
+            v-else-if="canViewResults"
             :to="`/workstation-v5/qc-task?job_id=${encodeURIComponent(currentJob.id)}`"
             class="record-pool-qc-status__detail-link"
             data-testid="qc-task-detail-link"
@@ -196,11 +220,12 @@
 </template>
 
 <script setup lang="ts">
-import { message } from 'ant-design-vue'
+import { Popconfirm, message } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import { ChevronDown, CircleAlert, CircleCheckBig, X } from 'lucide-vue-next'
+import { ChevronDown, CircleAlert, CircleCheckBig, Square, X } from 'lucide-vue-next'
 import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob,
 } from '@/services/sichuan-rule-workspace-service'
@@ -236,6 +261,7 @@ const props = withDefaults(
 const emit = defineEmits<{
   dismiss: []
   completed: []
+  canceled: [job: SichuanBatchJob]
   'results-updated': []
   'view-results': [job: SichuanBatchJob]
 }>()
@@ -245,12 +271,37 @@ const currentJob = ref<SichuanBatchJob | null>(null)
 const pollError = ref(false)
 const resultReadError = ref('')
 const exporting = ref(false)
+const canceling = ref(false)
 const detailsOpen = ref(false)
 let pollTimer: ReturnType<typeof setTimeout> | null = null
 let requestSequence = 0
 let consecutiveReadFailures = 0
 
 const DELIVERY_CONTRACT_ERROR = '历史质控结果交付合同不完整，无法安全展示'
+
+async function cancelCurrentBatch() {
+  const jobId = String(currentJob.value?.id || '').trim()
+  if (!jobId || !canCancel.value || canceling.value) return
+  canceling.value = true
+  try {
+    const response = await cancelSichuanWorkspaceBatchJob(jobId)
+    if (!response.success || !response.data) {
+      message.error(response.message || '停止质控任务失败，请稍后重试')
+      return
+    }
+    requestSequence += 1
+    clearPollTimer()
+    currentJob.value = response.data
+    pollError.value = false
+    emit('canceled', response.data)
+    emit('results-updated')
+    message.success('已停止当前质控任务')
+  } catch {
+    message.error('停止质控任务失败，请稍后重试')
+  } finally {
+    canceling.value = false
+  }
+}
 
 async function exportCurrentBatch() {
   const jobId = String(currentJob.value?.id || '').trim()
@@ -273,6 +324,19 @@ async function exportCurrentBatch() {
 }
 
 const isActive = computed(() => !resultReadError.value && isBatchJobPollingActive(currentJob.value))
+const canCancel = computed(() => {
+  const status = String(currentJob.value?.status || '')
+    .trim()
+    .toLowerCase()
+  return isActive.value && (status === 'queued' || status === 'running')
+})
+const canViewResults = computed(() => {
+  const status = String(currentJob.value?.status || '')
+    .trim()
+    .toLowerCase()
+  if (status !== 'canceled' && status !== 'cancelled') return true
+  return (processedRecords.value ?? 0) > 0
+})
 const automaticRetrying = computed(() => isActive.value && currentJob.value?.status === 'failed')
 
 function finiteCount(value: unknown): number | null {
@@ -818,6 +882,38 @@ onBeforeUnmount(() => {
   margin-left: auto;
 }
 
+.record-pool-qc-status__cancel {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--mq-danger-icon) 34%, var(--mq-bg-surface));
+  border-radius: 7px;
+  background: var(--mq-bg-surface);
+  color: var(--mq-danger-text);
+  font-size: 12px;
+  line-height: 1;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    border-color 140ms ease,
+    color 140ms ease,
+    background-color 140ms ease;
+}
+
+.record-pool-qc-status__cancel:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--mq-danger-icon) 58%, var(--mq-bg-surface));
+  background: color-mix(in srgb, var(--mq-danger-icon) 7%, var(--mq-bg-surface));
+  color: var(--mq-danger-text);
+}
+
+.record-pool-qc-status__cancel:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
 .record-pool-qc-status__details-toggle {
   display: inline-flex;
   align-items: center;
@@ -845,6 +941,7 @@ onBeforeUnmount(() => {
   background: color-mix(in srgb, var(--mq-brand-600) 4%, var(--mq-bg-surface));
 }
 
+.record-pool-qc-status__cancel:focus-visible,
 .record-pool-qc-status__details-toggle:focus-visible,
 .record-pool-qc-status__detail-link:focus-visible,
 .record-pool-qc-status__export:focus-visible,

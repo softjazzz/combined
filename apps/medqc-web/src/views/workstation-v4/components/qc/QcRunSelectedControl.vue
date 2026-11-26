@@ -64,6 +64,7 @@
           :auto-poll="false"
           :inline-result-viewer="inlineResultViewer"
           @dismiss="handleDismissTask"
+          @canceled="handleCancelTask"
           @view-results="handleViewTaskResults"
         />
       </div>
@@ -95,6 +96,7 @@
         :auto-poll="false"
         :inline-result-viewer="inlineResultViewer"
         @dismiss="handleDismissTask"
+        @canceled="handleCancelTask"
         @view-results="handleViewTaskResults"
       />
     </template>
@@ -151,6 +153,15 @@ function handleDismissTask() {
   const dismissedJobId = String(taskJob.value?.id || '').trim()
   taskJob.value = null
   if (dismissedJobId) emit('dismiss-task', dismissedJobId)
+}
+
+function handleCancelTask(job: SichuanBatchJob) {
+  clearPollTimer()
+  clearPersistedJob(storageKey())
+  taskJob.value = job
+  state.value = 'idle'
+  progressMessage.value = ''
+  emit('results-updated')
 }
 
 function handleViewTaskResults(job: SichuanBatchJob) {
