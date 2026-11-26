@@ -116,6 +116,10 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
             "non_compliant_record_total": 1,
             "data_gap_record_total": 0,
             "uncertain_record_total": 0,
+            "problem_record_total": 1,
+            "primary_non_compliant_record_total": 1,
+            "primary_data_gap_record_total": 0,
+            "primary_uncertain_record_total": 0,
         },
         {
             "physician": "李医生",
@@ -123,6 +127,10 @@ def test_analytics_uses_root_job_and_three_coordinate_as_event_identity(monkeypa
             "non_compliant_record_total": 0,
             "data_gap_record_total": 1,
             "uncertain_record_total": 1,
+            "problem_record_total": 1,
+            "primary_non_compliant_record_total": 0,
+            "primary_data_gap_record_total": 1,
+            "primary_uncertain_record_total": 0,
         },
     ]
     assert [
@@ -203,6 +211,10 @@ def test_analytics_keeps_missing_attending_physician_unassigned(monkeypatch):
             "non_compliant_record_total": 1,
             "data_gap_record_total": 0,
             "uncertain_record_total": 0,
+            "problem_record_total": 1,
+            "primary_non_compliant_record_total": 1,
+            "primary_data_gap_record_total": 0,
+            "primary_uncertain_record_total": 0,
         },
         {
             "physician": "王医生",
@@ -210,6 +222,10 @@ def test_analytics_keeps_missing_attending_physician_unassigned(monkeypatch):
             "non_compliant_record_total": 0,
             "data_gap_record_total": 1,
             "uncertain_record_total": 0,
+            "problem_record_total": 1,
+            "primary_non_compliant_record_total": 0,
+            "primary_data_gap_record_total": 1,
+            "primary_uncertain_record_total": 0,
         },
     ]
 

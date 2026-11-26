@@ -243,7 +243,7 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   Check,
@@ -267,6 +267,9 @@ import type { AccountRole } from '@/api/accountManagement'
 
 const props = defineProps<{ registrationId?: string }>()
 const auth = useAuthStore()
+const canReviewRegistrations = computed(() =>
+  auth.userRoles.some((role) => role === 'admin' || role === 'super_admin'),
+)
 const rows = ref<RegistrationItem[]>([]),
   total = ref(0),
   page = ref(1)
@@ -304,36 +307,47 @@ const formatTime = (value: string) =>
   }).format(new Date(value))
 let listGeneration = 0,
   detailGeneration = 0
+let listAbortController: AbortController | null = null
+let detailAbortController: AbortController | null = null
 async function load(next = 1) {
   if (saving.value) return
   const token = ++listGeneration
+  listAbortController?.abort()
+  const controller = new AbortController()
+  listAbortController = controller
   loading.value = true
   error.value = ''
   try {
     const result = await listRegistrations({ status: state.value, page: next, page_size: 20 })
-    if (token !== listGeneration) return
+    if (token !== listGeneration || controller.signal.aborted) return
     rows.value = result.items
     total.value = result.total
     page.value = result.page
   } catch (err) {
-    if (token !== listGeneration) return
+    if (token !== listGeneration || controller.signal.aborted) return
     error.value = err instanceof Error ? err.message : '申请读取失败'
     rows.value = []
     total.value = 0
   } finally {
-    if (token === listGeneration) loading.value = false
+    if (token === listGeneration && listAbortController === controller) {
+      loading.value = false
+      listAbortController = null
+    }
   }
 }
 async function open(id: string) {
   if (saving.value) return
   const token = ++detailGeneration
+  detailAbortController?.abort()
+  const controller = new AbortController()
+  detailAbortController = controller
   dialog.value = true
   detailLoading.value = true
   detail.value = null
   detailError.value = ''
   try {
     const result = await getRegistrationDetail(id)
-    if (token !== detailGeneration) return
+    if (token !== detailGeneration || controller.signal.aborted) return
     detail.value = result
     decision.value = 'approve'
     comment.value = ''
@@ -343,15 +357,20 @@ async function open(id: string) {
       roles: ['doctor'],
     })
   } catch (err) {
-    if (token === detailGeneration)
+    if (token === detailGeneration && !controller.signal.aborted)
       detailError.value = err instanceof Error ? err.message : '申请详情读取失败'
   } finally {
-    if (token === detailGeneration) detailLoading.value = false
+    if (token === detailGeneration && detailAbortController === controller) {
+      detailLoading.value = false
+      detailAbortController = null
+    }
   }
 }
 function close() {
   if (saving.value) return
   detailGeneration++
+  detailAbortController?.abort()
+  detailAbortController = null
   dialog.value = false
   detail.value = null
   detailError.value = ''
@@ -394,20 +413,33 @@ async function save() {
     if (token === detailGeneration) saving.value = false
   }
 }
-watch([comment, () => binding.roles.join(',')], () => {
-  if (detailError.value === '请填写审核意见并核定授权角色') detailError.value = ''
-})
+watch(
+  [
+    decision,
+    comment,
+    () => binding.institute_id,
+    () => binding.department,
+    () => binding.roles.join(','),
+  ],
+  () => {
+    if (detail.value && detailError.value) detailError.value = ''
+  },
+)
 watch(
   () => [auth.user?.id, auth.userRoles.join(',')],
   () => {
     listGeneration++
     detailGeneration++
+    listAbortController?.abort()
+    listAbortController = null
+    detailAbortController?.abort()
+    detailAbortController = null
     rows.value = []
     total.value = 0
     dialog.value = false
     saving.value = false
     detail.value = null
-    if (auth.userRoles.includes('admin')) {
+    if (canReviewRegistrations.value) {
       void load(1)
       if (props.registrationId) void open(props.registrationId)
     } else {
@@ -420,12 +452,16 @@ watch(
 watch(
   () => props.registrationId,
   (id) => {
-    if (id && auth.userRoles.includes('admin')) void open(id)
+    if (id && canReviewRegistrations.value) void open(id)
   },
 )
 onBeforeUnmount(() => {
   listGeneration++
   detailGeneration++
+  listAbortController?.abort()
+  listAbortController = null
+  detailAbortController?.abort()
+  detailAbortController = null
 })
 </script>
 

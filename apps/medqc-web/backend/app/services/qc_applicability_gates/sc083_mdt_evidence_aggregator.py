@@ -430,13 +430,37 @@ def _documents_from_payload(payload: dict[str, Any], visit_id: str) -> list[MdtE
 
 def _visit_id(result: dict[str, Any], context: dict[str, Any] | None = None) -> str:
     context = context or {}
+    metadata = _safe_dict(result.get("metadata"))
+    bundle_meta = _safe_dict(context.get("bundle_metadata"))
     return _safe_text(
         result.get("visit_id")
         or result.get("record_id")
         or result.get("visitId")
+        or metadata.get("visit_id")
         or context.get("visit_id")
         or context.get("record_id")
+        or bundle_meta.get("visit_id")
     )
+
+
+def _tri_key(result: dict[str, Any], context: dict[str, Any] | None = None) -> tuple[str, str, str]:
+    context = context or {}
+    metadata = _safe_dict(result.get("metadata"))
+    bundle_meta = _safe_dict(context.get("bundle_metadata"))
+    institute_id = _safe_text(
+        result.get("institute_id")
+        or metadata.get("institute_id")
+        or context.get("institute_id")
+        or bundle_meta.get("institute_id")
+    )
+    patient_id = _safe_text(
+        result.get("patient_id")
+        or metadata.get("patient_id")
+        or context.get("patient_id")
+        or bundle_meta.get("patient_id")
+    )
+    visit_id = _visit_id(result, context)
+    return institute_id, patient_id, visit_id
 
 
 def _patient_name(result: dict[str, Any], context: dict[str, Any] | None = None) -> str:
@@ -449,21 +473,25 @@ def _department(result: dict[str, Any], context: dict[str, Any] | None = None) -
     return _safe_text(result.get("department") or context.get("department"))
 
 
+_SC083_DB_MAX_ROWS = 200
+
+
 def _db_table_schema(table_name: str) -> tuple[str, list[str]] | None:
-    try:
-        from app.database.connection import engine
-    except Exception:
-        return None
+    from app.database.connection import engine
+    from app.services.clinical_read import clinical_read_schema
+
     if engine is None:
-        return None
+        raise RuntimeError("数据库连接未配置，无法读取 SC-083 临床证据")
     inspector = sa_inspect(engine)
-    for schema in ("cdm", "public", None):
-        try:
-            if inspector.has_table(table_name, schema=schema):
-                columns = [column["name"] for column in inspector.get_columns(table_name, schema=schema)]
-                return schema or "", columns
-        except Exception:
-            continue
+    preferred = clinical_read_schema()
+    schema_candidates: list[str | None] = []
+    for candidate in (preferred, "cdm", "public", None):
+        if candidate not in schema_candidates:
+            schema_candidates.append(candidate)
+    for schema in schema_candidates:
+        if inspector.has_table(table_name, schema=schema):
+            columns = [column["name"] for column in inspector.get_columns(table_name, schema=schema)]
+            return schema or "", columns
     return None
 
 
@@ -471,33 +499,76 @@ def _qualified(schema: str, table_name: str) -> str:
     return f'"{schema}"."{table_name}"' if schema else f'"{table_name}"'
 
 
-def _db_rows(table_name: str, visit_id: str, wanted_fields: list[str]) -> list[dict[str, Any]]:
-    try:
-        from app.database.connection import engine
-    except Exception:
-        return []
-    if engine is None or not visit_id:
-        return []
+def _db_rows(
+    table_name: str,
+    visit_id: str,
+    wanted_fields: list[str],
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+    max_rows: int = _SC083_DB_MAX_ROWS,
+) -> tuple[list[dict[str, Any]], bool]:
+    """按三坐标 (institute_id, patient_id, visit_id) 读取证据行，使用 LIMIT N+1 探测截断且不静默吞 DB 错。"""
+    from app.database.connection import engine
+
+    iid = _safe_text(institute_id)
+    pid = _safe_text(patient_id)
+    vid = _safe_text(visit_id)
+    if not (iid and pid and vid):
+        raise ValueError("SC-083 数据库回源缺少完整三坐标 (institute_id, patient_id, visit_id)")
+    if engine is None:
+        raise RuntimeError("数据库连接未配置，无法读取 SC-083 临床证据")
     schema_info = _db_table_schema(table_name)
     if not schema_info:
-        return []
+        return [], False
     schema, columns = schema_info
-    fields = ["visit_id"] + [field for field in wanted_fields if field in columns]
+    for required_col in ("institute_id", "patient_id", "visit_id"):
+        if required_col not in columns:
+            raise RuntimeError(f"SC-083 来源表 {table_name} 缺少三坐标列 {required_col}")
+    fields = ["institute_id", "patient_id", "visit_id"] + [
+        field for field in wanted_fields if field in columns
+    ]
     fields = list(dict.fromkeys(fields))
-    if "visit_id" not in fields:
-        return []
     selected = ", ".join(f'"{field}"' for field in fields)
-    sql = f'SELECT {selected} FROM {_qualified(schema, table_name)} WHERE CAST("visit_id" AS TEXT) = :visit_id'
-    try:
-        with engine.connect() as conn:
-            return [dict(row) for row in conn.execute(text(sql), {"visit_id": visit_id}).mappings().all()]
-    except Exception:
-        return []
+    limit_cap = max(1, int(max_rows))
+    sql = (
+        f'SELECT {selected} FROM {_qualified(schema, table_name)} '
+        f'WHERE CAST("institute_id" AS TEXT) = :institute_id '
+        f'AND CAST("patient_id" AS TEXT) = :patient_id '
+        f'AND CAST("visit_id" AS TEXT) = :visit_id '
+        f'LIMIT :limit_rows'
+    )
+    with engine.connect() as conn:
+        fetched = [
+            dict(row)
+            for row in conn.execute(
+                text(sql),
+                {
+                    "institute_id": iid,
+                    "patient_id": pid,
+                    "visit_id": vid,
+                    "limit_rows": limit_cap + 1,
+                },
+            )
+            .mappings()
+            .all()
+        ]
+    truncated = len(fetched) > limit_cap
+    if truncated:
+        fetched = fetched[:limit_cap]
+    return fetched, truncated
 
 
-def _db_code_context(visit_id: str, patient_name: str = "", department: str = "") -> SurgeryCodeGateContext:
+def _db_code_context(
+    visit_id: str,
+    patient_name: str = "",
+    department: str = "",
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+) -> tuple[SurgeryCodeGateContext, bool]:
     if not visit_id:
-        return SurgeryCodeGateContext(visit_id=visit_id, patient_name=patient_name, department=department)
+        return SurgeryCodeGateContext(visit_id=visit_id, patient_name=patient_name, department=department), False
     catalog = _catalog_by_code()
     source_priority = (
         ("mr_surgery", "surgery_code", "surgery_name"),
@@ -509,8 +580,18 @@ def _db_code_context(visit_id: str, patient_name: str = "", department: str = ""
     matched_levels: list[int] = []
     best_level4: dict[str, str] | None = None
     unmatched = False
+    any_truncated = False
     for table, code_field, name_field in source_priority:
-        for row in _db_rows(table, visit_id, [code_field, name_field]):
+        rows, truncated = _db_rows(
+            table,
+            visit_id,
+            [code_field, name_field],
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
+        if truncated:
+            any_truncated = True
+        for row in rows:
             code = _normalize_code(row.get(code_field))
             if not code:
                 continue
@@ -544,7 +625,15 @@ def _db_code_context(visit_id: str, patient_name: str = "", department: str = ""
             visit_level4_evidence_source_table=best_level4["table"],
             strong_match_type=best_level4["match_type"],
             sc083_applicability="applicable_level4_by_code",
-        )
+        ), any_truncated
+    if any_truncated:
+        return SurgeryCodeGateContext(
+            visit_id=visit_id,
+            patient_name=patient_name,
+            department=department,
+            visit_max_level="unknown",
+            sc083_applicability="data_gap_source_truncated",
+        ), True
     if matched_levels and max(matched_levels) <= 3 and not unmatched:
         return SurgeryCodeGateContext(
             visit_id=visit_id,
@@ -553,7 +642,7 @@ def _db_code_context(visit_id: str, patient_name: str = "", department: str = ""
             visit_max_level="<=3",
             strong_match_type="code_exact",
             sc083_applicability="not_applicable_level3_by_code",
-        )
+        ), False
     reason = "data_gap_code_missing"
     if seen_codes and unmatched:
         reason = "data_gap_code_unmatched"
@@ -563,11 +652,17 @@ def _db_code_context(visit_id: str, patient_name: str = "", department: str = ""
         department=department,
         visit_max_level="unknown",
         sc083_applicability=reason,
-    )
+    ), False
 
 
-def _db_mdt_documents(visit_id: str) -> list[MdtEvidenceDocument]:
+def _db_mdt_documents(
+    visit_id: str,
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+) -> tuple[list[MdtEvidenceDocument], bool]:
     documents: list[MdtEvidenceDocument] = []
+    any_truncated = False
     table_names = ("consultation_record", "presurg_discussion", "daily_course_record", "senior_course_record")
     wanted = [
         "document_id",
@@ -584,7 +679,16 @@ def _db_mdt_documents(visit_id: str) -> list[MdtEvidenceDocument]:
         "update_time",
     ]
     for table in table_names:
-        for row in _db_rows(table, visit_id, wanted):
+        rows, truncated = _db_rows(
+            table,
+            visit_id,
+            wanted,
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
+        if truncated:
+            any_truncated = True
+        for row in rows:
             record_time = next(
                 (
                     _safe_text(row.get(field))
@@ -613,7 +717,7 @@ def _db_mdt_documents(visit_id: str) -> list[MdtEvidenceDocument]:
                     v2_schema=_safe_text(row.get("v2_schema")),
                 )
             )
-    return documents
+    return documents, any_truncated
 
 
 def _aggregation_to_gate(aggregation: MdtEvidenceAggregation) -> ApplicabilityGateResult:
@@ -674,14 +778,47 @@ def _aggregation_to_gate(aggregation: MdtEvidenceAggregation) -> ApplicabilityGa
 def run_sc083_gate(result: dict[str, Any], context: dict[str, Any] | None = None) -> ApplicabilityGateResult:
     context = _safe_dict(context)
     metadata = _safe_dict(result.get("metadata"))
-    visit_id = _visit_id(result, context)
+    institute_id, patient_id, visit_id = _tri_key(result, context)
     patient = _patient_name(result, context)
     department = _department(result, context)
-    code_context = (
-        _code_context_from_mapping(context, visit_id)
-        or _code_context_from_mapping(metadata, visit_id)
-        or _db_code_context(visit_id, patient, department)
-    )
-    documents = _documents_from_payload(context, visit_id) or _documents_from_payload(metadata, visit_id) or _db_mdt_documents(visit_id)
+
+    code_context = _code_context_from_mapping(context, visit_id) or _code_context_from_mapping(metadata, visit_id)
+    code_truncated = False
+    if code_context is None:
+        code_context, code_truncated = _db_code_context(
+            visit_id,
+            patient,
+            department,
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
+
+    documents = _documents_from_payload(context, visit_id) or _documents_from_payload(metadata, visit_id)
+    docs_truncated = False
+    if not documents:
+        documents, docs_truncated = _db_mdt_documents(
+            visit_id,
+            institute_id=institute_id,
+            patient_id=patient_id,
+        )
+
     aggregation = aggregate_sc083_mdt_evidence(code_context, documents)
-    return _aggregation_to_gate(aggregation)
+    gate_result = _aggregation_to_gate(aggregation)
+    if code_truncated or docs_truncated:
+        gate_result.metadata["source_rows_truncated"] = True
+        if gate_result.gate_decision != GateDecision.REJECTED_BY_SYSTEM or code_truncated:
+            gate_result.metadata["data_gap_reason"] = "sc083_source_rows_truncated"
+            gate_result.metadata["gate_decision"] = GateDecision.DATA_QUALITY_GAP.value
+            return ApplicabilityGateResult(
+                rule_id=RULE_ID,
+                gate_name=GATE_NAME,
+                applicability=GateApplicability.UNKNOWN,
+                coverage=GateCoverage.INSUFFICIENT,
+                gate_decision=GateDecision.DATA_QUALITY_GAP,
+                confirmed_allowed=False,
+                needs_second_pass_gate=False,
+                metadata=gate_result.metadata,
+                evidence_quote=gate_result.evidence_quote,
+                reason="SC-083 临床证据查询发生截断，无法安全断言缺失或排除适用，已降级为资料缺口。",
+            )
+    return gate_result

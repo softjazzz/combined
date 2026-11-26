@@ -117,7 +117,11 @@ def _authorize(client, *, email="qc-admin@hospital.local", roles=None, is_demo_a
         actor = session.get(SysUser, "u-admin")
         actor.role = user["roles"][0]
         actor.roles_json = None
-        actor.institute_id = "H-1"
+        actor.institute_id = (
+            None
+            if set(user["roles"]) & {"admin", "super_admin", "sync_admin"}
+            else "H-1"
+        )
     if is_demo_account is not None:
         user["is_demo_account"] = is_demo_account
     client.app.dependency_overrides[enforce_default_auth] = _auth_gate

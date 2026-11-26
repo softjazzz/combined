@@ -4,11 +4,25 @@
 支持 ZIP 解压、多 Excel 文件探索和数据合并清洗。
 """
 import os
+from pathlib import Path
+import uuid
 import zipfile
 import pandas as pd
 from typing import List, Dict, Any, Optional
 from datetime import datetime
 import re
+
+# ZIP 安全解压限制（防 Zip Slip / Zip Bomb / 同名覆盖）
+MAX_ZIP_ENTRIES = int(os.getenv("SMART_UPLOAD_MAX_ZIP_ENTRIES", "100"))
+MAX_ZIP_SINGLE_FILE_BYTES = int(
+    os.getenv("SMART_UPLOAD_MAX_ZIP_SINGLE_FILE_BYTES", str(50 * 1024 * 1024))
+)
+MAX_ZIP_TOTAL_BYTES = int(
+    os.getenv("SMART_UPLOAD_MAX_ZIP_TOTAL_BYTES", str(100 * 1024 * 1024))
+)
+_ZIP_STREAM_CHUNK_BYTES = 64 * 1024
+_UNIX_SYMLINK_MODE = 0o120000
+_UNIX_FILE_TYPE_MASK = 0o170000
 
 # 核心字段定义（DIP/DRG 分析必需）- 扩展别名列表
 CORE_COLUMNS = {
@@ -70,26 +84,143 @@ class MultiFileProcessor:
             "time": datetime.now().isoformat()
         })
     
-    def extract_zip(self, zip_path: str, extract_dir: str) -> List[str]:
-        """解压 ZIP 文件，返回 Excel 文件列表"""
+    @staticmethod
+    def _decode_zip_member_name(file_info: zipfile.ZipInfo) -> str:
+        raw_name = file_info.filename or ""
+        if file_info.flag_bits & 0x800:
+            return raw_name
+        try:
+            return raw_name.encode("cp437").decode("gbk")
+        except Exception:
+            return raw_name
+
+    @staticmethod
+    def _validate_zip_member_path(member_name: str, file_info: zipfile.ZipInfo) -> list[str]:
+        if not member_name or "\x00" in member_name:
+            raise ValueError("ZIP 包含非法文件名条目")
+        unix_mode = (file_info.external_attr >> 16) & _UNIX_FILE_TYPE_MASK
+        if unix_mode == _UNIX_SYMLINK_MODE:
+            raise ValueError("ZIP 不允许包含符号链接条目")
+        if member_name.startswith(("/", "\\")) or re.match(r"^[A-Za-z]:", member_name):
+            raise ValueError("ZIP 包含非法绝对路径条目")
+        normalized = member_name.replace("\\", "/")
+        parts = [part for part in normalized.split("/") if part]
+        if not parts or any(part in {".", ".."} for part in parts):
+            raise ValueError("ZIP 包含非法路径遍历条目")
+        return parts
+
+    @staticmethod
+    def _sanitize_excel_basename(raw_base: str) -> str:
+        cleaned = re.sub(r"[\x00-\x1f\x7f]", "", str(raw_base or "")).strip()
+        if not cleaned or cleaned in {".", ".."} or "/" in cleaned or "\\" in cleaned:
+            raise ValueError("ZIP 包含非法 Excel 文件名")
+        return cleaned
+
+    def extract_zip(
+        self,
+        zip_path: str,
+        extract_dir: str,
+        *,
+        max_entries: Optional[int] = None,
+        max_single_file_bytes: Optional[int] = None,
+        max_total_bytes: Optional[int] = None,
+    ) -> List[str]:
+        """安全解压 ZIP 文件，防 Zip Slip / Zip Bomb / 同名覆盖，返回 Excel 文件列表。"""
         self.log("解压文件", f"正在解压: {os.path.basename(zip_path)}")
-        
-        excel_files = []
-        
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            for file_info in zip_ref.infolist():
-                # 处理中文文件名编码
+
+        entry_limit = max(1, int(MAX_ZIP_ENTRIES if max_entries is None else max_entries))
+        single_limit = max(
+            1,
+            int(
+                MAX_ZIP_SINGLE_FILE_BYTES
+                if max_single_file_bytes is None
+                else max_single_file_bytes
+            ),
+        )
+        total_limit = max(
+            1,
+            int(MAX_ZIP_TOTAL_BYTES if max_total_bytes is None else max_total_bytes),
+        )
+
+        extract_root = Path(extract_dir).resolve()
+        extract_root.mkdir(parents=True, exist_ok=True)
+
+        excel_files: List[str] = []
+        used_names: set[str] = set()
+        total_extracted = 0
+        current_writing_path: Optional[Path] = None
+
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
+                infos = zip_ref.infolist()
+                if len(infos) > entry_limit:
+                    raise ValueError(f"ZIP 文件条目数超过限制（最多 {entry_limit} 个）")
+
+                for file_info in infos:
+                    member_name = self._decode_zip_member_name(file_info)
+                    parts = self._validate_zip_member_path(member_name, file_info)
+
+                    if file_info.is_dir() or member_name.endswith(("/", "\\")):
+                        continue
+
+                    if any(part == "__MACOSX" for part in parts):
+                        continue
+
+                    base_name = self._sanitize_excel_basename(parts[-1])
+                    if base_name.startswith("._"):
+                        continue
+                    if not base_name.lower().endswith((".xlsx", ".xls")):
+                        continue
+
+                    if file_info.file_size > single_limit:
+                        raise ValueError("ZIP 内单文件解压大小超过限制")
+                    if total_extracted + file_info.file_size > total_limit:
+                        raise ValueError("ZIP 总解压大小超过限制")
+
+                    safe_name = base_name
+                    target_path = (extract_root / safe_name).resolve()
+                    if safe_name.lower() in used_names or target_path.exists():
+                        safe_name = f"{len(excel_files) + 1:03d}_{uuid.uuid4().hex[:6]}_{base_name}"
+                        target_path = (extract_root / safe_name).resolve()
+
+                    if not target_path.is_relative_to(extract_root) or target_path == extract_root:
+                        raise ValueError("ZIP 目标路径越界")
+
+                    written_for_file = 0
+                    current_writing_path = target_path
+                    with zip_ref.open(file_info, "r") as src, open(target_path, "wb") as dst:
+                        while True:
+                            chunk = src.read(_ZIP_STREAM_CHUNK_BYTES)
+                            if not chunk:
+                                break
+                            written_for_file += len(chunk)
+                            total_extracted += len(chunk)
+                            if written_for_file > single_limit:
+                                raise ValueError("ZIP 内单文件解压大小超过限制")
+                            if total_extracted > total_limit:
+                                raise ValueError("ZIP 总解压大小超过限制")
+                            dst.write(chunk)
+
+                    used_names.add(safe_name.lower())
+                    excel_files.append(str(target_path))
+                    current_writing_path = None
+        except Exception:
+            for created_path in excel_files:
                 try:
-                    filename = file_info.filename.encode('cp437').decode('gbk')
-                except Exception:
-                    filename = file_info.filename
-                
-                # 只处理 Excel 文件
-                if filename.endswith(('.xlsx', '.xls')) and not filename.startswith('__MACOSX'):
-                    file_info.filename = os.path.basename(filename)
-                    zip_ref.extract(file_info, extract_dir)
-                    excel_files.append(os.path.join(extract_dir, file_info.filename))
-        
+                    Path(created_path).unlink(missing_ok=True)
+                except OSError:
+                    pass
+            if (
+                current_writing_path is not None
+                and current_writing_path.is_relative_to(extract_root)
+                and current_writing_path != extract_root
+            ):
+                try:
+                    current_writing_path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            raise
+
         self.log("解压文件", f"发现 {len(excel_files)} 个 Excel 文件", "success")
         return excel_files
     
@@ -303,8 +434,8 @@ class MultiFileProcessor:
     def _select_best_sheet(self, file_path: str):
         """选择默认分析 sheet：优先列数最多"""
         try:
-            xls = pd.ExcelFile(file_path)
-            sheet_names = list(xls.sheet_names or [])
+            with pd.ExcelFile(file_path) as xls:
+                sheet_names = list(xls.sheet_names or [])
         except Exception:
             return 0
 

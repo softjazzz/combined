@@ -1,7 +1,7 @@
 import type { EditableMedicalRecordDocument } from './types'
 import { testRecordDocumentTypeOptions } from './syntheticCaseBuilder'
-import { parseBackendDateTime } from './recordPresentation'
 import { formatPlannedOrderEndTime } from './medicalOrderDisplay'
+import { formatDocSortTime } from '../utils/documentDisplay'
 
 export type EditableCopyOrderTypeFilter = 'long' | 'temporary'
 
@@ -81,9 +81,14 @@ export function resolveEditableOrderTypeKey(
 function normalizeEditableOrderTimeText(value?: string, fallback = '-'): string {
   const raw = String(value || '').trim()
   if (!raw) return fallback
-  const parsed = parseBackendDateTime(raw)
-  if (Number.isNaN(parsed.getTime())) return raw.replace('T', ' ').slice(0, 19)
-  return parsed.toISOString().slice(0, 19).replace('T', ' ')
+  if (/[T ]\d{2}:\d{2}.*(?:Z|[+-]\d{2}:?\d{2})$/iu.test(raw)) {
+    return formatDocSortTime(raw)
+  }
+  const matched = raw.match(/^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/u)
+  if (matched) {
+    return `${matched[1]} ${matched[2]}${matched[3] ? `:${matched[3]}` : ''}`
+  }
+  return raw.replace('T', ' ').slice(0, 19)
 }
 
 function resolveEditableOrderStartTimeValue(document: EditableMedicalRecordDocument): string {
@@ -95,8 +100,16 @@ function resolveEditableOrderStopTimeValue(document: EditableMedicalRecordDocume
 }
 
 function editableOrderTimeValue(document: EditableMedicalRecordDocument): number {
-  const parsed = parseBackendDateTime(resolveEditableOrderStartTimeValue(document))
-  return Number.isNaN(parsed.getTime()) ? 0 : parsed.getTime()
+  const raw = String(resolveEditableOrderStartTimeValue(document) || '').trim()
+  if (!raw) return 0
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T')
+  const hasTimezone = /(?:Z|[+-]\d{2}:?\d{2})$/iu.test(normalized)
+  const normalizedWithMilliseconds = normalized.replace(/\.(\d{3})\d+/u, '.$1')
+  const candidate = hasTimezone
+    ? normalizedWithMilliseconds
+    : `${normalizedWithMilliseconds}+08:00`
+  const parsed = Date.parse(candidate)
+  return Number.isFinite(parsed) ? parsed : 0
 }
 
 export function compareEditableOrderDocumentByTimeDesc(
@@ -170,6 +183,9 @@ function resolveEditableOrderItemText(document: EditableMedicalRecordDocument): 
   return firstLine.replace(/\s+/gu, ' ').slice(0, 80)
 }
 
+const ORDER_STOP_TOKEN_PATTERN =
+  /(?:^|[\s，,;；。:：（）()])(?:已停|停嘱|停用|停止医嘱|停用医嘱|停止执行)(?:$|[\s，,;；。:：（）()])/u
+
 function resolveEditableOrderStatus(document: EditableMedicalRecordDocument): string {
   if (document.enabled === false) return '不写入'
   if (document.order_status?.trim()) return document.order_status.trim()
@@ -177,7 +193,16 @@ function resolveEditableOrderStatus(document: EditableMedicalRecordDocument): st
   const explicitStatus = lines.find((line) => isEditableOrderStatusLine(line))
   if (explicitStatus) return explicitStatus
   const text = `${document.title || ''} ${document.content || ''}`.toLowerCase()
-  if (text.includes('停止') || text.includes('停用') || text.includes('停')) return '停止'
+  if (text.includes('作废')) return '作废'
+  if (text.includes('撤销')) return '撤销'
+  const sanitizedForStop = text.replace(/停止时间(?:及|：|:|\s|$)/gu, '')
+  if (
+    sanitizedForStop.includes('停止') ||
+    sanitizedForStop.includes('停用') ||
+    ORDER_STOP_TOKEN_PATTERN.test(sanitizedForStop)
+  ) {
+    return '停止'
+  }
   if (text.includes('新开') || text.includes('开立') || document.is_new) return '新开'
   if (text.includes('执行')) return '执行中'
   return '新开'

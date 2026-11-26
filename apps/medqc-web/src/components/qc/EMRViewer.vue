@@ -154,13 +154,39 @@
           <div
             class="emr-struct__paragraph"
             :data-anchor-text="(block.text || '').slice(0, 80)"
-            v-html="renderParagraphContent(block.text || '')"
-          />
+          >
+            <template
+              v-for="(seg, segIdx) in renderParagraphSegments(block.text || '')"
+              :key="segIdx"
+            >
+              <span
+                v-if="seg.type === 'section_title'"
+                class="emr-section-title"
+              >{{ seg.text }}</span>
+              <span
+                v-else-if="seg.type === 'defect'"
+                :class="`emr-defect emr-defect--${seg.severity}`"
+                :data-defect-id="seg.defectId"
+                :data-severity="seg.severity"
+              >
+                {{ seg.text }}
+                <span class="emr-defect-tip">
+                  <span :class="`emr-defect-tip__header emr-defect-tip__header--${seg.severity}`">{{ seg.severityLabel }}</span>
+                  <span class="emr-defect-tip__body">{{ seg.description }}</span>
+                  <span
+                    v-if="seg.suggestion"
+                    class="emr-defect-tip__suggest"
+                  >💡 {{ seg.suggestion }}</span>
+                </span>
+              </span>
+              <template v-else>{{ seg.text }}</template>
+            </template>
+          </div>
         </template>
       </section>
     </div>
 
-    <template v-else-if="renderedContent">
+    <template v-else-if="renderedSegments.length > 0">
       <div class="emr-content-meta">
         <span v-if="displayDocumentId">文书ID：{{ displayDocumentId }}</span>
         <span v-if="metadata.record_time">{{ displayClockLabel }}：{{ metadata.record_time }}</span>
@@ -178,8 +204,34 @@
         ref="contentRef"
         class="emr-content overflow-auto"
         :style="{ maxHeight: maxHeight + 'px' }"
-        v-html="renderedContent"
-      />
+      >
+        <template
+          v-for="(seg, segIdx) in renderedSegments"
+          :key="segIdx"
+        >
+          <span
+            v-if="seg.type === 'section_title'"
+            class="emr-section-title"
+          >{{ seg.text }}</span>
+          <span
+            v-else-if="seg.type === 'defect'"
+            :class="`emr-defect emr-defect--${seg.severity}`"
+            :data-defect-id="seg.defectId"
+            :data-severity="seg.severity"
+          >
+            {{ seg.text }}
+            <span class="emr-defect-tip">
+              <span :class="`emr-defect-tip__header emr-defect-tip__header--${seg.severity}`">{{ seg.severityLabel }}</span>
+              <span class="emr-defect-tip__body">{{ seg.description }}</span>
+              <span
+                v-if="seg.suggestion"
+                class="emr-defect-tip__suggest"
+              >💡 {{ seg.suggestion }}</span>
+            </span>
+          </span>
+          <template v-else>{{ seg.text }}</template>
+        </template>
+      </div>
     </template>
 
     <div
@@ -360,7 +412,9 @@ const activeMaterialNotice = computed(() => resolveMaterialDisplayNotice({ ...ac
 const annotations = ref<DefectAnnotation[]>([])
 const documentItems = ref<EmrDocumentSummary[]>([])
 const loadedDocKey = ref('')
-const loadedRecordId = ref('')
+const loadedDocSignature = ref('')
+const loadedRecordContextKey = ref('')
+const loadedDocType = ref('')
 const showAnnotationPanel = ref(false)
 const layoutVersion = ref('')
 const renderBlocks = ref<EmrRenderBlock[]>([])
@@ -381,11 +435,19 @@ function isAbortError(error: unknown) {
 const viewerRef = ref<HTMLElement>()
 const contentRef = ref<HTMLElement>()
 
-const { activeDefectId, highlightDefects, scrollToDefect, onDefectClick, bindClickEvents } =
+const { activeDefectId, buildHighlightedSegments, scrollToDefect, onDefectClick, bindClickEvents } =
   useDefectHighlight()
 
 const effectiveRecordId = computed(() => props.recordId || props.visitId || '')
 const hasTripletContext = computed(() => !!(props.visitId && props.patientId && props.instituteId))
+const recordContextKey = computed(() =>
+  [
+    String(props.instituteId || '').trim(),
+    String(props.patientId || '').trim(),
+    String(props.visitId || '').trim(),
+    String(props.recordId || '').trim(),
+  ].join('::'),
+)
 
 const baseQueryString = computed(() => {
   const params = new URLSearchParams()
@@ -395,10 +457,23 @@ const baseQueryString = computed(() => {
   return params.toString()
 })
 
-const renderedContent = computed(() => {
-  if (!rawContent.value) return ''
-  if (contentType.value === 'html') return rawContent.value
-  return highlightDefects(rawContent.value, annotations.value)
+function extractSafePlainTextFromHtml(html: string): string {
+  if (!html) return ''
+  if (typeof DOMParser !== 'undefined') {
+    const doc = new DOMParser().parseFromString(html, 'text/html')
+    doc.querySelectorAll('script, style, noscript, iframe, object, embed').forEach((el) => el.remove())
+    return (doc.body?.textContent || '').replace(/\r\n/g, '\n')
+  }
+  return html
+    .replace(/<(script|style|noscript|iframe|object|embed)\b[^>]*>[\s\S]*?<\/\1>/gi, '')
+    .replace(/<[^>]+>/g, '')
+}
+
+const renderedSegments = computed(() => {
+  if (!rawContent.value) return []
+  const safeText =
+    contentType.value === 'html' ? extractSafePlainTextFromHtml(rawContent.value) : rawContent.value
+  return buildHighlightedSegments(safeText, annotations.value)
 })
 
 const isStructuredLayout = computed(
@@ -690,6 +765,17 @@ function docIdentityKey(doc: EmrDocumentSummary): string {
   return String(doc.doc_key || `${doc.doc_type || ''}::${doc.id || ''}`)
 }
 
+function docSnapshotSignature(doc: EmrDocumentSummary): string {
+  return [
+    docIdentityKey(doc),
+    String(doc.id || ''),
+    String(doc.doc_type || ''),
+    String(doc.version_id || ''),
+    String(doc.execution_domain || ''),
+    doc.has_content === undefined ? '' : String(Boolean(doc.has_content)),
+  ].join('|')
+}
+
 function resetViewerState() {
   documentReadError.value = ''
   documentEmptyReason.value = ''
@@ -699,7 +785,9 @@ function resetViewerState() {
   annotations.value = []
   documentItems.value = []
   loadedDocKey.value = ''
-  loadedRecordId.value = ''
+  loadedDocSignature.value = ''
+  loadedRecordContextKey.value = ''
+  loadedDocType.value = ''
   layoutVersion.value = ''
   renderBlocks.value = []
 }
@@ -752,7 +840,9 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
-    loadedRecordId.value = effectiveRecordId.value
+    loadedDocSignature.value = docSnapshotSignature(target)
+    loadedRecordContextKey.value = recordContextKey.value
+    loadedDocType.value = String(props.docType || '')
     await loadDocument(target)
     return
   }
@@ -796,7 +886,9 @@ async function fetchDocuments() {
       return
     }
     loadedDocKey.value = docIdentityKey(target)
-    loadedRecordId.value = effectiveRecordId.value
+    loadedDocSignature.value = docSnapshotSignature(target)
+    loadedRecordContextKey.value = recordContextKey.value
+    loadedDocType.value = String(props.docType || '')
     await loadDocument(target)
   } catch (err) {
     if (isAbortError(err)) return
@@ -831,6 +923,9 @@ async function loadDocument(doc?: EmrDocumentSummary) {
   const controller = beginRequest()
   loading.value = true
   loadedDocKey.value = docIdentityKey(doc)
+  loadedDocSignature.value = docSnapshotSignature(doc)
+  loadedRecordContextKey.value = recordContextKey.value
+  loadedDocType.value = String(props.docType || '')
   rawContent.value = ''
   metadata.value = {}
   annotations.value = []
@@ -926,9 +1021,9 @@ function handleAnnotationClick(ann: DefectAnnotation) {
   emit('defect-click', ann.defect_id)
 }
 
-function renderParagraphContent(text: string): string {
+function renderParagraphSegments(text: string) {
   const normalized = String(text || '')
-  if (!normalized) return ''
+  if (!normalized) return []
   const localAnnotations: DefectAnnotation[] = []
   for (const ann of annotations.value) {
     const keyword = String(ann.keyword || '').trim()
@@ -941,7 +1036,7 @@ function renderParagraphContent(text: string): string {
       end_offset: index + keyword.length,
     })
   }
-  return highlightDefects(normalized, localAnnotations)
+  return buildHighlightedSegments(normalized, localAnnotations)
 }
 
 function scrollTo(defectId: string) {
@@ -968,20 +1063,34 @@ watch(
     props.instituteId,
     props.docType,
     props.documents,
+    Array.isArray(props.documents)
+      ? props.documents.map((doc) => docSnapshotSignature(doc)).join(';;')
+      : '',
     props.documentsManaged,
     props.documentsLoading,
   ],
   () => {
-    // 受控目录后台补齐时 documents 数组会追加项目，但当前文书仍然有效，
-    // 不应因为目录变化再次请求同一份正文；切换病历/文书时 loadedDocKey 会失效。
-    if (
-      props.documentsManaged &&
-      loadedRecordId.value === effectiveRecordId.value &&
-      loadedDocKey.value &&
-      documentItems.value.some((doc) => docIdentityKey(doc) === loadedDocKey.value) &&
-      (!props.activeDocKey || props.activeDocKey === loadedDocKey.value)
-    ) {
-      return
+    // 受控目录后台补齐时 documents 数组会追加项目：必须先校验三键上下文与当前文书快照签名，
+    // 同一病历且当前文书快照未变化时同步目录并跳过重复正文拉取；跨院同号或快照变化则刷新。
+    if (props.documentsManaged) {
+      const incomingDocs = Array.isArray(props.documents) ? props.documents : []
+      const sameRecordContext =
+        Boolean(loadedRecordContextKey.value) &&
+        loadedRecordContextKey.value === recordContextKey.value
+      const matchedCurrentDoc =
+        sameRecordContext && loadedDocKey.value
+          ? incomingDocs.find((doc) => docIdentityKey(doc) === loadedDocKey.value)
+          : undefined
+      const sameDocSnapshot =
+        Boolean(matchedCurrentDoc) &&
+        docSnapshotSignature(matchedCurrentDoc!) === loadedDocSignature.value
+      const activeKeyMatches = !props.activeDocKey || props.activeDocKey === loadedDocKey.value
+      const docTypeUnchanged = loadedDocType.value === String(props.docType || '')
+
+      if (sameRecordContext && sameDocSnapshot && activeKeyMatches && docTypeUnchanged) {
+        documentItems.value = incomingDocs
+        return
+      }
     }
     if (effectiveRecordId.value || hasTripletContext.value) {
       void fetchDocuments()

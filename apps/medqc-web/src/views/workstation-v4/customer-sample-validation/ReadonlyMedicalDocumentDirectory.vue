@@ -38,13 +38,19 @@
         type="search"
         class="readonly-medical-document-search"
         data-testid="record-document-search"
+        aria-label="搜索病历文书"
         :placeholder="summaryOnly ? '搜索文书标题或已加载医嘱' : '搜索标题、正文或医嘱'"
       >
-      <div class="readonly-medical-document-filter">
+      <div
+        class="readonly-medical-document-filter"
+        role="group"
+        aria-label="文书筛选"
+      >
         <button
           type="button"
           data-testid="record-document-filter-all"
           :class="{ 'is-active': filter === 'all' }"
+          :aria-pressed="filter === 'all'"
           @click="filter = 'all'"
         >
           全部
@@ -53,6 +59,7 @@
           type="button"
           data-testid="record-document-filter-content"
           :class="{ 'is-active': filter === 'content' }"
+          :aria-pressed="filter === 'content'"
           @click="filter = 'content'"
         >
           有正文
@@ -61,6 +68,7 @@
           type="button"
           data-testid="record-document-filter-order"
           :class="{ 'is-active': filter === 'orders' }"
+          :aria-pressed="filter === 'orders'"
           @click="selectOrdersFilter"
         >
           医嘱
@@ -286,15 +294,34 @@ const expandedGroupKeys = ref(new Set<string>())
 
 function selectOrdersFilter() {
   filter.value = 'orders'
+  const next = new Set(expandedGroupKeys.value)
+  next.add('orders')
+  expandedGroupKeys.value = next
   if (props.ordersLoadState === 'deferred' || props.ordersLoadState === 'failed') {
-    expandedGroupKeys.value = new Set(['orders'])
     emit('load-orders')
   }
 }
 
-watch(() => props.loading, (loading) => {
-  if (loading && props.summaryOnly) filter.value = 'all'
-})
+watch(
+  () => props.loading,
+  (loading) => {
+    if (!loading) return
+    query.value = ''
+    expandedGroupKeys.value = new Set()
+    if (props.summaryOnly) filter.value = 'all'
+  },
+)
+
+watch(
+  () => props.documents.map((document) => document.key),
+  (nextKeys, previousKeys) => {
+    if (!previousKeys?.length) return
+    if (!nextKeys.length || !nextKeys.some((key) => previousKeys.includes(key))) {
+      query.value = ''
+      expandedGroupKeys.value = new Set()
+    }
+  },
+)
 
 type DirectoryGroup = {
   key: string
@@ -426,9 +453,10 @@ function syncExpandedGroups() {
     const selectedParent = documentGroups.value.find((group) =>
       (group.subgroups || []).some((subgroup) => subgroup.key === selectedGroupKey),
     )
-    expandedGroupKeys.value = new Set(
-      selectedParent ? [selectedParent.key, selectedGroupKey] : [selectedGroupKey],
-    )
+    const next = new Set(expandedGroupKeys.value)
+    if (selectedParent) next.add(selectedParent.key)
+    next.add(selectedGroupKey)
+    expandedGroupKeys.value = next
     return
   }
 

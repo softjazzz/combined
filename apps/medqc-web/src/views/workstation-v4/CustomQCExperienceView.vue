@@ -8,12 +8,12 @@
               <a-tag color="processing">
                 {{ sceneLabel }}
               </a-tag>
-              <a-tag color="blue"> 只读试跑 </a-tag>
+              <a-tag color="blue"> 试跑记录落库 </a-tag>
               <a-tag color="default"> 待人工复核后发布 </a-tag>
             </div>
             <h1 class="custom-qc-title mq-page-title">自定义质控点工作台</h1>
             <p class="custom-qc-subtitle">
-              按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑过程只读病历，不写正式质控结果表。
+              按“规则定义、病历试跑、结果复核”完成自定义质控点验证。试跑会保存试跑结果记录以便复核，不修改病历正文或正式质控结果表；复核发布后写入规则库。
             </p>
           </div>
           <div class="custom-qc-actions mq-page-head__actions">
@@ -150,32 +150,36 @@
       </div>
 
       <div class="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
-        <a-card :bordered="false" class="custom-qc-surface mq-card">
+        <a-card :bordered="false" class="custom-qc-surface mq-card min-w-0">
           <template #title> 3. 病历试跑 </template>
           <div class="space-y-4">
-            <div class="grid gap-4 lg:grid-cols-[160px_220px_1fr_auto]">
+            <div class="custom-qc-record-filters">
               <a-select
                 v-model:value="filters.department"
                 allow-clear
                 size="large"
+                class="w-full"
                 placeholder="科室"
                 :options="departmentOptions"
               />
-              <a-range-picker v-model:value="filters.dateRange" size="large" />
-              <a-input
-                v-model:value="filters.keyword"
-                size="large"
-                placeholder="搜索病历号/姓名"
-                @press-enter="handleSearchRecords"
-              />
-              <a-button
-                size="large"
-                class="!rounded-lg"
-                :loading="recordsLoading"
-                @click="handleSearchRecords"
-              >
-                刷新列表
-              </a-button>
+              <a-range-picker v-model:value="filters.dateRange" size="large" class="w-full" />
+              <div class="custom-qc-record-filters__keyword-row">
+                <a-input
+                  v-model:value="filters.keyword"
+                  size="large"
+                  class="w-full"
+                  placeholder="搜索病历号/姓名"
+                  @press-enter="handleSearchRecords"
+                />
+                <a-button
+                  size="large"
+                  class="!rounded-lg custom-qc-record-filters__refresh"
+                  :loading="recordsLoading"
+                  @click="handleSearchRecords"
+                >
+                  刷新列表
+                </a-button>
+              </div>
             </div>
             <div
               class="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[var(--mq-border)] bg-slate-50 px-4 py-3"
@@ -530,7 +534,7 @@ async function fetchRecords() {
     records.value = (response.data.items || []).map((item: AdminRecordItem) => ({
       id: item.id,
       record_id: item.record_id,
-      visit_id: item.visit_type,
+      visit_id: (item as AdminRecordItem & { visit_id?: string }).visit_id || item.record_id,
       patient_name: item.patient_name,
       department: item.department,
       discharge_date: item.discharge_date,
@@ -827,7 +831,7 @@ async function handlePublish() {
 }
 
 function jumpToRulesList() {
-  router.push('/dashboard/rules')
+  router.push('/workstation-v5/rules')
 }
 
 function goBack() {
@@ -854,3 +858,48 @@ onMounted(async () => {
 </script>
 
 <style scoped src="./styles/custom-qc-experience.css"></style>
+<style scoped>
+.custom-qc-record-filters {
+  display: grid;
+  grid-template-columns: minmax(140px, 156px) minmax(200px, 220px) minmax(260px, 1fr);
+  gap: 12px;
+  align-items: center;
+}
+
+.custom-qc-record-filters > * {
+  min-width: 0;
+}
+
+.custom-qc-record-filters__keyword-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.custom-qc-record-filters__refresh {
+  white-space: nowrap;
+}
+
+@media (max-width: 1440px) {
+  .custom-qc-record-filters {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  }
+
+  .custom-qc-record-filters__keyword-row {
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(180px, 1fr) auto;
+  }
+}
+
+@media (max-width: 640px) {
+  .custom-qc-record-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .custom-qc-record-filters__keyword-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+</style>

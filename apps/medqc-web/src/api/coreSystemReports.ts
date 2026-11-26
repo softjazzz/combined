@@ -1,5 +1,7 @@
+import { isAxiosError } from 'axios'
+import { EXTENDED_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
-import { unwrapApiEnvelope } from '@/utils/api-envelope'
+import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 
 export interface CoreReportFilters {
   scene: 'running' | 'final'
@@ -217,26 +219,95 @@ function assertReport(value: unknown, page: number): asserts value is CoreSystem
   )
     return fail()
 }
+function isAbortError(error: unknown): boolean {
+  if (isAxiosError(error) && error.code === 'ERR_CANCELED') return true
+  return error instanceof Error && (error.name === 'AbortError' || error.name === 'CanceledError')
+}
+
+async function readBlobText(blob: Blob): Promise<string> {
+  const text = Reflect.get(blob, 'text')
+  if (typeof text === 'function') return String(await Reflect.apply(text, blob, []))
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('Blob读取结果不是文本'))
+    reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
+    reader.onabort = () => reject(new Error('Blob读取已中止'))
+    reader.readAsText(blob, 'utf-8')
+  })
+}
+
+async function extractBlobErrorMessage(value: unknown): Promise<string | undefined> {
+  if (!(value instanceof Blob) || value.size === 0) return undefined
+  try {
+    const raw = (await readBlobText(value)).trim()
+    if (!raw) return undefined
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return undefined
+    for (const key of ['detail', 'error', 'message'] as const) {
+      const candidate = (parsed as Record<string, unknown>)[key]
+      if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+      if (Array.isArray(candidate)) {
+        for (const item of candidate) {
+          if (item && typeof item === 'object') {
+            const msg =
+              (item as Record<string, unknown>).msg ?? (item as Record<string, unknown>).message
+            if (typeof msg === 'string' && msg.trim()) return msg.trim()
+          }
+        }
+      }
+      if (candidate && typeof candidate === 'object') {
+        const obj = candidate as Record<string, unknown>
+        const msg = obj.message ?? obj.detail ?? obj.msg
+        if (typeof msg === 'string' && msg.trim()) return msg.trim()
+      }
+    }
+  } catch {
+    return undefined
+  }
+  return undefined
+}
+
 export async function getCoreSystemReport(
   filters: CoreReportFilters,
   page = 1,
+  signal?: AbortSignal,
 ): Promise<CoreSystemReport> {
   const response = await ApiService.requestRaw<unknown>({
     url: base,
     method: 'GET',
     params: { ...params(filters), page, page_size: 20 },
+    skipErrorToast: true,
+    timeout: EXTENDED_REQUEST_TIMEOUT_MS,
+    ...(signal ? { signal } : {}),
   })
   const result = unwrapApiEnvelope<unknown>(response.data)
   assertReport(result, page)
   return result
 }
-export async function exportCoreSystemReport(filters: CoreReportFilters): Promise<Blob> {
-  return (
-    await ApiService.requestRaw<Blob>({
-      url: `${base}/export`,
-      method: 'GET',
-      params: params(filters),
-      responseType: 'blob',
-    })
-  ).data
+export async function exportCoreSystemReport(
+  filters: CoreReportFilters,
+  signal?: AbortSignal,
+): Promise<Blob> {
+  try {
+    return (
+      await ApiService.requestRaw<Blob>({
+        url: `${base}/export`,
+        method: 'GET',
+        params: params(filters),
+        responseType: 'blob',
+        skipErrorToast: true,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
+        ...(signal ? { signal } : {}),
+      })
+    ).data
+  } catch (error) {
+    if (isAbortError(error)) throw error
+    const body = isAxiosError(error) ? error.response?.data : undefined
+    const blobMessage = await extractBlobErrorMessage(body)
+    if (blobMessage) throw new Error(blobMessage)
+    throw new Error(extractApiErrorMessageFromError(error, '导出核心制度报表失败'))
+  }
 }

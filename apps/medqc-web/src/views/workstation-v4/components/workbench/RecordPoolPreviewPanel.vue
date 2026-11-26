@@ -20,8 +20,14 @@
         >
         <div class="pool-preview__identity">
           <span class="pool-preview__eyebrow">病历预览</span>
-          <strong class="pool-preview__name">{{ row.patientName || '患者信息待补' }}</strong>
-          <span class="pool-preview__visit">住院号 {{ row.visitId || '—' }}</span>
+          <strong
+            class="pool-preview__name"
+            :title="row.patientName || '患者信息待补'"
+          >{{ row.patientName || '患者信息待补' }}</strong>
+          <span
+            class="pool-preview__visit"
+            :title="`住院号 ${row.visitId || '—'}`"
+          >住院号 {{ row.visitId || '—' }}</span>
         </div>
         <span
           class="mq-status"
@@ -80,9 +86,15 @@
           class="mq-btn mq-btn--primary"
           data-testid="record-pool-preview-qc"
           :disabled="qcLoading"
+          :aria-busy="qcLoading || undefined"
           @click="emit('run-qc', rowKey)"
         >
-          质控此病历
+          <span
+            v-if="qcLoading"
+            class="pool-preview__btn-spinner"
+            aria-hidden="true"
+          />
+          {{ qcLoading ? '创建中…' : '质控此病历' }}
         </button>
       </footer>
     </template>
@@ -91,6 +103,7 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { WorkbenchRow } from './BatchTablePanel.vue'
 import { patientAvatarSrc } from '../qc/patient-avatar'
 import { resolveResultPresentation } from '../qc/latestQcSummaryPresentation'
@@ -127,7 +140,12 @@ const hospitalizationTone = computed(() => {
 })
 
 // 质控结果文案与运行/终末病历质控列表共用同一口径
-const qc = computed(() => resolveResultPresentation(props.row?.latestQcSummary, props.qcSummaryState))
+const { confirmedResultsOnly } = useQcResultVisibility()
+const qc = computed(() =>
+  resolveResultPresentation(props.row?.latestQcSummary, props.qcSummaryState, {
+    confirmedOnly: confirmedResultsOnly.value,
+  }),
+)
 
 const qcTone = computed(() => {
   switch (qc.value.resultStatus) {
@@ -168,7 +186,10 @@ const stayDaysLabel = computed(() => {
   top: 16px;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  max-height: calc(100vh - 32px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  container-type: inline-size;
   border: 1px solid var(--mq-glass-border);
   border-radius: var(--mq-radius-card);
   background: var(--mq-glass-bg);
@@ -304,5 +325,41 @@ const stayDaysLabel = computed(() => {
 .pool-preview__actions .mq-btn {
   flex: 1 1 0;
   height: 42px;
+}
+
+.pool-preview__btn-spinner {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 14px;
+  border: 2px solid rgba(255, 255, 255, 0.45);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: pool-preview-spin 0.75s linear infinite;
+}
+
+@keyframes pool-preview-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@container (max-width: 310px) {
+  .pool-preview__facts {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .pool-preview__facts > div {
+    padding: 12px 16px;
+  }
+
+  .pool-preview__facts > div:nth-child(odd) {
+    border-right: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pool-preview__btn-spinner {
+    animation: none;
+  }
 }
 </style>

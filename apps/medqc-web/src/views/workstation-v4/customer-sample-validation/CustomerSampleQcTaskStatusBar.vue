@@ -6,6 +6,7 @@
       presentation?.statusClass,
       presentation?.normalizedStatus ? `is-${presentation.normalizedStatus}` : 'is-unknown',
       presentation?.isRunning ? 'is-expanded' : 'is-collapsed',
+      { 'is-compact': isCompactActive },
     ]"
     data-testid="customer-sample-qc-task-status"
     aria-live="polite"
@@ -23,6 +24,12 @@
                 <strong>{{ presentation?.statusTitle }}</strong>
                 <span class="qc-task-status__badge">{{ presentation?.statusLabel }}</span>
                 <span class="qc-task-status__rule-set">{{ presentation?.ruleSetText }}</span>
+                <span
+                  v-if="isCompactActive && presentation?.recordProgressText"
+                  class="qc-task-status__compact-meta"
+                >
+                  {{ presentation.recordProgressText }}
+                </span>
               </div>
               <p v-if="presentation?.isRunning">
                 {{ presentation.phaseText }}
@@ -51,7 +58,7 @@
             </a-button>
             <a-dropdown
               v-if="task.status === 'completed' && !task.read_only"
-              placement="bottomRight"
+              placement="topRight"
             >
               <a-button
                 size="small"
@@ -87,10 +94,21 @@
             >
               质控记录
             </a-button>
+            <a-button
+              v-if="collapsible && !presentation?.isRunning"
+              type="text"
+              size="small"
+              class="qc-task-status__collapse-toggle"
+              data-testid="qc-task-toggle-compact"
+              :aria-expanded="!isCompactActive"
+              @click="emit('toggle-compact')"
+            >
+              {{ isCompactActive ? '展开任务栏' : '收起' }}
+            </a-button>
           </div>
         </div>
 
-        <div class="qc-task-status__body">
+        <div v-show="!isCompactActive" class="qc-task-status__body">
           <div
             v-if="presentation?.isRunning"
             class="qc-task-status__progress"
@@ -253,11 +271,15 @@ const props = withDefaults(
     loading?: boolean
     canceling?: boolean
     reviewing?: boolean
+    compact?: boolean
+    collapsible?: boolean
   }>(),
   {
     loading: false,
     canceling: false,
     reviewing: false,
+    compact: false,
+    collapsible: false,
   },
 )
 
@@ -267,6 +289,7 @@ const emit = defineEmits<{
   review: [jobId: string]
   export: [jobId: string]
   'open-history': []
+  'toggle-compact': []
 }>()
 
 const { confirmedResultsOnly } = useQcResultVisibility()
@@ -277,6 +300,7 @@ const presentation = computed(() =>
       })
     : null,
 )
+const isCompactActive = computed(() => Boolean(props.compact && !presentation.value?.isRunning))
 const attentionStatusKeys = new Set([
   'technical_error',
   'non_compliant',
@@ -284,6 +308,7 @@ const attentionStatusKeys = new Set([
   'data_quality_gap',
   'uncertain',
   'ai_suggested_non_compliant',
+  'not_executed',
 ])
 const attentionStatusChips = computed(() =>
   (presentation.value?.statusChips || []).filter((chip) => attentionStatusKeys.has(chip.key)),
@@ -357,6 +382,27 @@ onBeforeUnmount(stopLiveResultRotation)
 
 .qc-task-status.is-expanded .qc-task-status__layout {
   padding-block: 16px;
+}
+
+.qc-task-status.is-compact .qc-task-status__layout {
+  padding: 10px 16px;
+}
+
+.qc-task-status.is-compact .qc-task-status__header {
+  align-items: center;
+}
+
+.qc-task-status.is-compact .qc-task-status__title strong {
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.qc-task-status__compact-meta {
+  color: rgba(29, 29, 31, 0.56);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
 }
 
 .qc-task-status__header,
@@ -560,34 +606,43 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__live-result-status {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  padding: 0 8px;
+}
+
+.qc-task-status__live-result-status::before {
+  width: 6px;
+  height: 6px;
   flex: none;
   border-radius: 999px;
-  background: rgba(100, 116, 139, 0.1);
-  color: #475569;
-  font-size: 11px;
-  font-weight: 650;
-  line-height: 19px;
-  padding: 0 7px;
+  background: #94a3b8;
+  content: '';
 }
 
-.qc-task-status__live-result-status.is-danger {
-  background: rgba(239, 68, 68, 0.08);
-  color: #dc2626;
+.qc-task-status__live-result-status.is-danger::before {
+  background: #dc2626;
 }
 
-.qc-task-status__live-result-status.is-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #b45309;
+.qc-task-status__live-result-status.is-warning::before {
+  background: #d97706;
 }
 
-.qc-task-status__live-result-status.is-review {
-  background: rgba(10, 108, 255, 0.08);
-  color: #0a6cff;
+.qc-task-status__live-result-status.is-review::before {
+  background: #2563eb;
 }
 
-.qc-task-status__live-result-status.is-success {
-  background: rgba(16, 185, 129, 0.1);
-  color: #047857;
+.qc-task-status__live-result-status.is-success::before {
+  background: #059669;
 }
 
 .qc-task-status__live-result-text {
@@ -717,32 +772,63 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__chips > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.6);
+  background: #ffffff;
+  color: #0f172a;
   font-size: 12px;
-  line-height: 22px;
-  padding: 0 8px;
+  font-weight: 500;
+  line-height: 20px;
+  padding: 1px 9px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
 }
 
-.qc-task-status__chips .is-danger {
-  background: rgba(239, 68, 68, 0.07);
-  color: #dc2626;
+.qc-task-status__chips > span::before {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: #94a3b8;
+  content: '';
 }
 
-.qc-task-status__chips .is-warning {
-  background: rgba(245, 158, 11, 0.09);
-  color: #b45309;
+.qc-task-status__chips > span strong {
+  color: #0f172a;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
-.qc-task-status__chips .is-review {
-  background: rgba(10, 108, 255, 0.07);
-  color: #0a6cff;
+.qc-task-status__chips .is-danger,
+.qc-task-status__chips .is-warning,
+.qc-task-status__chips .is-review,
+.qc-task-status__chips .is-success,
+.qc-task-status__chips .is-muted {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  color: #0f172a;
 }
 
-.qc-task-status__chips .is-success {
-  background: rgba(16, 185, 129, 0.08);
-  color: #047857;
+.qc-task-status__chips .is-danger::before {
+  background: #dc2626;
+}
+
+.qc-task-status__chips .is-warning::before {
+  background: #d97706;
+}
+
+.qc-task-status__chips .is-review::before {
+  background: #2563eb;
+}
+
+.qc-task-status__chips .is-success::before {
+  background: #059669;
+}
+
+.qc-task-status__chips .is-muted::before {
+  background: #94a3b8;
 }
 
 .qc-task-status__other-results {
@@ -756,10 +842,14 @@ onBeforeUnmount(stopLiveResultRotation)
 }
 
 .qc-task-status__other-results > span:not(:first-child) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.035);
-  color: rgba(29, 29, 31, 0.62);
-  padding: 0 7px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #475569;
+  padding: 0 8px;
 }
 
 .qc-task-status__actions {
@@ -767,11 +857,22 @@ onBeforeUnmount(stopLiveResultRotation)
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  max-width: 440px;
+  max-width: 520px;
 }
 
 .qc-task-status__actions :deep(.ant-btn) {
   border-radius: 8px;
+}
+
+.qc-task-status__collapse-toggle {
+  color: rgba(29, 29, 31, 0.58);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.qc-task-status__collapse-toggle:hover,
+.qc-task-status__collapse-toggle:focus {
+  color: #0a6cff;
 }
 
 @media (max-width: 1080px) {

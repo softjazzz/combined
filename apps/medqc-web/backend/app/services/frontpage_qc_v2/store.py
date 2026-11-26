@@ -7,22 +7,31 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import threading
 import uuid
+from collections import defaultdict
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.exc import SQLAlchemyError
 
+from .catalog import RULES_BY_ID
+from .config import grade_of
 from .loader import FrontpageRef
 from .model import FrontpageQcOutcome
+from .scoring_items import GROUP_CAPS, SCORE_ITEMS, max_points
+
+logger = logging.getLogger(__name__)
 
 RUNS_TABLE = "frontpage_qc_runs"
 RESULTS_TABLE = "frontpage_qc_results"
 FINDINGS_TABLE = "frontpage_qc_findings"
 _RESULT_REF_INLINE_LIMIT = 128
+_CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
 
 RUN_ACTIVE_STATUSES = ("queued", "running")
 REVIEW_STATUSES = ("pending", "confirmed", "false_alarm")
@@ -34,6 +43,37 @@ class FrontpageQcStoreUnavailable(RuntimeError):
 
 class FrontpageQcNotFound(LookupError):
     pass
+
+
+class FrontpageQcRunConflict(RuntimeError):
+    """同一用户并发发起重复的活跃首页质控任务。"""
+
+    def __init__(self, active_run: Dict[str, Any]) -> None:
+        super().__init__("已有进行中的首页质控任务")
+        self.active_run = active_run
+
+
+_LOCAL_LOCKS_GUARD = threading.Lock()
+_LOCAL_LOCKS: Dict[str, threading.Lock] = {}
+
+
+def _get_local_lock(key: str) -> threading.Lock:
+    with _LOCAL_LOCKS_GUARD:
+        lock = _LOCAL_LOCKS.get(key)
+        if lock is None:
+            if len(_LOCAL_LOCKS) > 4096:
+                idle = [k for k, v in _LOCAL_LOCKS.items() if not v.locked()]
+                for k in idle[:2048]:
+                    _LOCAL_LOCKS.pop(k, None)
+            lock = threading.Lock()
+            _LOCAL_LOCKS[key] = lock
+        return lock
+
+
+def _acquire_pg_advisory_xact_lock(session: Any, lock_key: str) -> None:
+    if session.get_bind().dialect.name == "postgresql":
+        lock_id = int.from_bytes(hashlib.sha256(lock_key.encode()).digest()[:8], "big", signed=True)
+        session.execute(sa.text("SELECT pg_advisory_xact_lock(:key)"), {"key": lock_id})
 
 
 def build_tables(schema: Optional[str] = None) -> Tuple[sa.Table, sa.Table, sa.Table]:
@@ -222,6 +262,10 @@ class FrontpageQcStore:
             with self.session_factory() as session:
                 return fn(session)
         except SQLAlchemyError as exc:
+            logger.exception(
+                "首页质控存储数据库操作失败 error_type=%s",
+                type(exc).__name__,
+            )
             raise FrontpageQcStoreUnavailable(
                 "首页质控存储不可用：请确认已执行 20261013_000048 迁移并检查数据库连接"
             ) from exc
@@ -263,6 +307,102 @@ class FrontpageQcStore:
             return self._public_run(row)
 
         return self._guard(op)
+
+    def create_run_if_no_active(
+        self,
+        *,
+        created_by: str,
+        refs: Sequence[FrontpageRef],
+        filters: Dict[str, Any],
+        ruleset_version: str,
+        stalled_after: Optional[timedelta] = None,
+    ) -> Dict[str, Any]:
+        """串行化检查并创建用户活跃任务，防止同用户并发 POST /runs 产生双活跃任务。"""
+        self._check_refs(refs)
+        now = _now()
+        row = {
+            "id": str(uuid.uuid4()),
+            "status": "queued",
+            "ruleset_version": ruleset_version,
+            "filters_json": _dumps(filters),
+            "record_refs_json": _dumps([asdict(ref) for ref in refs]),
+            "total_records": len(refs),
+            "processed_records": 0,
+            "success_count": 0,
+            "failed_count": 0,
+            "issue_records": 0,
+            "data_gap_records": 0,
+            "failed_records_json": None,
+            "error_message": None,
+            "cancel_requested": False,
+            "created_by": created_by,
+            "created_at": now,
+            "started_at": None,
+            "finished_at": None,
+            "updated_at": now,
+        }
+        lock_key = f"frontpage_qc_run:{created_by}"
+
+        def op(session):
+            _acquire_pg_advisory_xact_lock(session, lock_key)
+            active_rows = (
+                session.execute(
+                    sa.select(self.runs)
+                    .where(
+                        self._run_scope(),
+                        self.runs.c.created_by == created_by,
+                        self.runs.c.status.in_(RUN_ACTIVE_STATUSES),
+                    )
+                    .order_by(self.runs.c.created_at.desc())
+                    .limit(5)
+                )
+                .mappings()
+                .all()
+            )
+            still_active: List[Dict[str, Any]] = []
+            for active_row in active_rows:
+                pub = self._public_run(active_row)
+                if stalled_after is not None and pub.get("updated_at"):
+                    updated = datetime.fromisoformat(pub["updated_at"])
+                    if updated.tzinfo is None:
+                        updated = updated.replace(tzinfo=timezone.utc)
+                    if now - updated >= stalled_after:
+                        cutoff = now - stalled_after
+                        res = session.execute(
+                            self.runs.update()
+                            .where(
+                                self.runs.c.id == pub["id"],
+                                self._run_scope(),
+                                self.runs.c.status.in_(RUN_ACTIVE_STATUSES),
+                                self.runs.c.updated_at == active_row["updated_at"],
+                                self.runs.c.updated_at <= cutoff,
+                            )
+                            .values(
+                                status="failed",
+                                error_message="任务中断（服务重启或执行异常），请重新发起",
+                                finished_at=now,
+                                updated_at=now,
+                            )
+                        )
+                        if res.rowcount != 1:
+                            refreshed = session.execute(
+                                sa.select(self.runs).where(
+                                    self.runs.c.id == pub["id"], self._run_scope()
+                                )
+                            ).mappings().first()
+                            if refreshed is not None and refreshed["status"] in RUN_ACTIVE_STATUSES:
+                                still_active.append(self._public_run(refreshed))
+                        continue
+                still_active.append(pub)
+            if still_active:
+                session.commit()
+                raise FrontpageQcRunConflict(still_active[0])
+            session.execute(self.runs.insert().values(**row))
+            session.commit()
+            return self._public_run(row)
+
+        with _get_local_lock(lock_key):
+            return self._guard(op)
 
     def _public_run(self, row: Any) -> Dict[str, Any]:
         data = dict(row)
@@ -337,6 +477,45 @@ class FrontpageQcStore:
 
         self._guard(op)
 
+    def settle_stalled_run(
+        self,
+        run_id: str,
+        *,
+        expected_updated_at: Optional[datetime] = None,
+        stale_before: Optional[datetime] = None,
+        error_message: str = "任务中断（服务重启或执行异常），请重新发起",
+    ) -> bool:
+        """按 updated_at CAS 将超时中断任务落为失败，避免误杀并发刷新心跳的运行中任务。"""
+        now = _now()
+
+        def _utc_aware(dt: datetime) -> datetime:
+            return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+
+        def op(session):
+            conditions = [
+                self.runs.c.id == run_id,
+                self._run_scope(),
+                self.runs.c.status.in_(RUN_ACTIVE_STATUSES),
+            ]
+            if expected_updated_at is not None:
+                conditions.append(self.runs.c.updated_at == _utc_aware(expected_updated_at))
+            if stale_before is not None:
+                conditions.append(self.runs.c.updated_at <= _utc_aware(stale_before))
+            res = session.execute(
+                self.runs.update()
+                .where(*conditions)
+                .values(
+                    status="failed",
+                    error_message=error_message,
+                    finished_at=now,
+                    updated_at=now,
+                )
+            )
+            session.commit()
+            return res.rowcount == 1
+
+        return self._guard(op)
+
     def request_cancel(self, run_id: str) -> Dict[str, Any]:
         self.get_run(run_id)
         def op(session):
@@ -379,11 +558,8 @@ class FrontpageQcStore:
         def op(session):
             # 沿用上一次结果中相同问题的复核结论，避免重新质控后重复复核
             self._check_refs([ref])
-            # PG事务级病例锁覆盖“首次还没有latest行”的并发窗口。
-            if session.get_bind().dialect.name == 'postgresql':
-                # 历史键和新键的同一病例共用原事务锁。
-                lock = int.from_bytes(hashlib.sha256(ref.legacy_key().encode()).digest()[:8], 'big', signed=True)
-                session.execute(sa.text('SELECT pg_advisory_xact_lock(:key)'), {'key': lock})
+            # PG事务级病例锁覆盖“首次还没有latest行”的并发窗口，并与 review_finding 共用同病例锁。
+            _acquire_pg_advisory_xact_lock(session, ref.legacy_key())
             run = session.execute(sa.select(self.runs).where(self.runs.c.id == run_id)).mappings().first()
             if run is None:
                 raise FrontpageQcNotFound('质控任务不存在')
@@ -469,10 +645,13 @@ class FrontpageQcStore:
                 )
             if rows:
                 session.execute(self.findings.insert(), rows)
+                if any(item["review_status"] == "false_alarm" for item in rows):
+                    self._recompute_result_aggregates(session, result_id)
             session.commit()
             return result_id
 
-        return self._guard(op)
+        with _get_local_lock(f"case:{ref.legacy_key()}"):
+            return self._guard(op)
 
     def _public_result(self, row: Any) -> Dict[str, Any]:
         data = dict(row)
@@ -557,6 +736,120 @@ class FrontpageQcStore:
 
         return self._guard(op)
 
+    def _recompute_result_aggregates(self, session: Any, result_id: str) -> None:
+        """按当前非误报（review_status != 'false_alarm'）有效问题重算结果汇总与评分。"""
+        result_row = session.execute(
+            sa.select(
+                self.results.c.item_scores_json,
+                self.results.c.rule_verdicts_json,
+            ).where(self.results.c.id == result_id)
+        ).mappings().first()
+        if result_row is None:
+            return
+
+        all_findings = session.execute(
+            sa.select(self.findings).where(self.findings.c.result_id == result_id)
+        ).mappings().all()
+
+        effective = [f for f in all_findings if f["review_status"] != "false_alarm"]
+        effective_fails = [f for f in effective if f["verdict"] == "fail"]
+
+        fail_count = sum(1 for f in effective_fails if f["severity"] == "deduct")
+        hint_count = sum(1 for f in effective_fails if f["severity"] == "hint")
+        required_missing_count = sum(1 for f in effective_fails if f["severity"] == "required")
+        data_gap_count = sum(1 for f in effective if f["verdict"] == "data_gap")
+
+        rule_verdicts: Dict[str, str] = dict(_loads(result_row["rule_verdicts_json"], {}))
+        by_rule: Dict[str, List[Any]] = defaultdict(list)
+        for finding in all_findings:
+            by_rule[finding["rule_id"]].append(finding)
+        for rule_id, group in by_rule.items():
+            active_group = [f for f in group if f["review_status"] != "false_alarm"]
+            if any(f["verdict"] == "fail" for f in active_group):
+                rule_verdicts[rule_id] = "fail"
+            elif any(f["verdict"] == "data_gap" for f in active_group):
+                rule_verdicts[rule_id] = "data_gap"
+            else:
+                rule_verdicts[rule_id] = (
+                    "pass" if any(f["verdict"] == "fail" for f in group) else "not_applicable"
+                )
+
+        fails_by_score_item: Dict[str, List[Any]] = defaultdict(list)
+        for finding in effective_fails:
+            score_item_key = finding.get("score_item")
+            if finding["severity"] == "deduct" and score_item_key in SCORE_ITEMS:
+                fails_by_score_item[score_item_key].append(finding)
+
+        item_deductions: Dict[str, float] = {}
+        for key, item in SCORE_ITEMS.items():
+            deduction = 0.0
+            if key in fails_by_score_item:
+                if item.per_item:
+                    details = [
+                        d
+                        for f in fails_by_score_item[key]
+                        for d in _loads(f.get("details_json"), [])
+                        if isinstance(d, dict)
+                    ]
+                    indexed = {d.get("item_index") for d in details if d.get("item_index") is not None}
+                    unindexed = sum(1 for d in details if d.get("item_index") is None)
+                    count = max(1, len(indexed) + unindexed)
+                    deduction = min(item.points * count, max_points(item))
+                else:
+                    deduction = item.points
+            item_deductions[key] = deduction
+
+        group_totals: Dict[Tuple[str, str], float] = defaultdict(float)
+        for key, deduction in item_deductions.items():
+            item = SCORE_ITEMS[key]
+            group_totals[(item.section, item.klass)] += deduction
+        total_deduction = 0.0
+        for group_key, amount in group_totals.items():
+            cap = GROUP_CAPS.get(group_key)
+            total_deduction += min(amount, cap) if cap is not None else amount
+        score = round(max(0.0, 100.0 - total_deduction) + 1e-9, 2)
+        grade = grade_of(score)
+
+        item_scores = _loads(result_row["item_scores_json"], [])
+        if isinstance(item_scores, list):
+            for entry in item_scores:
+                if isinstance(entry, dict) and entry.get("key") in item_deductions:
+                    entry["deduction"] = item_deductions[entry["key"]]
+
+        completeness_judged = [
+            verdict
+            for rule_id, verdict in rule_verdicts.items()
+            if verdict in ("pass", "fail")
+            and RULES_BY_ID.get(rule_id) is not None
+            and RULES_BY_ID[rule_id].group == "completeness"
+            and RULES_BY_ID[rule_id].severity.value != "hint"
+        ]
+        completeness_rate = (
+            round(
+                sum(1 for v in completeness_judged if v == "pass") / len(completeness_judged)
+                + 1e-9,
+                2,
+            )
+            if completeness_judged
+            else None
+        )
+
+        session.execute(
+            self.results.update()
+            .where(self.results.c.id == result_id)
+            .values(
+                score=score,
+                grade=grade,
+                fail_count=fail_count,
+                hint_count=hint_count,
+                required_missing_count=required_missing_count,
+                data_gap_count=data_gap_count,
+                completeness_rate=completeness_rate,
+                item_scores_json=_dumps(item_scores),
+                rule_verdicts_json=_dumps(rule_verdicts),
+            )
+        )
+
     def query_latest(
         self,
         *,
@@ -568,6 +861,7 @@ class FrontpageQcStore:
         rule_id: str = "",
         rule_verdict: str = "fail",
         institute_id: str = "",
+        include_test_records: bool = True,
         record_refs: Optional[Sequence[FrontpageRef]] = None,
         page: int = 1,
         page_size: int = 50,
@@ -598,15 +892,26 @@ class FrontpageQcStore:
                 conditions.append(t.c.data_gap_count > 0)
             elif issue == "hint":
                 conditions.append(t.c.hint_count > 0)
+            elif issue == "required_missing":
+                conditions.append(t.c.required_missing_count > 0)
             elif issue == "clean":
                 conditions.append(sa.and_(t.c.fail_count == 0, t.c.hint_count == 0, t.c.required_missing_count == 0))
             if institute_id:
                 conditions.append(t.c.institute_id == institute_id)
+            elif not include_test_records and not (
+                refs and any(ref.institute_id == _CUSTOMER_TEST_INSTITUTE_ID for ref in refs)
+            ):
+                conditions.append(t.c.institute_id != _CUSTOMER_TEST_INSTITUTE_ID)
             if rule_id:
                 f = self.findings
                 conditions.append(
                     sa.exists().where(
-                        sa.and_(f.c.result_id == t.c.id, f.c.rule_id == rule_id, f.c.verdict == rule_verdict)
+                        sa.and_(
+                            f.c.result_id == t.c.id,
+                            f.c.rule_id == rule_id,
+                            f.c.verdict == rule_verdict,
+                            f.c.review_status != "false_alarm",
+                        )
                     )
                 )
             if refs is not None:
@@ -619,7 +924,13 @@ class FrontpageQcStore:
             rows = session.execute(
                 sa.select(t)
                 .where(where)
-                .order_by(t.c.score.asc(), t.c.discharge_date.desc(), t.c.record_key)
+                .order_by(
+                    t.c.score.asc(),
+                    sa.nullslast(t.c.discharge_date.desc()),
+                    t.c.institute_id.asc(),
+                    t.c.patient_id.asc(),
+                    t.c.visit_id.asc(),
+                )
                 .offset(max(page - 1, 0) * page_size)
                 .limit(page_size)
             ).mappings().all()
@@ -628,13 +939,21 @@ class FrontpageQcStore:
         return self._guard(op)
 
     def latest_rows_for_analytics(
-        self, *, department: str = "", start_date: str = "", end_date: str = "", institute_id: str = ""
+        self,
+        *,
+        department: str = "",
+        start_date: str = "",
+        end_date: str = "",
+        institute_id: str = "",
+        include_test_records: bool = True,
     ) -> List[Dict[str, Any]]:
         def op(session):
             t = self.results
             conditions = [t.c.is_latest.is_(True), self._result_scope()]
             if institute_id:
                 conditions.append(t.c.institute_id == institute_id)
+            elif not include_test_records:
+                conditions.append(t.c.institute_id != _CUSTOMER_TEST_INSTITUTE_ID)
             if department:
                 conditions.append(t.c.department == department)
             if start_date:
@@ -644,11 +963,30 @@ class FrontpageQcStore:
             rows = session.execute(
                 sa.select(
                     t.c.id, t.c.record_key, t.c.department, t.c.score, t.c.grade, t.c.fail_count,
-                    t.c.hint_count, t.c.data_gap_count, t.c.rule_verdicts_json,
+                    t.c.hint_count, t.c.required_missing_count, t.c.data_gap_count, t.c.rule_verdicts_json,
                 ).where(sa.and_(*conditions))
             ).mappings().all()
+            result_ids = [row["id"] for row in rows]
+            l06_main_failed_ids: set[str] = set()
+            if result_ids:
+                f = self.findings
+                for start in range(0, len(result_ids), 500):
+                    matched_ids = session.execute(
+                        sa.select(f.c.result_id).where(
+                            f.c.result_id.in_(result_ids[start:start + 500]),
+                            f.c.rule_id == "L-06",
+                            f.c.score_item == "main_diag_code",
+                            f.c.verdict == "fail",
+                            f.c.review_status != "false_alarm",
+                        )
+                    ).scalars().all()
+                    l06_main_failed_ids.update(matched_ids)
             return [
-                {**{k: row[k] for k in row.keys() if k != "rule_verdicts_json"}, "rule_verdicts": _loads(row["rule_verdicts_json"], {})}
+                {
+                    **{k: row[k] for k in row.keys() if k != "rule_verdicts_json"},
+                    "rule_verdicts": _loads(row["rule_verdicts_json"], {}),
+                    "l06_main_failed": row["id"] in l06_main_failed_ids,
+                }
                 for row in rows
             ]
 
@@ -663,9 +1001,15 @@ class FrontpageQcStore:
             ids = list(result_ids)
             for start in range(0, len(ids), 500):
                 rows = session.execute(
-                    sa.select(self.findings).where(self.findings.c.result_id.in_(ids[start:start + 500]), sa.exists().where(self.results.c.id == self.findings.c.result_id, self._result_scope()))
+                    sa.select(self.findings)
+                    .where(
+                        self.findings.c.result_id.in_(ids[start:start + 500]),
+                        sa.exists().where(self.results.c.id == self.findings.c.result_id, self._result_scope()),
+                    )
+                    .order_by(self.findings.c.result_id.asc(), self.findings.c.rule_id.asc(), self.findings.c.id.asc())
                 ).mappings().all()
                 found.extend({**self._public_finding(row), "result_id": row["result_id"], "record_key": row["record_key"]} for row in rows)
+            found.sort(key=lambda item: (item["result_id"], item["rule_id"], item["id"]))
             return found
 
         return self._guard(op)
@@ -676,11 +1020,37 @@ class FrontpageQcStore:
         if status not in REVIEW_STATUSES:
             raise ValueError("复核状态只能是 pending / confirmed / false_alarm")
 
+        def locate_case(session):
+            return session.execute(
+                sa.select(
+                    self.findings.c.result_id,
+                    self.results.c.institute_id,
+                    self.results.c.patient_id,
+                    self.results.c.visit_id,
+                )
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
+
+        located = self._guard(locate_case)
+        if located is None:
+            raise FrontpageQcNotFound("问题不存在")
+        case_ref = FrontpageRef(located["institute_id"], located["patient_id"], located["visit_id"])
+        legacy_key = case_ref.legacy_key()
+
         def op(session):
-            row = session.execute(sa.select(self.findings).join(self.results, self.results.c.id == self.findings.c.result_id).where(self.findings.c.id == finding_id, self._result_scope())).mappings().first()
+            # 与 save_outcome 复用同一病例级锁，消除并发重跑时复核落到旧结果行导致丢失沿用的竞态
+            _acquire_pg_advisory_xact_lock(session, legacy_key)
+            row = session.execute(
+                sa.select(self.findings)
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
             if row is None:
                 raise FrontpageQcNotFound("问题不存在")
-            latest = session.execute(sa.select(self.results.c.is_latest).where(self.results.c.id == row["result_id"])).scalar()
+            latest = session.execute(
+                sa.select(self.results.c.is_latest).where(self.results.c.id == row["result_id"])
+            ).scalar()
             if not latest:
                 raise FrontpageQcNotFound("该问题所在结果已被重新质控替换，请刷新后在最新结果上复核")
             values = {
@@ -690,11 +1060,17 @@ class FrontpageQcStore:
                 "reviewed_at": _now() if status != "pending" else None,
             }
             session.execute(self.findings.update().where(self.findings.c.id == finding_id).values(**values))
+            self._recompute_result_aggregates(session, row["result_id"])
             session.commit()
-            updated = session.execute(sa.select(self.findings).join(self.results, self.results.c.id == self.findings.c.result_id).where(self.findings.c.id == finding_id, self._result_scope())).mappings().first()
+            updated = session.execute(
+                sa.select(self.findings)
+                .join(self.results, self.results.c.id == self.findings.c.result_id)
+                .where(self.findings.c.id == finding_id, self._result_scope())
+            ).mappings().first()
             return self._public_finding(updated)
 
-        return self._guard(op)
+        with _get_local_lock(f"case:{legacy_key}"):
+            return self._guard(op)
 
 
 def date_text(value: Any) -> str:

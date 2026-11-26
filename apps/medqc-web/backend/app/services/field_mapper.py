@@ -105,6 +105,83 @@ def _get_field_mapper_model() -> str:
     ).strip()
 
 
+def _normalize_openai_base_url(endpoint: str) -> str:
+    """将完整 chat/completions URL 规范化为 OpenAI SDK 可用的 base_url。"""
+    normalized = str(endpoint or "").strip().rstrip("/")
+    if normalized.lower().endswith("/chat/completions"):
+        normalized = normalized[: -len("/chat/completions")].rstrip("/")
+    return normalized
+
+
+async def _load_active_system_llm_config() -> Dict[str, Any] | None:
+    """尝试从系统配置加载激活的 LLM 运行时配置，失败时静默回退环境变量。"""
+    try:
+        from .llm_config_loader import LLMConfigLoader
+
+        cfg = await LLMConfigLoader.load_config(config_name="default")
+        if isinstance(cfg, dict):
+            return cfg
+    except Exception as exc:
+        logger.debug("field_mapper_system_llm_config_unavailable error_type=%s", type(exc).__name__)
+    return None
+
+
+def _is_active_system_config_override(cfg: Dict[str, Any] | None) -> bool:
+    if not isinstance(cfg, dict):
+        return False
+    if cfg.get("endpoint_config_revision") is not None:
+        return True
+    source = str(cfg.get("source") or "").strip().lower()
+    return source != "env"
+
+
+async def _resolve_llm_client_settings() -> tuple[str, str, str, str]:
+    """解析字段映射使用的 (api_key, base_url, model, provider_code)。
+
+    优先采用系统配置（LLMConfigLoader）中的生效配置/端点覆盖；
+    若系统未保存激活覆盖（仅 env 默认或加载不可用），回退既有环境变量解析逻辑。
+    """
+    system_cfg = await _load_active_system_llm_config()
+    if _is_active_system_config_override(system_cfg):
+        assert system_cfg is not None
+        sys_endpoint = _normalize_openai_base_url(str(system_cfg.get("api_endpoint") or ""))
+        sys_model = str(system_cfg.get("model") or "").strip()
+        sys_provider = str(system_cfg.get("provider_code") or "").strip().lower()
+        sys_key = str(system_cfg.get("api_key") or "").strip()
+
+        base_url = sys_endpoint or _normalize_openai_base_url(_get_dashscope_base_url())
+        model = sys_model or _get_field_mapper_model()
+        provider_code = sys_provider or _field_mapper_provider_code(base_url)
+        if sys_key:
+            api_key = sys_key
+        elif provider_code == "ollama":
+            api_key = "ollama"
+        else:
+            api_key = _get_dashscope_api_key()
+        return api_key, base_url, model, provider_code
+
+    model = _get_field_mapper_model()
+    base_url = _normalize_openai_base_url(_get_dashscope_base_url())
+    provider_code = _field_mapper_provider_code(base_url)
+    try:
+        api_key = _get_dashscope_api_key()
+        return api_key, base_url, model, provider_code
+    except ValueError:
+        if isinstance(system_cfg, dict):
+            fallback_endpoint = _normalize_openai_base_url(str(system_cfg.get("api_endpoint") or ""))
+            fallback_provider = str(system_cfg.get("provider_code") or "").strip().lower()
+            fallback_key = str(system_cfg.get("api_key") or "").strip()
+            fallback_model = str(system_cfg.get("model") or "").strip()
+            if fallback_endpoint and (fallback_key or fallback_provider == "ollama"):
+                return (
+                    fallback_key or "ollama",
+                    fallback_endpoint,
+                    fallback_model or model,
+                    fallback_provider or _field_mapper_provider_code(fallback_endpoint),
+                )
+        raise
+
+
 def _field_mapper_provider_code(base_url: str) -> str:
     """根据实际 OpenAI 兼容端点给出不含端点明文的供应商标识。"""
     normalized = str(base_url or "").strip().lower()
@@ -309,10 +386,9 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
         for key in ["ALL_PROXY", "HTTP_PROXY", "HTTPS_PROXY", "all_proxy", "http_proxy", "https_proxy"]:
             os.environ.pop(key, None)
 
-        model = _get_field_mapper_model()
-        base_url = _get_dashscope_base_url()
+        api_key, base_url, model, provider_code = await _resolve_llm_client_settings()
         client = OpenAI(
-            api_key=_get_dashscope_api_key(),
+            api_key=api_key,
             base_url=base_url,
             timeout=45.0,
             max_retries=0,
@@ -342,7 +418,7 @@ async def suggest_field_mapping(columns: List[str], sample_data: List[Dict[str, 
             try:
                 observed_result = await observe_llm_http_attempt(
                     _request,
-                    provider_code=_field_mapper_provider_code(base_url),
+                    provider_code=provider_code,
                     model=model,
                     business_scene="smart_upload_field_mapping",
                     executor_key="field_mapper",

@@ -83,6 +83,7 @@ const props = defineProps<{
   localProviders: LLMLocalProvider[]
   defaultProvider: string
   disabled: boolean
+  catalogRefresh?: { provider: string; version: number } | null
 }>()
 const emit = defineEmits<{ 'update:value': [value: LLMTaskRoleModels] }>()
 const roleRows: Array<{ key: LLMTaskRole; label: string; hint: string }> = [
@@ -94,6 +95,7 @@ const catalog = reactive<Record<string, LLMModel[]>>({})
 const pending = reactive<Record<string, boolean>>({})
 const errors = reactive<Record<string, boolean>>({})
 const versions: Record<string, number> = {}
+const controllers: Record<string, AbortController> = {}
 let mounted = true
 const local = (provider: string) => provider === 'strata' || provider === 'ollama'
 const providerOptions = computed(() => [
@@ -111,18 +113,29 @@ function modelOptions(provider: string) {
 }
 
 async function loadModels(provider: string, refresh = false) {
-  if (local(provider) || pending[provider] || (catalog[provider] && !refresh)) return
+  if (local(provider)) return
+  if (!refresh && (pending[provider] || catalog[provider])) return
+  controllers[provider]?.abort()
+  const controller = new AbortController()
+  controllers[provider] = controller
   const version = (versions[provider] || 0) + 1
   versions[provider] = version
   pending[provider] = true
   errors[provider] = false
   try {
-    const models = await llmConfigService.getModelsByProvider(provider)
-    if (mounted && versions[provider] === version) catalog[provider] = models
+    const models = await llmConfigService.getModelsByProvider(provider, { signal: controller.signal })
+    if (mounted && versions[provider] === version && !controller.signal.aborted) {
+      catalog[provider] = models
+    }
   } catch {
-    if (mounted && versions[provider] === version) errors[provider] = true
+    if (mounted && versions[provider] === version && !controller.signal.aborted) {
+      errors[provider] = true
+    }
   } finally {
-    if (mounted && versions[provider] === version) pending[provider] = false
+    if (mounted && versions[provider] === version && controllers[provider] === controller) {
+      pending[provider] = false
+      delete controllers[provider]
+    }
   }
 }
 
@@ -140,7 +153,28 @@ function selectModel(role: LLMTaskRole, model: string) {
 watch(() => props.value, (value) => {
   for (const selected of Object.values(value)) if (selected) void loadModels(selected.provider_code)
 }, { immediate: true, deep: true })
-onBeforeUnmount(() => { mounted = false })
+
+watch(
+  () => props.catalogRefresh,
+  (refresh) => {
+    const provider = refresh?.provider
+    if (!provider || local(provider)) return
+    delete catalog[provider]
+    const providerInUse = Object.values(props.value).some(
+      (selected) => selected?.provider_code === provider,
+    )
+    if (providerInUse) {
+      void loadModels(provider, true)
+    }
+  },
+)
+
+onBeforeUnmount(() => {
+  mounted = false
+  for (const controller of Object.values(controllers)) {
+    controller.abort()
+  }
+})
 </script>
 
 <style scoped>

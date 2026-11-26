@@ -18,6 +18,7 @@ from ..luxian_0609.privacy_request_scope import luxian_0609_privacy_scope
 from ..luxian_0609.rule_decision_settings import ReadOnlySettingsOverlay
 from ..luxian_0609.native_package import Luxian0609PackagePlan
 from ..llm_execution_concurrency import LLMExecutionConcurrency
+from ..qc_cancellation import cancellation_scope, raise_if_cancelled
 
 
 def _resolve_facade_module(host: Any) -> Any:
@@ -68,6 +69,53 @@ async def evaluate_running_final_bundle_input(
     - 仅做输入适配；
     - 仅支持 running/final 场景。
     """
+    with cancellation_scope(cancellation_check):
+        raise_if_cancelled(cancellation_check)
+        return await _evaluate_running_final_bundle_input_in_scope(
+            host,
+            bundle,
+            rule_ids=rule_ids,
+            bucket_strategy=bucket_strategy,
+            quality_profile=quality_profile,
+            batch_output_mode=batch_output_mode,
+            enable_selective_refine=enable_selective_refine,
+            refine_confidence_threshold=refine_confidence_threshold,
+            max_refine_candidates=max_refine_candidates,
+            use_execution_cache=use_execution_cache,
+            enable_pack_probe=enable_pack_probe,
+            rule_set_key=rule_set_key,
+            evaluation_as_of_date=evaluation_as_of_date,
+            evaluation_horizon_policy=evaluation_horizon_policy,
+            evaluation_horizon_unavailable_reason=evaluation_horizon_unavailable_reason,
+            task_settings=task_settings,
+            cancellation_check=cancellation_check,
+            execution_trace_sink=execution_trace_sink,
+            execution_concurrency=execution_concurrency,
+        )
+
+
+async def _evaluate_running_final_bundle_input_in_scope(
+    host: Any,
+    bundle: Dict[str, Any],
+    *,
+    rule_ids: Optional[List[str]] = None,
+    bucket_strategy: str = "domain_only",
+    quality_profile: str = QUALITY_PROFILE_THROUGHPUT,
+    batch_output_mode: str = BATCH_OUTPUT_MODE_FULL,
+    enable_selective_refine: bool = False,
+    refine_confidence_threshold: float = DEFAULT_REFINE_CONFIDENCE_THRESHOLD,
+    max_refine_candidates: int = DEFAULT_MAX_REFINE_CANDIDATES,
+    use_execution_cache: bool = True,
+    enable_pack_probe: bool = False,
+    rule_set_key: str = "",
+    evaluation_as_of_date: str | None = None,
+    evaluation_horizon_policy: str | None = None,
+    evaluation_horizon_unavailable_reason: str | None = None,
+    task_settings: Settings | ReadOnlySettingsOverlay | None = None,
+    cancellation_check: Optional[Callable[[], bool]] = None,
+    execution_trace_sink: Optional[Callable[[Dict[str, Any]], None]] = None,
+    execution_concurrency: LLMExecutionConcurrency | None = None,
+) -> Dict[str, Any]:
     from ..qc_input_adapters import adapt_bundle_to_sichuan_eval_args
     from ..qc_input_adapters import extract_bundle_documents
 
@@ -189,6 +237,7 @@ async def evaluate_running_final_bundle_input(
                     bundle_documents=bundle_documents,
                 ),
             )
+        raise_if_cancelled(cancellation_check)
         execution_rules, luxian_context = await host_module.prepare_luxian_0609_execution(
             rule_set_key=normalized_rule_set_key,
             prepared_rules=selected_rules,
@@ -212,6 +261,7 @@ async def evaluate_running_final_bundle_input(
             **({"prepared_package_plan": package_plan} if package_plan is not None else {}),
             trace_sink=execution_trace_sink,
         )
+        raise_if_cancelled(cancellation_check)
 
     bundle_institute_id = str((bundle or {}).get("institute_id") or "").strip()
     bundle_patient_id = str((bundle or {}).get("patient_id") or "").strip()

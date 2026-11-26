@@ -1641,7 +1641,11 @@ class SichuanQCService:
             0,
             total_rules - not_applicable_count - data_gap_count - not_executed_count - technical_error_count,
         )
-        compliance_rate = (compliant_rules / compliance_denominator * 100.0) if compliance_denominator else 100.0
+        compliance_rate = (
+            (compliant_rules / compliance_denominator * 100.0)
+            if compliance_denominator
+            else None
+        )
 
         from .history_evidence_audit import carry_retained_fields
 
@@ -1711,9 +1715,12 @@ class SichuanQCService:
                 "audit": item.get("audit"),
             }))
 
+        compliance_rate_display = (
+            f"{compliance_rate:.1f}%" if compliance_rate is not None else "N/A"
+        )
         logger.info(
             f"质控评估完成: {compliant_rules}/{compliance_denominator} 条适用规则符合，"
-            f"不适用 {not_applicable_count} 条，数据缺口 {data_gap_count} 条，合规率 {compliance_rate:.1f}%"
+            f"不适用 {not_applicable_count} 条，数据缺口 {data_gap_count} 条，合规率 {compliance_rate_display}"
         )
 
         result = {
@@ -1722,7 +1729,7 @@ class SichuanQCService:
             "total_rules": total_rules,
             "applicable_rules": display_rule_ids or [r.get("rule_code", r.get("id", "")) for r in rules],
             "evaluation_summary": {
-                "compliance_rate": round(compliance_rate, 2),
+                "compliance_rate": round(compliance_rate, 2) if compliance_rate is not None else None,
                 "issues_found": issues_found,
                 "not_applicable": not_applicable_count,
                 "data_gap_count": data_gap_count,
@@ -3274,11 +3281,12 @@ class SichuanQCService:
             "total_rules": 1,
             "applicable_rules": [str(rule.get("rule_id") or "")],
             "evaluation_summary": {
-                "compliance_rate": 100.0,
+                "compliance_rate": None,
                 "issues_found": 0,
                 "not_applicable": 1,
                 "total_rules": 1,
-                "compliant_rules": 1,
+                "compliance_denominator": 0,
+                "compliant_rules": 0,
                 "model": self.client.model,
             },
             "parsed_evaluation_results": [result],
@@ -4812,7 +4820,8 @@ class SichuanQCService:
             return {
                 "document_id": document_id,
                 "evaluation_summary": {
-                    "compliance_rate": 100.0,
+                    "compliance_rate": None,
+                    "compliance_denominator": 0,
                     "issues_found": 0,
                     "model": self.client.model
                 },
@@ -4853,12 +4862,38 @@ class SichuanQCService:
         ]
 
         total_rules = len(rule_results)
+        not_applicable_count = sum(1 for r in evaluation_results if r.get("status") == "not_applicable")
+        data_gap_count = sum(1 for r in evaluation_results if r.get("status") == "data_gap")
+        not_executed_count = sum(1 for r in evaluation_results if r.get("status") == "not_executed")
+        technical_error_count = sum(
+            1 for r in evaluation_results
+            if r.get("status") in {"technical_error", "technical_error_internal"}
+        )
         compliant_rules = sum(
             1 for r in evaluation_results
-            if r.get("is_compliant") is True or r.get("status") in ("compliant", "not_applicable")
+            if r.get("status") == "compliant"
+            or (
+                r.get("is_compliant") is True
+                and r.get("status") not in {
+                    "not_applicable",
+                    "data_gap",
+                    "not_executed",
+                    "technical_error",
+                    "technical_error_internal",
+                    "non_compliant",
+                }
+            )
         )
-        issues_found = total_rules - compliant_rules
-        compliance_rate = (compliant_rules / total_rules * 100) if total_rules > 0 else 100.0
+        issues_found = sum(1 for r in evaluation_results if r.get("status") == "non_compliant")
+        compliance_denominator = max(
+            0,
+            total_rules - not_applicable_count - data_gap_count - not_executed_count - technical_error_count,
+        )
+        compliance_rate = (
+            round(compliant_rules / compliance_denominator * 100.0, 2)
+            if compliance_denominator > 0
+            else None
+        )
 
         token_usage = int(orchestrated.get("total_tokens") or 0)
         api_time = float(orchestrated.get("total_api_time") or 0.0)
@@ -4871,7 +4906,12 @@ class SichuanQCService:
             "prompt_mode": prompt_mode,  # 添加 prompt_mode 到返回结果
             "evaluation_summary": {
                 "total_rules": total_rules,
+                "compliance_denominator": compliance_denominator,
                 "compliant_rules": compliant_rules,
+                "not_applicable": not_applicable_count,
+                "data_gap_count": data_gap_count,
+                "not_executed_count": not_executed_count,
+                "technical_error_count": technical_error_count,
                 "issues_found": issues_found,
                 "compliance_rate": compliance_rate,
                 "model": self.client.model
@@ -4943,6 +4983,7 @@ class SichuanQCService:
         total_tokens = 0
         total_time = 0.0
         sum_total_rules = 0
+        sum_compliance_denominator = 0
         sum_compliant = 0
         sum_not_applicable = 0
         sum_critical = 0
@@ -4959,12 +5000,23 @@ class SichuanQCService:
             total_rules = len(doc_rules)
             compliant = sum(
                 1 for r in rule_results
-                if r.get("status") in ("compliant", "not_applicable")
+                if r.get("status") == "compliant"
             )
             not_applicable = sum(1 for r in rule_results if r.get("status") == "not_applicable")
+            data_gap = sum(1 for r in rule_results if r.get("status") == "data_gap")
+            not_executed = sum(1 for r in rule_results if r.get("status") == "not_executed")
+            technical_error = sum(
+                1 for r in rule_results
+                if r.get("status") in {"technical_error", "technical_error_internal"}
+            )
             critical_violations = sum(1 for r in rule_results if r.get("status") == "non_compliant")
+            doc_denominator = max(
+                0,
+                total_rules - not_applicable - data_gap - not_executed - technical_error,
+            )
 
             sum_total_rules += total_rules
+            sum_compliance_denominator += doc_denominator
             sum_compliant += compliant
             sum_not_applicable += not_applicable
             sum_critical += critical_violations
@@ -4973,6 +5025,7 @@ class SichuanQCService:
 
             document_results[doc_type] = {
                 "total_rules": total_rules,
+                "compliance_denominator": doc_denominator,
                 "compliant_rules": compliant,
                 "not_applicable": not_applicable,
                 "processing_time": api_time,
@@ -4981,16 +5034,26 @@ class SichuanQCService:
                 "evaluation_results": rule_results,
             }
 
-        overall_rate = (sum_compliant / max(sum_total_rules, 1)) * 100
-        overall_grade = "A" if overall_rate >= 90 else "B" if overall_rate >= 75 else "C"
+        overall_rate = (
+            (sum_compliant / sum_compliance_denominator) * 100.0
+            if sum_compliance_denominator > 0
+            else None
+        )
+        overall_grade = (
+            None
+            if overall_rate is None
+            else ("A" if overall_rate >= 90 else "B" if overall_rate >= 75 else "C")
+        )
         document_breakdown = {}
         for dt, dr in document_results.items():
             total = dr.get("total_rules", 0)
+            denom = dr.get("compliance_denominator", 0)
             compliant = dr.get("compliant_rules", 0)
             document_breakdown[dt] = {
                 "total_rules": total,
+                "compliance_denominator": denom,
                 "compliant_rules": compliant,
-                "compliance_rate": round((compliant / total * 100) if total else 100.0, 2),
+                "compliance_rate": round((compliant / denom * 100.0), 2) if denom > 0 else None,
                 "critical_violations": dr.get("critical_violations", 0),
                 "not_applicable": dr.get("not_applicable", 0),
             }
@@ -5006,10 +5069,11 @@ class SichuanQCService:
             "document_id": document_id,
             "overall_summary": {
                 "total_rules": sum_total_rules,
+                "compliance_denominator": sum_compliance_denominator,
                 "compliant_rules": sum_compliant,
                 "not_applicable": sum_not_applicable,
                 "issues_found": sum_critical,
-                "compliance_rate": round(overall_rate, 2),
+                "compliance_rate": round(overall_rate, 2) if overall_rate is not None else None,
                 "overall_grade": overall_grade,
                 "critical_violations": sum_critical,
                 "document_breakdown": document_breakdown,

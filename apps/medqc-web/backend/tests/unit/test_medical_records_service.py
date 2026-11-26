@@ -161,7 +161,12 @@ def test_save_ai_frontpage_draft_create():
         ensure_table=lambda: None,
     )
 
-    assert result == {"action": "created", "visit_id": "V-1"}
+    assert result == {
+        "action": "created",
+        "institute_id": "I-1",
+        "patient_id": "P-1",
+        "visit_id": "V-1",
+    }
     assert fake_session.committed is True
     assert fake_session.added is not None
     assert fake_session.added.visit_id == "V-1"

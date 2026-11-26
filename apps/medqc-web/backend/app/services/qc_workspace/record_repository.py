@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence
+from zoneinfo import ZoneInfo
 
-from sqlalchemy import String, and_, asc, cast, desc, exists, func, or_
+from sqlalchemy import Boolean, String, and_, asc, cast, desc, exists, func, nullslast, or_, tuple_
+from sqlalchemy.exc import OperationalError, ProgrammingError
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, load_only
+from sqlalchemy.sql.expression import FunctionElement
 
 from ...database.models.cdm import (
     AdmissionRecord,
+    DeathRecord,
     DischargeRecord,
     HospitalizationStatusProjection,
     InpatRegistration,
@@ -18,6 +23,152 @@ from ..case_identity import CaseRef, CaseRefInput, normalize_case_refs
 from ..discharge_time import select_discharge_time
 from ..clinical_scene_admission import resolve_scene
 from ..validation_material_source import is_explicitly_invalid_document_status
+
+CUSTOMER_TEST_INSTITUTE_ID = "CUSTOMER_TEST"
+CUSTOMER_TEST_VISIT_PREFIX = "CUSTOMER_TEST_"
+_RECORD_REF_BATCH_SIZE = 200
+_FRONTPAGE_METADATA_COLUMNS = (
+    MedicalRecordFrontpage.institute_id,
+    MedicalRecordFrontpage.patient_id,
+    MedicalRecordFrontpage.visit_id,
+    MedicalRecordFrontpage.name,
+    MedicalRecordFrontpage.mr_no,
+    MedicalRecordFrontpage.inpat_no,
+    MedicalRecordFrontpage.discharge_dept_name,
+    MedicalRecordFrontpage.admission_dept_name,
+    MedicalRecordFrontpage.attending_physician_sign,
+    MedicalRecordFrontpage.admission_datetime,
+    MedicalRecordFrontpage.discharge_datetime,
+)
+_UNTRUSTED_PROJECTION_SOURCES = frozenset(
+    {"", "inpat_registration", "mr", "source_scope_unmatched"}
+)
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+
+def _shanghai_today() -> date:
+    return datetime.now(_SHANGHAI_TZ).date()
+
+
+def _escape_like(value: str) -> str:
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def _frontpage_order_by():
+    return (
+        nullslast(desc(MedicalRecordFrontpage.discharge_datetime)),
+        nullslast(desc(MedicalRecordFrontpage.admission_datetime)),
+        asc(MedicalRecordFrontpage.institute_id),
+        asc(MedicalRecordFrontpage.patient_id),
+        asc(MedicalRecordFrontpage.visit_id),
+    )
+
+
+def _sort_collected_records(records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    ordered = sorted(
+        records,
+        key=lambda item: (
+            _safe_text(item.get("institute_id")),
+            _safe_text(item.get("patient_id")),
+            _safe_text(item.get("visit_id")),
+        ),
+    )
+    ordered.sort(
+        key=lambda item: (
+            bool(_safe_text(item.get("discharge_datetime"))),
+            _safe_text(item.get("discharge_datetime")),
+            bool(_safe_text(item.get("admission_datetime"))),
+            _safe_text(item.get("admission_datetime")),
+        ),
+        reverse=True,
+    )
+    return ordered
+
+
+class _IsIsoDateText(FunctionElement):
+    """可移植 YYYY-MM-DD 格式校验：兼容 PostgreSQL 正则与 SQLite GLOB，空串/脏值不报错。"""
+
+    type = Boolean()
+    inherit_cache = True
+
+
+@compiles(_IsIsoDateText, "postgresql")
+def _compile_is_iso_date_pg(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return f"({compiled} ~ '^[0-9]{{4}}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$')"
+
+
+@compiles(_IsIsoDateText, "sqlite")
+def _compile_is_iso_date_sqlite(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return (
+        f"({compiled} GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' "
+        f"AND substr({compiled}, 6, 2) BETWEEN '01' AND '12' "
+        f"AND substr({compiled}, 9, 2) BETWEEN '01' AND '31')"
+    )
+
+
+@compiles(_IsIsoDateText)
+def _compile_is_iso_date_default(element: _IsIsoDateText, compiler: Any, **kw: Any) -> str:
+    compiled = compiler.process(element.clauses, **kw)
+    return f"({compiled} LIKE '____-__-__')"
+
+
+def _is_fresh_projection_timestamp(verified_at: Any, *, max_age_hours: int = 24) -> bool:
+    if verified_at is None:
+        return False
+    if isinstance(verified_at, str):
+        try:
+            verified_at = datetime.fromisoformat(verified_at.strip())
+        except ValueError:
+            return False
+    if not isinstance(verified_at, datetime):
+        return False
+    if verified_at.tzinfo is not None:
+        delta = datetime.now(timezone.utc) - verified_at.astimezone(timezone.utc)
+        return timedelta(hours=-1) <= delta <= timedelta(hours=max_age_hours)
+    now_local = datetime.now()
+    now_hospital = datetime.now(timezone(timedelta(hours=8))).replace(tzinfo=None)
+    return any(
+        timedelta(hours=-1) <= (ref_now - verified_at) <= timedelta(hours=max_age_hours)
+        for ref_now in (now_local, now_hospital)
+    )
+
+
+def _resolve_verified_projection_status(projection_row: Any) -> tuple[str, str, Any]:
+    if projection_row is None:
+        return "", "", None
+    status = _safe_text(getattr(projection_row, "status", None)).lower()
+    if status not in {"inpatient", "discharged"}:
+        return "", "", None
+    source = _safe_text(getattr(projection_row, "source", None))
+    if not source or source.lower() in _UNTRUSTED_PROJECTION_SOURCES:
+        return "", "", None
+    verified_at = getattr(projection_row, "verified_at", None)
+    if not _is_fresh_projection_timestamp(verified_at):
+        return "", "", None
+    return status, source, verified_at
+
+
+def _should_exclude_customer_test(
+    *,
+    institute_id: Optional[str] = None,
+    include_test_records: bool = False,
+    record_refs: Optional[Sequence[CaseRefInput]] = None,
+    record_ids: Optional[Sequence[str]] = None,
+) -> bool:
+    """默认生产查询排除 CUSTOMER_TEST，除非显式指定机构、测试模式或显式测试样本坐标。"""
+    if include_test_records:
+        return False
+    if _safe_text(institute_id) == CUSTOMER_TEST_INSTITUTE_ID:
+        return False
+    if record_refs:
+        normalized = normalize_case_refs(record_refs)
+        if any(ref.institute_id == CUSTOMER_TEST_INSTITUTE_ID for ref in normalized):
+            return False
+    if record_ids and any(_safe_text(rid).startswith(CUSTOMER_TEST_VISIT_PREFIX) for rid in record_ids):
+        return False
+    return True
 
 
 def _capture_private_orm_identities(collector: Callable[[str, Any], None] | None, source_key: str, rows: Sequence[Any]) -> None:
@@ -85,13 +236,16 @@ def _normalize_date_field(date_field: Optional[str]) -> str:
 
 
 def _date_range_condition(column: Any, start: Optional[date], end: Optional[date]):
-    conditions = []
-    date_column = func.date(column)
+    if not start and not end:
+        return None
+    # 避免 PG 上对 varchar 调用 date(varchar) 必 500，同时安全跳过空串/非 YYYY-MM-DD 脏值。
+    date_text = func.substr(func.trim(cast(column, String)), 1, 10)
+    conditions = [date_text.is_not(None), _IsIsoDateText(date_text)]
     if start:
-        conditions.append(date_column >= start)
+        conditions.append(date_text >= start.isoformat())
     if end:
-        conditions.append(date_column <= end)
-    return and_(*conditions) if conditions else None
+        conditions.append(date_text <= end.isoformat())
+    return and_(*conditions)
 
 
 def _record_date_range_condition(
@@ -157,9 +311,10 @@ class RecordRepository:
     """工作区病历池的唯一只读查询与正文水合实现。"""
 
     def __init__(self, *, session_factory: Callable[[], Session], _material_schema: str | None = None,
-                 frontpage_display: bool = False) -> None:
+                 frontpage_display: bool = False, include_test_records: bool = False) -> None:
         self._session_factory = session_factory
         self._frontpage_display = frontpage_display
+        self._include_test_records = bool(include_test_records)
         if _material_schema:
             from ..validation_material_source import MATERIAL_SCHEMA
             if not MATERIAL_SCHEMA.fullmatch(_material_schema):
@@ -186,22 +341,31 @@ class RecordRepository:
     def _raw_case_refs(
         self, session: Session, *, record_ids: Optional[Sequence[str]] = None,
         institute_id: Optional[str] = None, sync_scope: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> List[CaseRef]:
         """只从原始住院登记/入院文书发现身份，旧 visit 入口必须唯一。"""
+        effective_include_test = bool(include_test_records or self._include_test_records)
+        exclude_customer_test = _should_exclude_customer_test(
+            institute_id=institute_id,
+            include_test_records=effective_include_test,
+            record_ids=record_ids,
+        )
         refs: set[CaseRef] = set()
         for model in (InpatRegistration, AdmissionRecord):
             query = session.query(model.institute_id, model.patient_id, model.visit_id)
             if record_ids:
                 query = query.filter(model.visit_id.in_(record_ids))
             if institute_id:
-                query = query.filter(model.institute_id == institute_id)
+                query = query.filter(model.institute_id == _safe_text(institute_id))
+            elif exclude_customer_test:
+                query = query.filter(model.institute_id != CUSTOMER_TEST_INSTITUTE_ID)
             if _safe_text(sync_scope).lower() == "today_inpatient":
                 query = query.filter(exists().where(and_(
                     HospitalizationStatusProjection.institute_id == model.institute_id,
                     HospitalizationStatusProjection.patient_id == model.patient_id,
                     HospitalizationStatusProjection.visit_id == model.visit_id,
                     HospitalizationStatusProjection.status == "inpatient",
-                    func.date(HospitalizationStatusProjection.verified_at) == date.today(),
+                    func.date(HospitalizationStatusProjection.verified_at) == _shanghai_today(),
                 )))
             for row in query.distinct().all():
                 ref = CaseRef(_safe_text(row.institute_id), _safe_text(row.patient_id), _safe_text(row.visit_id))
@@ -245,6 +409,7 @@ class RecordRepository:
         keyword: Optional[str],
         _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
+        _load_verified_status: bool = True,
     ) -> List[Dict[str, Any]]:
         """按三坐标读取原始临床执行锚点，禁止按 visit 串病例。"""
         missing_refs = [
@@ -253,24 +418,21 @@ class RecordRepository:
         if not missing_refs:
             return []
 
-        def exact_clause(model: Any):
-            return or_(
-                *(
-                    and_(
-                        model.institute_id == ref.institute_id,
-                        model.patient_id == ref.patient_id,
-                        model.visit_id == ref.visit_id,
-                    )
-                    for ref in missing_refs
-                )
+        def exact_clause(model: Any, batch: Sequence[CaseRef]):
+            return tuple_(model.institute_id, model.patient_id, model.visit_id).in_(
+                [(ref.institute_id, ref.patient_id, ref.visit_id) for ref in batch]
             )
 
         def source_rows(model: Any, fields: Sequence[str]):
-            query = session.query(model).filter(exact_clause(model))
-            if _metadata_only:
-                # 目录计数/分页只加载元数据；正文仅在选定病例后读取。
-                query = query.options(load_only(*(getattr(model, field) for field in fields)))
-            return query.all()
+            rows: List[Any] = []
+            for start in range(0, len(missing_refs), _RECORD_REF_BATCH_SIZE):
+                batch = missing_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                query = session.query(model).filter(exact_clause(model, batch))
+                if _metadata_only:
+                    # 目录计数/分页只加载元数据；正文仅在选定病例后读取。
+                    query = query.options(load_only(*(getattr(model, field) for field in fields)))
+                rows.extend(query.all())
+            return rows
 
         discharge_rows = source_rows(DischargeRecord, ("institute_id", "patient_id", "visit_id",
             "dept_name", "discharge_date", "discharge_time", "document_status"))
@@ -282,6 +444,40 @@ class RecordRepository:
         _capture_private_orm_identities(_private_identity_collector, "discharge_record", discharge_rows)
         _capture_private_orm_identities(_private_identity_collector, "inpat_registration", registration_rows)
         _capture_private_orm_identities(_private_identity_collector, "admission_record", admission_rows)
+
+        projection_by_ref: Dict[CaseRef, Any] = {}
+        if _load_verified_status and not self._material_schema:
+            projection_rows: List[Any] = []
+            try:
+                for start in range(0, len(missing_refs), _RECORD_REF_BATCH_SIZE):
+                    batch = missing_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                    if hasattr(session, "begin_nested"):
+                        with session.begin_nested():
+                            batch_rows = (
+                                session.query(HospitalizationStatusProjection)
+                                .filter(exact_clause(HospitalizationStatusProjection, batch))
+                                .all()
+                            )
+                    else:
+                        batch_rows = (
+                            session.query(HospitalizationStatusProjection)
+                            .filter(exact_clause(HospitalizationStatusProjection, batch))
+                            .all()
+                        )
+                    projection_rows.extend(batch_rows)
+            except (OperationalError, ProgrammingError):
+                projection_rows = []
+            for row in projection_rows:
+                ref = CaseRef.from_mapping(row.__dict__)
+                existing = projection_by_ref.get(ref)
+                if existing is None or (
+                    getattr(row, "verified_at", None) is not None
+                    and (
+                        getattr(existing, "verified_at", None) is None
+                        or getattr(row, "verified_at", None) > getattr(existing, "verified_at", None)
+                    )
+                ):
+                    projection_by_ref[ref] = row
 
         discharge_by_ref = {
             CaseRef.from_mapping(row.__dict__): row for row in discharge_rows
@@ -296,6 +492,56 @@ class RecordRepository:
         for row in [*registration_rows, *admission_rows]:
             ref = CaseRef.from_mapping(row.__dict__)
             anchor_by_ref.setdefault(ref, row)
+
+        death_by_ref: Dict[CaseRef, Any] = {}
+        if _load_verified_status:
+            refs_needing_death = []
+            for ref in missing_refs:
+                if ref not in anchor_by_ref:
+                    continue
+                reg_row = registration_by_ref.get(ref)
+                disc_row = discharge_by_ref.get(ref)
+                if (
+                    getattr(reg_row, "discharge_datetime", None) in (None, "")
+                    and getattr(disc_row, "discharge_time", None) in (None, "")
+                    and getattr(disc_row, "discharge_date", None) in (None, "")
+                ):
+                    refs_needing_death.append(ref)
+            if refs_needing_death:
+                death_rows: List[Any] = []
+                try:
+                    for start in range(0, len(refs_needing_death), _RECORD_REF_BATCH_SIZE):
+                        batch = refs_needing_death[start:start + _RECORD_REF_BATCH_SIZE]
+                        query = session.query(DeathRecord).filter(exact_clause(DeathRecord, batch))
+                        if _metadata_only:
+                            query = query.options(load_only(
+                                DeathRecord.institute_id,
+                                DeathRecord.patient_id,
+                                DeathRecord.visit_id,
+                                DeathRecord.death_datetime,
+                                DeathRecord.document_status,
+                            ))
+                        if hasattr(session, "begin_nested"):
+                            with session.begin_nested():
+                                death_rows.extend(query.all())
+                        else:
+                            death_rows.extend(query.all())
+                except (OperationalError, ProgrammingError):
+                    death_rows = []
+                for row in death_rows:
+                    ref = CaseRef.from_mapping(row.__dict__)
+                    existing = death_by_ref.get(ref)
+                    row_valid = not is_explicitly_invalid_document_status(getattr(row, "document_status", None))
+                    row_has_time = getattr(row, "death_datetime", None) not in (None, "")
+                    if existing is None:
+                        death_by_ref[ref] = row
+                        continue
+                    existing_valid = not is_explicitly_invalid_document_status(getattr(existing, "document_status", None))
+                    existing_has_time = getattr(existing, "death_datetime", None) not in (None, "")
+                    if (row_valid and row_has_time) and not (existing_valid and existing_has_time):
+                        death_by_ref[ref] = row
+                    elif row_has_time and not existing_has_time and row_valid == existing_valid:
+                        death_by_ref[ref] = row
 
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
@@ -320,19 +566,37 @@ class RecordRepository:
                 return None
 
             discharge_source = discharge_by_ref.get(ref)
+            death_source = death_by_ref.get(ref)
             discharge_selection = select_discharge_time(
                 registration=getattr(registration_source, "discharge_datetime", None),
                 document_date=getattr(discharge_source, "discharge_date", None),
                 document_time=getattr(discharge_source, "discharge_time", None),
                 document_status=getattr(discharge_source, "document_status", None),
+                death_time=getattr(death_source, "death_datetime", None),
+                death_status=getattr(death_source, "document_status", None),
             )
             discharge_datetime = discharge_selection.value
-            scene = resolve_scene(discharge=discharge_selection, document_present=discharge_source is not None,
+            verified_status, verified_source, verified_at = _resolve_verified_projection_status(
+                projection_by_ref.get(ref)
+            )
+            scene = resolve_scene(
+                discharge=discharge_selection,
+                document_present=(discharge_source is not None or death_source is not None),
                 document_invalid=is_explicitly_invalid_document_status(
-                    getattr(discharge_source, "document_status", None)))
-            # 旧住院投影可能含首页/排除法推断，不能作为新质控的正向状态证据。
-            scene["qc_scene_source"] = discharge_selection.source
-            scene["qc_scene_verified_at"] = ""
+                    getattr(discharge_source, "document_status", None)
+                ),
+                verified_status=verified_status,
+            )
+            if verified_status and scene["qc_scene_reason"] in {
+                "verified_inpatient_state",
+                "verified_discharge_state",
+                "discharge_state_conflict",
+            }:
+                scene["qc_scene_source"] = verified_source
+                scene["qc_scene_verified_at"] = _to_iso_datetime(verified_at)
+            else:
+                scene["qc_scene_source"] = discharge_selection.source
+                scene["qc_scene_verified_at"] = ""
             item_scope = scene["qc_scope"]
             if scope_value != "all" and item_scope != scope_value:
                 continue
@@ -345,8 +609,13 @@ class RecordRepository:
             item_doctor = _safe_text(
                 first_anchor_value("attending_physician_sign")
             )
-            if department and item_department != department:
-                continue
+            if department:
+                normalized_dept = department.strip()
+                if normalized_dept == "未分科室":
+                    if item_department and item_department != "未分科室":
+                        continue
+                elif item_department != normalized_dept:
+                    continue
             if doctor and item_doctor != doctor:
                 continue
             if keyword:
@@ -420,66 +689,150 @@ class RecordRepository:
         record_refs: Optional[Sequence[CaseRefInput]] = None,
         sync_scope: Optional[str] = None,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
+        _metadata_only: bool = False,
     ):
         scope_value = _normalize_scope(scope)
         date_field_value = _normalize_date_field(date_field)
         start = _as_date(start_date)
         end = _as_date(end_date)
+
+        # 按三坐标去重为每例至多一行，避免同一就诊多份入/出院文书 outerjoin 导致重复行与 total 虚高。
+        discharge_one = (
+            session.query(
+                DischargeRecord.institute_id.label("institute_id"),
+                DischargeRecord.patient_id.label("patient_id"),
+                DischargeRecord.visit_id.label("visit_id"),
+                DischargeRecord.dept_name.label("dept_name"),
+                DischargeRecord.discharge_date.label("discharge_date"),
+                DischargeRecord.discharge_time.label("discharge_time"),
+                DischargeRecord.document_status.label("document_status"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        DischargeRecord.institute_id,
+                        DischargeRecord.patient_id,
+                        DischargeRecord.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(DischargeRecord.discharge_time)),
+                        nullslast(desc(DischargeRecord.discharge_date)),
+                        nullslast(desc(DischargeRecord.submit_datetime)),
+                        nullslast(desc(DischargeRecord.update_time)),
+                        nullslast(desc(DischargeRecord.document_id)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("discharge_one")
+        )
+        admission_one = (
+            session.query(
+                AdmissionRecord.institute_id.label("institute_id"),
+                AdmissionRecord.patient_id.label("patient_id"),
+                AdmissionRecord.visit_id.label("visit_id"),
+                AdmissionRecord.dept_name.label("dept_name"),
+                AdmissionRecord.admission_datetime.label("admission_datetime"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        AdmissionRecord.institute_id,
+                        AdmissionRecord.patient_id,
+                        AdmissionRecord.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(AdmissionRecord.admission_datetime)),
+                        nullslast(desc(AdmissionRecord.submit_datetime)),
+                        nullslast(desc(AdmissionRecord.update_time)),
+                        nullslast(desc(AdmissionRecord.document_id)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("admission_one")
+        )
+        registration_one = (
+            session.query(
+                InpatRegistration.institute_id.label("institute_id"),
+                InpatRegistration.patient_id.label("patient_id"),
+                InpatRegistration.visit_id.label("visit_id"),
+                InpatRegistration.admission_datetime.label("admission_datetime"),
+                InpatRegistration.discharge_datetime.label("discharge_datetime"),
+                func.row_number()
+                .over(
+                    partition_by=(
+                        InpatRegistration.institute_id,
+                        InpatRegistration.patient_id,
+                        InpatRegistration.visit_id,
+                    ),
+                    order_by=(
+                        nullslast(desc(InpatRegistration.discharge_datetime)),
+                        nullslast(desc(InpatRegistration.admission_datetime)),
+                        nullslast(desc(InpatRegistration.update_time)),
+                    ),
+                )
+                .label("rn"),
+            ).subquery("registration_one")
+        )
+
         dept_expr = func.coalesce(
             MedicalRecordFrontpage.discharge_dept_name,
             MedicalRecordFrontpage.admission_dept_name,
-            DischargeRecord.dept_name,
-            AdmissionRecord.dept_name,
+            discharge_one.c.dept_name,
+            admission_one.c.dept_name,
         )
         discharge_dt_expr = func.coalesce(
-            # 源库可同时存在 timestamp、date 和 text，先统一类型再取业务时间。
-            cast(InpatRegistration.discharge_datetime, String),
-            cast(MedicalRecordFrontpage.discharge_datetime, String),
-            cast(DischargeRecord.discharge_date, String),
-            cast(DischargeRecord.discharge_time, String),
+            # 源库可同时存在 timestamp、date 和 text，先转文本并剔除空串再取业务时间。
+            func.nullif(func.trim(cast(registration_one.c.discharge_datetime, String)), ""),
+            func.nullif(func.trim(cast(MedicalRecordFrontpage.discharge_datetime, String)), ""),
+            func.nullif(func.trim(cast(discharge_one.c.discharge_date, String)), ""),
+            func.nullif(func.trim(cast(discharge_one.c.discharge_time, String)), ""),
         )
         admission_dt_expr = func.coalesce(
             MedicalRecordFrontpage.admission_datetime,
-            AdmissionRecord.admission_datetime,
-            InpatRegistration.admission_datetime,
+            admission_one.c.admission_datetime,
+            registration_one.c.admission_datetime,
         )
         query = (
             session.query(
                 MedicalRecordFrontpage,
                 discharge_dt_expr.label("effective_discharge_datetime"),
                 admission_dt_expr.label("effective_admission_datetime"),
-                InpatRegistration.discharge_datetime,
-                DischargeRecord.discharge_date,
-                DischargeRecord.discharge_time,
-                DischargeRecord.document_status,
-                InpatRegistration.admission_datetime,
-                AdmissionRecord.admission_datetime,
+                registration_one.c.discharge_datetime,
+                discharge_one.c.discharge_date,
+                discharge_one.c.discharge_time,
+                discharge_one.c.document_status,
+                registration_one.c.admission_datetime,
+                admission_one.c.admission_datetime,
             )
             .outerjoin(
-                DischargeRecord,
+                discharge_one,
                 and_(
-                    DischargeRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                    DischargeRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                    DischargeRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    discharge_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    discharge_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    discharge_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    discharge_one.c.rn == 1,
                 ),
             )
             .outerjoin(
-                AdmissionRecord,
+                admission_one,
                 and_(
-                    AdmissionRecord.institute_id == MedicalRecordFrontpage.institute_id,
-                    AdmissionRecord.patient_id == MedicalRecordFrontpage.patient_id,
-                    AdmissionRecord.visit_id == MedicalRecordFrontpage.visit_id,
+                    admission_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    admission_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    admission_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    admission_one.c.rn == 1,
                 ),
             )
             .outerjoin(
-                InpatRegistration,
+                registration_one,
                 and_(
-                    InpatRegistration.institute_id == MedicalRecordFrontpage.institute_id,
-                    InpatRegistration.patient_id == MedicalRecordFrontpage.patient_id,
-                    InpatRegistration.visit_id == MedicalRecordFrontpage.visit_id,
+                    registration_one.c.institute_id == MedicalRecordFrontpage.institute_id,
+                    registration_one.c.patient_id == MedicalRecordFrontpage.patient_id,
+                    registration_one.c.visit_id == MedicalRecordFrontpage.visit_id,
+                    registration_one.c.rn == 1,
                 ),
             )
         )
+        if _metadata_only:
+            query = query.options(load_only(*_FRONTPAGE_METADATA_COLUMNS))
         query = query.filter(
             MedicalRecordFrontpage.institute_id.is_not(None),
             MedicalRecordFrontpage.institute_id != "",
@@ -488,9 +841,17 @@ class RecordRepository:
             MedicalRecordFrontpage.visit_id.is_not(None),
             MedicalRecordFrontpage.visit_id != "",
         )
-        # 可选：只取指定机构的病历（如首页质控默认只看本院、排除测试数据）；不传时行为不变
+        # 默认生产病历池排除 CUSTOMER_TEST；仅显式指定机构、测试模式或显式测试样本坐标时包含
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if _safe_text(institute_id):
             query = query.filter(MedicalRecordFrontpage.institute_id == _safe_text(institute_id))
+        elif _should_exclude_customer_test(
+            institute_id=institute_id,
+            include_test_records=effective_include_test,
+            record_refs=record_refs,
+            record_ids=record_ids,
+        ):
+            query = query.filter(MedicalRecordFrontpage.institute_id != CUSTOMER_TEST_INSTITUTE_ID)
 
         if scope_value == "final":
             query = query.filter(discharge_dt_expr.is_not(None))
@@ -508,7 +869,7 @@ class RecordRepository:
                         == MedicalRecordFrontpage.visit_id,
                         HospitalizationStatusProjection.status == "inpatient",
                         func.date(HospitalizationStatusProjection.verified_at)
-                        == date.today(),
+                        == _shanghai_today(),
                     )
                 )
             )
@@ -516,29 +877,29 @@ class RecordRepository:
             query = query.filter(dept_expr == department)
         if doctor:
             query = query.filter(MedicalRecordFrontpage.attending_physician_sign == doctor)
-        if keyword:
-            kw = f"%{keyword.strip()}%"
+        if keyword and keyword.strip():
+            kw = f"%{_escape_like(keyword.strip())}%"
             query = query.filter(
                 or_(
-                    MedicalRecordFrontpage.visit_id.ilike(kw),
-                    MedicalRecordFrontpage.name.ilike(kw),
-                    MedicalRecordFrontpage.mr_no.ilike(kw),
-                    MedicalRecordFrontpage.inpat_no.ilike(kw),
+                    MedicalRecordFrontpage.visit_id.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.name.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.mr_no.ilike(kw, escape="\\"),
+                    MedicalRecordFrontpage.inpat_no.ilike(kw, escape="\\"),
                 )
             )
 
         if record_refs:
             normalized_refs = normalize_case_refs(record_refs)
             query = query.filter(
-                or_(
-                    *(
-                        and_(
-                            MedicalRecordFrontpage.institute_id == ref.institute_id,
-                            MedicalRecordFrontpage.patient_id == ref.patient_id,
-                            MedicalRecordFrontpage.visit_id == ref.visit_id,
-                        )
+                tuple_(
+                    MedicalRecordFrontpage.institute_id,
+                    MedicalRecordFrontpage.patient_id,
+                    MedicalRecordFrontpage.visit_id,
+                ).in_(
+                    [
+                        (ref.institute_id, ref.patient_id, ref.visit_id)
                         for ref in normalized_refs
-                    )
+                    ]
                 )
             )
         elif record_ids:
@@ -557,7 +918,7 @@ class RecordRepository:
             query = query.filter(date_condition)
         return query
 
-    def _serialize_record_row(self, row: Any) -> Dict[str, Any]:
+    def _serialize_record_row(self, row: Any, *, _metadata_only: bool = False) -> Dict[str, Any]:
         source_row = row
         effective_discharge_datetime = None
         effective_admission_datetime = None
@@ -630,8 +991,8 @@ class RecordRepository:
             "qc_discharge_datetime": _to_iso_datetime(qc_discharge_selection.value if qc_discharge_selection else None),
             "qc_discharge_horizon_source": qc_discharge_selection.source if qc_discharge_selection else "",
             "qc_discharge_horizon_conflict": bool(qc_discharge_selection and qc_discharge_selection.conflict),
-            "medical_text": _safe_text(source_row.record_content),
-            "medical_text_length": len(_safe_text(source_row.record_content)),
+            "medical_text": "" if _metadata_only else _safe_text(source_row.record_content),
+            "medical_text_length": 0 if _metadata_only else len(_safe_text(source_row.record_content)),
         }
 
     def _list_frontpage_records(
@@ -647,6 +1008,7 @@ class RecordRepository:
         page: int,
         page_size: int,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> WorkspaceListResult:
         session = self._open_session()
         try:
@@ -660,18 +1022,19 @@ class RecordRepository:
                 end_date=end_date,
                 keyword=keyword,
                 institute_id=institute_id,
+                include_test_records=include_test_records,
+                _metadata_only=True,
             )
-            total = int(query.count())
+            total = int(
+                query.with_entities(func.count()).scalar() or 0
+            )
             rows = (
-                query.order_by(
-                    desc(MedicalRecordFrontpage.discharge_datetime),
-                    desc(MedicalRecordFrontpage.admission_datetime),
-                )
+                query.order_by(*_frontpage_order_by())
                 .offset(max(page - 1, 0) * page_size)
                 .limit(page_size)
                 .all()
             )
-            items = [self._serialize_record_row(row) for row in rows]
+            items = [self._serialize_record_row(row, _metadata_only=True) for row in rows]
             return WorkspaceListResult(items=items, total=total, page=page, page_size=page_size)
         finally:
             session.close()
@@ -682,6 +1045,7 @@ class RecordRepository:
         scope: str,
         department: Optional[str],
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> Dict[str, Any]:
         session = self._open_session()
         try:
@@ -699,6 +1063,7 @@ class RecordRepository:
                 end_date=None,
                 keyword=None,
                 institute_id=institute_id,
+                include_test_records=include_test_records,
             )
             dept_query = base_query.with_entities(dept_expr.label("department")).filter(
                 dept_expr.is_not(None), dept_expr != ""
@@ -755,30 +1120,40 @@ class RecordRepository:
         page: int,
         page_size: int,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> WorkspaceListResult:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if self._frontpage_display:
             return self._list_frontpage_records(scope=scope, department=department, doctor=doctor,
                 date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
-                page=page, page_size=page_size, institute_id=institute_id)
+                page=page, page_size=page_size, institute_id=institute_id,
+                include_test_records=effective_include_test)
         records = self.collect_records(
             scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
-            _metadata_only=True,
+            include_test_records=effective_include_test, _metadata_only=True,
         )
         offset = max(page - 1, 0) * page_size
         selected = records[offset:offset + page_size]
         items = self.collect_records(scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword, institute_id=institute_id,
+            include_test_records=effective_include_test,
             record_refs=[CaseRef.from_mapping(item) for item in selected]) if selected else []
         return WorkspaceListResult(items=items, total=len(records), page=page, page_size=page_size)
 
     def get_record_filters(
         self, *, scope: str, department: Optional[str], institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> Dict[str, Any]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         if self._frontpage_display:
-            return self._get_frontpage_record_filters(scope=scope, department=department, institute_id=institute_id)
+            return self._get_frontpage_record_filters(
+                scope=scope, department=department, institute_id=institute_id,
+                include_test_records=effective_include_test,
+            )
         records = self.collect_records(scope=scope, department=None, doctor=None,
-            date_field="admission", start_date=None, end_date=None, keyword=None, institute_id=institute_id, _metadata_only=True)
+            date_field="admission", start_date=None, end_date=None, keyword=None, institute_id=institute_id,
+            include_test_records=effective_include_test, _metadata_only=True)
         def bounds(field: str) -> Dict[str, str]:
             values = [item[field] for item in records if item.get(field)]
             return {"min": min(values) if values else "", "max": max(values) if values else ""}
@@ -805,7 +1180,10 @@ class RecordRepository:
         _metadata_only: bool = False,
         _private_identity_collector: Callable[[str, Any], None] | None = None,
         institute_id: Optional[str] = None,
+        include_test_records: bool = False,
+        _load_verified_status: bool = True,
     ) -> List[Dict[str, Any]]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         from ..validation_material_source import is_material_copy, material_source_schema
         if not self._material_schema and record_refs:
             refs = normalize_case_refs(record_refs)
@@ -819,22 +1197,102 @@ class RecordRepository:
                 collected = []
                 for schema, group in groups.items():
                     repository = RecordRepository(session_factory=self._session_factory, _material_schema=schema,
-                                                  frontpage_display=self._frontpage_display)
+                                                  frontpage_display=self._frontpage_display,
+                                                  include_test_records=effective_include_test)
                     collected.extend(repository.collect_records(scope=scope, department=department, doctor=doctor,
                         date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
                         record_refs=group, sync_scope=sync_scope, _private_identity_collector=_private_identity_collector,
-                        institute_id=institute_id, _metadata_only=_metadata_only))
+                        institute_id=institute_id, include_test_records=effective_include_test,
+                        _metadata_only=_metadata_only, _load_verified_status=_load_verified_status))
                 return collected
         if record_ids and any(str(value).startswith("pdfv_") for value in record_ids):
             raise ValueError("material_copy_requires_complete_case_refs")
         if self._frontpage_display:
             session = self._open_session()
             try:
-                rows = self._build_records_query(session, scope=scope, department=department, doctor=doctor,
-                    date_field=date_field, start_date=start_date, end_date=end_date, keyword=keyword,
-                    record_ids=record_ids, record_refs=record_refs, sync_scope=sync_scope,
-                    institute_id=institute_id).all()
-                return [self._serialize_record_row(row) for row in rows]
+                if record_refs:
+                    normalized_refs = list(normalize_case_refs(record_refs))
+                    if not normalized_refs:
+                        return []
+                    rows: List[Any] = []
+                    for start in range(0, len(normalized_refs), _RECORD_REF_BATCH_SIZE):
+                        batch = normalized_refs[start:start + _RECORD_REF_BATCH_SIZE]
+                        rows.extend(
+                            self._build_records_query(
+                                session,
+                                scope=scope,
+                                department=department,
+                                doctor=doctor,
+                                date_field=date_field,
+                                start_date=start_date,
+                                end_date=end_date,
+                                keyword=keyword,
+                                record_ids=None,
+                                record_refs=batch,
+                                sync_scope=sync_scope,
+                                institute_id=institute_id,
+                                include_test_records=effective_include_test,
+                                _metadata_only=_metadata_only,
+                            ).all()
+                        )
+                    return _sort_collected_records([
+                        self._serialize_record_row(row, _metadata_only=_metadata_only)
+                        for row in rows
+                    ])
+                if record_ids:
+                    normalized_ids = list(
+                        dict.fromkeys(_safe_text(item) for item in record_ids if _safe_text(item))
+                    )
+                    if len(normalized_ids) > _RECORD_REF_BATCH_SIZE:
+                        rows = []
+                        for start in range(0, len(normalized_ids), _RECORD_REF_BATCH_SIZE):
+                            batch_ids = normalized_ids[start:start + _RECORD_REF_BATCH_SIZE]
+                            rows.extend(
+                                self._build_records_query(
+                                    session,
+                                    scope=scope,
+                                    department=department,
+                                    doctor=doctor,
+                                    date_field=date_field,
+                                    start_date=start_date,
+                                    end_date=end_date,
+                                    keyword=keyword,
+                                    record_ids=batch_ids,
+                                    record_refs=None,
+                                    sync_scope=sync_scope,
+                                    institute_id=institute_id,
+                                    include_test_records=effective_include_test,
+                                    _metadata_only=_metadata_only,
+                                ).all()
+                            )
+                        return _sort_collected_records([
+                            self._serialize_record_row(row, _metadata_only=_metadata_only)
+                            for row in rows
+                        ])
+                rows = (
+                    self._build_records_query(
+                        session,
+                        scope=scope,
+                        department=department,
+                        doctor=doctor,
+                        date_field=date_field,
+                        start_date=start_date,
+                        end_date=end_date,
+                        keyword=keyword,
+                        record_ids=record_ids,
+                        record_refs=record_refs,
+                        sync_scope=sync_scope,
+                        institute_id=institute_id,
+                        include_test_records=effective_include_test,
+                        _metadata_only=_metadata_only,
+                    )
+                    .order_by(*_frontpage_order_by())
+                    .all()
+                )
+                return [
+                    self._serialize_record_row(row, _metadata_only=_metadata_only)
+                    for row in rows
+                ]
             finally:
                 session.close()
         from ...database.clinical_connection import configured
@@ -846,11 +1304,24 @@ class RecordRepository:
         session = self._open_session()
         try:
             refs = list(normalize_case_refs(record_refs)) if record_refs else self._raw_case_refs(
-                session, record_ids=record_ids, institute_id=institute_id, sync_scope=sync_scope)
+                session, record_ids=record_ids, institute_id=institute_id, sync_scope=sync_scope,
+                include_test_records=effective_include_test)
             if institute_id:
                 refs = [ref for ref in refs if ref.institute_id == _safe_text(institute_id)]
+            elif _should_exclude_customer_test(
+                institute_id=institute_id,
+                include_test_records=effective_include_test,
+                record_refs=record_refs,
+                record_ids=record_ids,
+            ):
+                refs = [ref for ref in refs if ref.institute_id != CUSTOMER_TEST_INSTITUTE_ID]
             if record_refs and _safe_text(sync_scope).lower() == "today_inpatient":
-                verified = set(self._raw_case_refs(session, institute_id=institute_id, sync_scope=sync_scope))
+                verified = set(self._raw_case_refs(
+                    session, institute_id=institute_id, sync_scope=sync_scope,
+                    include_test_records=effective_include_test or any(
+                        ref.institute_id == CUSTOMER_TEST_INSTITUTE_ID for ref in refs
+                    ),
+                ))
                 refs = [ref for ref in refs if ref in verified]
             records = []
             for offset in range(0, len(refs), 128):
@@ -859,9 +1330,9 @@ class RecordRepository:
                     scope=scope, department=department, doctor=doctor, date_field=date_field,
                     start_date=start_date, end_date=end_date, keyword=keyword,
                     _private_identity_collector=_private_identity_collector, _metadata_only=_metadata_only,
+                    _load_verified_status=_load_verified_status,
                 ))
-            return sorted(records, key=lambda item: (item["discharge_datetime"], item["admission_datetime"],
-                                                     item["record_key"]), reverse=True)
+            return _sort_collected_records(records)
         finally:
             session.close()
 
@@ -877,37 +1348,60 @@ class RecordRepository:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        institute_id: Optional[str] = None,
+        include_test_records: bool = False,
     ) -> int:
         return len(self.collect_records(
             scope=scope, department=department, doctor=doctor, date_field=date_field,
             start_date=start_date, end_date=end_date, keyword=keyword,
-            record_ids=record_ids, record_refs=record_refs, _metadata_only=True,
+            record_ids=record_ids, record_refs=record_refs, institute_id=institute_id,
+            include_test_records=include_test_records, _metadata_only=True,
         ))
 
     def hydrate_records_with_medical_text(
         self,
         records: Sequence[Dict[str, Any]],
+        *,
+        include_test_records: bool = False,
     ) -> List[Dict[str, Any]]:
+        effective_include_test = bool(include_test_records or self._include_test_records)
         filters = dict(scope="all", department=None, doctor=None, date_field="admission",
-                       start_date=None, end_date=None, keyword=None)
+                       start_date=None, end_date=None, keyword=None,
+                       include_test_records=effective_include_test, _load_verified_status=False)
         full_refs = [CaseRef.from_mapping(item) for item in records if all(CaseRef.from_mapping(item))]
         sources = self.collect_records(**filters, record_refs=full_refs) if full_refs else []
-        source_by_ref = {CaseRef.from_mapping(item): item for item in sources}
+        source_by_ref: Dict[CaseRef, Dict[str, Any]] = {
+            CaseRef.from_mapping(item): item for item in sources
+        }
         legacy_groups: Dict[str, set[str]] = {}
         for item in records:
             ref = CaseRef.from_mapping(item)
             if ref.visit_id and not all(ref):
                 legacy_groups.setdefault(ref.institute_id, set()).add(ref.visit_id)
-        legacy_sources = {}
+        legacy_sources_by_ref: Dict[CaseRef, Dict[str, Any]] = {}
         for institute, visit_ids in legacy_groups.items():
             for item in self.collect_records(**filters, record_ids=sorted(visit_ids), institute_id=institute or None):
-                legacy_sources[(institute, item["visit_id"])] = item
+                candidate_ref = CaseRef.from_mapping(item)
+                if all(candidate_ref):
+                    legacy_sources_by_ref[candidate_ref] = item
         hydrated: List[Dict[str, Any]] = []
         for item in records:
             ref = CaseRef.from_mapping(item)
             if not ref.visit_id:
                 continue
-            source = source_by_ref.get(ref) if all(ref) else legacy_sources.get((ref.institute_id, ref.visit_id))
+            if all(ref):
+                source = source_by_ref.get(ref)
+            else:
+                matches = [
+                    candidate
+                    for candidate_ref, candidate in legacy_sources_by_ref.items()
+                    if candidate_ref.visit_id == ref.visit_id
+                    and (not ref.institute_id or candidate_ref.institute_id == ref.institute_id)
+                    and (not ref.patient_id or candidate_ref.patient_id == ref.patient_id)
+                ]
+                if len(matches) > 1:
+                    raise ValueError("clinical_case_identity_ambiguous_or_missing")
+                source = matches[0] if len(matches) == 1 else None
             if source is not None and any(given and given != actual for given, actual in zip(ref, CaseRef.from_mapping(source))):
                 raise ValueError("clinical_case_identity_ambiguous_or_missing")
             hydrated_item = dict(item)

@@ -75,6 +75,7 @@ async def run_worker() -> None:
                 consumer = BatchConsumer(
                     repository=repository,
                     execute_job=execute,
+                    recover_failed_job=getattr(recovery, "recover_failed_job", None),
                 )
                 consumer_task = asyncio.create_task(
                     consumer.run(transport),

@@ -1,5 +1,5 @@
 <template>
-  <main class="qc-record-result-list-view running-qc-refined running-qc-apple">
+  <div class="qc-record-result-list-view running-qc-refined running-qc-apple">
     <!-- 页头：眉标 + 大标题；右侧视图切换与“质控所选” -->
     <section class="qc-record-result-list-view__header mq-page-head">
       <div class="mq-page-head__copy">
@@ -25,7 +25,7 @@
             data-testid="qc-result-view-records"
             :class="{ 'is-active': activeView === 'records' }"
             :aria-pressed="activeView === 'records'"
-            @click="activeView = 'records'"
+            @click="setActiveView('records')"
           >
             病历结果
           </button>
@@ -35,22 +35,25 @@
             data-testid="qc-result-view-analysis"
             :class="{ 'is-active': activeView === 'analysis' }"
             :aria-pressed="activeView === 'analysis'"
-            :disabled="sourceId === 'independent_cdm'"
-            :title="sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
-            @click="activeView = 'analysis'"
+            :disabled="!sourceId || sourceId === 'independent_cdm'"
+            :title="!sourceId ? '正在加载数据源…' : sourceId === 'independent_cdm' ? 'CDM来源暂不提供跨病例结果分析' : ''"
+            @click="setActiveView('analysis')"
           >
             结果分析
           </button>
         </nav>
         <div class="review-workbench-primary">
           <QcRunSelectedControl
-            :key="sourceId"
+            :key="`${sourceId || 'pending'}:${carePhase}`"
             :source-id="sourceId"
             :care-phase="carePhase"
             :record-refs="selectedQcRecordRefs"
             :selected-count="selectedCount"
             :status-target="`#qc-record-result-task-status-${carePhase}`"
+            :inline-result-viewer="true"
             @results-updated="refreshAfterSelectedQc"
+            @view-results="handleViewBatchQcResults"
+            @dismiss-task="handleDismissBatchQcTask"
           />
         </div>
       </div>
@@ -59,7 +62,7 @@
     <section
       class="review-workbench-metrics mq-card"
       aria-label="质控结果汇总"
-      :aria-busy="qcSummaryState === 'pending'"
+      :aria-busy="!qcTotalsReady && qcSummaryState === 'pending'"
     >
       <div
         v-for="metric in metricItems"
@@ -67,7 +70,7 @@
         :class="`review-metric--${metric.key}`"
       >
         <span>{{ metric.key === 'priority' ? '确定问题' : metric.label }}</span>
-        <strong>{{ metric.key === 'records' || qcSummaryState === 'ready' ? metric.value : '—' }}</strong>
+        <strong>{{ metric.key === 'records' || qcTotalsReady ? metric.value : '—' }}</strong>
         <span>{{ metric.key === 'records' || metric.key === 'completed' || metric.key === 'failed' ? '份' : '项' }}</span>
         <MqIconTile
           class="review-metric__icon"
@@ -82,9 +85,19 @@
     <Alert
       v-if="!loading && !loadError && qcSummaryState === 'unavailable'"
       type="warning"
-      message="质控摘要暂不可用"
+      :message="qcTotalsReady ? '本页质控摘要暂不可用' : '质控摘要暂不可用'"
       show-icon
-    />
+    >
+      <template #action>
+        <Button
+          size="small"
+          data-testid="qc-result-retry-summary"
+          @click="handleRefreshData"
+        >
+          重试摘要
+        </Button>
+      </template>
+    </Alert>
 
     <div
       :id="`qc-record-result-task-status-${carePhase}`"
@@ -101,11 +114,11 @@
           aria-label="病历筛选条件"
         >
           <div
-            class="qc-record-result-list-view__filter-field"
+            class="qc-record-result-list-view__filter-field qc-record-result-list-view__source-field"
             aria-label="病历数据源"
           >
             <span class="qc-record-result-list-view__field-label">数据源</span>
-            <span>东华CDM</span>
+            <span class="qc-record-result-list-view__source-badge">东华CDM</span>
           </div>
           <div class="qc-record-result-list-view__filter-field">
             <span class="qc-record-result-list-view__field-label">关键词</span>
@@ -173,8 +186,10 @@
           <div
             class="qc-record-result-list-view__export-menu"
             @focusout="handleExportMenuFocusOut"
+            @keydown.esc="closeExportMenu"
           >
             <button
+              ref="exportTriggerRef"
               class="qc-record-result-list-view__export-trigger"
               type="button"
               data-testid="qc-result-export-trigger"
@@ -182,7 +197,6 @@
               :aria-expanded="exportMenuOpen"
               aria-haspopup="menu"
               @click="exportMenuOpen = !exportMenuOpen"
-              @keydown.esc="exportMenuOpen = false"
             >
               <Download
                 :size="15"
@@ -224,14 +238,33 @@
             class="qc-record-result-list-view__refresh-button"
             type="button"
             :disabled="loading"
-            @click="refreshData"
+            @click="handleRefreshData"
           >
             刷新
           </button>
         </div>
       </div>
 
-      <div class="review-workbench-split">
+      <p
+        v-if="detailNotice || exportNotice"
+        class="qc-record-result-list-view__notice"
+        :class="{ 'qc-record-result-list-view__notice--error': noticeTone === 'error' }"
+        data-testid="qc-result-notice"
+        role="status"
+      >
+        {{ detailNotice || exportNotice }}
+      </p>
+
+      <BatchQcResultsPanel
+        v-if="batchQcResults"
+        :items="batchQcResults.items"
+        :loading="batchQcResults.loading"
+        :active-record-key="batchQcResults.activeRecordKey"
+        :export-scope="isInpatient ? 'running' : 'final'"
+        @open-record="handleOpenBatchQcResult"
+        @exit="exitBatchQcResults"
+      />
+      <div v-else class="review-workbench-split">
         <div
           class="review-workbench-list"
           :aria-busy="loading"
@@ -264,7 +297,7 @@
               <Button
                 size="small"
                 data-testid="qc-result-retry-list"
-                @click="refreshData"
+                @click="handleRefreshData"
               >
                 重试
               </Button>
@@ -314,31 +347,23 @@
               show-quick-jumper
               show-less-items
               size="small"
-              @change="handlePageChange"
+              @change="onPageChange"
             />
           </footer>
         </div>
         <QcRecordReviewPreview
-          :key="sourceId"
+          :key="`${resolvedSourceEpoch}:${carePhase}`"
           :care-phase="carePhase"
           :row="previewRow"
           :refresh-key="previewRefreshKey"
           @open-full="handleOpenResult"
         />
       </div>
-
-      <p
-        v-if="detailNotice || exportNotice"
-        class="qc-record-result-list-view__notice"
-        role="status"
-      >
-        {{ detailNotice || exportNotice }}
-      </p>
     </section>
 
     <QcRecordResultAnalysisPanel
       v-else
-      :key="sourceId"
+      :key="`${resolvedSourceEpoch}:${analysisRefreshKey}`"
       :care-phase="carePhase"
       @open-result="handleOpenAnalysisResult"
     />
@@ -350,25 +375,30 @@
     <QCRecordResultComparisonDrawer
       :open="drawerOpen"
       :focus="selectedFocus"
+      :batch-records="comparisonBatchRecords"
+      :active-batch-index="comparisonBatchIndex"
       presentation-mode="grouped"
       :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
+      @select-batch-index="handleSelectComparisonBatchIndex"
       @close="closeResultDrawer"
     />
-  </main>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { Alert, Button, Empty, Input, Pagination, RangePicker, Select, Spin } from 'ant-design-vue'
 import { SearchOutlined } from '@ant-design/icons-vue'
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ChevronDown, Download } from 'lucide-vue-next'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import type { MqIconName, MqIconTone } from '@/components/icons/mqIcons'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 
 import { exportFilteredLuxian0609RecordResults } from '@/services/sichuan-rule-workspace-service'
 
 import QCRecordResultComparisonDrawer, {
+  type QCRecordResultBatchItem,
   type QCRecordResultFocus,
 } from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
 import type { PreviousResultRequest } from './customer-sample-validation/single-record-result-model'
@@ -379,7 +409,17 @@ import QcRecordResultTable, {
 import QcRecordResultAnalysisPanel from './components/qc/QcRecordResultAnalysisPanel.vue'
 import QcRecordReviewPreview from './components/qc/QcRecordReviewPreview.vue'
 import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
-import QcRunSelectedControl from './components/qc/QcRunSelectedControl.vue'
+import QcRunSelectedControl, {
+  type SelectedQcRecordRef,
+} from './components/qc/QcRunSelectedControl.vue'
+import BatchQcResultsPanel from './components/workbench/BatchQcResultsPanel.vue'
+import type { SichuanBatchJob } from './semantic-rules/types'
+import { buildCaseRecordKey } from './utils/caseRecordKey'
+import {
+  resolveBatchResultRecords,
+  toComparisonFocusFromBatchItem,
+  type BatchResultRecordItem,
+} from './utils/batchResultViewer'
 import { usePatientRecords } from './composables/usePatientRecords'
 import type { PatientRecord, RecordLatestQcSummary } from './types'
 import type { LuxianQcAnalysisRecordItem } from '@/services/luxian-qc-result-analysis-service'
@@ -405,12 +445,40 @@ const props = defineProps<{
 }>()
 
 const route = useRoute()
+const instance = getCurrentInstance()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const detailNotice = ref('')
 const exportNotice = ref('')
+const exportNoticeTone = ref<'info' | 'error'>('info')
+const noticeTone = computed<'info' | 'error'>(() =>
+  detailNotice.value ? 'error' : exportNoticeTone.value,
+)
 const exporting = ref(false)
 const exportMenuOpen = ref(false)
+const exportTriggerRef = ref<HTMLButtonElement | null>(null)
 const drawerOpen = ref(false)
 const selectedFocus = ref<QCRecordResultFocus | null>(null)
+const comparisonBatchQueue = ref<BatchResultRecordItem[]>([])
+const comparisonBatchIndex = ref(-1)
+const batchQcResults = ref<{
+  jobId: string
+  loading: boolean
+  items: BatchResultRecordItem[]
+  activeRecordKey?: string
+} | null>(null)
+const knownRecordsByKey = new Map<string, PatientRecord>()
+let batchQcResultSequence = 0
+const comparisonBatchRecords = computed<QCRecordResultBatchItem[]>(() =>
+  comparisonBatchQueue.value.map((item) => ({
+    recordKey: item.recordKey,
+    patientName: item.patientName,
+    visitId: item.visitId,
+    department: item.department,
+    confirmedIssueCount: item.confirmedIssueCount,
+    resultLabel: item.resultLabel,
+  })),
+)
+const activeFocusRuleId = ref('')
 const selectedRecordKeys = ref<string[]>([])
 const selectedRecordRefs = ref<
   Record<string, { institute_id: string; patient_id: string; visit_id: string }>
@@ -424,6 +492,13 @@ const selectedQcRecordRefs = computed(() =>
     ),
 )
 const activeView = ref<'records' | 'analysis'>('records')
+const analysisRefreshKey = ref(0)
+const resolvedSourceEpoch = ref(0)
+const pendingDeepLinkKey = ref('')
+let deepLinkGeneration = 0
+let hasInitialMountFetch = false
+let lastRequestedCarePhase: QcRecordCarePhase | null = null
+let lastResolvedSourceId = ''
 
 const isInpatient = computed(() => props.carePhase === 'inpatient')
 const pageTitle = computed(() => (isInpatient.value ? '运行病历质控' : '终末病历质控'))
@@ -441,10 +516,12 @@ const {
   departments,
   fetchData,
   handlePageChange,
+  hospFilter,
   loadError,
   loading,
   qcSummary,
   qcSummaryState,
+  qcTotalsReady,
   refreshData,
   searchText,
   selectHospFilter,
@@ -473,9 +550,9 @@ const METRIC_ICONS: Record<string, { name: MqIconName; tone: MqIconTone }> = {
 }
 
 const metricItems = computed<QcRecordMetricItem[]>(() => [
-  { key: 'records', label: '纳入病历', value: qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value },
+  { key: 'records', label: '纳入病历', value: qcTotalsReady.value ? qcSummary.value.totalRecords : serverTotal.value },
   { key: 'completed', label: '已完成质控', value: qcSummary.value.readyRecords },
-  ...(qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords
+  ...(!confirmedResultsOnly.value && (qcSummary.value.partialFailedRecords || qcSummary.value.failedRecords)
     ? [{ key: 'failed' as const, label: '未全部完成', value: (qcSummary.value.partialFailedRecords || 0) + (qcSummary.value.failedRecords || 0) }]
     : []),
   {
@@ -483,17 +560,19 @@ const metricItems = computed<QcRecordMetricItem[]>(() => [
     label: '需优先复核',
     value: statusCount(qcSummary.value.statusCounts, 'non_compliant'),
   },
-  {
-    key: 'dataGap',
-    label: '资料待核实',
-    value: statusCount(qcSummary.value.statusCounts, 'data_gap'),
-  },
+  ...(!confirmedResultsOnly.value
+    ? [{
+        key: 'dataGap' as const,
+        label: '资料待核实',
+        value: statusCount(qcSummary.value.statusCounts, 'data_gap'),
+      }]
+    : []),
 ])
 
-const rows = computed<QcRecordResultRow[]>(() => {
-  const resultRows = allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow)
-  return resultRows.sort(compareLatestQcTimeDesc)
-})
+// 保持后端分页顺序，避免 deferred 摘要回填后客户端重排造成列表跳动
+const rows = computed<QcRecordResultRow[]>(() =>
+  allRecords.value.filter(hasCompleteRecordIdentity).map(toResultRow),
+)
 const selectedCount = computed(() => selectedRecordKeys.value.length)
 const activePreviewKey = ref('')
 const previewRefreshKey = ref(0)
@@ -503,15 +582,62 @@ const previewRow = computed(
 watch(
   rows,
   (next) => {
+    if (pendingDeepLinkKey.value && next.some((row) => row.recordKey === pendingDeepLinkKey.value)) {
+      activePreviewKey.value = pendingDeepLinkKey.value
+      return
+    }
     if (!next.some((row) => row.recordKey === activePreviewKey.value)) {
       activePreviewKey.value = next[0]?.recordKey ?? ''
     }
-    previewRefreshKey.value += 1
   },
   { immediate: true },
 )
 
+// 仅当同一病历在相同非占位状态下发生原地摘要变更时主动刷新预览；
+// recordKey / resultStatus 变更已由 QcRecordReviewPreview 自身监听处理，避免重复拉取。
+watch(
+  () => [
+    previewRow.value?.recordKey ?? '',
+    previewRow.value?.resultStatus ?? '',
+    previewRow.value?.latestQcTime ?? '',
+    previewRow.value?.issueSummary ?? '',
+  ],
+  ([nextKey, nextStatus, nextTime, nextSummary], [prevKey, prevStatus, prevTime, prevSummary]) => {
+    if (!nextKey || nextKey !== prevKey) return
+    if (nextStatus !== prevStatus) return
+    if (nextStatus === 'unknown' || nextStatus === 'not-run') return
+    if (nextTime !== prevTime || nextSummary !== prevSummary) {
+      previewRefreshKey.value += 1
+    }
+  },
+)
+
+function cancelPendingDeepLink() {
+  pendingDeepLinkKey.value = ''
+  deepLinkGeneration += 1
+}
+
+function tryResolvePendingDeepLink() {
+  const targetKey = pendingDeepLinkKey.value
+  if (!targetKey) return
+  if (loading.value || qcSummaryState.value === 'pending') return
+  pendingDeepLinkKey.value = ''
+  if (loadError.value) return
+  if (rows.value.some((row) => row.recordKey === targetKey)) {
+    activePreviewKey.value = targetKey
+    handleOpenResult(targetKey)
+    return
+  }
+  if (allRecords.value.some((candidate) => candidate.recordKey === targetKey)) {
+    handleOpenResult(targetKey)
+    return
+  }
+  closeResultDrawer()
+  detailNotice.value = '未在当前筛选页找到目标病历，请调整筛选条件或翻页查看'
+}
+
 function handleSelectPreview(recordKey: string) {
+  cancelPendingDeepLink()
   activePreviewKey.value = recordKey
 }
 
@@ -519,19 +645,33 @@ function hasCompleteRecordIdentity(record: PatientRecord): boolean {
   return Boolean(record.recordKey && record.instituteId && record.patientId && record.visitId)
 }
 
-function qcTimeSortValue(value?: string): number {
-  const text = String(value || '').trim()
-  if (!text || text === '—') return 0
-  const timestamp = Date.parse(`${text.replace(' ', 'T')}+08:00`)
-  return Number.isFinite(timestamp) ? timestamp : 0
+interface CommittedListFilters {
+  department: string
+  doctor: string
+  keyword: string
+  dateRange: [string, string] | null
 }
 
-function compareLatestQcTimeDesc(left: QcRecordResultRow, right: QcRecordResultRow): number {
-  return qcTimeSortValue(right.latestQcTime) - qcTimeSortValue(left.latestQcTime)
+const committedFilters = ref<CommittedListFilters>({
+  department: ALL_DEPARTMENTS,
+  doctor: '全部主管医师',
+  keyword: '',
+  dateRange: null,
+})
+
+function commitCurrentFilters() {
+  committedFilters.value = {
+    department: String(activeDept.value || '').trim() || ALL_DEPARTMENTS,
+    doctor: String(activeDoctor.value || '').trim() || '全部主管医师',
+    keyword: String(searchText.value || '').trim(),
+    dateRange: dateRange.value ? [dateRange.value[0], dateRange.value[1]] : null,
+  }
 }
 
 function toResultRow(record: PatientRecord): QcRecordResultRow {
-  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value)
+  const result = resolveResultPresentation(record.latestQcSummary, qcSummaryState.value, {
+    confirmedOnly: confirmedResultsOnly.value,
+  })
   return {
     recordKey: record.recordKey as string,
     instituteId: record.instituteId as string,
@@ -545,7 +685,9 @@ function toResultRow(record: PatientRecord): QcRecordResultRow {
     admissionTime: formatMedicalRecordTimestamp(record.admissionDate),
     dischargeTime: formatMedicalRecordTimestamp(record.dischargeDate),
     sourceLabel:
-      record.sourceState && record.sourceState.status !== 'unknown' ? '资料同步待核实' : undefined,
+      !confirmedResultsOnly.value && record.sourceState && record.sourceState.status !== 'unknown'
+        ? '资料同步待核实'
+        : undefined,
     ...result,
   }
 }
@@ -558,10 +700,44 @@ function formatMedicalRecordTimestamp(value?: string | null): string {
   return match[2] && match[3] ? `${match[1]} ${match[2]}:${match[3]}` : match[1]
 }
 
+let manualRefreshSequence = 0
+
+function pruneStaleSelectedRecordKeys() {
+  if (selectedRecordKeys.value.length === 0) return
+  const currentKeys = new Set(rows.value.map((row) => row.recordKey))
+  const retainedKeys = selectedRecordKeys.value.filter((key) => currentKeys.has(key))
+  if (retainedKeys.length === selectedRecordKeys.value.length) return
+  const nextRefs: Record<string, { institute_id: string; patient_id: string; visit_id: string }> = {}
+  for (const key of retainedKeys) {
+    const refItem = selectedRecordRefs.value[key]
+    if (refItem) nextRefs[key] = refItem
+  }
+  selectedRecordRefs.value = nextRefs
+  selectedRecordKeys.value = retainedKeys
+}
+
 function applyFilters() {
+  ++manualRefreshSequence
+  exitBatchQcResults()
+  cancelPendingDeepLink()
   clearSelection()
+  commitCurrentFilters()
   currentPage.value = 1
   fetchData(1)
+}
+
+async function handleRefreshData() {
+  const sequence = ++manualRefreshSequence
+  cancelPendingDeepLink()
+  await refreshData()
+  if (sequence !== manualRefreshSequence || loading.value || loadError.value) return
+  pruneStaleSelectedRecordKeys()
+}
+
+function onPageChange(page: number, nextPageSize?: number) {
+  ++manualRefreshSequence
+  cancelPendingDeepLink()
+  handlePageChange(page, nextPageSize)
 }
 
 function handleSearchChange(event: Event) {
@@ -572,6 +748,7 @@ function handleSearchChange(event: Event) {
 function resetVisibleFilters() {
   searchText.value = ''
   activeDept.value = ALL_DEPARTMENTS
+  activeDoctor.value = '全部主管医师'
   dateRange.value = null
   applyFilters()
 }
@@ -591,6 +768,7 @@ function updateSelectedRecordKeys(recordKeys: string[]) {
   for (const key of nextKeys) {
     const record = currentRows.get(key)
     if (!record) continue
+    knownRecordsByKey.set(key, record)
     nextRefs[key] = {
       institute_id: record.instituteId as string,
       patient_id: record.patientId as string,
@@ -608,7 +786,15 @@ function clearSelection() {
 
 function refreshAfterSelectedQc() {
   clearSelection()
+  previewRefreshKey.value += 1
+  analysisRefreshKey.value += 1
   refreshData()
+}
+
+function closeExportMenu() {
+  if (!exportMenuOpen.value) return
+  exportMenuOpen.value = false
+  exportTriggerRef.value?.focus()
 }
 
 function handleExportMenuFocusOut(event: FocusEvent) {
@@ -642,6 +828,7 @@ async function exportSelectedRecords() {
       Boolean(value),
     )
   if (recordRefs.length !== selectedCount.value) {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '所选病历身份已变化，请重新勾选后导出'
     clearSelection()
     return
@@ -649,6 +836,7 @@ async function exportSelectedRecords() {
 
   exporting.value = true
   exportNotice.value = ''
+  exportNoticeTone.value = 'info'
   try {
     const response = await exportFilteredLuxian0609RecordResults({
       scope: isInpatient.value ? 'running' : 'final',
@@ -656,6 +844,7 @@ async function exportSelectedRecords() {
       record_refs: recordRefs,
     })
     if (!response.success || !response.data) {
+      exportNoticeTone.value = 'error'
       exportNotice.value = response.message || '导出所选质控结果失败'
       return
     }
@@ -663,8 +852,10 @@ async function exportSelectedRecords() {
       response.data,
       `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-所选${recordRefs.length}份.xlsx`,
     )
+    exportNoticeTone.value = 'info'
     exportNotice.value = `已开始下载所选 ${recordRefs.length} 份病历的质控结果`
   } catch {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '导出所选质控结果失败，请稍后重试'
   } finally {
     exporting.value = false
@@ -675,10 +866,11 @@ async function exportCurrentFilter() {
   if (exporting.value) return
   exporting.value = true
   exportNotice.value = ''
-  const [rangeStart, rangeEnd] = dateRange.value || []
-  const department = String(activeDept.value || '').trim()
-  const doctor = String(activeDoctor.value || '').trim()
-  const keyword = String(searchText.value || '').trim()
+  exportNoticeTone.value = 'info'
+  const [rangeStart, rangeEnd] = committedFilters.value.dateRange || []
+  const department = committedFilters.value.department
+  const doctor = committedFilters.value.doctor
+  const keyword = committedFilters.value.keyword
   try {
     const response = await exportFilteredLuxian0609RecordResults({
       scope: isInpatient.value ? 'running' : 'final',
@@ -690,6 +882,7 @@ async function exportCurrentFilter() {
       ...(keyword ? { keyword } : {}),
     })
     if (!response.success || !response.data) {
+      exportNoticeTone.value = 'error'
       exportNotice.value = response.message || '导出当前筛选质控结果失败'
       return
     }
@@ -697,8 +890,10 @@ async function exportCurrentFilter() {
       response.data,
       `${isInpatient.value ? '运行病历质控' : '终末病历质控'}-当前筛选.xlsx`,
     )
+    exportNoticeTone.value = 'info'
     exportNotice.value = '当前筛选质控结果已开始下载'
   } catch {
+    exportNoticeTone.value = 'error'
     exportNotice.value = '导出当前筛选质控结果失败，请稍后重试'
   } finally {
     exporting.value = false
@@ -710,24 +905,91 @@ function updateDateRange(value: unknown) {
   applyFilters()
 }
 
+function setActiveView(nextView: 'records' | 'analysis') {
+  if (nextView === 'analysis' && (!sourceId.value || sourceId.value === 'independent_cdm')) {
+    return
+  }
+  if (activeView.value === nextView) return
+  activeView.value = nextView
+}
+
+watch(sourceId, (nextSourceId) => {
+  if (nextSourceId === 'independent_cdm') {
+    activeView.value = 'records'
+  }
+  if (!nextSourceId) return
+  if (lastResolvedSourceId && lastResolvedSourceId !== nextSourceId) {
+    resolvedSourceEpoch.value += 1
+  }
+  lastResolvedSourceId = nextSourceId
+})
+
 watch(
   () => props.carePhase,
-  (carePhase) => {
+  (carePhase, previousCarePhase) => {
+    if (carePhase === previousCarePhase) return
+    ++manualRefreshSequence
+    exitBatchQcResults()
+    cancelPendingDeepLink()
     medicalRecordFocus.value = null
     closeResultDrawer()
     clearSelection()
+    exportNotice.value = ''
+    exportNoticeTone.value = 'info'
+    exportMenuOpen.value = false
+    activePreviewKey.value = ''
+    detailNotice.value = ''
+    activeDept.value = ALL_DEPARTMENTS
+    activeDoctor.value = '全部主管医师'
+    searchText.value = ''
+    dateRange.value = null
+    commitCurrentFilters()
+    currentPage.value = 1
+    activeView.value = 'records'
     dateField.value = carePhase === 'inpatient' ? 'admission' : 'discharge'
+    if (!hasInitialMountFetch) return
+    lastRequestedCarePhase = carePhase
+    const prevHospFilter = hospFilter?.value
     selectHospFilter(carePhase)
+    if (prevHospFilter === carePhase) {
+      void fetchData(1)
+    }
   },
 )
 
+watch(
+  () => [loading.value, qcSummaryState.value, loadError.value],
+  () => {
+    tryResolvePendingDeepLink()
+  },
+)
+
+onBeforeUnmount(() => {
+  ++manualRefreshSequence
+  cancelPendingDeepLink()
+})
+
 onMounted(async () => {
+  hasInitialMountFetch = true
+  lastRequestedCarePhase = props.carePhase
+  if (sourceId.value) {
+    lastResolvedSourceId = sourceId.value
+  }
   dateField.value = props.carePhase === 'inpatient' ? 'admission' : 'discharge'
+  if (hospFilter && hospFilter.value !== props.carePhase) {
+    hospFilter.value = props.carePhase
+  }
   const requestedRecordKey = routeQueryText('record_key')
   const requestedVisitId = routeQueryText('visit_id')
-  if (requestedRecordKey && requestedVisitId) searchText.value = requestedVisitId
+  if (requestedRecordKey) {
+    pendingDeepLinkKey.value = requestedRecordKey
+    if (requestedVisitId) searchText.value = requestedVisitId
+  }
+  commitCurrentFilters()
+  const generation = ++deepLinkGeneration
   await fetchData(1)
-  if (requestedRecordKey) handleOpenResult(requestedRecordKey)
+  if (generation !== deepLinkGeneration || !pendingDeepLinkKey.value) return
+  tryResolvePendingDeepLink()
 })
 
 function routeQueryText(name: string): string {
@@ -738,6 +1000,7 @@ function routeQueryText(name: string): string {
 const medicalRecordFocus = ref<PatientRecord | null>(null)
 
 function handleOpenMedicalRecord(recordKey: string) {
+  cancelPendingDeepLink()
   medicalRecordFocus.value = null
   closeResultDrawer()
   const record = allRecords.value.find(
@@ -750,7 +1013,14 @@ function handleOpenMedicalRecord(recordKey: string) {
   medicalRecordFocus.value = record
 }
 
-function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequest) {
+function handleOpenResult(
+  recordKey: string,
+  previousResult?: PreviousResultRequest,
+  focusRuleId?: string,
+) {
+  if (pendingDeepLinkKey.value && pendingDeepLinkKey.value !== recordKey) {
+    cancelPendingDeepLink()
+  }
   medicalRecordFocus.value = null
   const record = allRecords.value.find(
     (candidate) => candidate.recordKey === recordKey && hasCompleteRecordIdentity(candidate),
@@ -767,6 +1037,7 @@ function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequ
     return
   }
   detailNotice.value = ''
+  activeFocusRuleId.value = typeof focusRuleId === 'string' ? focusRuleId.trim() : ''
   const labelParts = [
     record.name || '患者信息待核实',
     record.department || '未分科室',
@@ -780,6 +1051,8 @@ function handleOpenResult(recordKey: string, previousResult?: PreviousResultRequ
     patientName: record.name,
     patientSex: record.sex,
     patientAge: record.age,
+    admissionTime: record.admissionDate,
+    dischargeTime: record.dischargeDate,
     listQcTime: row.latestQcTime && row.latestQcTime !== '—' ? `质控结束 ${row.latestQcTime}` : undefined,
     previousResult,
     label: labelParts.join(' · '),
@@ -815,10 +1088,132 @@ function handleOpenAnalysisResult(record: LuxianQcAnalysisRecordItem) {
   drawerOpen.value = true
 }
 
+function exitBatchQcResults() {
+  batchQcResultSequence += 1
+  batchQcResults.value = null
+  closeResultDrawer()
+}
+
+function handleDismissBatchQcTask(jobId: string) {
+  if (jobId && batchQcResults.value?.jobId === jobId) {
+    exitBatchQcResults()
+  }
+}
+
+function handleOpenBatchQcResult(payload: {
+  item: BatchResultRecordItem
+  queue: BatchResultRecordItem[]
+  index: number
+}) {
+  medicalRecordFocus.value = null
+  detailNotice.value = ''
+  comparisonBatchQueue.value = payload.queue
+  comparisonBatchIndex.value = payload.index
+  selectedFocus.value = toComparisonFocusFromBatchItem(payload.item)
+  drawerOpen.value = true
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: payload.item.recordKey }
+  }
+}
+
+function handleSelectComparisonBatchIndex(nextIndex: number) {
+  const nextItem = comparisonBatchQueue.value[nextIndex]
+  if (!nextItem) return
+  comparisonBatchIndex.value = nextIndex
+  selectedFocus.value = toComparisonFocusFromBatchItem(nextItem)
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: nextItem.recordKey }
+  }
+}
+
+async function handleViewBatchQcResults(payload: {
+  job: SichuanBatchJob
+  recordRefs: SelectedQcRecordRef[]
+}) {
+  const jobId = String(payload.job?.id || '').trim()
+  if (!jobId) return
+  const sequence = ++batchQcResultSequence
+  const currentByKey = new Map<string, PatientRecord>()
+  for (const record of allRecords.value) {
+    if (!hasCompleteRecordIdentity(record)) continue
+    const key = buildCaseRecordKey(
+      record.instituteId as string,
+      record.patientId as string,
+      record.visitId as string,
+    )
+    if (key) {
+      currentByKey.set(key, record)
+      knownRecordsByKey.set(key, record)
+    }
+  }
+  const submittedRecords = (payload.recordRefs || [])
+    .map((refItem) => {
+      const key = buildCaseRecordKey(refItem.institute_id, refItem.patient_id, refItem.visit_id)
+      return currentByKey.get(key) ?? knownRecordsByKey.get(key)
+    })
+    .filter((record): record is PatientRecord => Boolean(record))
+  const expectedTotal = Math.max(
+    0,
+    Math.trunc(Number(payload.job.total_records ?? payload.job.summary?.total_records ?? 0) || 0),
+  )
+  activeView.value = 'records'
+  if (expectedTotal !== 1 && submittedRecords.length !== 1) {
+    batchQcResults.value = {
+      jobId,
+      loading: true,
+      items: [],
+      activeRecordKey: '',
+    }
+  }
+  const resolved = await resolveBatchResultRecords({
+    job: payload.job,
+    sourceId: sourceId.value,
+    submittedRecords,
+    currentRecords: allRecords.value,
+    confirmedOnly: confirmedResultsOnly.value,
+  })
+  if (sequence !== batchQcResultSequence) return
+  if (resolved.items.length === 1) {
+    batchQcResults.value = null
+    medicalRecordFocus.value = null
+    detailNotice.value = ''
+    comparisonBatchQueue.value = []
+    comparisonBatchIndex.value = -1
+    selectedFocus.value = toComparisonFocusFromBatchItem(resolved.items[0])
+    drawerOpen.value = true
+    return
+  }
+  if (resolved.items.length >= 2) {
+    batchQcResults.value = {
+      jobId,
+      loading: false,
+      items: resolved.items,
+      activeRecordKey: '',
+    }
+    return
+  }
+  batchQcResults.value = null
+  const fallbackUrl = `/workstation-v5/qc-task?job_id=${encodeURIComponent(jobId)}`
+  const appRouter = instance?.appContext.config.globalProperties.$router as
+    | { push?: (target: string) => unknown }
+    | undefined
+  if (typeof appRouter?.push === 'function') {
+    void appRouter.push(fallbackUrl)
+  } else if (typeof window !== 'undefined') {
+    window.location.assign(fallbackUrl)
+  }
+}
+
 function closeResultDrawer() {
   drawerOpen.value = false
   selectedFocus.value = null
+  comparisonBatchQueue.value = []
+  comparisonBatchIndex.value = -1
+  activeFocusRuleId.value = ''
   detailNotice.value = ''
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: '' }
+  }
 }
 </script>
 
@@ -963,6 +1358,7 @@ function closeResultDrawer() {
   z-index: 20;
   top: calc(100% + 8px);
   right: 0;
+  left: auto;
   display: grid;
   min-width: 246px;
   overflow: hidden;
@@ -1098,10 +1494,16 @@ function closeResultDrawer() {
 
 .qc-record-result-list-view__notice {
   padding: 12px 20px;
-  border-top: 1px solid rgba(10, 108, 255, 0.1);
+  border-bottom: 1px solid rgba(10, 108, 255, 0.12);
   background: rgba(10, 108, 255, 0.045);
   color: #0a6cff !important;
   font-weight: 600;
+}
+
+.qc-record-result-list-view__notice--error {
+  border-bottom-color: rgba(239, 68, 68, 0.18);
+  background: #fff4f2;
+  color: #b42318 !important;
 }
 
 @media (max-width: 1100px) {
@@ -1116,12 +1518,12 @@ function closeResultDrawer() {
   }
 
   .qc-record-result-list-view__toolbar-actions {
-    justify-content: flex-start;
+    justify-content: flex-end;
   }
 
   .qc-record-result-list-view__export-options {
-    right: auto;
-    left: 0;
+    right: 0;
+    left: auto;
   }
 
   .qc-record-result-list-view__pagination {

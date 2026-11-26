@@ -40,18 +40,34 @@
         个质控族已选
       </span>
       <span>
-        <strong>{{ selectedRuleIds.length || families.flatMap((family) => family.rules).filter((rule) => rule.releaseScope !== 'acceptance_only').length }}</strong>
+        <strong>{{ selectedRuleIds.length || defaultRunnableRuleCount }}</strong>
         个质控点将运行
       </span>
+      <div class="customer-sample-luxian-scope-search">
+        <input
+          v-model="ruleSearchQuery"
+          type="search"
+          class="customer-sample-luxian-search-input"
+          placeholder="搜索质控点名称或编号"
+        >
+        <button
+          v-if="normalizedRuleSearchQuery"
+          type="button"
+          class="customer-sample-luxian-search-clear"
+          @click="ruleSearchQuery = ''"
+        >
+          清空
+        </button>
+      </div>
     </div>
     <div class="customer-sample-luxian-rule-groups">
       <div
-        v-for="family in families"
+        v-for="{ family, visibleRules } in visibleFamilies"
         :key="family.key"
         class="customer-sample-luxian-rule-group"
         :class="{
           'is-selected': familySelectedCount(family) > 0,
-          'is-expanded': isFamilyExpanded(family.key),
+          'is-expanded': isFamilyExpanded(family.key) || Boolean(normalizedRuleSearchQuery),
         }"
       >
         <div class="customer-sample-luxian-rule-group-head">
@@ -73,26 +89,31 @@
           <div class="customer-sample-luxian-rule-group-actions">
             <button
               type="button"
-              :class="{ 'is-selected-action': isFamilySelected(family.ruleIds) }"
-              @click="emit('toggle-family', family.ruleIds)"
+              :disabled="!hasDefaultRules(family)"
+              :title="!hasDefaultRules(family) ? '该组均为待验收质控点，请展开后逐条勾选' : undefined"
+              :class="{
+                'is-selected-action': isFamilySelected(family.ruleIds),
+                'is-disabled-action': !hasDefaultRules(family),
+              }"
+              @click="hasDefaultRules(family) && emit('toggle-family', family.ruleIds)"
             >
-              {{ isFamilySelected(family.ruleIds) ? '取消本组' : '选择本组' }}
+              {{ !hasDefaultRules(family) ? '仅支持逐条勾选' : isFamilySelected(family.ruleIds) ? '取消本组' : '选择本组' }}
             </button>
             <button
               type="button"
               class="is-ghost"
               @click="emit('toggle-expanded', family.key)"
             >
-              {{ isFamilyExpanded(family.key) ? '收起明细' : '查看质控点' }}
+              {{ isFamilyExpanded(family.key) || Boolean(normalizedRuleSearchQuery) ? '收起明细' : '查看质控点' }}
             </button>
           </div>
         </div>
         <div
-          v-if="isFamilyExpanded(family.key)"
+          v-if="isFamilyExpanded(family.key) || Boolean(normalizedRuleSearchQuery)"
           class="customer-sample-luxian-rule-options"
         >
           <label
-            v-for="rule in family.rules"
+            v-for="rule in visibleRules"
             :key="rule.ruleId"
             class="customer-sample-luxian-rule-option"
             :class="{ 'is-selected': selectedRuleSet.has(rule.ruleId) }"
@@ -106,16 +127,28 @@
               @change="emit('toggle-rule', rule.ruleId)"
             >
             <span>{{ rule.ruleId }}</span>
-            <em>{{ rule.name }}<small v-if="rule.releaseScope === 'acceptance_only'"> · 待验收</small></em>
+            <em>{{ rule.name }}</em>
+            <small
+              v-if="rule.releaseScope === 'acceptance_only'"
+              class="customer-sample-luxian-acceptance-tag"
+            >
+              待验收
+            </small>
           </label>
         </div>
+      </div>
+      <div
+        v-if="!visibleFamilies.length"
+        class="customer-sample-luxian-search-empty"
+      >
+        未找到匹配“{{ ruleSearchQuery.trim() }}”的质控点
       </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import {
   Clock3,
   Droplets,
@@ -161,7 +194,47 @@ const emit = defineEmits<{
   'toggle-rule': [ruleId: string]
 }>()
 
+const ruleSearchQuery = ref('')
+const normalizedRuleSearchQuery = computed(() => ruleSearchQuery.value.trim().toLowerCase())
 const selectedRuleSet = computed(() => new Set(props.selectedRuleIds))
+const acceptanceOnlyRuleSet = computed(
+  () =>
+    new Set(
+      props.families
+        .flatMap((family) => family.rules)
+        .filter((rule) => rule.releaseScope === 'acceptance_only')
+        .map((rule) => rule.ruleId),
+    ),
+)
+const defaultRunnableRuleCount = computed(
+  () =>
+    props.families
+      .flatMap((family) => family.rules)
+      .filter((rule) => rule.releaseScope !== 'acceptance_only').length,
+)
+const visibleFamilies = computed(() => {
+  const query = normalizedRuleSearchQuery.value
+  if (!query) {
+    return props.families.map((family) => ({
+      family,
+      visibleRules: family.rules,
+    }))
+  }
+  return props.families
+    .map((family) => {
+      const visibleRules = family.rules.filter(
+        (rule) =>
+          rule.ruleId.toLowerCase().includes(query) ||
+          rule.name.toLowerCase().includes(query) ||
+          rule.description.toLowerCase().includes(query),
+      )
+      return {
+        family,
+        visibleRules,
+      }
+    })
+    .filter((entry) => entry.visibleRules.length > 0)
+})
 
 const LUXIAN_RULE_FAMILY_ICONS = {
   basic_timeliness: Clock3,
@@ -177,10 +250,12 @@ function familySelectedCount(family: LuxianRuleFamily): number {
   return family.ruleIds.filter((ruleId) => selectedRuleSet.value.has(ruleId)).length
 }
 
+function hasDefaultRules(family: LuxianRuleFamily): boolean {
+  return family.rules.some((rule) => rule.releaseScope !== 'acceptance_only')
+}
+
 function isFamilySelected(ruleIds: string[]): boolean {
-  const acceptanceOnly = new Set(props.families.flatMap((family) => family.rules)
-    .filter((rule) => rule.releaseScope === 'acceptance_only').map((rule) => rule.ruleId))
-  const defaultIds = ruleIds.filter((id) => !acceptanceOnly.has(id))
+  const defaultIds = ruleIds.filter((id) => !acceptanceOnlyRuleSet.value.has(id))
   return defaultIds.length > 0 && defaultIds.every((ruleId) => selectedRuleSet.value.has(ruleId))
 }
 
@@ -273,6 +348,50 @@ function resolveFamilyIcon(familyKey: string) {
 .customer-sample-luxian-scope-overview strong {
   color: var(--customer-sample-primary);
   font-weight: 750;
+}
+
+.customer-sample-luxian-scope-search {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.customer-sample-luxian-search-input {
+  width: 220px;
+  max-width: 100%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  padding: 4px 11px;
+  color: var(--customer-sample-text);
+  font-size: 12px;
+  line-height: 18px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.customer-sample-luxian-search-input:focus {
+  border-color: rgba(0, 102, 204, 0.4);
+  box-shadow: 0 0 0 2px rgba(0, 102, 204, 0.1);
+}
+
+.customer-sample-luxian-search-clear {
+  border: 0;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 3px 8px;
+  color: rgba(29, 29, 31, 0.65);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.customer-sample-luxian-search-empty {
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--customer-sample-muted);
+  font-size: 12px;
 }
 
 .customer-sample-luxian-rule-groups {
@@ -435,6 +554,13 @@ function resolveFamilyIcon(familyKey: string) {
   color: var(--customer-sample-primary);
 }
 
+.customer-sample-luxian-rule-group-actions button.is-disabled-action,
+.customer-sample-luxian-rule-group-actions button:disabled {
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(29, 29, 31, 0.42);
+  cursor: not-allowed;
+}
+
 .customer-sample-luxian-rule-options {
   margin-top: 9px;
   margin-left: 42px;
@@ -447,7 +573,7 @@ function resolveFamilyIcon(familyKey: string) {
   min-width: 0;
   max-width: 100%;
   display: inline-grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 6px;
   border: 1px solid rgba(0, 0, 0, 0.06);
@@ -490,6 +616,18 @@ function resolveFamilyIcon(familyKey: string) {
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
+}
+
+.customer-sample-luxian-acceptance-tag {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  border-radius: 999px;
+  background: rgba(245, 158, 11, 0.14);
+  padding: 1px 6px;
+  color: #b45309;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
 }
 
 @media (max-width: 900px) {

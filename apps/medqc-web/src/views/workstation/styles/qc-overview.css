@@ -1,11 +1,44 @@
 /* v7.1 液态玻璃 · 首页概览 */
-/* 页头右侧工具栏：科室下拉 + 生成时间 + 刷新 */
+.qc-home-shell {
+  /* 首页内高对比度语义文字色（浅色玻璃底上均满足 WCAG AA >= 4.5:1） */
+  --qc-brand-text: #0a58cc;
+  --qc-success-text: #147a36;
+  --qc-warning-text: #a64d00;
+  --qc-danger-text: #c81e32;
+}
+
+/* 避免与 .ws-content 的顶部留白叠加出 18px 假滚动条，并给右下角悬浮助手球留出底部安全间距 */
+.qc-home-shell .mq-page {
+  min-height: 0;
+  padding-bottom: 72px;
+}
+
+.qc-home-body {
+  display: grid;
+  gap: 20px;
+  transition: opacity 160ms ease;
+}
+
+.qc-home-body.is-refreshing {
+  opacity: 0.72;
+}
+
+/* 页头右侧工具栏：关键词组 + 科室下拉 + 生成时间/更新态 + 刷新 */
 .qc-home-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: flex-end;
   gap: 8px;
+}
+
+.qc-home-toolbar__keyword-group {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .qc-home-toolbar__keyword {
@@ -18,36 +51,58 @@
 }
 
 .qc-home-toolbar__clear {
+  flex-shrink: 0;
   height: 30px;
   padding: 0 8px;
   border: 0;
   border-radius: 8px;
   background: transparent;
-  color: var(--mq-brand-600);
+  color: var(--qc-brand-text);
   font: inherit;
   font-size: var(--mq-font-13);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 
-.qc-home-toolbar__time {
+.qc-home-toolbar__clear:hover {
+  background: rgba(10, 108, 255, 0.1);
+  color: #0848a8;
+}
+
+.qc-home-toolbar__clear:active {
+  background: rgba(10, 108, 255, 0.16);
+}
+
+.qc-home-toolbar__time,
+.qc-home-toolbar__refreshing {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   white-space: nowrap;
 }
 
-/* 下拉按钮：页头与缺陷分析共用 */
+.qc-home-toolbar__refreshing {
+  color: var(--qc-brand-text);
+  font-weight: 500;
+}
+
+/* 下拉按钮：右侧内边距落在 select 上，点击下拉箭头可直接触发展开 */
 .qc-home-pulldown {
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
   height: 30px;
-  padding: 0 26px 0 10px;
+  padding: 0;
   border-radius: 8px;
   color: var(--mq-text-primary);
   font-size: var(--mq-font-13);
   white-space: nowrap;
-  transition: background-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
 .qc-home-pulldown:hover {
@@ -55,24 +110,39 @@
 }
 
 .qc-home-pulldown--bordered {
-  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  border: 0.5px solid rgba(20, 40, 80, 0.16);
   background: rgba(255, 255, 255, 0.85);
 }
 
+.qc-home-pulldown--bordered:hover {
+  border-color: rgba(20, 40, 80, 0.26);
+  background: #ffffff;
+}
+
 .qc-home-pulldown__label {
+  padding-left: 10px;
   color: var(--mq-text-tertiary);
+  pointer-events: none;
 }
 
 .qc-home-pulldown select {
-  max-width: 180px;
+  box-sizing: border-box;
+  max-width: 210px;
   height: 100%;
-  padding: 0;
+  padding: 0 26px 0 10px;
+  overflow: hidden;
   border: 0;
+  border-radius: 8px;
   background: transparent;
   color: inherit;
   font: inherit;
+  text-overflow: ellipsis;
   appearance: none;
   cursor: pointer;
+}
+
+.qc-home-pulldown__label + select {
+  padding-left: 6px;
 }
 
 .qc-home-pulldown select:focus-visible {
@@ -88,6 +158,11 @@
   right: 10px;
   color: var(--mq-text-tertiary);
   pointer-events: none;
+  transition: color 140ms ease;
+}
+
+.qc-home-pulldown:hover .qc-home-pulldown__caret {
+  color: var(--mq-text-secondary);
 }
 
 .qc-home-icon-button {
@@ -96,44 +171,112 @@
   justify-content: center;
   width: 30px;
   height: 30px;
-  border: 0.5px solid rgba(20, 40, 80, 0.14);
+  border: 0.5px solid rgba(20, 40, 80, 0.16);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.85);
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
-.qc-home-icon-button:hover {
+.qc-home-icon-button:hover:not(:disabled) {
+  border-color: rgba(20, 40, 80, 0.26);
   background: #ffffff;
+  box-shadow: 0 2px 6px rgba(10, 55, 115, 0.08);
+}
+
+.qc-home-icon-button:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.qc-home-icon-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.qc-home-icon-button.is-refreshing :deep(svg) {
+  animation: qc-home-spin 900ms linear infinite;
+}
+
+@keyframes qc-home-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .qc-home-toolbar__clear:focus-visible,
 .qc-home-icon-button:focus-visible,
-.qc-home-shortcuts button:focus-visible,
 .qc-home-button:focus-visible,
 button.qc-home-defect-analysis__row:focus-visible {
   outline: 2px solid var(--mq-brand-600);
   outline-offset: 2px;
 }
 
-/* 主卡 + 进度卡：两卡都收紧尺寸，进度卡与其他卡片同为浅色玻璃 */
+/* 零病历提示条 */
+.qc-home-zero-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+}
+
+.qc-home-zero-hint__copy {
+  display: flex;
+  flex: 1 1 240px;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.qc-home-zero-hint__copy strong {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-14);
+}
+
+.qc-home-zero-hint__copy span {
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
+.qc-home-zero-hint__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 主卡 + 进度卡：紧凑布局，蓝卡左数字、右进度与入口；进度卡浅色玻璃 */
 .qc-home-overview {
   display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(300px, 1fr);
+  grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
   gap: 16px;
 }
 
 .qc-home-hero {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-areas:
+    'label progress'
+    'value progress'
+    'value nav';
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: 28px;
+  row-gap: 8px;
   overflow: hidden;
-  padding: 20px 24px;
+  padding: 18px 24px;
   border-radius: var(--mq-radius-card);
-  background: var(--mq-brand-hero);
+  background: linear-gradient(135deg, #1b6de8 0%, #125dd4 52%, #0949b8 100%);
   box-shadow:
-    0 12px 28px rgba(10, 100, 230, 0.24),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 12px 28px rgba(10, 74, 185, 0.24),
+    inset 0 1px 0 rgba(255, 255, 255, 0.32);
   color: #ffffff;
 }
 
@@ -144,25 +287,29 @@ button.qc-home-defect-analysis__row:focus-visible {
   width: 240px;
   height: 240px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.32), transparent 65%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.22), transparent 65%);
   pointer-events: none;
 }
 
 .qc-home-hero__label {
   position: relative;
+  grid-area: label;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.9);
+  color: #ffffff;
   font-size: var(--mq-font-14);
   font-weight: 600;
 }
 
 .qc-home-hero__value {
   position: relative;
+  grid-area: value;
+  align-self: start;
   display: flex;
   align-items: flex-end;
-  gap: 14px;
+  gap: 12px;
+  white-space: nowrap;
 }
 
 .qc-home-hero__value strong {
@@ -176,17 +323,20 @@ button.qc-home-defect-analysis__row:focus-visible {
 
 .qc-home-hero__value span {
   padding-bottom: 4px;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.92);
   font-size: var(--mq-font-14);
   font-weight: 500;
 }
 
 .qc-home-hero__progress {
   position: relative;
+  grid-area: progress;
+  align-self: end;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: rgba(255, 255, 255, 0.88);
+  min-width: 0;
+  color: rgba(255, 255, 255, 0.95);
   font-size: var(--mq-font-13);
 }
 
@@ -195,55 +345,85 @@ button.qc-home-defect-analysis__row:focus-visible {
   height: 6px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(255, 255, 255, 0.24);
 }
 
 .qc-home-hero__track i {
   display: block;
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #ffffff, #cfe4ff);
+  background: linear-gradient(90deg, #ffffff, #d6e8ff);
 }
 
 .qc-home-shortcuts {
   position: relative;
+  grid-area: nav;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
 .qc-home-shortcuts button {
-  height: 34px;
-  padding: 0 16px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid rgba(255, 255, 255, 0.48);
   border-radius: 999px;
   background: rgba(255, 255, 255, 0.16);
   color: #ffffff;
   font: inherit;
   font-size: var(--mq-font-13);
   font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
-  transition: background-color 140ms ease;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease;
 }
 
 .qc-home-shortcuts button:hover {
+  border-color: rgba(255, 255, 255, 0.75);
   background: rgba(255, 255, 255, 0.26);
+  transform: translateY(-1px);
 }
 
-.qc-home-shortcuts .qc-home-shortcuts__primary,
-.qc-home-shortcuts .qc-home-shortcuts__primary:hover {
+.qc-home-shortcuts button:active {
+  transform: translateY(0);
+}
+
+.qc-home-shortcuts button:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+
+.qc-home-shortcuts .qc-home-shortcuts__primary {
   border-color: transparent;
   background: #ffffff;
-  box-shadow: 0 4px 12px rgba(10, 40, 90, 0.16);
-  color: var(--mq-brand-600);
-  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(10, 40, 90, 0.18);
+  color: var(--qc-brand-text);
+  font-weight: 600;
+}
+
+.qc-home-shortcuts .qc-home-shortcuts__primary:hover {
+  border-color: transparent;
+  background: #f2f7ff;
+  box-shadow: 0 6px 16px rgba(10, 40, 90, 0.26);
+  color: #0848a8;
+  transform: translateY(-1px);
+}
+
+.qc-home-shortcuts .qc-home-shortcuts__primary:active {
+  box-shadow: 0 2px 6px rgba(10, 40, 90, 0.16);
+  transform: translateY(0);
 }
 
 .qc-home-rings {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 20px 24px;
+  gap: 10px;
+  min-width: 0;
+  padding: 18px 24px;
   border: 1px solid var(--mq-glass-border);
   border-radius: var(--mq-radius-card);
   background: var(--mq-glass-bg);
@@ -262,20 +442,28 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-rings__body {
   display: flex;
   flex-grow: 1;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 24px;
+  gap: 16px 20px;
+}
+
+.qc-home-rings__body svg {
+  flex-shrink: 0;
 }
 
 .qc-home-rings__legend {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex: 1 1 160px;
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  min-width: 0;
   margin: 0;
 }
 
 .qc-home-rings__legend dt {
   font-size: var(--mq-font-12);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 .qc-home-rings__legend dd {
@@ -285,86 +473,12 @@ button.qc-home-defect-analysis__row:focus-visible {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.2;
+  font-variant-numeric: tabular-nums;
 }
 
 .qc-home-rings__legend small {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
-}
-
-/* 紧凑版概览：蓝卡左数字、右进度与入口；进度卡圆环 96px、比率横排，整行约 150px 高 */
-.qc-home-hero {
-  display: grid;
-  grid-template-areas:
-    'label progress'
-    'value progress'
-    'value nav';
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  column-gap: 32px;
-  row-gap: 8px;
-  padding: 18px 24px;
-}
-
-.qc-home-hero__label {
-  grid-area: label;
-}
-
-.qc-home-hero__value {
-  grid-area: value;
-  align-self: start;
-}
-
-.qc-home-hero__value strong {
-  font-size: 48px;
-}
-
-.qc-home-hero__value span {
-  font-size: var(--mq-font-14);
-}
-
-.qc-home-hero__progress {
-  grid-area: progress;
-  align-self: end;
-}
-
-.qc-home-shortcuts {
-  grid-area: nav;
-}
-
-.qc-home-shortcuts button {
-  height: 32px;
-  padding: 0 14px;
-}
-
-.qc-home-rings {
-  gap: 10px;
-  padding: 18px 24px;
-}
-
-.qc-home-rings__body {
-  gap: 20px;
-}
-
-.qc-home-rings__legend {
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-}
-
-.qc-home-rings__legend dd {
-  font-size: var(--mq-font-20);
-}
-
-@media (max-width: 1279px) {
-  .qc-home-hero {
-    grid-template-areas:
-      'label'
-      'value'
-      'progress'
-      'nav';
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 /* 三栏指标卡 */
@@ -378,9 +492,9 @@ button.qc-home-defect-analysis__row:focus-visible {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  overflow: hidden;
-  padding: 20px 24px;
+  gap: 10px;
+  min-width: 0;
+  padding: 16px 22px;
 }
 
 .qc-home-metric + .qc-home-metric::before {
@@ -393,20 +507,17 @@ button.qc-home-defect-analysis__row:focus-visible {
   content: '';
 }
 
-.qc-home-metric__watermark {
-  position: absolute;
-  right: -14px;
-  bottom: -18px;
-  opacity: 0.07;
-  pointer-events: none;
-}
-
 .qc-home-metric__head {
   position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
   line-height: 18px;
+}
+
+.qc-home-metric__titles {
+  min-width: 0;
 }
 
 .qc-home-metric__label {
@@ -426,20 +537,23 @@ button.qc-home-defect-analysis__row:focus-visible {
   display: flex;
   align-items: flex-end;
   gap: 12px;
+  min-width: 0;
 }
 
 .qc-home-metric__value {
+  flex-shrink: 0;
   font-family: var(--mq-font-display);
   font-size: 32px;
   font-weight: 600;
   letter-spacing: -0.035em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .qc-home-metric__value small {
   margin-left: 6px;
-  color: #86868b;
+  color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
   font-weight: 500;
   letter-spacing: 0;
@@ -450,14 +564,18 @@ button.qc-home-defect-analysis__row:focus-visible {
   flex: 1 1 auto;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   padding-bottom: 5px;
 }
 
 .qc-home-metric__rate em {
   align-self: flex-end;
+  max-width: 100%;
+  overflow: hidden;
   font-size: var(--mq-font-12);
   font-style: normal;
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -475,9 +593,14 @@ button.qc-home-defect-analysis__row:focus-visible {
   border-radius: 999px;
 }
 
-/* 零值不强调：数值与比例回到中性色 */
+/* 零值完全中性化：图标、标题、数字、比例均无告警色倾向 */
+.qc-home-metric.is-zero .qc-home-metric__label,
+.qc-home-metric.is-zero .qc-home-metric__value {
+  color: var(--mq-text-secondary);
+}
+
 .qc-home-metric.is-zero .qc-home-metric__rate em {
-  color: var(--mq-text-tertiary) !important;
+  color: var(--mq-text-tertiary);
 }
 
 /* 分析区 */
@@ -491,9 +614,11 @@ button.qc-home-defect-analysis__row:focus-visible {
 .qc-home-side {
   display: grid;
   gap: 20px;
+  min-width: 0;
 }
 
 .qc-home-panel {
+  min-width: 0;
   padding: 20px 24px;
 }
 
@@ -529,11 +654,12 @@ button.qc-home-defect-analysis__row:focus-visible {
 
 .qc-home-defect-analysis__list {
   display: grid;
+  gap: 2px;
 }
 
 .qc-home-defect-analysis__row {
   display: grid;
-  grid-template-columns: minmax(140px, 0.9fr) minmax(160px, 1.4fr) auto 16px;
+  grid-template-columns: minmax(120px, 0.9fr) minmax(140px, 1.35fr) auto 16px;
   align-items: center;
   gap: 14px;
   width: 100%;
@@ -547,15 +673,47 @@ button.qc-home-defect-analysis__row:focus-visible {
   text-align: left;
 }
 
-button.qc-home-defect-analysis__row {
-  cursor: pointer;
-  transition: background-color 140ms ease;
+.qc-home-defect-analysis__row.is-physician {
+  grid-template-columns: minmax(120px, 0.9fr) minmax(140px, 1.35fr) auto;
 }
 
-button.qc-home-defect-analysis__row:hover,
+button.qc-home-defect-analysis__row {
+  cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+button.qc-home-defect-analysis__row:hover {
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 4px rgba(10, 55, 115, 0.06);
+}
+
+button.qc-home-defect-analysis__row:hover .qc-home-defect-analysis__chevron {
+  color: var(--mq-text-primary);
+  transform: translateX(2px);
+}
+
 .qc-home-defect-analysis__row.is-active {
-  background: var(--mq-glass-bg-strong);
-  box-shadow: var(--mq-float-shadow);
+  background: rgba(10, 108, 255, 0.09);
+  box-shadow:
+    inset 3px 0 0 var(--mq-brand-600),
+    0 0 0 1px rgba(10, 108, 255, 0.22);
+}
+
+button.qc-home-defect-analysis__row.is-active:hover {
+  background: rgba(10, 108, 255, 0.13);
+  box-shadow:
+    inset 3px 0 0 var(--mq-brand-600),
+    0 0 0 1px rgba(10, 108, 255, 0.3);
+}
+
+.qc-home-defect-analysis__row.is-active .qc-home-defect-analysis__meta strong {
+  color: var(--qc-brand-text);
+}
+
+.qc-home-defect-analysis__row.is-active .qc-home-defect-analysis__chevron {
+  color: var(--qc-brand-text);
 }
 
 .qc-home-defect-analysis__meta {
@@ -582,9 +740,10 @@ button.qc-home-defect-analysis__row:hover,
 
 .qc-home-defect-analysis__metric {
   display: grid;
-  grid-template-columns: minmax(80px, 1fr) 40px;
+  grid-template-columns: minmax(80px, 1fr) minmax(48px, auto);
   align-items: center;
   gap: 10px;
+  min-width: 0;
 }
 
 .qc-home-defect-analysis__track {
@@ -602,11 +761,16 @@ button.qc-home-defect-analysis__row:hover,
   transition: width 250ms ease;
 }
 
+.qc-home-defect-analysis__track i.is-nonzero {
+  min-width: 4px;
+}
+
 .qc-home-defect-analysis__metric strong {
   font-size: var(--mq-font-13);
   font-weight: 600;
   text-align: right;
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .qc-home-defect-analysis__counts {
@@ -618,12 +782,15 @@ button.qc-home-defect-analysis__row:hover,
 }
 
 .qc-home-defect-analysis__counts strong {
-  color: var(--mq-danger-text);
+  color: var(--qc-danger-text);
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .qc-home-defect-analysis__counts span {
-  color: var(--mq-warning-text);
+  color: var(--qc-warning-text);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
 }
 
 .qc-home-defect-analysis__counts .is-zero {
@@ -632,7 +799,10 @@ button.qc-home-defect-analysis__row:hover,
 }
 
 .qc-home-defect-analysis__chevron {
-  color: #b0b0b8;
+  color: var(--mq-text-tertiary);
+  transition:
+    color 140ms ease,
+    transform 140ms ease;
 }
 
 .qc-home-defect-analysis__note {
@@ -641,11 +811,12 @@ button.qc-home-defect-analysis__row:hover,
   font-size: var(--mq-font-13);
 }
 
-/* 结论结构 */
+/* 结论结构（SVG 圆环，无白色贴纸遮罩） */
 .qc-home-conclusion__content {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 22px;
+  gap: 18px 22px;
 }
 
 .qc-home-conclusion__ring {
@@ -654,41 +825,51 @@ button.qc-home-defect-analysis__row:hover,
   width: 120px;
   height: 120px;
   place-items: center;
-  border-radius: 50%;
 }
 
-.qc-home-conclusion__ring > div {
+.qc-home-conclusion__svg,
+.qc-home-conclusion__center {
+  grid-area: 1 / 1;
+}
+
+.qc-home-conclusion__svg {
+  display: block;
+}
+
+.qc-home-conclusion__center {
   display: grid;
-  width: 88px;
-  height: 88px;
   place-content: center;
-  border-radius: 50%;
-  background: #ffffff;
   text-align: center;
+  pointer-events: none;
 }
 
-.qc-home-conclusion__ring strong {
+.qc-home-conclusion__center strong {
+  color: var(--mq-text-primary);
   font-family: var(--mq-font-display);
   font-size: var(--mq-font-20);
-  line-height: 28px;
+  line-height: 26px;
+  font-variant-numeric: tabular-nums;
 }
 
-.qc-home-conclusion__ring span {
+.qc-home-conclusion__center span {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
 }
 
 .qc-home-conclusion__legend {
   display: grid;
-  flex: 1 1 auto;
+  flex: 1 1 170px;
   gap: 8px;
+  min-width: 0;
   margin: 0;
   padding: 0;
   list-style: none;
+  font-variant-numeric: tabular-nums;
 }
 
 .qc-home-conclusion__legend li {
-  display: flex;
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr) minmax(44px, auto);
   align-items: center;
   gap: 8px;
   color: var(--mq-text-secondary);
@@ -701,10 +882,32 @@ button.qc-home-defect-analysis__row:hover,
   border-radius: 50%;
 }
 
-.qc-home-conclusion__legend small {
-  margin-left: auto;
+.qc-home-conclusion__item-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.qc-home-conclusion__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.qc-home-conclusion__count {
+  color: var(--mq-text-primary);
+  font-weight: 600;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.qc-home-conclusion__percent {
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* 数据与服务 */
@@ -715,10 +918,11 @@ button.qc-home-defect-analysis__row:hover,
 
 .qc-home-health-list > div {
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr) auto;
+  grid-template-columns: 34px minmax(84px, auto) minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   min-height: 52px;
+  padding: 8px 0;
   border-bottom: 0.5px solid var(--mq-border);
 }
 
@@ -727,18 +931,23 @@ button.qc-home-defect-analysis__row:hover,
 }
 
 .qc-home-health-list dt {
+  color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
+  white-space: nowrap;
 }
 
 .qc-home-health-list dd {
   margin: 0;
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-13);
+  line-height: 1.45;
+  text-align: right;
   font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
 .qc-home-health-list .is-danger {
-  color: var(--mq-danger-text);
+  color: var(--qc-danger-text);
   font-weight: 600;
 }
 
@@ -749,6 +958,7 @@ button.qc-home-defect-analysis__row:hover,
 
 .qc-home-notice {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 14px;
   padding: 16px 20px;
@@ -757,12 +967,13 @@ button.qc-home-defect-analysis__row:hover,
 
 .qc-home-notice__copy {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 220px;
   flex-direction: column;
+  gap: 2px;
 }
 
 .qc-home-notice__copy strong {
-  color: var(--mq-danger-text);
+  color: var(--qc-danger-text);
 }
 
 .qc-home-notice__copy span,
@@ -792,16 +1003,49 @@ button.qc-home-defect-analysis__row:hover,
   padding: 28px;
 }
 
+.qc-home-empty__title {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-16);
+  font-weight: 600;
+}
+
+.qc-home-empty__desc {
+  margin: 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-13);
+}
+
 .qc-home-button {
   height: 38px;
   padding: 0 18px;
-  border: 1px solid var(--mq-glass-border);
+  border: 1px solid rgba(20, 40, 80, 0.14);
   border-radius: 999px;
   background: var(--mq-bg-subtle);
   color: var(--mq-text-primary);
   font: inherit;
   font-size: var(--mq-font-14);
+  font-weight: 500;
+  white-space: nowrap;
   cursor: pointer;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    box-shadow 140ms ease,
+    transform 140ms ease,
+    filter 140ms ease;
+}
+
+.qc-home-button:hover {
+  border-color: rgba(20, 40, 80, 0.24);
+  background: #ffffff;
+  box-shadow: 0 4px 12px rgba(10, 55, 115, 0.1);
+  transform: translateY(-1px);
+}
+
+.qc-home-button:active {
+  transform: translateY(0);
 }
 
 .qc-home-button--primary {
@@ -812,14 +1056,88 @@ button.qc-home-defect-analysis__row:hover,
   font-weight: 600;
 }
 
+.qc-home-button--primary:hover {
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow: 0 10px 24px rgba(10, 100, 230, 0.36);
+  filter: brightness(1.05);
+}
+
+.qc-home-button--primary:active {
+  filter: brightness(0.98);
+}
+
+/* 响应式断点：1280px 紧凑桌面 / 1024px 平板 / 860px 窄屏 / 600px 移动 */
+@media (max-width: 1280px) {
+  .qc-home-overview {
+    grid-template-columns: minmax(0, 1.25fr) minmax(290px, 1fr);
+  }
+
+  .qc-home-hero {
+    grid-template-areas:
+      'label'
+      'value'
+      'progress'
+      'nav';
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .qc-home-defect-analysis__row {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    grid-template-areas:
+      'meta meta chevron'
+      'metric counts chevron';
+    gap: 6px 12px;
+    padding: 10px 12px;
+  }
+
+  .qc-home-defect-analysis__row.is-physician {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'meta meta'
+      'metric counts';
+  }
+
+  .qc-home-defect-analysis__meta {
+    grid-area: meta;
+  }
+
+  .qc-home-defect-analysis__metric {
+    grid-area: metric;
+  }
+
+  .qc-home-defect-analysis__counts {
+    grid-area: counts;
+  }
+
+  .qc-home-defect-analysis__chevron {
+    grid-area: chevron;
+  }
+}
+
 @media (max-width: 1279px) {
   .qc-home-analysis {
     grid-template-columns: 1fr;
   }
 }
 
-/* 两张概览卡在中等宽度仍并排，只有很窄时才上下堆叠 */
-@media (max-width: 900px) {
+@media (max-width: 1120px) {
+  .qc-home-metric__foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .qc-home-metric__rate {
+    padding-bottom: 0;
+  }
+
+  .qc-home-metric__rate em {
+    align-self: flex-start;
+  }
+}
+
+@media (max-width: 1024px) {
   .qc-home-overview {
     grid-template-columns: 1fr;
   }
@@ -828,6 +1146,20 @@ button.qc-home-defect-analysis__row:hover,
 @media (max-width: 860px) {
   .qc-home-metrics {
     grid-template-columns: 1fr;
+  }
+
+  .qc-home-metric__foot {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 12px;
+  }
+
+  .qc-home-metric__rate {
+    padding-bottom: 5px;
+  }
+
+  .qc-home-metric__rate em {
+    align-self: flex-end;
   }
 
   .qc-home-metric + .qc-home-metric::before {
@@ -840,16 +1172,72 @@ button.qc-home-defect-analysis__row:hover,
   }
 }
 
-/* 三栏指标卡紧凑版：数字 44→32px，内边距收紧 */
-.qc-home-metric {
-  gap: 10px;
-  padding: 16px 22px;
+@media (max-width: 600px) {
+  .qc-home-shell .mq-page {
+    padding: 8px 14px 72px;
+  }
+
+  .qc-home-panel,
+  .qc-home-hero,
+  .qc-home-rings {
+    padding: 16px;
+  }
+
+  .qc-home-defect-analysis__row {
+    grid-template-columns: minmax(0, 1fr) 16px;
+    grid-template-areas:
+      'meta chevron'
+      'metric chevron'
+      'counts chevron';
+  }
+
+  .qc-home-defect-analysis__row.is-physician {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'meta'
+      'metric'
+      'counts';
+  }
+
+  .qc-home-defect-analysis__counts {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .qc-home-health-list > div {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 2px 12px;
+  }
+
+  .qc-home-health-list dd {
+    grid-column: 2;
+    text-align: left;
+  }
 }
 
-.qc-home-metric__value {
-  font-size: 32px;
-}
+@media (prefers-reduced-motion: reduce) {
+  .qc-home-body,
+  .qc-home-toolbar__clear,
+  .qc-home-pulldown,
+  .qc-home-pulldown__caret,
+  .qc-home-icon-button,
+  .qc-home-shortcuts button,
+  .qc-home-button,
+  button.qc-home-defect-analysis__row,
+  .qc-home-defect-analysis__track i,
+  .qc-home-defect-analysis__chevron {
+    transition: none;
+  }
 
-.qc-home-metric__value small {
-  font-size: var(--mq-font-13);
+  .qc-home-icon-button.is-refreshing :deep(svg) {
+    animation: none;
+  }
+
+  .qc-home-shortcuts button:hover,
+  .qc-home-shortcuts .qc-home-shortcuts__primary:hover,
+  .qc-home-button:hover,
+  .qc-home-icon-button:active:not(:disabled),
+  button.qc-home-defect-analysis__row:hover .qc-home-defect-analysis__chevron {
+    transform: none;
+  }
 }

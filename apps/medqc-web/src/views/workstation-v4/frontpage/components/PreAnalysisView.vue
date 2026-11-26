@@ -192,7 +192,23 @@
               }}</em>
             </div>
             <div class="reader-scroll">
-              <div class="medical-text" v-html="highlightedMedicalText" />
+              <div class="medical-text">
+                <template
+                  v-for="(seg, segIdx) in highlightedMedicalTextSegments"
+                  :key="segIdx"
+                >
+                  <br v-if="seg.type === 'br'">
+                  <mark
+                    v-else-if="seg.type === 'diag'"
+                    class="hl-diag"
+                  >{{ seg.text }}</mark>
+                  <mark
+                    v-else-if="seg.type === 'proc'"
+                    class="hl-proc"
+                  >{{ seg.text }}</mark>
+                  <template v-else>{{ seg.text }}</template>
+                </template>
+              </div>
             </div>
           </div>
         </div>
@@ -408,7 +424,18 @@
           <div v-if="drgResult && (drgResult.messages || []).length" class="trace-list">
             <div v-for="(item, idx) in drgResult.messages || []" :key="idx" class="trace-item">
               <div class="trace-item__title">步骤 {{ idx + 1 }}</div>
-              <div class="trace-item__value" v-html="highlightCodes(item)" />
+              <div class="trace-item__value">
+                <template
+                  v-for="(seg, segIdx) in splitTraceCodeSegments(item)"
+                  :key="segIdx"
+                >
+                  <code
+                    v-if="seg.isCode"
+                    class="trace-code"
+                  >{{ seg.text }}</code>
+                  <template v-else>{{ seg.text }}</template>
+                </template>
+              </div>
             </div>
           </div>
           <div v-else class="trace-empty">暂无轨迹，执行 DRG/DIP 后自动记录。</div>
@@ -679,9 +706,24 @@ const profitClass = computed(() => {
   return profit >= 0 ? 'profit-positive' : 'profit-negative'
 })
 
-const highlightedMedicalText = computed(() => {
-  if (!medicalText.value) return ''
-  let html = medicalText.value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+type MedicalTextSegment =
+  | { type: 'text'; text: string }
+  | { type: 'diag'; text: string }
+  | { type: 'proc'; text: string }
+  | { type: 'br' }
+
+function appendTextWithBreaks(target: MedicalTextSegment[], text: string) {
+  if (!text) return
+  const lines = text.split('\n')
+  lines.forEach((line, index) => {
+    if (line) target.push({ type: 'text', text: line })
+    if (index < lines.length - 1) target.push({ type: 'br' })
+  })
+}
+
+const highlightedMedicalTextSegments = computed<MedicalTextSegment[]>(() => {
+  const source = medicalText.value
+  if (!source) return []
 
   const diagTerms: string[] = []
   if (mainDiagnosis.value?.text) diagTerms.push(mainDiagnosis.value.text)
@@ -695,24 +737,66 @@ const highlightedMedicalText = computed(() => {
   })
 
   const allTerms = [
-    ...diagTerms.map((text) => ({ text, type: 'diag' as const })),
-    ...procTerms.map((text) => ({ text, type: 'proc' as const })),
-  ].sort((a, b) => b.text.length - a.text.length)
+    ...diagTerms.map((text) => ({ text: String(text).trim(), type: 'diag' as const })),
+    ...procTerms.map((text) => ({ text: String(text).trim(), type: 'proc' as const })),
+  ]
+    .filter((item) => item.text.length > 0)
+    .sort((a, b) => b.text.length - a.text.length)
 
-  for (const term of allTerms) {
-    const escaped = term.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const cls = term.type === 'diag' ? 'hl-diag' : 'hl-proc'
-    html = html.replace(new RegExp(escaped, 'g'), `<mark class="${cls}">${term.text}</mark>`)
+  if (!allTerms.length) {
+    const plain: MedicalTextSegment[] = []
+    appendTextWithBreaks(plain, source)
+    return plain
   }
 
-  return html.replace(/\n/g, '<br/>')
+  const matches: Array<{ start: number; end: number; type: 'diag' | 'proc' }> = []
+  for (const term of allTerms) {
+    let searchFrom = 0
+    while (searchFrom < source.length) {
+      const idx = source.indexOf(term.text, searchFrom)
+      if (idx < 0) break
+      const end = idx + term.text.length
+      if (!matches.some((m) => idx < m.end && end > m.start)) {
+        matches.push({ start: idx, end, type: term.type })
+      }
+      searchFrom = end
+    }
+  }
+  matches.sort((a, b) => a.start - b.start)
+
+  const segments: MedicalTextSegment[] = []
+  let cursor = 0
+  for (const match of matches) {
+    if (match.start > cursor) {
+      appendTextWithBreaks(segments, source.slice(cursor, match.start))
+    }
+    segments.push({ type: match.type, text: source.slice(match.start, match.end) })
+    cursor = match.end
+  }
+  if (cursor < source.length) {
+    appendTextWithBreaks(segments, source.slice(cursor))
+  }
+  return segments
 })
 
-function highlightCodes(msg: string): string {
-  return String(msg || '').replace(
-    /([A-Z]\d{2}\.\d[\w.]*|\d{2}\.\d[\w.]*)/g,
-    '<code class="trace-code">$1</code>',
-  )
+function splitTraceCodeSegments(msg: string): Array<{ text: string; isCode: boolean }> {
+  const source = String(msg || '')
+  if (!source) return []
+  const codeRegex = /([A-Z]\d{2}\.\d[\w.]*|\d{2}\.\d[\w.]*)/g
+  const segments: Array<{ text: string; isCode: boolean }> = []
+  let lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = codeRegex.exec(source)) !== null) {
+    if (match.index > lastIndex) {
+      segments.push({ text: source.slice(lastIndex, match.index), isCode: false })
+    }
+    segments.push({ text: match[0], isCode: true })
+    lastIndex = match.index + match[0].length
+  }
+  if (lastIndex < source.length) {
+    segments.push({ text: source.slice(lastIndex), isCode: false })
+  }
+  return segments
 }
 
 function preGroupingFieldLabel(field: string): string {

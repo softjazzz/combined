@@ -25,17 +25,25 @@
             选择示例或输入病历文本，验证该规则识别结果。
           </div>
         </div>
-        <div class="test-example-switch">
+        <div
+          class="test-example-switch"
+          role="group"
+          aria-label="测试示例类型"
+        >
           <button
+            type="button"
             class="test-example-btn"
             :class="{ active: exampleType === 'negative' }"
+            :aria-pressed="exampleType === 'negative'"
             @click="emit('update:exampleType', 'negative')"
           >
             反例（有缺陷）
           </button>
           <button
+            type="button"
             class="test-example-btn"
             :class="{ active: exampleType === 'positive' }"
+            :aria-pressed="exampleType === 'positive'"
             @click="emit('update:exampleType', 'positive')"
           >
             正例（无缺陷）
@@ -54,6 +62,7 @@
       <div class="test-actions">
         <span class="test-action-hint">仅用于规则验证，不写入正式质控结果。</span>
         <a-button
+          v-if="!confirmedResultsOnly"
           type="primary"
           class="test-primary-btn"
           :loading="loading"
@@ -83,9 +92,11 @@
           />
           <div
             v-if="
-              result.error_message || result.error_detail || result.trace_id || result.status_code
+              !confirmedResultsOnly &&
+              (result.error_message || result.error_detail || result.trace_id || result.status_code)
             "
             class="test-result-block"
+            data-testid="rule-test-debug-info"
           >
             <div class="test-result-block-title">
               调试信息
@@ -134,6 +145,7 @@
 </template>
 
 <script setup lang="ts">
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { SemanticRuleItem, SemanticRuleTestResult } from '../../types'
 
 defineProps<{
@@ -151,6 +163,8 @@ const emit = defineEmits<{
   'update:medicalText': [value: string]
   execute: []
 }>()
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 </script>
 
 <style scoped>
@@ -184,7 +198,7 @@ const emit = defineEmits<{
   max-height: min(78vh, 760px);
   overflow-y: auto;
   padding: 18px 22px 20px;
-  background: #f5f5f7;
+  background: var(--mq-bg-page);
 }
 
 .test-wrap {
@@ -228,7 +242,7 @@ const emit = defineEmits<{
 
 .test-rule-subtitle {
   margin-top: 4px;
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -245,7 +259,7 @@ const emit = defineEmits<{
 .test-example-btn {
   border: none;
   background: transparent;
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   border-radius: 999px;
   height: 28px;
   padding: 0 12px;
@@ -255,6 +269,11 @@ const emit = defineEmits<{
   transition:
     background-color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1),
     color 0.25s cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.test-example-btn:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .test-example-btn.active {
@@ -287,7 +306,7 @@ const emit = defineEmits<{
 }
 
 .test-action-hint {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -318,7 +337,7 @@ const emit = defineEmits<{
 }
 
 .test-result-kicker {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -357,7 +376,7 @@ const emit = defineEmits<{
 .test-result-block-title {
   padding: 8px 10px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }

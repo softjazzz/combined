@@ -161,9 +161,31 @@ export function useSichuanBatchJobs() {
       if (batchJobDetail.value) {
         const latest = response.data.items.find((item) => item.id === batchJobDetail.value?.id)
         if (latest) {
+          const current = batchJobDetail.value
+          const nextItems =
+            Array.isArray(latest.items) && latest.items.length > 0
+              ? latest.items
+              : Array.isArray(current.items) && current.items.length > 0
+                ? current.items
+                : latest.items
+          const nextFailedRecords =
+            Array.isArray(latest.failed_records) && latest.failed_records.length > 0
+              ? latest.failed_records
+              : Array.isArray(current.failed_records) && current.failed_records.length > 0
+                ? current.failed_records
+                : latest.failed_records
+          const nextRuleResults =
+            Array.isArray(latest.rule_results) && latest.rule_results.length > 0
+              ? latest.rule_results
+              : Array.isArray(current.rule_results) && current.rule_results.length > 0
+                ? current.rule_results
+                : latest.rule_results
           batchJobDetail.value = {
-            ...batchJobDetail.value,
+            ...current,
             ...latest,
+            items: nextItems,
+            failed_records: nextFailedRecords,
+            rule_results: nextRuleResults,
           }
         }
       }

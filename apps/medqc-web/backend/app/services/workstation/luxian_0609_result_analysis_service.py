@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 import json
-from collections import defaultdict
+from collections import OrderedDict, defaultdict
 from datetime import datetime, timezone
+from threading import RLock
 from typing import Any, Callable, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from ...services import custom_qc_workspace_service as _workspace_module
 from ...services.custom_qc_workspace_service import CustomQCWorkspaceService
 from ...services.luxian_0609_rule_master import load_luxian_0609_rule_master
+from ...services.medical_records.query_service import (
+    SYNTHETIC_TEST_INSTITUTE_IDS,
+    normalize_department_name,
+)
+
+_ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE = CustomQCWorkspaceService
+_RESULT_ANALYSIS_CACHE_LOCK = RLock()
+_WORKSPACE_SERVICE_CACHE: dict[str, Any] = {"cls": None, "instance": None}
+_RESULT_ANALYSIS_WATERMARK_CACHE: "OrderedDict[tuple[Any, ...], dict[tuple[str, str, str], dict[str, Any] | None]]" = OrderedDict()
+_RESULT_ANALYSIS_WATERMARK_CACHE_MAX = 32
 
 _RESULT_STATUSES = (
     "non_compliant",
@@ -19,6 +31,17 @@ _RESULT_STATUSES = (
     "not_applicable",
     "not_executed",
 )
+_STATUS_SEVERITY_RANK: dict[str, int] = {
+    "non_compliant": 0,
+    "ai_suggested_non_compliant": 1,
+    "technical_error": 2,
+    "data_gap": 3,
+    "uncertain": 4,
+    "compliant": 5,
+    "not_applicable": 6,
+    "not_executed": 7,
+}
+_UNKNOWN_STATUS_SEVERITY_RANK = len(_STATUS_SEVERITY_RANK)
 _ISSUE_STATUSES = frozenset({"non_compliant", "data_gap", "uncertain"})
 _CARE_PHASE_TO_HOSPITAL_STATUS = {
     "inpatient": "inpatient",
@@ -27,10 +50,32 @@ _CARE_PHASE_TO_HOSPITAL_STATUS = {
 _ASIA_SHANGHAI = ZoneInfo("Asia/Shanghai")
 
 
+def _evict_result_analysis_cache_for_scope(scope_key: str) -> None:
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        stale_keys = [
+            key
+            for key in _RESULT_ANALYSIS_WATERMARK_CACHE
+            if key and key[0] == scope_key
+        ]
+        for key in stale_keys:
+            _RESULT_ANALYSIS_WATERMARK_CACHE.pop(key, None)
+
+
+if hasattr(_workspace_module, "register_summary_cache_scope_eviction_callback"):
+    _workspace_module.register_summary_cache_scope_eviction_callback(
+        _evict_result_analysis_cache_for_scope
+    )
+
+
 def _safe_text(value: Any, default: str = "") -> str:
     if value is None:
         return default
     return str(value).strip()
+
+
+def _normalized_department(value: Any, default: str = "") -> str:
+    normalized = normalize_department_name(value)
+    return normalized or default
 
 
 def _identity_from_record(record: Mapping[str, Any]) -> tuple[str, str, str] | None:
@@ -42,16 +87,30 @@ def _identity_from_record(record: Mapping[str, Any]) -> tuple[str, str, str] | N
 
 
 def _parse_completed_at(value: Any) -> datetime | None:
-    text = _safe_text(value)
-    if not text:
-        return None
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        return None
+    if isinstance(value, datetime):
+        parsed = value
+    else:
+        text = _safe_text(value)
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=timezone.utc)
     return parsed.astimezone(timezone.utc)
+
+
+def _completed_at_sort_timestamp(value: Any) -> float:
+    parsed = _parse_completed_at(value)
+    if parsed is None:
+        return float("-inf")
+    return parsed.timestamp()
+
+
+def _status_severity_rank(status: Any) -> int:
+    return _STATUS_SEVERITY_RANK.get(_normalized_status(status), _UNKNOWN_STATUS_SEVERITY_RANK)
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -74,106 +133,331 @@ def _default_rule_name_loader() -> dict[str, str]:
     return {entry.rule_id: entry.title for entry in load_luxian_0609_rule_master()}
 
 
-def _load_current_workstation_records(
+def _is_doctor_case_scope(case_scope: Any) -> bool:
+    return case_scope is not None and hasattr(case_scope, "doctor_name")
+
+
+def _is_institute_case_scope(case_scope: Any) -> bool:
+    return (
+        case_scope is not None
+        and not hasattr(case_scope, "doctor_name")
+        and hasattr(case_scope, "institute_id")
+    )
+
+
+def _matches_case_scope_identity(
+    identity: tuple[str, str, str],
+    case_scope: Any,
+) -> bool:
+    if case_scope is None:
+        return True
+    if _is_doctor_case_scope(case_scope):
+        return identity in getattr(case_scope, "case_refs", ())
+    if _is_institute_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None))
+        return bool(scope_inst) and identity[0] == scope_inst
+    return True
+
+
+def _load_single_db_workstation_records(
+    session: Any,
     *,
     department: str | None,
     doctor: str | None,
     hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
 ) -> list[dict[str, str]]:
-    """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
-
+    from sqlalchemy import func, or_
+    from sqlalchemy.orm import Session as _Session
+    from ...services.clinical_read import clinical_query
     from ...services.medical_records.query_service import (
         MedicalRecordFrontpage,
         _apply_workstation_filters,
         _filter_indexed_registration_records,
         _load_indexed_registration_records,
         _load_hospitalization_projection_map,
-        _session_factory,
         _workstation_department_expr,
         _workstation_discharge_join_condition,
         _workstation_discharge_summary_subquery,
     )
 
-    session = _session_factory()
-    try:
-        discharge_summary = _workstation_discharge_summary_subquery(session)
-        query = session.query(MedicalRecordFrontpage)
-        if discharge_summary is not None:
-            query = query.outerjoin(
-                discharge_summary,
-                _workstation_discharge_join_condition(discharge_summary),
+    normalized_department = _normalized_department(department) or None
+    normalized_institute_id = _safe_text(institute_id) or None
+    is_unassigned_dept = normalized_department == "未分科室"
+
+    discharge_summary = _workstation_discharge_summary_subquery(session)
+    if isinstance(session, _Session) or hasattr(session, "get_bind"):
+        query = clinical_query(session, MedicalRecordFrontpage)
+    else:
+        try:
+            query = clinical_query(session, MedicalRecordFrontpage)
+        except AttributeError:
+            query = session.query(MedicalRecordFrontpage)
+    if case_scope is not None:
+        query = query.filter(case_scope.predicate(MedicalRecordFrontpage))
+    if normalized_institute_id is not None:
+        query = query.filter(MedicalRecordFrontpage.institute_id == normalized_institute_id)
+    elif case_scope is None and hasattr(query, "filter"):
+        query = query.filter(
+            or_(
+                MedicalRecordFrontpage.institute_id.is_(None),
+                MedicalRecordFrontpage.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
             )
-        query = _apply_workstation_filters(
-            query,
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
-            hospital_status=hospital_status,
-            sync_scope="all",
-            include_department=True,
-            include_doctor=True,
-            discharge_summary=discharge_summary,
         )
-        department_expr = _workstation_department_expr(discharge_summary).label("department")
-        rows = query.with_entities(
-            MedicalRecordFrontpage.institute_id,
-            MedicalRecordFrontpage.patient_id,
-            MedicalRecordFrontpage.visit_id,
-            MedicalRecordFrontpage.name.label("patient_name"),
-            MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
-            department_expr,
-        ).all()
-        records = [
-            {
-                "institute_id": _safe_text(row.institute_id),
-                "patient_id": _safe_text(row.patient_id),
-                "visit_id": _safe_text(row.visit_id),
-                "patient_name": _safe_text(row.patient_name),
-                "department": _safe_text(row.department, "未分科室") or "未分科室",
-                "attending_physician": _safe_text(
-                    row.attending_physician,
-                    "未登记主治医师",
-                )
-                or "未登记主治医师",
-            }
-            for row in rows
-        ]
-        indexed_records = _filter_indexed_registration_records(
-            _load_indexed_registration_records(session),
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=None,
-            end_date=None,
-            date_field="visit",
-            hospital_status=hospital_status,
-            sync_scope="all",
-            hospitalization_projection_map=_load_hospitalization_projection_map(session),
+    if discharge_summary is not None:
+        query = query.outerjoin(
+            discharge_summary,
+            _workstation_discharge_join_condition(discharge_summary),
         )
-        records.extend(
+    query = _apply_workstation_filters(
+        query,
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=doctor,
+        keyword=None,
+        start_date=None,
+        end_date=None,
+        date_field="visit",
+        hospital_status=hospital_status,
+        sync_scope="all",
+        include_department=not is_unassigned_dept,
+        include_doctor=True,
+        discharge_summary=discharge_summary,
+    )
+    dept_expr = _workstation_department_expr(discharge_summary)
+    if is_unassigned_dept:
+        query = query.filter(
+            or_(
+                dept_expr.is_(None),
+                func.trim(dept_expr) == "",
+                func.trim(dept_expr) == "未分科室",
+            )
+        )
+    department_expr = dept_expr.label("department")
+    rows = query.with_entities(
+        MedicalRecordFrontpage.institute_id,
+        MedicalRecordFrontpage.patient_id,
+        MedicalRecordFrontpage.visit_id,
+        MedicalRecordFrontpage.name.label("patient_name"),
+        MedicalRecordFrontpage.attending_physician_sign.label("attending_physician"),
+        department_expr,
+    ).all()
+    records = [
+        {
+            "institute_id": _safe_text(row.institute_id),
+            "patient_id": _safe_text(row.patient_id),
+            "visit_id": _safe_text(row.visit_id),
+            "patient_name": _safe_text(row.patient_name),
+            "department": _normalized_department(row.department, "未分科室"),
+            "attending_physician": _safe_text(
+                row.attending_physician,
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for row in rows
+    ]
+    indexed_records = _filter_indexed_registration_records(
+        _load_indexed_registration_records(session),
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=doctor,
+        keyword=None,
+        start_date=None,
+        end_date=None,
+        date_field="visit",
+        hospital_status=hospital_status,
+        sync_scope="all",
+        hospitalization_projection_map=_load_hospitalization_projection_map(session),
+    )
+    for record in indexed_records:
+        identity = (
+            _safe_text(record.institute_id),
+            _safe_text(record.patient_id),
+            _safe_text(record.visit_id),
+        )
+        if not all(identity):
+            continue
+        if normalized_institute_id is not None and identity[0] != normalized_institute_id:
+            continue
+        if case_scope is not None and not _matches_case_scope_identity(identity, case_scope):
+            continue
+        if (
+            case_scope is None
+            and normalized_institute_id is None
+            and identity[0] in SYNTHETIC_TEST_INSTITUTE_IDS
+        ):
+            continue
+        dept_label = _normalized_department(
+            record.discharge_dept_name or record.admission_dept_name,
+            "未分科室",
+        )
+        if is_unassigned_dept and dept_label != "未分科室":
+            continue
+        records.append(
             {
-                "institute_id": _safe_text(record.institute_id),
-                "patient_id": _safe_text(record.patient_id),
-                "visit_id": _safe_text(record.visit_id),
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
                 "patient_name": _safe_text(record.name),
-                "department": _safe_text(
-                    record.discharge_dept_name or record.admission_dept_name,
-                    "未分科室",
-                )
-                or "未分科室",
+                "department": dept_label,
                 "attending_physician": _safe_text(
                     record.attending_physician_sign,
                     "未登记主治医师",
                 )
                 or "未登记主治医师",
             }
-            for record in indexed_records
         )
-    finally:
-        session.close()
+    return records
+
+
+def _load_independent_workstation_records(
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
+) -> list[dict[str, str]]:
+    from sqlalchemy import func, inspect as sa_inspect, or_, select
+    from sqlalchemy.orm import Session as _Session
+    from ...database import clinical_connection
+    from ...services import clinical_case_catalog as catalog_service
+
+    normalized_department = _normalized_department(department) or None
+    normalized_doctor = _safe_text(doctor) or None
+    normalized_institute_id = _safe_text(institute_id) or None
+
+    if case_scope is not None and hasattr(case_scope, "require_filters"):
+        case_scope.require_filters(normalized_department, normalized_doctor)
+
+    effective_case_scope = case_scope
+    effective_institute_id = normalized_institute_id
+    if _is_institute_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None)) or None
+        if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+            return []
+        effective_institute_id = scope_inst or effective_institute_id
+        effective_case_scope = None
+    elif _is_doctor_case_scope(case_scope):
+        scope_inst = _safe_text(getattr(case_scope, "institute_id", None)) or None
+        if effective_institute_id and scope_inst and effective_institute_id != scope_inst:
+            return []
+        if not getattr(case_scope, "case_refs", ()):
+            return []
+
+    clinical_engine = clinical_connection.get_engine()
+    if clinical_engine is None:
+        return []
+
+    inspector = sa_inspect(clinical_engine)
+    has_catalog = (
+        inspector.has_table("admission_record", schema="cdm")
+        and inspector.has_table("discharge_record", schema="cdm")
+    )
+    if not has_catalog:
+        with _Session(clinical_engine) as cdm_session:
+            return _load_single_db_workstation_records(
+                cdm_session,
+                department=normalized_department,
+                doctor=normalized_doctor,
+                hospital_status=hospital_status,
+                institute_id=normalized_institute_id,
+                case_scope=case_scope,
+            )
+
+    source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+    is_unassigned_dept = normalized_department == "未分科室"
+    predicates = catalog_service._predicates(
+        source,
+        dept=None if is_unassigned_dept else normalized_department,
+        doctor=normalized_doctor,
+        keyword=None,
+        hospital_status=hospital_status,
+        case_scope=effective_case_scope,
+        institute_id=effective_institute_id,
+    )
+    if effective_case_scope is None and effective_institute_id is None:
+        predicates.append(
+            or_(
+                source.c.institute_id.is_(None),
+                source.c.institute_id.notin_(SYNTHETIC_TEST_INSTITUTE_IDS),
+            )
+        )
+    if is_unassigned_dept:
+        predicates.append(
+            or_(
+                source.c.department.is_(None),
+                func.trim(source.c.department) == "",
+                func.trim(source.c.department) == "未分科室",
+            )
+        )
+    with clinical_engine.connect() as connection:
+        rows = (
+            connection.execute(
+                select(
+                    source.c.institute_id,
+                    source.c.patient_id,
+                    source.c.visit_id,
+                    source.c.name,
+                    source.c.department,
+                    source.c.doctor,
+                ).where(*predicates)
+            )
+            .mappings()
+            .all()
+        )
+    return [
+        {
+            "institute_id": _safe_text(row.get("institute_id")),
+            "patient_id": _safe_text(row.get("patient_id")),
+            "visit_id": _safe_text(row.get("visit_id")),
+            "patient_name": _safe_text(row.get("name")),
+            "department": _normalized_department(row.get("department"), "未分科室"),
+            "attending_physician": _safe_text(
+                row.get("doctor"),
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for row in rows
+    ]
+
+
+def _load_current_workstation_records(
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    institute_id: str | None = None,
+    case_scope=None,
+) -> list[dict[str, str]]:
+    """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
+
+    from ...database import clinical_connection
+
+    if clinical_connection.configured():
+        records = _load_independent_workstation_records(
+            department=department,
+            doctor=doctor,
+            hospital_status=hospital_status,
+            institute_id=institute_id,
+            case_scope=case_scope,
+        )
+    else:
+        from ...services.medical_records.query_service import _session_factory
+
+        session = _session_factory()
+        try:
+            records = _load_single_db_workstation_records(
+                session,
+                department=department,
+                doctor=doctor,
+                hospital_status=hospital_status,
+                institute_id=institute_id,
+                case_scope=case_scope,
+            )
+        finally:
+            session.close()
 
     unique_records: dict[tuple[str, str, str], dict[str, str]] = {}
     for record in records:
@@ -181,6 +465,160 @@ def _load_current_workstation_records(
         if identity is not None:
             unique_records.setdefault(identity, record)
     return list(unique_records.values())
+
+
+def clear_luxian_0609_result_analysis_caches() -> None:
+    """清空结果分析水印缓存及只读工作区服务实例缓存（供测试或运维手动重置）。"""
+
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        _RESULT_ANALYSIS_WATERMARK_CACHE.clear()
+        _WORKSPACE_SERVICE_CACHE["cls"] = None
+        _WORKSPACE_SERVICE_CACHE["instance"] = None
+
+
+def _resolve_workspace_service_cls() -> Any:
+    if CustomQCWorkspaceService is not _ORIGINAL_CUSTOM_QC_WORKSPACE_SERVICE:
+        return CustomQCWorkspaceService
+    return _workspace_module.CustomQCWorkspaceService
+
+
+def _get_readonly_workspace_service() -> Any:
+    cls = _resolve_workspace_service_cls()
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        if _WORKSPACE_SERVICE_CACHE["cls"] is cls and _WORKSPACE_SERVICE_CACHE["instance"] is not None:
+            return _WORKSPACE_SERVICE_CACHE["instance"]
+        svc = cls(readonly=True)
+        _WORKSPACE_SERVICE_CACHE["cls"] = cls
+        _WORKSPACE_SERVICE_CACHE["instance"] = svc
+        return svc
+
+
+def _project_lightweight_result(raw_projection: Any) -> dict[str, Any] | None:
+    """仅保留结果分析所需的轻量投影，不缓存原始证据或病历正文。"""
+
+    if not isinstance(raw_projection, Mapping):
+        return None
+    status = _normalized_status(raw_projection.get("status"))
+    execution_status = _normalized_status(raw_projection.get("execution_status"))
+    if status != "ready":
+        projected_non_ready: dict[str, Any] = {"status": status}
+        if execution_status:
+            projected_non_ready["execution_status"] = execution_status
+        return projected_non_ready
+    completed_at = _safe_text(raw_projection.get("completed_at"))
+    raw_items = raw_projection.get("items")
+    if not isinstance(raw_items, list):
+        projected_empty: dict[str, Any] = {
+            "status": status,
+            "completed_at": completed_at,
+            "items": None,
+        }
+        if execution_status:
+            projected_empty["execution_status"] = execution_status
+        return projected_empty
+    projected_items: list[dict[str, str] | None] = []
+    for raw_item in raw_items:
+        if not isinstance(raw_item, Mapping):
+            projected_items.append(None)
+            continue
+        projected_items.append(
+            {
+                "rule_id": _normalized_rule_id(raw_item.get("rule_id") or raw_item.get("rule_code")),
+                "status": _normalized_status(raw_item.get("status")),
+            }
+        )
+    projected_ready: dict[str, Any] = {
+        "status": status,
+        "completed_at": completed_at,
+        "items": projected_items,
+    }
+    if execution_status:
+        projected_ready["execution_status"] = execution_status
+    return projected_ready
+
+
+def _clone_lightweight_result(projected: Mapping[str, Any]) -> dict[str, Any]:
+    cloned: dict[str, Any] = {"status": projected.get("status", "")}
+    if "execution_status" in projected:
+        cloned["execution_status"] = projected["execution_status"]
+    if "completed_at" in projected:
+        cloned["completed_at"] = projected["completed_at"]
+    if "items" in projected:
+        items = projected["items"]
+        cloned["items"] = (
+            [dict(item) if isinstance(item, Mapping) else item for item in items]
+            if isinstance(items, list)
+            else items
+        )
+    return cloned
+
+
+def _read_result_analysis_watermark_key(
+    svc: Any,
+    *,
+    session_factory: Callable[[], Any] | None = None,
+) -> tuple[Any, ...] | None:
+    watermark_reader = getattr(svc, "_read_luxian_summary_watermark", None)
+    if not callable(watermark_reader):
+        return None
+    factory = session_factory or _workspace_module._session
+    try:
+        session = factory()
+    except Exception:
+        return None
+    try:
+        db_scope = _workspace_module._session_cache_scope_key(session)
+        if db_scope is None:
+            return None
+        watermark = watermark_reader(session)
+        if watermark is None:
+            return None
+        return (db_scope, watermark)
+    except Exception:
+        return None
+    finally:
+        close = getattr(session, "close", None)
+        if callable(close):
+            close()
+
+
+def _result_analysis_cache_get(
+    bucket_key: tuple[Any, ...],
+    identities: Sequence[tuple[str, str, str]],
+) -> tuple[dict[tuple[str, str, str], dict[str, Any]], list[tuple[str, str, str]]]:
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        bucket = _RESULT_ANALYSIS_WATERMARK_CACHE.get(bucket_key)
+        if bucket is None:
+            return {}, list(identities)
+        _RESULT_ANALYSIS_WATERMARK_CACHE.move_to_end(bucket_key)
+        hits: dict[tuple[str, str, str], dict[str, Any]] = {}
+        missing: list[tuple[str, str, str]] = []
+        for identity in identities:
+            if identity in bucket:
+                cached = bucket[identity]
+                if cached is not None:
+                    hits[identity] = _clone_lightweight_result(cached)
+            else:
+                missing.append(identity)
+        return hits, missing
+
+
+def _result_analysis_cache_merge(
+    bucket_key: tuple[Any, ...],
+    projections: Mapping[tuple[str, str, str], dict[str, Any] | None],
+) -> None:
+    if not projections:
+        return
+    with _RESULT_ANALYSIS_CACHE_LOCK:
+        bucket = _RESULT_ANALYSIS_WATERMARK_CACHE.get(bucket_key)
+        if bucket is None:
+            bucket = {}
+            _RESULT_ANALYSIS_WATERMARK_CACHE[bucket_key] = bucket
+        for identity, value in projections.items():
+            bucket[identity] = _clone_lightweight_result(value) if value is not None else None
+        _RESULT_ANALYSIS_WATERMARK_CACHE.move_to_end(bucket_key)
+        while len(_RESULT_ANALYSIS_WATERMARK_CACHE) > _RESULT_ANALYSIS_WATERMARK_CACHE_MAX:
+            _RESULT_ANALYSIS_WATERMARK_CACHE.popitem(last=False)
 
 
 class Luxian0609ResultAnalysisService:
@@ -193,19 +631,87 @@ class Luxian0609ResultAnalysisService:
         result_loader: Callable[[Sequence[Mapping[str, Any]]], Mapping[tuple[str, str, str], Mapping[str, Any]]]
         | None = None,
         rule_name_loader: Callable[[], Mapping[str, str]] = _default_rule_name_loader,
+        session_factory: Callable[[], Any] | None = None,
     ) -> None:
         self._record_scope_loader = record_scope_loader
         self._result_loader = result_loader or self._load_latest_results
         self._rule_name_loader = rule_name_loader
+        self._session_factory = session_factory
 
-    @staticmethod
     def _load_latest_results(
+        self,
         record_refs: Sequence[Mapping[str, Any]],
     ) -> Mapping[tuple[str, str, str], Mapping[str, Any]]:
-        return CustomQCWorkspaceService().build_luxian_0609_completed_record_result_summaries(
-            record_refs=record_refs,
-            include_items=True,
+        normalized_refs: list[dict[str, str]] = []
+        identities: list[tuple[str, str, str]] = []
+        seen: set[tuple[str, str, str]] = set()
+        for ref in record_refs:
+            if not isinstance(ref, Mapping):
+                continue
+            identity = _identity_from_record(ref)
+            if identity is None or identity in seen:
+                continue
+            seen.add(identity)
+            identities.append(identity)
+            normalized_refs.append(
+                {
+                    "institute_id": identity[0],
+                    "patient_id": identity[1],
+                    "visit_id": identity[2],
+                }
+            )
+        if not identities:
+            return {}
+
+        svc = _get_readonly_workspace_service()
+        bucket_key = _read_result_analysis_watermark_key(
+            svc,
+            session_factory=self._session_factory,
         )
+        if bucket_key is None:
+            call_kwargs: dict[str, Any] = {
+                "record_refs": normalized_refs,
+                "include_items": True,
+                "include_latest_partial": True,
+            }
+            if self._session_factory is not None:
+                call_kwargs["session_factory"] = self._session_factory
+            return svc.build_luxian_0609_completed_record_result_summaries(**call_kwargs)
+
+        cached_hits, missing_identities = _result_analysis_cache_get(bucket_key, identities)
+        if not missing_identities:
+            return cached_hits
+
+        missing_refs = [
+            {
+                "institute_id": identity[0],
+                "patient_id": identity[1],
+                "visit_id": identity[2],
+            }
+            for identity in missing_identities
+        ]
+        call_kwargs = {
+            "record_refs": missing_refs,
+            "include_items": True,
+            "include_latest_partial": True,
+        }
+        if self._session_factory is not None:
+            call_kwargs["session_factory"] = self._session_factory
+        raw_loaded = svc.build_luxian_0609_completed_record_result_summaries(**call_kwargs)
+
+        projected_loaded: dict[tuple[str, str, str], dict[str, Any] | None] = {}
+        result: dict[tuple[str, str, str], dict[str, Any]] = dict(cached_hits)
+        for identity in missing_identities:
+            if identity in raw_loaded:
+                projected = _project_lightweight_result(raw_loaded[identity])
+                projected_loaded[identity] = projected
+                if projected is not None:
+                    result[identity] = _clone_lightweight_result(projected)
+            else:
+                projected_loaded[identity] = None
+
+        _result_analysis_cache_merge(bucket_key, projected_loaded)
+        return result
 
     def get_analysis(
         self,
@@ -219,6 +725,8 @@ class Luxian0609ResultAnalysisService:
         completed_to: datetime | None = None,
         page: int = 1,
         page_size: int = 20,
+        institute_id: str | None = None,
+        case_scope=None,
     ) -> dict[str, Any]:
         hospital_status = _CARE_PHASE_TO_HOSPITAL_STATUS.get(_safe_text(care_phase).lower())
         if hospital_status is None:
@@ -227,24 +735,40 @@ class Luxian0609ResultAnalysisService:
         normalized_status = _normalized_status(result_status)
         if normalized_status and normalized_status not in _RESULT_STATUSES:
             raise ValueError("result_status 无效")
-        if completed_from and completed_to and completed_from > completed_to:
+        if completed_from and completed_to and _as_utc(completed_from) > _as_utc(completed_to):
             raise ValueError("completed_from 不能晚于 completed_to")
         if page < 1:
             raise ValueError("page 必须大于或等于 1")
         if not 1 <= page_size <= 100:
             raise ValueError("page_size 必须在 1 到 100 之间")
 
-        normalized_department = _safe_text(department) or None
+        normalized_department = _normalized_department(department) or None
         normalized_doctor = _safe_text(doctor) or None
-        scope_records = self._record_scope_loader(
-            department=normalized_department,
-            doctor=normalized_doctor,
-            hospital_status=hospital_status,
-        )
+        normalized_institute_id = _safe_text(institute_id) or None
+        loader_kwargs: dict[str, Any] = {
+            "department": normalized_department,
+            "doctor": normalized_doctor,
+            "hospital_status": hospital_status,
+        }
+        if normalized_institute_id is not None:
+            loader_kwargs["institute_id"] = normalized_institute_id
+        if case_scope is not None:
+            loader_kwargs["case_scope"] = case_scope
+        scope_records = self._record_scope_loader(**loader_kwargs)
         records_by_identity = {
-            identity: record
+            identity: {
+                **record,
+                "department": _normalized_department(record.get("department"), "未分科室"),
+            }
             for record in scope_records
             if (identity := _identity_from_record(record)) is not None
+            and (normalized_institute_id is None or identity[0] == normalized_institute_id)
+            and (case_scope is None or _matches_case_scope_identity(identity, case_scope))
+            and (
+                normalized_institute_id is not None
+                or case_scope is not None
+                or identity[0] not in SYNTHETIC_TEST_INSTITUTE_IDS
+            )
         }
         projections = self._result_loader(
             [
@@ -260,11 +784,20 @@ class Luxian0609ResultAnalysisService:
         base_items: list[dict[str, Any]] = []
         unavailable_result_total = 0
         ready_record_identities: set[tuple[str, str, str]] = set()
+        partial_failed_record_identities: set[tuple[str, str, str]] = set()
         for identity, record in records_by_identity.items():
             projection = projections.get(identity)
-            if not isinstance(projection, Mapping) or _normalized_status(projection.get("status")) != "ready":
-                if projection is not None:
-                    unavailable_result_total += 1
+            if projection is None:
+                continue
+            if not isinstance(projection, Mapping):
+                unavailable_result_total += 1
+                continue
+            projection_status = _normalized_status(projection.get("status"))
+            execution_status = _normalized_status(projection.get("execution_status"))
+            if projection_status == "not_run":
+                continue
+            if projection_status != "ready" or execution_status == "failed":
+                unavailable_result_total += 1
                 continue
             completed_at_text = _safe_text(projection.get("completed_at"))
             completed_at = _parse_completed_at(completed_at_text)
@@ -301,7 +834,10 @@ class Luxian0609ResultAnalysisService:
             if not normalized_items:
                 unavailable_result_total += 1
                 continue
-            ready_record_identities.add(identity)
+            if execution_status == "partial_failed":
+                partial_failed_record_identities.add(identity)
+            else:
+                ready_record_identities.add(identity)
             for item in normalized_items:
                 base_items.append(
                     {
@@ -354,6 +890,11 @@ class Luxian0609ResultAnalysisService:
                 "scoped_record_total": len(records_by_identity),
                 "ready_record_total": len(ready_record_identities),
                 "unavailable_result_total": unavailable_result_total,
+                **(
+                    {"partial_failed_record_total": len(partial_failed_record_identities)}
+                    if partial_failed_record_identities
+                    else {}
+                ),
             },
             "status_distribution": [
                 {"status": status, "count": status_counts[status]}
@@ -389,7 +930,7 @@ class Luxian0609ResultAnalysisService:
             status = item["status"]
             if status in _ISSUE_STATUSES:
                 bucket[f"{status}_count"] += 1
-            bucket["department_items"][_safe_text(item["record"].get("department"), "未分科室")].append(item)
+            bucket["department_items"][_normalized_department(item["record"].get("department"), "未分科室")].append(item)
 
         result: list[dict[str, Any]] = []
         for bucket in per_rule.values():
@@ -469,18 +1010,23 @@ class Luxian0609ResultAnalysisService:
         for item in items:
             identity = item["identity"]
             current = records_by_identity.get(identity)
-            if current is None or _safe_text(item["completed_at"]) > _safe_text(current["completed_at"]):
+            if current is None:
+                records_by_identity[identity] = item
+                continue
+            item_ts = _completed_at_sort_timestamp(item["completed_at"])
+            current_ts = _completed_at_sort_timestamp(current["completed_at"])
+            if item_ts > current_ts or (
+                item_ts == current_ts
+                and _status_severity_rank(item["status"]) < _status_severity_rank(current["status"])
+            ):
                 records_by_identity[identity] = item
         ordered_items = sorted(
             records_by_identity.values(),
             key=lambda item: (
-                0 if item["status"] == "non_compliant" else 1,
-                0 if item["status"] == "data_gap" else 1,
-                0 if item["status"] == "uncertain" else 1,
-                _safe_text(item["completed_at"]),
+                _status_severity_rank(item["status"]),
+                -_completed_at_sort_timestamp(item["completed_at"]),
                 item["identity"],
             ),
-            reverse=False,
         )
         start = (page - 1) * page_size
         page_items = []
@@ -494,7 +1040,7 @@ class Luxian0609ResultAnalysisService:
                     "patient_id": identity[1],
                     "visit_id": identity[2],
                     "patient_name": _safe_text(record.get("patient_name")),
-                    "department": _safe_text(record.get("department"), "未分科室") or "未分科室",
+                    "department": _normalized_department(record.get("department"), "未分科室"),
                     "attending_physician": _safe_text(
                         record.get("attending_physician"),
                         "未登记主治医师",

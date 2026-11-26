@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncGenerator, Tuple, Coroutine
+import inspect
 import json
 import re
 import logging
@@ -19,6 +20,7 @@ import asyncio
 from pydantic import ValidationError
 
 from .clinical_read import clinical_table_sql
+from .luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from ..schemas.frontpage import FrontPageDraft
 from ..core.clinical_defaults import get_clinical_defaults
 from ..core.settings import get_settings
@@ -26,6 +28,146 @@ from ..core.http import safe_post_json
 from .llm_observability import observe_llm_http_attempt
 
 logger = logging.getLogger(__name__)
+
+
+class FrontPageExtractionUnavailableError(RuntimeError):
+    """正式病案首页抽取不可用（缺少有效病历文本、LLM 未配置或调用失败）时抛出，严禁静默回退演示患者数据。"""
+
+
+class FrontPageCaseIdentityConflictError(ValueError):
+    """同一 visit_id 在多院区或多患者间重号且未提供完整三坐标时 fail-closed 抛出。"""
+
+
+def redact_frontpage_text_for_llm(
+    text: str,
+    *,
+    identity_values: Optional[Tuple[str, ...]] = None,
+) -> str:
+    """发往 LLM 前对病历/提示词执行患者隐私脱敏，保留临床医疗事实。"""
+    raw = str(text or "")
+    if not raw:
+        return ""
+    return redact_luxian_0609_patient_privacy(raw, identity_values=identity_values)
+
+
+def _is_missing_table_or_column_error(exc: BaseException) -> bool:
+    msg = str(exc).lower()
+    return any(
+        marker in msg
+        for marker in (
+            "no such table",
+            "no such column",
+            "does not exist",
+            "undefinedtable",
+            "undefinedcolumn",
+            "42p01",
+            "42703",
+        )
+    )
+
+
+def _resolve_case_tri_key(
+    session: Any,
+    *,
+    visit_id: str,
+    patient_id: Optional[str] = None,
+    institute_id: Optional[str] = None,
+) -> Optional[Tuple[str, str, str]]:
+    """解析病例三坐标 (institute_id, patient_id, visit_id)。
+
+    - 显式传入完整三坐标时直接采用；
+    - 缺失可选坐标时按已有条件探测临床表；若发现多院区或多患者重号立即 fail-closed 抛冲突异常；
+    - 仅命中唯一三坐标时锁定返回，后续所有源表均按完整三坐标隔离读取。
+    """
+    from sqlalchemy import text as sql_text
+
+    vid = str(visit_id or "").strip()
+    pid = str(patient_id or "").strip()
+    iid = str(institute_id or "").strip()
+    if not vid:
+        return None
+    if iid and pid:
+        return (iid, pid, vid)
+
+    clauses = ["visit_id = :vid"]
+    params: Dict[str, Any] = {"vid": vid}
+    if iid:
+        clauses.append("institute_id = :iid")
+        params["iid"] = iid
+    if pid:
+        clauses.append("patient_id = :pid")
+        params["pid"] = pid
+    where_sql = " AND ".join(clauses)
+
+    resolved: set[Tuple[str, str, str]] = set()
+    for table_name in (
+        "inpat_registration",
+        "mr",
+        "admission_record",
+        "discharge_record",
+        "diagnosis",
+    ):
+        try:
+            rows = (
+                session.execute(
+                    sql_text(
+                        f"SELECT DISTINCT institute_id, patient_id, visit_id "
+                        f"FROM {clinical_table_sql(table_name)} "
+                        f"WHERE {where_sql} LIMIT 2"
+                    ),
+                    params,
+                )
+                .mappings()
+                .all()
+            )
+        except Exception as exc:
+            if _is_missing_table_or_column_error(exc):
+                continue
+            raise
+        for row in rows:
+            row_iid = str(row.get("institute_id") or "").strip()
+            row_pid = str(row.get("patient_id") or "").strip()
+            row_vid = str(row.get("visit_id") or vid).strip()
+            if row_iid or row_pid:
+                resolved.add((row_iid, row_pid, row_vid))
+                if len(resolved) > 1:
+                    raise FrontPageCaseIdentityConflictError(
+                        f"visit_id={vid} 存在多院区或多患者重号冲突，请显式传入 institute_id 与 patient_id"
+                    )
+
+    if len(resolved) > 1:
+        raise FrontPageCaseIdentityConflictError(
+            f"visit_id={vid} 存在多院区或多患者重号冲突，请显式传入 institute_id 与 patient_id"
+        )
+    if len(resolved) == 1:
+        return next(iter(resolved))
+    if iid or pid:
+        return (iid, pid, vid)
+    return None
+
+
+def _build_tri_key_where(
+    *,
+    visit_id: str,
+    patient_id: Optional[str] = None,
+    institute_id: Optional[str] = None,
+    include_visit_id: bool = True,
+) -> Tuple[str, Dict[str, Any]]:
+    clauses: List[str] = []
+    params: Dict[str, Any] = {}
+    iid = str(institute_id or "").strip()
+    pid = str(patient_id or "").strip()
+    vid = str(visit_id or "").strip()
+    if iid:
+        clauses.append("institute_id = :iid")
+        params["iid"] = iid
+    if pid:
+        clauses.append("patient_id = :pid")
+        params["pid"] = pid
+    if include_visit_id:
+        clauses.append("visit_id = :vid")
+        params["vid"] = vid
+    return " AND ".join(clauses), params
 
 
 def get_tender_extraction_contract():
@@ -84,6 +226,8 @@ class FrontPageLLMClient:
             logger.warning("LLM 未配置，返回空响应")
             return ""
 
+        safe_system_prompt = redact_frontpage_text_for_llm(system_prompt)
+        safe_user_prompt = redact_frontpage_text_for_llm(user_prompt)
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -91,8 +235,8 @@ class FrontPageLLMClient:
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
+                {"role": "system", "content": safe_system_prompt},
+                {"role": "user", "content": safe_user_prompt},
             ],
             "temperature": self.temperature,
             "max_tokens": max_tokens or self.max_tokens,
@@ -754,63 +898,95 @@ class FrontPageExtractionService:
 
         self._use_llm = bool(self.llm_client.api_endpoint and self.llm_client.api_key)
 
-    async def generate_draft_from_visit(self, visit_id: str) -> FrontPageDraft:
+    async def generate_draft_from_visit(
+        self,
+        visit_id: str,
+        *,
+        allow_demo_fallback: bool = False,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
+    ) -> FrontPageDraft:
         """
         根据住院 ID 生成首页草稿
-        
-        - 如果 LLM 已配置，调用 LLM 抽取
-        - 否则回退到 demo 数据
+
+        - 仅在显式允许或 visit_id == 'demo' 时才回退演示数据
+        - 正式病例抽取失败或 LLM 未配置时显式报错，避免用演示患者覆盖真实数据
         """
         await self._refresh_llm_runtime_from_default()
-        # 获取病历文本（当前为 demo，后续接入真实 EMR）
-        medical_text = await self._get_medical_text(visit_id)
-        
-        if self._use_llm and medical_text:
+        effective_allow_demo = allow_demo_fallback or str(visit_id or "").strip().lower() == "demo"
+        get_text_params = inspect.signature(self._get_medical_text).parameters
+        get_text_kwargs: Dict[str, Any] = {}
+        if "allow_demo_fallback" in get_text_params:
+            get_text_kwargs["allow_demo_fallback"] = effective_allow_demo
+        if "patient_id" in get_text_params and patient_id is not None:
+            get_text_kwargs["patient_id"] = patient_id
+        if "institute_id" in get_text_params and institute_id is not None:
+            get_text_kwargs["institute_id"] = institute_id
+        medical_text = await self._get_medical_text(visit_id, **get_text_kwargs)
+
+        if self._use_llm and medical_text and medical_text.strip():
             try:
                 return await self._extract_with_llm(medical_text)
             except Exception as e:
-                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
-                return await self._load_demo_frontpage()
-        else:
+                if effective_allow_demo:
+                    logger.error(f"LLM 抽取失败，演示模式回退 demo 数据: {e}")
+                    return await self._load_demo_frontpage()
+                logger.error(f"LLM 抽取失败，拒绝回退演示数据: {e}")
+                raise FrontPageExtractionUnavailableError(f"首页 LLM 抽取失败: {e}") from e
+        if effective_allow_demo:
             return await self._load_demo_frontpage()
+        if not medical_text or not medical_text.strip():
+            raise FrontPageExtractionUnavailableError("未获取到有效病历文本，无法生成首页草稿")
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def generate_draft_from_documents(
-        self, documents: List[Dict[str, Any]]
+        self, documents: List[Dict[str, Any]], *, allow_demo_fallback: bool = False
     ) -> FrontPageDraft:
-        """根据传入的文书列表生成首页草稿"""
+        """根据传入的文书列表生成首页草稿（默认严禁回退演示患者数据）"""
         await self._refresh_llm_runtime_from_default()
         # 合并文书内容
         medical_text = "\n\n".join(
             f"【{doc.get('type', '未知文书')}】\n{doc.get('content', '')}"
             for doc in documents
+            if str(doc.get("content", "") or "").strip()
         )
-        
-        if self._use_llm and medical_text:
+
+        if not medical_text.strip():
+            if allow_demo_fallback:
+                return await self._load_demo_frontpage()
+            raise FrontPageExtractionUnavailableError("传入文书内容为空，无法生成首页草稿")
+
+        if self._use_llm:
             try:
                 return await self._extract_with_llm(medical_text)
             except Exception as e:
-                logger.error(f"LLM 抽取失败，回退到 demo 数据: {e}")
-                return await self._load_demo_frontpage()
-        else:
+                if allow_demo_fallback:
+                    logger.error(f"LLM 抽取失败，演示模式回退到 demo 数据: {e}")
+                    return await self._load_demo_frontpage()
+                logger.error(f"LLM 抽取失败，拒绝回退到 demo 数据: {e}")
+                raise FrontPageExtractionUnavailableError(f"首页 LLM 抽取失败: {e}") from e
+
+        if allow_demo_fallback:
             return await self._load_demo_frontpage()
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def extract_from_text(
-        self, medical_text: str, context_strategy: Optional[str] = None
+        self,
+        medical_text: str,
+        context_strategy: Optional[str] = None,
+        *,
+        allow_demo_fallback: bool = False,
     ) -> FrontPageDraft:
         """
-        直接从病历文本提取病案首页信息
-        
-        Args:
-            medical_text: 病历全文
-            
-        Returns:
-            FrontPageDraft: 提取的首页草稿
+        直接从病历文本提取病案首页信息（默认严禁回退演示患者数据）
         """
         await self._refresh_llm_runtime_from_default()
         if not medical_text or not medical_text.strip():
-            logger.warning("传入的病历文本为空，回退到 demo 数据")
-            return await self._load_demo_frontpage()
-        
+            if allow_demo_fallback:
+                logger.warning("传入的病历文本为空，演示模式回退到 demo 数据")
+                return await self._load_demo_frontpage()
+            raise FrontPageExtractionUnavailableError("传入的病历文本为空，无法生成首页草稿")
+
         if self._use_llm:
             try:
                 logger.info(f"开始从文本提取首页信息，文本长度: {len(medical_text)}")
@@ -820,9 +996,11 @@ class FrontPageExtractionService:
             except Exception as e:
                 logger.error(f"LLM 抽取失败: {e}")
                 raise
-        else:
-            logger.warning("LLM 未配置，回退到 demo 数据")
+
+        if allow_demo_fallback:
+            logger.warning("LLM 未配置，演示模式回退到 demo 数据")
             return await self._load_demo_frontpage()
+        raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
     async def extract_from_text_stream(
         self,
@@ -830,6 +1008,10 @@ class FrontPageExtractionService:
         visit_id: str = None,
         force_llm: bool = False,
         context_strategy: Optional[str] = None,
+        *,
+        allow_demo_fallback: bool = False,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
     ) -> AsyncGenerator[Tuple[str, Dict[str, Any]], None]:
         """
         逐步抽取首页信息，按模块产出结果（用于前端分批展示）。
@@ -895,7 +1077,13 @@ class FrontPageExtractionService:
         cdm_prefilled = False
         if visit_id:
             try:
-                fp_data = await self._prefill_from_cdm(visit_id)
+                prefill_params = inspect.signature(self._prefill_from_cdm).parameters
+                prefill_kwargs: Dict[str, Any] = {}
+                if "patient_id" in prefill_params and patient_id is not None:
+                    prefill_kwargs["patient_id"] = patient_id
+                if "institute_id" in prefill_params and institute_id is not None:
+                    prefill_kwargs["institute_id"] = institute_id
+                fp_data = await self._prefill_from_cdm(visit_id, **prefill_kwargs)
                 cdm_prefilled = True
                 diagnosis_locked = self._is_diagnosis_locked(fp_data.get("diagnoses"))
                 if diagnosis_locked and not fp_data["diagnoses"].get("_diagnosis_code_resolution_done"):
@@ -931,6 +1119,8 @@ class FrontPageExtractionService:
                 if diagnosis_locked:
                     yield ("update", {"module": "diagnoses", "frontpage": fp_data})
 
+            except FrontPageCaseIdentityConflictError:
+                raise
             except Exception as exc:
                 logger.warning(f"stream: SQL 层异常，回退到纯 LLM 模式: {exc}")
                 fp_data = default_frontpage()
@@ -960,7 +1150,13 @@ class FrontPageExtractionService:
         # 获取 LLM 需要看的文本
         if visit_id and cdm_prefilled:
             # 使用新的精简版上下文（不含 mr 表）
-            llm_text = await self._get_llm_context_text(visit_id)
+            ctx_params = inspect.signature(self._get_llm_context_text).parameters
+            ctx_kwargs: Dict[str, Any] = {}
+            if "patient_id" in ctx_params and patient_id is not None:
+                ctx_kwargs["patient_id"] = patient_id
+            if "institute_id" in ctx_params and institute_id is not None:
+                ctx_kwargs["institute_id"] = institute_id
+            llm_text = await self._get_llm_context_text(visit_id, **ctx_kwargs)
             if not llm_text.strip():
                 llm_text = medical_text or ""
         else:
@@ -973,9 +1169,11 @@ class FrontPageExtractionService:
                 yield ("done", {"frontpage": fp_data})
                 return
             if not cdm_prefilled:
-                demo = await self._load_demo_frontpage()
-                yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
-                return
+                if allow_demo_fallback:
+                    demo = await self._load_demo_frontpage()
+                    yield ("done", {"frontpage": demo.model_dump(), "fallback": "empty_text"})
+                    return
+                raise FrontPageExtractionUnavailableError("未获取到有效病历文本，无法流式生成首页草稿")
             # force_llm=True 但无文本 → 记录日志，继续尝试
             logger.warning("stream: force_llm=True 但 LLM 文本为空，无法调用 LLM")
 
@@ -1005,10 +1203,12 @@ class FrontPageExtractionService:
                     logger.warning("stream: force_llm=True 但 LLM 未配置，仅返回 SQL 数据")
                 yield ("done", {"frontpage": fp_data})
                 return
-            demo = await self._load_demo_frontpage()
-            yield ("update", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
-            yield ("done", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
-            return
+            if allow_demo_fallback:
+                demo = await self._load_demo_frontpage()
+                yield ("update", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+                yield ("done", {"frontpage": demo.model_dump(), "fallback": "llm_not_configured"})
+                return
+            raise FrontPageExtractionUnavailableError("首页抽取 LLM 未配置，拒绝回退演示数据")
 
         validation_info: Dict[str, Any] = {}
 
@@ -1192,7 +1392,7 @@ class FrontPageExtractionService:
         if diagnosis_locked:
             logger.info("stream: diagnosis 表诊断已锁定，跳过外部全文编码任务")
         else:
-            add_task("coding_result", ext_coding_service.extract_coding(llm_text, patient_context))
+            add_task("coding_result", ext_coding_service.extract_coding(redact_frontpage_text_for_llm(llm_text), patient_context))
 
         for name, exc in prepared_failures:
             logger.warning("stream: module %s failed before execution: %s", name, exc)
@@ -1449,7 +1649,13 @@ class FrontPageExtractionService:
     # 第一层 + 第二层：SQL 直读 + 码表映射
     # ========================================================================
 
-    async def _prefill_from_cdm(self, visit_id: str) -> Dict[str, Any]:
+    async def _prefill_from_cdm(
+        self,
+        visit_id: str,
+        *,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
         三层架构 - 第一层 + 第二层：
         从 CDM 源头表直接读取结构化数据，并通过码表映射补充文本。
@@ -1469,7 +1675,7 @@ class FrontPageExtractionService:
         诊断信息 → 直接读取 diagnosis 表的诊断名称，后续仅补 ICD 编码。
         手术/其他医疗信息 → 由第三层 LLM 从病历文书中提取。
         """
-        logger.info(f"_prefill_from_cdm: visit_id={visit_id}")
+        logger.info("_prefill_from_cdm: visit_id=%s", visit_id)
 
         hospital_name = get_clinical_defaults().hospital_name
         fp_data: Dict[str, Any] = {
@@ -1510,17 +1716,41 @@ class FrontPageExtractionService:
             from sqlalchemy import text as sql_text
 
             with Session(engine) as session:
+                resolved = _resolve_case_tri_key(
+                    session,
+                    visit_id=visit_id,
+                    patient_id=patient_id,
+                    institute_id=institute_id,
+                )
+                resolved_iid = resolved[0] if resolved else (str(institute_id or "").strip() or None)
+                resolved_pid = resolved[1] if resolved else (str(patient_id or "").strip() or None)
+                resolved_vid = resolved[2] if resolved else str(visit_id or "").strip()
+                where_sql, where_params = _build_tri_key_where(
+                    visit_id=resolved_vid,
+                    patient_id=resolved_pid,
+                    institute_id=resolved_iid,
+                )
 
                 # ---- 1. inpat_registration 表 → 住院登记信息 ----
-                # 先从登记表获取 patient_id 以便查询 patient_information
-                patient_id = None
+                # 先从登记表获取 patient_id / institute_id 以便精确三坐标隔离
+                reg_patient_id = resolved_pid
                 try:
                     reg = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('inpat_registration')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('inpat_registration')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if reg:
-                        patient_id = reg.get("patient_id")
+                        reg_patient_id = str(reg.get("patient_id") or "").strip() or resolved_pid
+                        reg_institute_id = str(reg.get("institute_id") or "").strip() or resolved_iid
+                        if reg_institute_id:
+                            resolved_iid = reg_institute_id
+                        if reg_patient_id:
+                            resolved_pid = reg_patient_id
+                        where_sql, where_params = _build_tri_key_where(
+                            visit_id=resolved_vid,
+                            patient_id=resolved_pid,
+                            institute_id=resolved_iid,
+                        )
                         fp_data["hospitalization"].update({
                             "medical_record_no": reg.get("mr_no") or "",
                             "admission_datetime": str(reg.get("admission_datetime") or ""),
@@ -1552,16 +1782,22 @@ class FrontPageExtractionService:
                         sex_text = reg.get("sex") or ""
                         fp_data["basic_info"]["gender_text"] = sex_text
                         fp_data["basic_info"]["gender"] = _text_to_code("sex", sex_text)
-                        logger.info(f"  inpat_registration 读取成功: patient_id={patient_id}")
+                        logger.info("  inpat_registration 读取成功")
                 except Exception as e:
                     logger.warning(f"  inpat_registration 查询失败: {e}")
 
                 # ---- 2. patient_information 表 → 人口学信息 ----
-                if patient_id:
+                if reg_patient_id:
                     try:
+                        pi_where, pi_params = _build_tri_key_where(
+                            visit_id=resolved_vid,
+                            patient_id=reg_patient_id,
+                            institute_id=resolved_iid,
+                            include_visit_id=False,
+                        )
                         pi = session.execute(sql_text(
-                            f"SELECT * FROM {clinical_table_sql('patient_information')} WHERE patient_id = :pid LIMIT 1"
-                        ), {"pid": patient_id}).mappings().first()
+                            f"SELECT * FROM {clinical_table_sql('patient_information')} WHERE {pi_where} LIMIT 1"
+                        ), pi_params).mappings().first()
 
                         if pi:
                             fp_data["basic_info"].update({
@@ -1598,15 +1834,15 @@ class FrontPageExtractionService:
                             else:
                                 fp_data["basic_info"]["marital_status_text"] = ms
                                 fp_data["basic_info"]["marital_status"] = _text_to_code("marital_status", ms)
-                            logger.info(f"  patient_information 读取成功: name={pi.get('name')}")
+                            logger.info("  patient_information 读取成功")
                     except Exception as e:
                         logger.warning(f"  patient_information 查询失败: {e}")
 
                 # ---- 3. admission_record 表 → 入院记录结构化列 ----
                 try:
                     adm = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if adm:
                         # 补充住院信息
@@ -1648,8 +1884,8 @@ class FrontPageExtractionService:
                 # ---- 4. discharge_record 表 → 出院记录结构化列 ----
                 try:
                     dis = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if dis:
                         fp_data["hospitalization"]["discharge_dept"] = (
@@ -1672,8 +1908,8 @@ class FrontPageExtractionService:
                 # ---- 5. diagnosis 表 → 诊断名称清单（名称锁定，编码后续单独生成） ----
                 try:
                     diag_rows = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE visit_id = :vid"
-                    ), {"vid": visit_id}).mappings().all()
+                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE {where_sql}"
+                    ), where_params).mappings().all()
 
                     if diag_rows:
                         diagnosis_payload = self._compose_frontpage_diagnoses_from_rows(
@@ -1695,10 +1931,10 @@ class FrontPageExtractionService:
                     try:
                         record_diag_rows = session.execute(sql_text(
                             f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
-                            "WHERE visit_id = :vid "
+                            f"WHERE {where_sql} "
                             "AND diagnosis_type LIKE '%出院诊断%' "
                             "AND COALESCE(is_deleted, '0') <> '1'"
-                        ), {"vid": visit_id}).mappings().all()
+                        ), where_params).mappings().all()
 
                         if record_diag_rows:
                             diagnosis_payload = self._compose_frontpage_diagnoses_from_rows(
@@ -1719,9 +1955,9 @@ class FrontPageExtractionService:
                 try:
                     bill_rows = session.execute(sql_text(
                         "SELECT item_type, SUM(CAST(cost AS NUMERIC)) as total "
-                        f"FROM {clinical_table_sql('inpat_bill_item')} WHERE visit_id = :vid "
+                        f"FROM {clinical_table_sql('inpat_bill_item')} WHERE {where_sql} "
                         "GROUP BY item_type"
-                    ), {"vid": visit_id}).mappings().all()
+                    ), where_params).mappings().all()
 
                     if bill_rows:
                         # item_type 中文名 → 首页费用分类索引的映射
@@ -1795,8 +2031,8 @@ class FrontPageExtractionService:
                 # 注：mr 是首页目标表，此处仅读取源头文书中无法获取的管理类字段
                 try:
                     mr_row = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if mr_row:
                         # 离院方式
@@ -1829,6 +2065,8 @@ class FrontPageExtractionService:
                 except Exception as e:
                     logger.warning(f"  mr 表查询失败: {e}")
 
+        except FrontPageCaseIdentityConflictError:
+            raise
         except Exception as e:
             logger.error(f"_prefill_from_cdm 整体异常: {e}")
 
@@ -1976,13 +2214,19 @@ class FrontPageExtractionService:
             "_source_diagnosis_codes_ignored": True,
         }
 
-    async def _get_llm_context_text(self, visit_id: str) -> str:
+    async def _get_llm_context_text(
+        self,
+        visit_id: str,
+        *,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
+    ) -> str:
         """
         三层架构 - 第三层辅助：
         只拼接 LLM 需要看的源头文书全文（不读 mr 表！）。
         用于精准补缺，而不是全量提取。
         """
-        logger.info(f"_get_llm_context_text: visit_id={visit_id}")
+        logger.info("_get_llm_context_text: visit_id=%s", visit_id)
         sections = []
         try:
             from ..database.connection import engine
@@ -1990,11 +2234,26 @@ class FrontPageExtractionService:
             from sqlalchemy import text as sql_text
 
             with Session(engine) as session:
+                resolved = _resolve_case_tri_key(
+                    session,
+                    visit_id=visit_id,
+                    patient_id=patient_id,
+                    institute_id=institute_id,
+                )
+                resolved_iid = resolved[0] if resolved else (str(institute_id or "").strip() or None)
+                resolved_pid = resolved[1] if resolved else (str(patient_id or "").strip() or None)
+                resolved_vid = resolved[2] if resolved else str(visit_id or "").strip()
+                where_sql, where_params = _build_tri_key_where(
+                    visit_id=resolved_vid,
+                    patient_id=resolved_pid,
+                    institute_id=resolved_iid,
+                )
+
                 # 入院记录全文
                 try:
                     adm = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
                     if adm:
                         content = adm.get("record_content") or ""
                         if not str(content).strip():
@@ -2029,8 +2288,8 @@ class FrontPageExtractionService:
                 # 出院记录全文
                 try:
                     dis = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
                     if dis:
                         content = dis.get("record_content") or ""
                         if not str(content).strip():
@@ -2063,8 +2322,8 @@ class FrontPageExtractionService:
                 try:
                     rows = session.execute(sql_text(
                         f"SELECT * FROM {clinical_table_sql('discharge_record_diagnosis')} "
-                        "WHERE visit_id = :vid AND COALESCE(is_deleted, '0') <> '1'"
-                    ), {"vid": visit_id}).mappings().all()
+                        f"WHERE {where_sql} AND COALESCE(is_deleted, '0') <> '1'"
+                    ), where_params).mappings().all()
                     if rows:
                         content = self._compose_record_diagnosis_document_text(
                             [dict(row) for row in rows],
@@ -2093,8 +2352,8 @@ class FrontPageExtractionService:
                 for table_name, label in extra_tables:
                     try:
                         rows = session.execute(sql_text(
-                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE visit_id = :vid"
-                        ), {"vid": visit_id}).mappings().all()
+                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE {where_sql}"
+                        ), where_params).mappings().all()
                         if rows:
                             for idx, row in enumerate(rows, 1):
                                 content = row.get("record_content") or ""
@@ -2103,6 +2362,8 @@ class FrontPageExtractionService:
                     except Exception:
                         pass  # 表不存在时静默跳过
 
+        except FrontPageCaseIdentityConflictError:
+            raise
         except Exception as e:
             logger.error(f"_get_llm_context_text 异常: {e}")
 
@@ -2110,13 +2371,20 @@ class FrontPageExtractionService:
         logger.info(f"_get_llm_context_text 完成: 长度={len(full_text)}")
         return full_text
 
-    async def _get_medical_text(self, visit_id: str, *, allow_demo_fallback: bool = True) -> str:
+    async def _get_medical_text(
+        self,
+        visit_id: str,
+        *,
+        allow_demo_fallback: bool = True,
+        patient_id: Optional[str] = None,
+        institute_id: Optional[str] = None,
+    ) -> str:
         """
-        根据 visit_id 从本地 PG 获取病历文书，拼接为全文供大模型提取。
+        根据三坐标 (institute_id, patient_id, visit_id) 从本地库获取病历文书，拼接为全文供大模型提取。
         支持提取病案首页、入院出院记录、诊断列表及十余种病程和各类报告表。
-        单表失败不影响其他表的数据获取。
+        单表失败不影响其他表的数据获取；多院/多患者重号冲突时 fail-closed 抛异常。
         """
-        logger.info(f"_get_medical_text: visit_id={visit_id}")
+        logger.info("_get_medical_text: visit_id=%s", visit_id)
         try:
             from ..database.connection import engine
             from sqlalchemy.orm import Session
@@ -2125,16 +2393,30 @@ class FrontPageExtractionService:
             sections = []
 
             with Session(engine) as session:
+                resolved = _resolve_case_tri_key(
+                    session,
+                    visit_id=visit_id,
+                    patient_id=patient_id,
+                    institute_id=institute_id,
+                )
+                resolved_iid = resolved[0] if resolved else (str(institute_id or "").strip() or None)
+                resolved_pid = resolved[1] if resolved else (str(patient_id or "").strip() or None)
+                resolved_vid = resolved[2] if resolved else str(visit_id or "").strip()
+                where_sql, where_params = _build_tri_key_where(
+                    visit_id=resolved_vid,
+                    patient_id=resolved_pid,
+                    institute_id=resolved_iid,
+                )
+
                 # 1. 病案首页基本信息
                 try:
                     mr_row = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('mr')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if mr_row:
                         mr = dict(mr_row)
                         sections.append("【病案首页信息】")
-                        sections.append(f"姓名: {mr.get('name', '')}")
                         sections.append(f"性别: {mr.get('sex', '')}")
                         sections.append(f"年龄: {mr.get('age_year', '')}岁")
                         sections.append(f"入院日期: {mr.get('admission_datetime', '')}")
@@ -2145,15 +2427,15 @@ class FrontPageExtractionService:
                         sections.append(f"主治医师: {mr.get('attending_physician_sign', '')}")
                         sections.append(f"病案全文:\n{mr.get('record_content', '')}")
                         sections.append("")
-                        logger.info(f"  mr 表查询成功: name={mr.get('name')}")
+                        logger.info("  mr 表查询成功")
                 except Exception as e:
                     logger.warning(f"  mr 表查询失败: {e}")
 
                 # 2. 入院记录
                 try:
                     adm_row = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('admission_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if adm_row:
                         adm = dict(adm_row)
@@ -2181,8 +2463,8 @@ class FrontPageExtractionService:
                 # 3. 出院记录
                 try:
                     dis_row = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE visit_id = :vid LIMIT 1"
-                    ), {"vid": visit_id}).mappings().first()
+                        f"SELECT * FROM {clinical_table_sql('discharge_record')} WHERE {where_sql} LIMIT 1"
+                    ), where_params).mappings().first()
 
                     if dis_row:
                         dis = dict(dis_row)
@@ -2206,8 +2488,8 @@ class FrontPageExtractionService:
                 # 4. 诊断列表
                 try:
                     diag_rows = session.execute(sql_text(
-                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE visit_id = :vid"
-                    ), {"vid": visit_id}).mappings().all()
+                        f"SELECT * FROM {clinical_table_sql('diagnosis')} WHERE {where_sql}"
+                    ), where_params).mappings().all()
 
                     if diag_rows:
                         sections.append("【诊断列表】")
@@ -2239,8 +2521,8 @@ class FrontPageExtractionService:
                 for table_name, label in extra_tables:
                     try:
                         rows = session.execute(sql_text(
-                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE visit_id = :vid"
-                        ), {"vid": visit_id}).mappings().all()
+                            f"SELECT record_content FROM {clinical_table_sql(table_name)} WHERE {where_sql}"
+                        ), where_params).mappings().all()
                         
                         if rows:
                             for idx, row in enumerate(rows, 1):
@@ -2257,6 +2539,8 @@ class FrontPageExtractionService:
                 logger.info(f"从本地 PG 获取全病历文本成功: visit_id={visit_id}, 组装长度={len(full_text)}")
                 return full_text
 
+        except FrontPageCaseIdentityConflictError:
+            raise
         except Exception as e:
             logger.warning(f"从本地 PG 获取全病历文本失败: {e}, 回退到 demo 数据")
 
@@ -2436,7 +2720,7 @@ class FrontPageExtractionService:
             "other_medical": self._extract_json(OTHER_MEDICAL_INFO_PROMPT.format(medical_text=medical_text)),
             "staff": self._extract_json(STAFF_PROMPT.format(medical_text=medical_text)),
             "costs": self._extract_json(COSTS_PROMPT.format(medical_text=medical_text)),
-            "coding_result": ext_coding_service.extract_coding(medical_text, patient_context)
+            "coding_result": ext_coding_service.extract_coding(redact_frontpage_text_for_llm(medical_text), patient_context)
         }
         
         try:
@@ -2616,27 +2900,10 @@ class FrontPageExtractionService:
 
         frontpage_data = self._sanitize_frontpage_data(frontpage_data)
         logger.info("LLM 抽取完成，构建 FrontPageDraft")
-        logger.debug(
-            "frontpage_data before model_validate=%s",
-            json.dumps(frontpage_data, ensure_ascii=False, default=str),
-        )
         try:
             return FrontPageDraft.model_validate(frontpage_data)
         except ValidationError as e:
-            logger.error("FrontPageDraft 验证失败: %s", e)
-            logger.error("FrontPageDraft 验证错误详情: %s", e.errors())
-            logger.error(
-                "frontpage_data.basic_info=%s",
-                json.dumps(frontpage_data.get("basic_info", {}), ensure_ascii=False, default=str),
-            )
-            logger.error(
-                "frontpage_data.diagnoses=%s",
-                json.dumps(frontpage_data.get("diagnoses", {}), ensure_ascii=False, default=str),
-            )
-            logger.error(
-                "frontpage_data(full)=%s",
-                json.dumps(frontpage_data, ensure_ascii=False, default=str),
-            )
+            logger.error("FrontPageDraft 验证失败: error_count=%d", len(e.errors()))
             raise
 
     async def _extract_json(
@@ -2644,8 +2911,9 @@ class FrontPageExtractionService:
     ) -> Optional[Dict[str, Any]]:
         """调用 LLM 并解析 JSON 响应"""
         try:
+            safe_prompt = redact_frontpage_text_for_llm(prompt)
             response = await self.llm_client.generate(
-                SYSTEM_PROMPT, prompt, max_tokens=max_tokens
+                SYSTEM_PROMPT, safe_prompt, max_tokens=max_tokens
             )
             return self._parse_json_response(response)
         except Exception as e:
@@ -3930,14 +4198,16 @@ class FrontPageExtractionService:
         
         diagnoses_text = "\n".join(all_diagnoses)
         
-        # 调用 LLM 推理
+        # 调用 LLM 推理（发往模型前脱敏）
         prompt = ADMISSION_CONDITION_PROMPT.format(
-            medical_text=medical_text,
+            medical_text=redact_frontpage_text_for_llm(medical_text),
             diagnoses_text=diagnoses_text
         )
         
         try:
-            response = await self.llm_client.generate(SYSTEM_PROMPT, prompt)
+            response = await self.llm_client.generate(
+                SYSTEM_PROMPT, redact_frontpage_text_for_llm(prompt)
+            )
             result = self._parse_json_response(response)
             
             results_list = result.get("results") if isinstance(result, dict) else None

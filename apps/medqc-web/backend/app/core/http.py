@@ -1,11 +1,13 @@
 import asyncio
 import ipaddress
+import os
 import socket
 import threading
 from contextvars import copy_context
 from time import perf_counter
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Callable, Dict, Optional, TypeVar
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -214,14 +216,180 @@ def close_shared_http_resources() -> None:
             resources.proxy_client.close()
 
 
+_BLOCKED_METADATA_HOSTS = frozenset({
+    "metadata.google.internal",
+    "metadata.aliyun.internal",
+    "metadata.internal",
+})
+_BLOCKED_LOOPBACK_HOSTS = frozenset({
+    "localhost",
+    "localhost.",
+    "ip6-localhost",
+    "ip6-loopback",
+})
+_ALIBABA_METADATA_IP = ipaddress.IPv4Address("100.100.100.200")
+
+
+def _unwrap_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    mapped = getattr(ip_obj, "ipv4_mapped", None)
+    return mapped if mapped is not None else ip_obj
+
+
+def parse_ip_literal(host: str) -> Optional[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """解析字面 IP（含方括号 IPv6、zone ID 及数字/十六进制/八进制 IPv4 变形）。"""
+    candidate = str(host or "").strip()
+    if candidate.startswith("[") and candidate.endswith("]"):
+        candidate = candidate[1:-1]
+    candidate = candidate.split("%", 1)[0].strip()
+    if not candidate:
+        return None
+    try:
+        return _unwrap_ip(ipaddress.ip_address(candidate))
+    except ValueError:
+        pass
+    # 拦截十进制/十六进制/八进制 IPv4 变形（如 2130706433、0x7f000001、0177.0.0.1）
+    if all(ch in "0123456789abcdefABCDEFxX." for ch in candidate):
+        try:
+            packed = socket.inet_aton(candidate)
+            return ipaddress.IPv4Address(packed)
+        except OSError:
+            pass
+    return None
+
+
+def is_unsafe_ssrf_ip(ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """判定 IP 是否落入回环、私网、link-local、云元数据、保留段、多播或未指定段。"""
+    ip_obj = _unwrap_ip(ip_obj)
+    if ip_obj == _ALIBABA_METADATA_IP:
+        return True
+    return bool(
+        not ip_obj.is_global
+        or ip_obj.is_private
+        or ip_obj.is_loopback
+        or ip_obj.is_link_local
+        or ip_obj.is_reserved
+        or ip_obj.is_multicast
+        or ip_obj.is_unspecified
+    )
+
+
+def _is_blocked_db_metadata_or_special_ip(
+    ip_obj: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> bool:
+    """数据库目标主机永不允许探测云元数据、link-local、未指定、多播或保留段。"""
+    ip_obj = _unwrap_ip(ip_obj)
+    if ip_obj == _ALIBABA_METADATA_IP:
+        return True
+    return bool(
+        ip_obj.is_link_local
+        or ip_obj.is_unspecified
+        or ip_obj.is_multicast
+        or ip_obj.is_reserved
+    )
+
+
+def _match_host_allowlist(host: str, entries: list[str], resolved_ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address]) -> bool:
+    normalized_host = host.strip().lower().rstrip(".")
+    literal_ip = parse_ip_literal(normalized_host)
+    candidate_ips = [literal_ip] if literal_ip is not None else list(resolved_ips)
+    for raw_entry in entries:
+        entry = raw_entry.strip().lower()
+        if not entry:
+            continue
+        if entry.startswith("[") and entry.endswith("]"):
+            entry = entry[1:-1]
+        if "/" in entry:
+            try:
+                net = ipaddress.ip_network(entry, strict=False)
+                if any(_unwrap_ip(ip) in net for ip in candidate_ips):
+                    return True
+            except ValueError:
+                continue
+            continue
+        entry_ip = parse_ip_literal(entry)
+        if entry_ip is not None:
+            if any(_unwrap_ip(ip) == entry_ip for ip in candidate_ips):
+                return True
+            continue
+        entry_host = entry.rstrip(".")
+        if normalized_host == entry_host or normalized_host.endswith("." + entry_host):
+            return True
+    return False
+
+
+def validate_db_target_host(host: str, *, allowlist_env: str = "") -> str:
+    """校验数据库连接目标主机，防止 SSRF / 内网回环及云元数据探测。"""
+    raw = str(host or "").strip()
+    if not raw or any(ch.isspace() or ord(ch) < 32 for ch in raw):
+        raise ValueError("无效的数据库目标主机")
+    if any(token in raw for token in ("://", "/", "@", "?", "#")):
+        raise ValueError("无效的数据库目标主机")
+
+    normalized = raw[1:-1].strip().lower() if raw.startswith("[") and raw.endswith("]") else raw.lower()
+    stripped_dot = normalized.rstrip(".")
+    if not stripped_dot:
+        raise ValueError("无效的数据库目标主机")
+
+    if stripped_dot in _BLOCKED_METADATA_HOSTS:
+        raise ValueError("禁止连接云元数据或保留地址")
+
+    allow_entries: list[str] = []
+    for env_name in (allowlist_env, "DB_TARGET_HOST_ALLOWLIST"):
+        if not env_name:
+            continue
+        env_val = os.getenv(env_name, "").strip()
+        if env_val:
+            allow_entries.extend(item.strip() for item in env_val.split(",") if item.strip())
+
+    literal_ip = parse_ip_literal(normalized)
+    resolved_ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    if literal_ip is not None:
+        resolved_ips = [literal_ip]
+    else:
+        try:
+            infos = socket.getaddrinfo(stripped_dot, None)
+            for _family, _, _, _, sockaddr in infos:
+                parsed_ip = parse_ip_literal(sockaddr[0])
+                if parsed_ip is not None:
+                    resolved_ips.append(parsed_ip)
+        except OSError:
+            resolved_ips = []
+
+    if any(_is_blocked_db_metadata_or_special_ip(ip) for ip in resolved_ips):
+        raise ValueError("禁止连接云元数据、链路本地或保留地址")
+
+    if allow_entries:
+        if not _match_host_allowlist(normalized, allow_entries, resolved_ips):
+            raise ValueError("目标数据库主机不在部署白名单中")
+        return raw
+
+    if stripped_dot in _BLOCKED_LOOPBACK_HOSTS or stripped_dot.endswith(".localhost"):
+        raise ValueError("禁止探测本机回环地址，如需本机连接请配置白名单")
+    if any(_unwrap_ip(ip).is_loopback for ip in resolved_ips):
+        raise ValueError("禁止探测本机回环地址，如需本机连接请配置白名单")
+    return raw
+
+
 def _is_private_address(host: str) -> bool:
+    normalized = str(host or "").strip().lower()
+    stripped_dot = normalized.rstrip(".")
+    if not stripped_dot:
+        return True
+    if stripped_dot in _BLOCKED_LOOPBACK_HOSTS or stripped_dot.endswith(".localhost"):
+        return True
+    if stripped_dot in _BLOCKED_METADATA_HOSTS:
+        return True
+    literal_ip = parse_ip_literal(normalized)
+    if literal_ip is not None:
+        return is_unsafe_ssrf_ip(literal_ip)
     try:
         # Resolve host to IPs and check each
-        infos = socket.getaddrinfo(host, None)
-        for family, _, _, _, sockaddr in infos:
-            ip = sockaddr[0]
-            ip_obj = ipaddress.ip_address(ip)
-            if ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local:
+        infos = socket.getaddrinfo(stripped_dot, None)
+        if not infos:
+            return True
+        for _family, _, _, _, sockaddr in infos:
+            ip_obj = parse_ip_literal(sockaddr[0])
+            if ip_obj is None or is_unsafe_ssrf_ip(ip_obj):
                 return True
         return False
     except Exception:
@@ -231,9 +399,16 @@ def _is_private_address(host: str) -> bool:
 
 def _is_allowed_host(host: str) -> bool:
     settings = get_settings()
-    allow = [h.strip().lower() for h in (settings.OUTBOUND_ALLOWLIST or [])]
-    host = host.lower()
-    return any(host == a or host.endswith("." + a) for a in allow)
+    allow = [h.strip().lower().rstrip(".") for h in (settings.OUTBOUND_ALLOWLIST or []) if str(h).strip()]
+    normalized = str(host or "").strip().lower().rstrip(".")
+    if not normalized:
+        return False
+    for entry in allow:
+        if normalized == entry:
+            return True
+        if "." in entry and parse_ip_literal(entry) is None and normalized.endswith("." + entry):
+            return True
+    return False
 
 
 def _is_disconnected_without_response(error: httpx.RemoteProtocolError) -> bool:
@@ -298,10 +473,10 @@ async def safe_post_json(
     *, allow_disconnect_retry: bool = True,
 ) -> Dict[str, Any]:
     # Basic safety checks
-    if not (url.startswith("https://") or url.startswith("http://")):
+    parsed = urlsplit(url)
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
         raise ValueError("Invalid URL scheme")
-    # Extract host (strip port if present)
-    host = url.split("//", 1)[1].split("/", 1)[0].split(":")[0]
+    host = parsed.hostname
     # 先检查允许列表：允许列表中的域名跳过私有地址检查
     # （VPN/代理环境可能把合法域名 DNS 解析到 198.18.x.x 等私有 IP 段）
     if not _is_allowed_host(host):

@@ -10,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..core.audit import audit_event
 from ..core.response import success_response
-from ..core.security import get_current_user
+from ..core.security import get_current_user, is_global_system_admin_principal
 from ..database.connection import SessionLocal
 from ..services import data_pipeline_settings as settings
 from ..services import sync_control_client as control
@@ -30,7 +30,7 @@ def require_pipeline_admin(current: dict = Depends(get_current_user)) -> dict:
     try:
         with SessionLocal() as session:
             person = _person(session, actor_id)
-        if not person["roles"] & {"admin", "sync_admin", "super_admin"}:
+        if not is_global_system_admin_principal(person["roles"], person.get("institute_id")):
             raise HTTPException(403, "data_pipeline_admin_required")
         return person
     except RectificationError as error:

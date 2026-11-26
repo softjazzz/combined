@@ -8,13 +8,28 @@
 from fastapi import APIRouter, Query, BackgroundTasks, Depends, HTTPException, Request, status
 from typing import Optional
 from ..core.audit import audit_event
-from ..core.security import require_admin
+from ..core.security import require_global_system_admin
 from ..core.response import success_response, error_response, get_trace_id
+
+def require_legacy_system_available() -> None:
+    from ..database import clinical_connection
+    from ..services.clinical_source_policy import fixed_cdm
+
+    selection = clinical_connection.current_selection()
+    if (selection is not None and selection.get("id") == "independent_cdm") or fixed_cdm():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="legacy_system_sync_disabled_in_independent_cdm",
+        )
+
 
 router = APIRouter(
     prefix="/api/system",
     tags=["系统配置"],
-    dependencies=[Depends(require_admin)],
+    dependencies=[
+        Depends(require_global_system_admin),
+        Depends(require_legacy_system_available),
+    ],
 )
 
 def _reject_legacy_write_endpoint(path: str):
@@ -27,7 +42,7 @@ def _reject_legacy_write_endpoint(path: str):
 # ==================== 数据库连接状态 ====================
 
 @router.get("/db/status")
-async def get_db_status(request: Request):
+def get_db_status(request: Request):
     """获取本地 + 远端数据库连接状态"""
     from ..services.etl_sync import test_local_connection, test_remote_connection
 
@@ -42,7 +57,7 @@ async def get_db_status(request: Request):
 
 
 @router.get("/db/local")
-async def get_local_db_status(request: Request):
+def get_local_db_status(request: Request):
     """获取本地数据库连接状态和表数据量"""
     from ..services.etl_sync import test_local_connection
     return success_response(
@@ -53,7 +68,7 @@ async def get_local_db_status(request: Request):
 
 
 @router.get("/db/remote")
-async def get_remote_db_status(request: Request):
+def get_remote_db_status(request: Request):
     """测试远端数据库连接"""
     from ..services.etl_sync import test_remote_connection
     return success_response(
@@ -66,7 +81,7 @@ async def get_remote_db_status(request: Request):
 # ==================== 数据库配置（页面可编辑）====================
 
 @router.get("/db/config")
-async def get_db_config(request: Request):
+def get_db_config(request: Request):
     """获取远端数据库配置（密码脱敏）"""
     from ..services.etl_sync import load_db_config
     cfg = load_db_config()
@@ -86,7 +101,7 @@ async def get_db_config(request: Request):
 
 
 @router.put("/db/config")
-async def update_db_config(request: Request, data: dict):
+def update_db_config(request: Request, data: dict):
     """
     保存远端数据库配置并测试连接
     
@@ -138,7 +153,7 @@ async def update_db_config(request: Request, data: dict):
 
 
 @router.post("/sync/trigger")
-async def trigger_sync(
+def trigger_sync(
     request: Request,
     background_tasks: BackgroundTasks,
     sync_date: Optional[str] = Query(None, description="同步日期，格式 YYYY-MM-DD，默认昨天"),
@@ -188,7 +203,7 @@ async def trigger_sync(
 
 
 @router.get("/sync/status")
-async def get_sync_status(request: Request):
+def get_sync_status(request: Request):
     """获取当前同步状态和最近一次同步日志"""
     from ..services.etl_sync import get_sync_state
     return success_response(
@@ -201,7 +216,7 @@ async def get_sync_status(request: Request):
 # ==================== 同步配置 ====================
 
 @router.get("/sync/tables")
-async def get_sync_tables(request: Request):
+def get_sync_tables(request: Request):
     """获取可同步的表列表"""
     from ..services.etl_sync import list_sync_tables
     tables = list_sync_tables()

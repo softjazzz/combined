@@ -5,7 +5,6 @@
  */
 
 import { API_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
-import CryptoJS from 'crypto-js'
 import { apiClient } from '@/services/apiService'
 
 // API基础URL配置：优先用环境变量；若未设置则使用相对路径，交由 Vite 代理转发
@@ -125,125 +124,137 @@ export interface LLMConfigSummary {
   readonly: boolean
 }
 
+export interface LLMRequestOptions {
+  signal?: AbortSignal
+}
+
 class LLMConfigService {
-  private readonly ENCRYPTION_KEY = 'medqc-llm-config-key-2024' // 在生产环境中应该使用环境变量
-
-  /**
-   * 加密API密钥
-   */
-  private encryptApiKey(apiKey: string): string {
-    return CryptoJS.AES.encrypt(apiKey, this.ENCRYPTION_KEY).toString()
-  }
-
-  /**
-   * 解密API密钥
-   */
-  private decryptApiKey(encryptedKey: string): string {
-    try {
-      // 首先尝试AES解密（原有逻辑）
-      const bytes = CryptoJS.AES.decrypt(encryptedKey, this.ENCRYPTION_KEY)
-      const decrypted = bytes.toString(CryptoJS.enc.Utf8)
-      if (decrypted) {
-        return decrypted
-      }
-    } catch (error) {
-      console.warn('AES解密失败，尝试base64解码:', error)
-    }
-
-    try {
-      // 回退到base64解码（兼容Python脚本保存的密钥）
-      return atob(encryptedKey)
-    } catch (error) {
-      console.error('base64解码也失败:', error)
-      return encryptedKey // 返回原始值作为最后的回退
-    }
-  }
-
   /**
    * 获取所有可用的LLM提供商
    */
-  async getProviders(): Promise<LLMProvider[]> {
+  async getProviders(options?: LLMRequestOptions): Promise<LLMProvider[]> {
+    const controller = new AbortController()
+    let timedOut = false
+    const onExternalAbort = () => controller.abort(options?.signal?.reason)
+    if (options?.signal) {
+      if (options.signal.aborted) {
+        controller.abort(options.signal.reason)
+      } else {
+        options.signal.addEventListener('abort', onExternalAbort, { once: true })
+      }
+    }
+    const timeoutId = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, API_REQUEST_TIMEOUT_MS)
+
     try {
       console.log('🌐 发起请求:', `${API_BASE_URL}${LLM_API_PREFIX}/providers`)
-
-      // 添加超时控制
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), API_REQUEST_TIMEOUT_MS)
 
       const response = await apiClient.get(`${LLM_API_PREFIX}/providers`, {
         signal: controller.signal,
       })
-
-      clearTimeout(timeoutId)
 
       console.log('📡 响应状态:', response.status, response.statusText)
       const result = response.data
       console.log('✅ 获取提供商成功:', result.data?.length || 0, '个')
       return result.data || []
     } catch (error) {
+      if (options?.signal?.aborted) {
+        throw error
+      }
       console.error('❌ 获取LLM提供商失败:', error)
-      if (error instanceof Error && error.name === 'AbortError') {
+      if (timedOut || (error instanceof Error && error.name === 'AbortError')) {
         throw new Error('请求超时，请检查网络连接')
       }
       throw new Error(
         `获取LLM提供商失败: ${error instanceof Error ? error.message : String(error)}`,
       )
+    } finally {
+      clearTimeout(timeoutId)
+      options?.signal?.removeEventListener('abort', onExternalAbort)
     }
   }
 
   /**
    * 获取指定提供商的所有模型
    */
-  async getModelsByProvider(providerId: string): Promise<LLMModel[]> {
+  async getModelsByProvider(providerId: string, options?: LLMRequestOptions): Promise<LLMModel[]> {
     try {
       const response = await apiClient.get(`${LLM_API_PREFIX}/models`, {
         params: { provider_id: providerId },
+        ...(options?.signal ? { signal: options.signal } : {}),
       })
       const result = response.data
       return result.data || []
     } catch (error) {
+      if (options?.signal?.aborted) {
+        throw error
+      }
       console.error('获取LLM模型失败:', error)
       throw new Error(`获取LLM模型失败: ${error instanceof Error ? error.message : String(error)}`)
     }
   }
 
-  async getLocalModelOptions(): Promise<LLMLocalProvider[]> {
-    const response = await apiClient.get(`${LLM_API_PREFIX}/local-options`)
+  async getLocalModelOptions(options?: LLMRequestOptions): Promise<LLMLocalProvider[]> {
+    const response = options?.signal
+      ? await apiClient.get(`${LLM_API_PREFIX}/local-options`, { signal: options.signal })
+      : await apiClient.get(`${LLM_API_PREFIX}/local-options`)
     return response.data?.data || []
   }
 
-  async getDefaultSummary(): Promise<LLMConfigSummary> {
-    const response = await apiClient.get(`${LLM_API_PREFIX}/configs/default/summary`)
+  async getDefaultSummary(options?: LLMRequestOptions): Promise<LLMConfigSummary> {
+    const response = options?.signal
+      ? await apiClient.get(`${LLM_API_PREFIX}/configs/default/summary`, { signal: options.signal })
+      : await apiClient.get(`${LLM_API_PREFIX}/configs/default/summary`)
     return response.data?.data as LLMConfigSummary
   }
 
-  async resetDefaultSummary(): Promise<LLMConfigSummary> {
-    const response = await apiClient.post(`${LLM_API_PREFIX}/configs/default/reset`)
+  async resetDefaultSummary(options?: LLMRequestOptions): Promise<LLMConfigSummary> {
+    const response = options?.signal
+      ? await apiClient.post(`${LLM_API_PREFIX}/configs/default/reset`, undefined, {
+          signal: options.signal,
+        })
+      : await apiClient.post(`${LLM_API_PREFIX}/configs/default/reset`)
     return response.data?.data as LLMConfigSummary
   }
 
-  async addCustomModel(providerCode: string, modelCode: string, modelName?: string): Promise<void> {
+  async addCustomModel(
+    providerCode: string,
+    modelCode: string,
+    modelName?: string,
+    options?: LLMRequestOptions,
+  ): Promise<void> {
     const payload = {
       provider_code: providerCode,
       model_code: modelCode,
       model_name: modelName || modelCode,
     }
-    await apiClient.post(`${LLM_API_PREFIX}/models/custom`, payload)
+    if (options?.signal) {
+      await apiClient.post(`${LLM_API_PREFIX}/models/custom`, payload, { signal: options.signal })
+    } else {
+      await apiClient.post(`${LLM_API_PREFIX}/models/custom`, payload)
+    }
   }
 
-  async deleteCustomModel(providerCode: string, modelCode: string): Promise<void> {
+  async deleteCustomModel(
+    providerCode: string,
+    modelCode: string,
+    options?: LLMRequestOptions,
+  ): Promise<void> {
     await apiClient.delete(`${LLM_API_PREFIX}/models/custom`, {
       params: {
         provider_code: providerCode,
         model_code: modelCode,
       },
+      ...(options?.signal ? { signal: options.signal } : {}),
     })
   }
 
   /**
    * 获取用户的LLM配置列表
    */
-  async getUserConfigs(userId?: string): Promise<UserLLMConfig[]> {
+  async getUserConfigs(userId?: string, options?: LLMRequestOptions): Promise<UserLLMConfig[]> {
     try {
       const params = new URLSearchParams()
       if (userId) {
@@ -252,21 +263,20 @@ class LLMConfigService {
 
       const response = await apiClient.get(`${LLM_API_PREFIX}/configs`, {
         params: params.toString() ? Object.fromEntries(params.entries()) : undefined,
+        ...(options?.signal ? { signal: options.signal } : {}),
       })
       const result = response.data
       const raw = result.data
-      const data = (Array.isArray(raw) ? raw : raw?.items || []) as Array<
-        UserLLMConfig & { api_key_encrypted?: string }
-      >
+      const data = (Array.isArray(raw) ? raw : raw?.items || []) as UserLLMConfig[]
 
-      // 解密API密钥
       return data.map((config) => ({
         ...config,
-        api_key_decrypted: config.api_key_encrypted
-          ? this.decryptApiKey(config.api_key_encrypted)
-          : null,
+        api_key_decrypted: null,
       }))
     } catch (error) {
+      if (options?.signal?.aborted) {
+        throw error
+      }
       console.error('获取用户LLM配置失败:', error)
       throw new Error(
         `获取用户LLM配置失败: ${error instanceof Error ? error.message : String(error)}`,
@@ -277,7 +287,11 @@ class LLMConfigService {
   /**
    * 获取指定名称的配置
    */
-  async getConfigByName(configName: string, userId?: string): Promise<UserLLMConfig | null> {
+  async getConfigByName(
+    configName: string,
+    userId?: string,
+    options?: LLMRequestOptions,
+  ): Promise<UserLLMConfig | null> {
     try {
       const params = new URLSearchParams({ config_name: configName })
       if (userId) {
@@ -289,6 +303,7 @@ class LLMConfigService {
         {
           params: Object.fromEntries(params.entries()),
           validateStatus: (status) => status === 404 || (status >= 200 && status < 300),
+          ...(options?.signal ? { signal: options.signal } : {}),
         },
       )
       if (response.status === 404) {
@@ -296,15 +311,11 @@ class LLMConfigService {
       }
 
       const result = response.data
-      const data = result.data as (UserLLMConfig & { api_key_encrypted?: string }) | null
-
-      // 解密API密钥
-      if (data?.api_key_encrypted) {
-        data.api_key_decrypted = this.decryptApiKey(data.api_key_encrypted)
-      }
-
-      return data
+      return (result.data as UserLLMConfig | null) ?? null
     } catch (error) {
+      if (options?.signal?.aborted) {
+        throw error
+      }
       console.error('获取LLM配置失败:', error)
       throw new Error(`获取LLM配置失败: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -313,11 +324,18 @@ class LLMConfigService {
   /**
    * 保存或更新LLM配置
    */
-  async saveConfig(config: LLMConfigInput, userId?: string): Promise<UserLLMConfig> {
+  async saveConfig(
+    config: LLMConfigInput,
+    userIdOrOptions?: string | LLMRequestOptions,
+    options?: LLMRequestOptions,
+  ): Promise<UserLLMConfig> {
+    const resolvedUserId = typeof userIdOrOptions === 'string' ? userIdOrOptions : undefined
+    const resolvedOptions =
+      typeof userIdOrOptions === 'object' && userIdOrOptions !== null ? userIdOrOptions : options
     try {
       // 准备数据（支持按ID或按code提交，后端负责解析）
       const configData: Record<string, unknown> = {
-        user_id: userId || null,
+        user_id: resolvedUserId || null,
         config_name: config.config_name,
         // 这两组字段按需传递，后端会优先使用 *_id，否则按 *_code 解析
         ...(config.provider_id ? { provider_id: config.provider_id } : {}),
@@ -339,17 +357,17 @@ class LLMConfigService {
       }
 
       // 通过后端API保存配置
-      const response = await apiClient.post(`${LLM_API_PREFIX}/configs`, configData)
+      const response = resolvedOptions?.signal
+        ? await apiClient.post(`${LLM_API_PREFIX}/configs`, configData, {
+            signal: resolvedOptions.signal,
+          })
+        : await apiClient.post(`${LLM_API_PREFIX}/configs`, configData)
       const result = response.data
-      const savedConfig = result.data
-
-      // 解密API密钥
-      if (savedConfig && savedConfig.api_key_encrypted) {
-        ;(savedConfig as any).api_key_decrypted = this.decryptApiKey(savedConfig.api_key_encrypted)
-      }
-
-      return savedConfig
+      return result.data
     } catch (error) {
+      if (resolvedOptions?.signal?.aborted) {
+        throw error
+      }
       console.error('保存LLM配置失败:', error)
       throw new Error(`保存LLM配置失败: ${error instanceof Error ? error.message : String(error)}`)
     }
@@ -358,7 +376,10 @@ class LLMConfigService {
   /**
    * 使用后端 env 中的真实 endpoint/key 测试连接
    */
-  async testConfig(input: LLMConnectionTestInput): Promise<{
+  async testConfig(
+    input: LLMConnectionTestInput,
+    options?: LLMRequestOptions,
+  ): Promise<{
     provider_code: string
     model: string
     api_endpoint: string
@@ -366,13 +387,18 @@ class LLMConfigService {
     stats: Record<string, unknown>
   }> {
     try {
-      const response = await apiClient.post(`${LLM_API_PREFIX}/test`, input)
+      const response = options?.signal
+        ? await apiClient.post(`${LLM_API_PREFIX}/test`, input, { signal: options.signal })
+        : await apiClient.post(`${LLM_API_PREFIX}/test`, input)
       const result = response.data
       if (!result.success) {
         throw new Error(result.error || result.message || `HTTP ${response.status}`)
       }
       return result.data
     } catch (error: any) {
+      if (options?.signal?.aborted) {
+        throw error
+      }
       const detail =
         error?.response?.data?.detail ||
         error?.response?.data?.error ||

@@ -10,22 +10,29 @@ class _DummyResp:
 
 
 class _FakeQuery:
+    def __init__(self, table_name: str):
+        self.table_name = table_name
+        self.op = "select"
+
     def select(self, *_args, **_kwargs):
+        self.op = "select"
         return self
 
     def eq(self, *_args, **_kwargs):
         return self
 
     def update(self, *_args, **_kwargs):
+        self.op = "update"
         return self
 
     def delete(self, *_args, **_kwargs):
+        self.op = "delete"
         return self
 
 
 class _FakeSupabase:
-    def table(self, _name: str):
-        return _FakeQuery()
+    def table(self, name: str):
+        return _FakeQuery(name)
 
 
 def _admin_headers(client) -> dict[str, str]:
@@ -38,6 +45,17 @@ def _admin_headers(client) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _global_admin_actor(*_args, **_kwargs) -> dict:
+    return {
+        "id": "user-admin-1",
+        "name": "Global Admin",
+        "roles": {"admin"},
+        "is_global": True,
+        "is_manager": True,
+        "institute_id": None,
+    }
+
+
 def test_assign_task_emits_audit_event(client, monkeypatch):
     async def _noop_auth_gate():
         return None
@@ -47,10 +65,10 @@ def test_assign_task_emits_audit_event(client, monkeypatch):
     audit_calls: list[dict] = []
     call_index = {"value": 0}
 
-    async def _fake_async_execute(_query):
-        idx = call_index["value"]
-        call_index["value"] += 1
-        if idx == 0:
+    async def _fake_async_execute(query):
+        if query.table_name == "qc_tasks" and query.op == "select":
+            return _DummyResp(data=[{"id": "task-1", "status": "sampling", "creator_id": "user-admin-1"}])
+        if query.table_name == "qc_task_records" and query.op == "select":
             return _DummyResp(
                 data=[
                     {"id": "tr-1", "task_id": "task-1", "status": "pending"},
@@ -59,6 +77,7 @@ def test_assign_task_emits_audit_event(client, monkeypatch):
             )
         return _DummyResp(data=[{"ok": True}])
 
+    monkeypatch.setattr("app.routers.tasks._resolve_actor", _global_admin_actor)
     monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
     monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
     monkeypatch.setattr(
@@ -99,6 +118,7 @@ def test_delete_task_emits_audit_event(client, monkeypatch):
     async def _fake_async_execute(_query):
         return _DummyResp(data=[{"ok": True}])
 
+    monkeypatch.setattr("app.routers.tasks._resolve_actor", _global_admin_actor)
     monkeypatch.setattr("app.routers.tasks.get_supabase", lambda: _FakeSupabase())
     monkeypatch.setattr("app.routers.tasks.async_execute", _fake_async_execute)
     monkeypatch.setattr(

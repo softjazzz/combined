@@ -1438,12 +1438,23 @@ def test_bulk_latest_uses_same_full_partial_generation_as_single_record(canonica
         rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
         rule_set_version=workspace.RULE_SET_VERSION,
     )
-    bulk = service.build_latest_luxian_0609_record_result_dtos(
-        record_refs=[_RERUN_RECORD_B],
-        rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
-        rule_set_version=workspace.RULE_SET_VERSION,
-    )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
+    envelope_reads = []
 
+    def track_envelope_read(_connection, _cursor, statement, *_args):
+        if statement.lstrip().upper().startswith("SELECT") and "luxian_0609_record_result_envelopes" in statement:
+            envelope_reads.append(statement)
+
+    sa.event.listen(engine, "before_cursor_execute", track_envelope_read)
+    try:
+        bulk = service.build_latest_luxian_0609_record_result_dtos(
+            record_refs=[_RERUN_RECORD_B],
+            rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+            rule_set_version=workspace.RULE_SET_VERSION,
+        )[tuple(CaseRef.from_mapping(_RERUN_RECORD_B))]
+    finally:
+        sa.event.remove(engine, "before_cursor_execute", track_envelope_read)
+
+    assert envelope_reads and all("envelope_json" not in statement for statement in envelope_reads)
     assert single["job_id"] == bulk["job_id"] == "new-partial-job"
     assert single["data_origin"] == bulk["data_origin"] == "saved_partial_task"
     assert single["expected_rule_count"] == bulk["expected_rule_count"] == 2
@@ -1548,6 +1559,40 @@ def test_new_failed_task_does_not_present_or_remove_previous_results(canonical_s
     job = _load_job(engine, jobs, job_id="new-full-job")
     with pytest.raises(ValueError, match="尚未形成可导出"):
         service._load_batch_job_export_items(job=job)
+
+
+def test_bulk_reads_failed_batch_payload_once(canonical_storage, monkeypatch):
+    from types import SimpleNamespace
+    from app.services.qc_workspace import partial_record_read
+
+    service, engine, jobs, _ = canonical_storage
+    _insert_independent_full_task(engine, jobs)
+    claim = service.mark_batch_job_running(job_id="new-full-job")
+    records = [_RERUN_RECORD_A, _RERUN_RECORD_B]
+    assert service.complete_batch_job(
+        job_id="new-full-job", attempt_filters_json=claim,
+        summary={
+            **_partial_summary(total_records=2, delivered=0, failed_rules=list(_RERUN_RULE_IDS)),
+            "success_count": 0, "failed_count": 2, "execution_status": "failed",
+            "failed_rule_count": 4, "rule_results": [],
+        },
+        items=[], failed_records=[_rule_failure(record, rule) for record in records for rule in _RERUN_RULE_IDS],
+    )
+    loads = []
+    original_loads = partial_record_read.json.loads
+
+    def tracked_loads(value):
+        loads.append(value)
+        return original_loads(value)
+
+    monkeypatch.setattr(partial_record_read, "json", SimpleNamespace(loads=tracked_loads))
+    results = service.build_latest_luxian_0609_record_result_dtos(
+        record_refs=records, rule_set_key=workspace.LUXIAN_0609_RULE_SET_KEY,
+        rule_set_version=workspace.RULE_SET_VERSION,
+    )
+    assert len(results) == 2
+    assert all(result["execution_status"] == "failed" and result["items"] == [] for result in results.values())
+    assert len(loads) == 3
 
 
 def test_late_root_leaf_attempt_failure_does_not_delete_published_canonical(canonical_storage):

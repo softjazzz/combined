@@ -89,7 +89,7 @@ class CasePrefixCache:
             transport_ms=number(gateway.get("http_seconds", -1) * 1000), wall_ms=elapsed * 1000,
         )
 
-    async def run(self, completion, profile, invoke, *, deadline):
+    async def run(self, completion, profile, invoke, *, deadline, prime_invoke=None):
         spec, original = completion.case_prefix, completion.payload
         prefix, suffix = self._split(original, spec)
         trace = GatewayCacheTrace(strategy="cold", prime_requests_started=0, rule_requests_started=0)
@@ -113,7 +113,16 @@ class CasePrefixCache:
         if entry is not None:
             trace.strategy = "reused"
         elif spec.expected_requests >= 2 and len(prefix) >= 1024:
-            entry = await self._prime(key, prefix, original, invoke, trace, deadline, profile.resource_id)
+            entry = await self._prime(
+                key,
+                prefix,
+                original,
+                invoke,
+                trace,
+                deadline,
+                profile.resource_id,
+                prime_invoke=prime_invoke,
+            )
         if entry is None:
             return await self._rule(original, invoke, trace)
         prepared = deepcopy(original)
@@ -127,20 +136,34 @@ class CasePrefixCache:
                     self.entries.pop(key, None)
         return response
 
-    async def _prime(self, key, prefix, original, invoke, trace, deadline, resource_id):
+    async def _prime(self, key, prefix, original, invoke, trace, deadline, resource_id, *, prime_invoke=None):
+        loop = asyncio.get_running_loop()
         async with self.lock:
             ready = self.entries.get(key)
-            if ready is not None and ready.expires > asyncio.get_running_loop().time():
+            if ready is not None and ready.expires > loop.time():
                 trace.strategy = "reused"
                 return ready
+            remaining = deadline - loop.time()
+            if remaining <= 0:
+                trace.prime_requests_started = 0
+                trace.strategy = "prime_failed"
+                trace.prime_error_code = "gateway_deadline_exceeded"
+                error = AdmissionDeadlineError()
+                error.cache_trace = trace
+                raise error
+            pending = self.pending.get(key)
+            creator = pending is None
+            min_prime_budget = float(
+                getattr(self.settings, "cache_min_prime_budget_seconds", 0.0) or 0.0
+            )
+            if creator and min_prime_budget > 0 and remaining < min_prime_budget:
+                return None
             resource = self.settings.resources[resource_id]
             waiting = self.waiting_by_resource.get(resource_id, 0)
             if waiting >= resource.max_inflight + resource.max_queue:
                 error = QueueFullError()
                 error.cache_trace = trace
                 raise error
-            pending = self.pending.get(key)
-            creator = pending is None
             if creator:
                 if len(self.entries) + len(self.pending) >= self.settings.cache_max_entries:
                     trace.strategy = "capacity_bypass"
@@ -148,7 +171,7 @@ class CasePrefixCache:
                 prime = {"model": original["model"], "messages": [{"role": "user", "content": prefix}],
                          "max_tokens": 1, "temperature": 0.0, "stream": False,
                          "chat_template_kwargs": {"enable_thinking": False}}
-                pending = _Pending(asyncio.create_task(self._build(key, prime, invoke)))
+                pending = _Pending(asyncio.create_task(self._build(key, prime, prime_invoke or invoke)))
                 self.pending[key] = pending
             pending.waiters += 1
             self.waiting_by_resource[resource_id] = waiting + 1
@@ -186,35 +209,44 @@ class CasePrefixCache:
                 raise
             return None
         finally:
+            task_to_cancel: asyncio.Task | None = None
             async with self.lock:
                 pending.waiters -= 1
                 self.waiting_by_resource[resource_id] -= 1
                 if not self.waiting_by_resource[resource_id]:
                     self.waiting_by_resource.pop(resource_id, None)
                 if pending.waiters == 0:
-                    if not pending.task.done():
-                        pending.task.cancel()
-                        await asyncio.gather(pending.task, return_exceptions=True)
                     if self.pending.get(key) is pending:
                         self.pending.pop(key, None)
+                    if not pending.task.done():
+                        task_to_cancel = pending.task
+            if task_to_cancel is not None:
+                task_to_cancel.cancel()
+                await asyncio.gather(task_to_cancel, return_exceptions=True)
 
     async def _build(self, key, prime, invoke):
         started = time.monotonic()
-        response = await invoke(prime)
-        usage = response.get("usage", {})
-        tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
-        entry = None
-        choices = response.get("choices")
-        valid = (isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict)
-                 and choices[0].get("finish_reason") in {"stop", "length"}
-                 and isinstance(choices[0].get("message"), dict)
-                 and isinstance(choices[0]["message"].get("content"), str)
-                 and response.get("__error__") is not True and not response.get("error"))
-        if type(tokens) is int and 1 <= tokens <= 32768 and valid:
-            entry = _Entry(tokens, asyncio.get_running_loop().time() + self.settings.cache_ttl_seconds)
-            async with self.lock:
-                self.entries[key] = entry
-        return response, entry, max(0, time.monotonic() - started)
+        current_task = asyncio.current_task()
+        try:
+            response = await invoke(prime)
+            usage = response.get("usage", {})
+            tokens = usage.get("prompt_tokens") if isinstance(usage, dict) else None
+            entry = None
+            choices = response.get("choices")
+            valid = (isinstance(choices, list) and len(choices) == 1 and isinstance(choices[0], dict)
+                     and choices[0].get("finish_reason") in {"stop", "length"}
+                     and isinstance(choices[0].get("message"), dict)
+                     and isinstance(choices[0]["message"].get("content"), str)
+                     and response.get("__error__") is not True and not response.get("error"))
+            if type(tokens) is int and 1 <= tokens <= 32768 and valid:
+                entry = _Entry(tokens, asyncio.get_running_loop().time() + self.settings.cache_ttl_seconds)
+                async with self.lock:
+                    self.entries[key] = entry
+            return response, entry, max(0, time.monotonic() - started)
+        finally:
+            pending = self.pending.get(key)
+            if pending is not None and pending.task is current_task:
+                self.pending.pop(key, None)
 
     @staticmethod
     async def _rule(payload, invoke, trace):

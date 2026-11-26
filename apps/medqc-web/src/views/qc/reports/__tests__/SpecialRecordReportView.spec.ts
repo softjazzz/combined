@@ -16,7 +16,7 @@ vi.mock('@/api/specialRecordReports', async (importOriginal) => ({
   getSpecialReportDefects: mocks.defects,
   exportSpecialRecordReport: mocks.export,
 }))
-const actor = reactive({ id: 'synthetic-A', institute_id: 'H1' })
+const actor = reactive({ id: 'synthetic-A', institute_id: 'H1', is_demo_account: false })
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: actor, hasRole: () => false }) }))
 const types = [
   'death',
@@ -142,6 +142,7 @@ describe('特殊病历报表页面', () => {
         record_type: 'death',
         record_type_state: 'positive',
       }),
+      expect.any(AbortSignal),
     )
     expect(wrapper.text()).toContain('未知')
     expect(wrapper.text()).not.toContain('机构代码配置')
@@ -151,7 +152,7 @@ describe('特殊病历报表页面', () => {
   it('V7.1页头、分段按压态与类型选中态，未知来源提示保留', async () => {
     const wrapper = render()
     await flushPromises()
-    expect(wrapper.find('main.mq-page .mq-page-head .mq-page-title').text()).toBe('特殊病历报表')
+    expect(wrapper.find('section.mq-page .mq-page-head .mq-page-title').text()).toBe('特殊病历报表')
     expect(wrapper.find('.archive-notice').text()).toContain('缺失来源单列未知')
     expect(wrapper.find('.type-item.is-active .type-main').attributes('aria-pressed')).toBe('true')
     const segments = wrapper.findAll('.mq-segmented__item')
@@ -193,6 +194,7 @@ describe('特殊病历报表页面', () => {
       expect.objectContaining({ department: '', institute_id: 'H1' }),
       'defects',
       report,
+      expect.any(AbortSignal),
     )
     expect(click).toHaveBeenCalledOnce()
     click.mockRestore()
@@ -207,6 +209,7 @@ describe('特殊病历报表页面', () => {
     expect(mocks.records).toHaveBeenLastCalledWith(
       expect.objectContaining({ department: '合成科室', record_type: 'death' }),
       1,
+      expect.any(AbortSignal),
     )
     wrapper.unmount()
   })
@@ -242,7 +245,10 @@ describe('特殊病历报表页面', () => {
     await flushPromises()
     resolve({ total: 1, page: 1, page_size: 20, items: [row] })
     await flushPromises()
-    expect(mocks.report).toHaveBeenLastCalledWith(expect.objectContaining({ institute_id: 'H2' }))
+    expect(mocks.report).toHaveBeenLastCalledWith(
+      expect.objectContaining({ institute_id: 'H2' }),
+      expect.any(AbortSignal),
+    )
     expect(wrapper.text()).not.toContain('合成病例')
     wrapper.unmount()
   })

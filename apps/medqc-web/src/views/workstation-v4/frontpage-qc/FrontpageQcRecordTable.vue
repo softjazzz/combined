@@ -32,14 +32,17 @@
           v-for="row in rows"
           :key="row.record_key"
           :class="{ 'is-active': row.record_key === activeKey }"
+          :aria-selected="row.record_key === activeKey ? 'true' : 'false'"
           data-testid="fpqc-record-row"
           tabindex="0"
           @click="emit('select', row.record_key)"
           @keydown.enter.prevent="emit('select', row.record_key)"
+          @keydown.space.prevent="emit('select', row.record_key)"
         >
           <td
             class="fpqc-table__check"
             @click.stop
+            @keydown.stop
           >
             <input
               type="checkbox"
@@ -77,21 +80,34 @@
               class="mq-status"
             >未质控</span>
           </td>
-          <td class="fpqc-table__nowrap">
-            <template v-if="row.result">
+          <td class="fpqc-table__issues">
+            <div
+              v-if="row.result"
+              class="fpqc-table__issues-list"
+            >
               <span
                 v-if="row.result.fail_count"
                 class="fpqc-table__issue fpqc-table__issue--danger"
               >扣分 {{ row.result.fail_count }}</span>
               <span
-                v-if="row.result.hint_count"
+                v-if="row.result.required_missing_count"
+                class="fpqc-table__issue fpqc-table__issue--danger"
+                data-testid="fpqc-issue-required-missing"
+              >必填缺项 {{ row.result.required_missing_count }}</span>
+              <span
+                v-if="!confirmedResultsOnly && row.result.hint_count"
                 class="fpqc-table__issue fpqc-table__issue--warning"
+                data-testid="fpqc-issue-hint"
               >提示 {{ row.result.hint_count }}</span>
               <span
-                v-if="!row.result.fail_count && !row.result.hint_count"
+                v-if="
+                  !row.result.fail_count &&
+                    (confirmedResultsOnly || !row.result.hint_count) &&
+                    !row.result.required_missing_count
+                "
                 class="fpqc-table__muted"
               >无</span>
-            </template>
+            </div>
             <span
               v-else
               class="fpqc-table__muted"
@@ -117,9 +133,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { FrontpageQcRecordItem } from '@/services/frontpage-qc-v2-service'
 
 import { formatDateTime, formatScore, GRADE_LABELS, GRADE_TONES } from './presentation'
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const props = defineProps<{
   rows: FrontpageQcRecordItem[]

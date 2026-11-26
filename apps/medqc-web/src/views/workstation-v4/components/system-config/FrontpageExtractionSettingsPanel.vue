@@ -14,8 +14,8 @@
           v-if="isReadonly"
           type="info"
           show-icon
-          message="当前为只读模式（qc_manager）"
-          description="当前账号仅可查看，需首页配置管理角色方可修改。"
+          message="当前为只读模式"
+          description="当前账号仅可查看，需全局系统管理员（admin / sync_admin / super_admin）角色方可修改。"
           class="mb-3"
         />
 
@@ -118,9 +118,11 @@
                 </div>
                 <a-input-number
                   v-model:value="form.demo_hide_threshold"
+                  data-testid="frontpage-demo-hide-threshold"
                   :min="0"
                   :max="100000"
                   :disabled="isReadonly || loading"
+                  @blur="handleDemoHideThresholdBlur"
                 />
               </div>
             </div>
@@ -171,13 +173,15 @@
             <span class="ds-footer-meta">来源：{{ source }}</span>
             <div class="ds-actions">
               <a-button
-                :disabled="loading"
+                :disabled="loading || saving || resetting"
                 @click="handleReload"
               >
                 刷新
               </a-button>
               <a-button
-                :disabled="isReadonly || loading"
+                data-testid="frontpage-settings-reset"
+                :loading="resetting"
+                :disabled="isReadonly || loading || saving || resetting"
                 @click="handleReset"
               >
                 恢复默认
@@ -186,7 +190,7 @@
                 type="primary"
                 data-testid="frontpage-settings-save"
                 :loading="saving"
-                :disabled="isReadonly || loading"
+                :disabled="isReadonly || loading || resetting"
                 @click="handleSave"
               >
                 保存配置
@@ -200,9 +204,10 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import {
   frontpageApi,
   type FrontpageExtractionSettings,
@@ -211,11 +216,23 @@ import {
 import { useAuthStore } from '@/stores/auth'
 
 const authStore = useAuthStore()
+const workstationConfirmation = useWorkstationConfirmation()
 const loading = ref(false)
 const saving = ref(false)
+const resetting = ref(false)
+const confirmPending = ref(false)
 const source = ref<'default' | 'file' | string>('default')
 
-const form = reactive<FrontpageExtractionSettings>({
+let disposed = false
+let loadSeq = 0
+let loadController: AbortController | null = null
+let mutationController: AbortController | null = null
+
+type FrontpageExtractionSettingsForm = Omit<FrontpageExtractionSettings, 'demo_hide_threshold'> & {
+  demo_hide_threshold: number | null
+}
+
+const form = reactive<FrontpageExtractionSettingsForm>({
   sql_prefill_enabled: true,
   llm_backfill_enabled: true,
   allow_force_llm_regenerate: true,
@@ -226,11 +243,30 @@ const form = reactive<FrontpageExtractionSettings>({
   default_preview_tab: 'preview',
 })
 
-const canManageFrontpageConfig = computed(() =>
-  authStore.userRoles.some((role) =>
-    ['admin', 'qc_manager', 'sync_admin', 'super_admin'].includes(role),
-  ),
-)
+function normalizeDemoHideThreshold(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.min(100000, Math.max(0, Math.trunc(parsed)))
+}
+
+function handleDemoHideThresholdBlur() {
+  form.demo_hide_threshold = normalizeDemoHideThreshold(form.demo_hide_threshold)
+}
+
+const canManageFrontpageConfig = computed(() => {
+  const roles = authStore.userRoles || []
+  if (roles.some((role) => ['sync_admin', 'super_admin'].includes(role))) {
+    return true
+  }
+  if (roles.includes('admin')) {
+    const instituteId = String(
+      (authStore.user as { institute_id?: string | null } | null)?.institute_id ?? '',
+    ).trim()
+    return !instituteId
+  }
+  return false
+})
 const isReadonly = computed(() => !canManageFrontpageConfig.value)
 
 function patchForm(payload: FrontpageExtractionSettings) {
@@ -245,16 +281,26 @@ function patchForm(payload: FrontpageExtractionSettings) {
 }
 
 async function loadSettings() {
+  if (saving.value || resetting.value) return
+  const seq = ++loadSeq
+  loadController?.abort()
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
   try {
-    const resp = await frontpageApi.getExtractionSettings()
+    const resp = await frontpageApi.getExtractionSettings({ signal: controller.signal })
+    if (disposed || seq !== loadSeq || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
   } catch (error) {
+    if (disposed || seq !== loadSeq || controller.signal.aborted) return
     console.error('加载首页抽取设置失败:', error)
     message.error('加载首页抽取设置失败')
   } finally {
-    loading.value = false
+    if (!disposed && seq === loadSeq && loadController === controller) {
+      loading.value = false
+      loadController = null
+    }
   }
 }
 
@@ -263,47 +309,99 @@ async function handleReload() {
 }
 
 async function handleSave() {
+  if (isReadonly.value || loading.value || saving.value || resetting.value) return
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
+  mutationController?.abort()
+  const controller = new AbortController()
+  mutationController = controller
+  const normalizedThreshold = normalizeDemoHideThreshold(form.demo_hide_threshold)
+  form.demo_hide_threshold = normalizedThreshold
   const payload: FrontpageExtractionSettingsUpdate = {
     sql_prefill_enabled: form.sql_prefill_enabled,
     llm_backfill_enabled: form.llm_backfill_enabled,
     allow_force_llm_regenerate: form.allow_force_llm_regenerate,
     include_demo_records: form.include_demo_records,
     auto_hide_demo_when_real_data: form.auto_hide_demo_when_real_data,
-    demo_hide_threshold: form.demo_hide_threshold,
+    demo_hide_threshold: normalizedThreshold,
     stream_progress_enabled: form.stream_progress_enabled,
     default_preview_tab: form.default_preview_tab,
   }
   saving.value = true
   try {
-    const resp = await frontpageApi.updateExtractionSettings(payload)
+    const resp = await frontpageApi.updateExtractionSettings(payload, { signal: controller.signal })
+    if (disposed || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('首页抽取设置已保存')
   } catch (error) {
+    if (disposed || controller.signal.aborted) return
     console.error('保存首页抽取设置失败:', error)
     message.error('保存失败')
   } finally {
-    saving.value = false
+    if (mutationController === controller) mutationController = null
+    if (!disposed) saving.value = false
   }
 }
 
 async function handleReset() {
-  saving.value = true
+  if (isReadonly.value || loading.value || saving.value || resetting.value || confirmPending.value) {
+    return
+  }
+  confirmPending.value = true
+  let confirmed = false
   try {
-    const resp = await frontpageApi.resetExtractionSettings()
+    confirmed = await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '确认恢复默认首页抽取设置？',
+        content: '将把抽取策略、样例数据策略和运行体验策略恢复为系统默认值，当前修改将被覆盖。',
+        okText: '确认恢复',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+  if (!confirmed || disposed || isReadonly.value || saving.value || resetting.value) return
+
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
+  mutationController?.abort()
+  const controller = new AbortController()
+  mutationController = controller
+  resetting.value = true
+  try {
+    const resp = await frontpageApi.resetExtractionSettings({ signal: controller.signal })
+    if (disposed || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('已恢复默认设置')
   } catch (error) {
+    if (disposed || controller.signal.aborted) return
     console.error('重置首页抽取设置失败:', error)
     message.error('重置失败')
   } finally {
-    saving.value = false
+    if (mutationController === controller) mutationController = null
+    if (!disposed) resetting.value = false
   }
 }
 
 onMounted(() => {
   void loadSettings()
+})
+
+onBeforeUnmount(() => {
+  disposed = true
+  loadSeq += 1
+  loadController?.abort()
+  loadController = null
+  mutationController?.abort()
+  mutationController = null
 })
 </script>
 
@@ -338,7 +436,7 @@ onMounted(() => {
 
 .ds-section-desc {
   margin: 0;
-  color: rgba(29, 29, 31, 0.6);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   line-height: 1.7;
 }
@@ -382,7 +480,7 @@ onMounted(() => {
 .ds-group__title {
   font-size: 13px;
   font-weight: 700;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   letter-spacing: 0;
   padding: 10px 18px;
 }
@@ -401,14 +499,14 @@ onMounted(() => {
 
 .ds-row__label {
   font-size: 14px;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-weight: 600;
 }
 
 .ds-row__hint {
   margin-top: 2px;
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .ds-card__footer {
@@ -428,7 +526,7 @@ onMounted(() => {
 
 .ds-footer-meta {
   font-size: 12px;
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .ds-root :deep(.ant-btn) {
@@ -459,7 +557,7 @@ onMounted(() => {
 }
 
 .ds-root :deep(.ant-alert-description) {
-  color: rgba(29, 29, 31, 0.6);
+  color: var(--mq-text-secondary);
 }
 
 .ds-root :deep(.ant-input-number),

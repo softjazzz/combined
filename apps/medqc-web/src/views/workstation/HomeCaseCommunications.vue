@@ -223,6 +223,29 @@
       </section>
     </a-drawer>
   </section>
+  <section
+    v-else
+    class="case-inbox case-inbox--denied mq-page"
+    role="status"
+    aria-label="无权访问病历沟通"
+  >
+    <header class="mq-page-head">
+      <div class="mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 医生消息</span>
+        <h1 class="mq-page-title">
+          病历沟通
+        </h1>
+      </div>
+    </header>
+    <div class="case-inbox__empty mq-soft">
+      <MqIconTile
+        name="task"
+        :size="44"
+      />
+      <strong>当前账号无权访问病历沟通</strong>
+      <p>仅临床医生或授权管理员可查看病历沟通记录，如需协助请联系管理员核对角色权限。</p>
+    </div>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -239,6 +262,7 @@ import {
   formatCommunicationTime as formatTime,
 } from '@/components/qc/caseCommunicationPresentation'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import {
   getCommunication,
   getCommunicationInbox,
@@ -248,7 +272,19 @@ import type { Communication, CommunicationDetail } from '@/api/caseCommunication
 
 const auth = useAuthStore()
 const route = useRoute()
-const allowed = computed(() => auth.userRoles.includes('doctor'))
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const allowed = computed(() =>
+  ['doctor', 'sync_admin', 'super_admin'].some((role) => effectiveUserRoles.value.includes(role)),
+)
 const items = ref<Communication[]>([]),
   selected = ref<CommunicationDetail>()
 const loading = ref(false),
@@ -299,11 +335,15 @@ async function show(id: string) {
   detailError.value = ''
   detailLoading.value = true
   try {
-    // 详情授权成功后才发送已读，不从列表旧对象推断接收权限。
+    // 详情授权成功后才发送已读，不从列表旧对象推断接收权限；服务端已确认已读则跳过重复 POST。
     const detail = await getCommunication(id)
     if (token !== detailGeneration) return
     validateDetail(detail, id)
     selected.value = detail
+    if (detail.is_read) {
+      items.value = items.value.map((value) => (value.id === id ? detail : value))
+      return
+    }
     const data = await readCommunication(id)
     if (token !== detailGeneration) return
     validateDetail(data, id)
@@ -360,7 +400,12 @@ function openRoute() {
   if (typeof id === 'string' && id.trim() && allowed.value) void show(id)
 }
 watch(
-  () => [auth.user?.id, auth.user?.institute_id, auth.user?.department, ...auth.userRoles],
+  () => [
+    auth.user?.id,
+    auth.user?.institute_id,
+    auth.user?.department,
+    ...effectiveUserRoles.value,
+  ],
   () => {
     reset()
     if (allowed.value) {

@@ -88,10 +88,21 @@ async def create_qc_agent_session(
 @router.get("/sessions/{session_id}", response_model=QCAgentSessionResponse)
 async def get_qc_agent_session(
     session_id: str,
-    _current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     store: QCAgentSessionStore = Depends(_session_store_or_503),
 ) -> QCAgentSessionResponse:
-    return QCAgentSessionResponse(**store.get_session(session_id))
+    return QCAgentSessionResponse(
+        **store.get_session(session_id, current_user=current_user)
+    )
+
+
+@router.delete("/sessions/{session_id}")
+async def delete_qc_agent_session(
+    session_id: str,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    store: QCAgentSessionStore = Depends(_session_store_or_503),
+) -> Dict[str, Any]:
+    return store.delete_session(session_id, current_user=current_user)
 
 
 @router.post(
@@ -158,14 +169,24 @@ async def run_qc_agent_chat(
     current_user: Dict[str, Any] = Depends(get_current_user),
     registry: AgentToolRegistry = Depends(get_qc_agent_registry),
 ) -> QCAgentChatResponse:
-    if not payload.session_id:
+    supplied_session_id = str(payload.session_id or "").strip()
+    if supplied_session_id:
+        try:
+            store = QCAgentSessionStore()
+            store.assert_session_access(supplied_session_id, current_user=current_user)
+        except HTTPException as exc:
+            if exc.status_code != status.HTTP_503_SERVICE_UNAVAILABLE:
+                raise
+        except Exception as exc:
+            logger.warning("qc_agent session ownership precheck skipped: %s", exc)
+    else:
         payload = payload.model_copy(update={"session_id": str(uuid.uuid4())})
     with llm_observation_context(
         business_scene="qc_agent_intent",
         root_job_id=opaque_observation_id("qc_agent_session", payload.session_id),
         executor_key="qc_agent_intent_router",
     ):
-        result = run_intent(payload, registry)
+        result = run_intent(payload, registry, current_user=current_user)
     assert_no_sensitive_output(result.model_dump())
     try:
         store = QCAgentSessionStore()
@@ -176,7 +197,14 @@ async def run_qc_agent_chat(
             user_context=payload.user_context,
         )
         if payload.confirm_selection:
-            store.resolve_pending_confirmation(session_id=str(payload.session_id or ""))
+            store.resolve_pending_confirmation(
+                session_id=str(payload.session_id or ""),
+                current_user=current_user,
+            )
+    except HTTPException as exc:
+        if exc.status_code in (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN):
+            raise
+        logger.warning("qc_agent session trace persist skipped: %s", exc)
     except Exception as exc:
         logger.warning("qc_agent session trace persist skipped: %s", exc)
     return result

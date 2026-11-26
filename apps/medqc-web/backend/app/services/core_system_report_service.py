@@ -8,6 +8,11 @@ from pathlib import Path
 
 from ..database.connection import SessionLocal
 from .defect_rectification_service import RectificationError, _person
+from .report_institute_scope import (
+    _trusted_bound_institute,
+    authorized_institute,
+    authorized_report_institute,
+)
 from .medical_core_system_catalog import CORE_SYSTEM_IDS, CORE_SYSTEMS
 from .record_quality_report_service import (
     MAX_REPORT_CASES,
@@ -93,16 +98,26 @@ class CoreSystemReportService:
         end = _as_utc(completed_to) if completed_to else None
         if start and end and start > end:
             raise RecordQualityReportInvalid("完成时间起不能晚于止")
+        institute_id = (
+            institute_id.strip()
+            if isinstance(institute_id, str) and institute_id.strip()
+            else None
+        )
+        if self.session_factory is None:
+            raise RuntimeError("账号范围来源暂不可用")
         with self.session_factory() as session:
-            actor = _person(session, actor_id)
-        if not actor["roles"] & {"admin", "qc_manager"}:
-            raise RectificationError("无权读取制度专题报表", 403)
-        if "admin" not in actor["roles"]:
-            if not actor["institute_id"] or (
-                institute_id and institute_id != actor["institute_id"]
-            ):
-                raise RectificationError("无权读取其他机构", 403)
-            institute_id = actor["institute_id"]
+            allowed_institute = authorized_institute(session, actor_id)
+            if allowed_institute is not None:
+                if institute_id and institute_id != allowed_institute:
+                    raise RectificationError("无权读取其他机构", 403)
+                institute_id = allowed_institute
+            elif not institute_id:
+                if self.session_factory is SessionLocal:
+                    institute_id = authorized_report_institute(actor_id)
+                else:
+                    person = _person(session, actor_id.strip())
+                    if person["roles"] & {"sync_admin", "super_admin"}:
+                        institute_id = _trusted_bound_institute(person)
         if department and not institute_id:
             raise RecordQualityReportInvalid("科室筛选须同时指定机构")
         records = self.scope_loader(
@@ -144,6 +159,7 @@ class CoreSystemReportService:
             raise RuntimeError("结果来源回执无效")
         versions = {}
         cases = []
+        has_time_window = bool(start or end)
         for identity, record in identities.items():
             result = raw.get(identity)
             row = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
@@ -159,14 +175,22 @@ class CoreSystemReportService:
                 points=[],
                 coverage="unavailable",
             )
+            completed = (
+                _parse_completed_at(result.get("completed_at"))
+                if isinstance(result, dict)
+                else None
+            )
+            if has_time_window and (
+                completed is None
+                or (start and completed < start)
+                or (end and completed > end)
+            ):
+                continue
             if not isinstance(result, dict) or result.get("status") != "ready":
                 cases.append(row)
                 continue
-            completed = _parse_completed_at(result.get("completed_at"))
             if completed is None or not isinstance(result.get("items"), list):
                 cases.append(row)
-                continue
-            if (start and completed < start) or (end and completed > end):
                 continue
             for key in (
                 "root_job_id",

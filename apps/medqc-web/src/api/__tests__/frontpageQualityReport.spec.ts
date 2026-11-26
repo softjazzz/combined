@@ -79,7 +79,7 @@ describe('frontpage quality report API', () => {
     expect(getRaw).toHaveBeenCalledWith(
       '/api/v1/quality-reports/frontpage-quality/export',
       { department: '外科', source: 'all', sheet: 'records' },
-      { responseType: 'blob' },
+      expect.objectContaining({ responseType: 'blob', skipErrorToast: true, timeout: 120_000 }),
     )
   })
 })

@@ -1,5 +1,5 @@
 <template>
-  <main class="feedback-demo-page mq-page">
+  <section class="feedback-demo-page mq-page" aria-label="质控反馈记录">
     <header class="feedback-demo-head mq-page-head">
       <div>
         <h1 class="mq-page-title">质控反馈记录</h1>
@@ -134,7 +134,7 @@
         </template>
       </section>
     </template>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -290,7 +290,11 @@ async function load() {
   try {
     const result = await listQcResultFeedbackDemo()
     if (!result.success || !result.data) {
-      error.value = result.message || '反馈记录暂时无法读取，请稍后重试。'
+      const rawMessage = String(result.message || '').trim()
+      error.value =
+        rawMessage === 'clinical_source_disabled'
+          ? '当前临床数据源已停用，请在系统配置中启用临床数据源后重试。'
+          : rawMessage || '反馈记录暂时无法读取，请稍后重试。'
       return
     }
     feedbacks.value = result.data

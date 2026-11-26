@@ -5,7 +5,7 @@
       <!-- 侧栏：分组标题 + 平铺入口（配置见 workstationNav.ts） -->
       <aside class="ws-sider">
         <div class="ws-sider__head">
-          <RouterLink :to="WORKSTATION_BASE" class="ws-brand" aria-label="病案质控系统首页">
+          <RouterLink :to="homePath" class="ws-brand" aria-label="病案质控系统首页">
             <span class="ws-brand__mark" aria-hidden="true">
               <MqIcon name="rules" color="#FFFFFF" :size="18" />
             </span>
@@ -117,9 +117,21 @@
               </template>
             </a-dropdown>
 
-            <a-tooltip v-if="useFullMessageCenter" title="消息中心" placement="right">
-              <router-link class="ws-icon-button" to="/workstation-v5/messages" aria-label="消息中心">
+            <a-tooltip v-if="useFullMessageCenter" :title="messageCenterTooltip" placement="right">
+              <router-link
+                class="ws-icon-button ws-icon-button--messages"
+                to="/workstation-v5/messages"
+                :aria-label="messageCenterAriaLabel"
+              >
                 <Bell aria-hidden="true" />
+                <span
+                  v-if="messageUnreadBadge"
+                  class="ws-icon-button__badge"
+                  data-testid="ws-message-unread-badge"
+                  aria-hidden="true"
+                >
+                  {{ messageUnreadBadge }}
+                </span>
               </router-link>
             </a-tooltip>
             <a-popover v-else placement="rightBottom" trigger="click">
@@ -153,12 +165,10 @@
         </nav>
 
         <main class="ws-content">
-          <router-view v-slot="{ Component }">
-            <transition name="fade" mode="out-in">
-              <div :key="route.fullPath" class="workstation-route-view">
-                <component :is="Component" v-if="Component" />
-              </div>
-            </transition>
+          <router-view v-slot="{ Component, route: currentRoute }">
+            <div :key="currentRoute.path" class="workstation-route-view">
+              <component :is="Component" v-if="Component" />
+            </div>
           </router-view>
         </main>
       </div>
@@ -185,16 +195,24 @@ import RuntimeBuildStatus from '@/components/layout/RuntimeBuildStatus.vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
+import { ApiService } from '@/services/apiService'
+import { ensureClinicalSourceModeInitialized } from '@/api/clinicalSources'
 import { useAuthStore } from '@/stores/auth'
 import { canUseMessageCenter } from '@/views/workstation/notificationNavigation'
 import { canUseReminderPanel, WORKSTATION_REMINDER_PANEL } from '@/views/workstation/notificationNavigation'
 import {
+  getSharedMessageCenterUnreadVersion,
+  MESSAGE_CENTER_UNREAD_EVENT,
+  syncSharedMessageCenterUnreadCount,
+  useSharedMessageCenterUnreadCount,
+} from '@/views/workstation/useMessageCenter'
+import {
   DRG_SECTION_TABS,
-  WORKSTATION_BASE,
   WORKSTATION_NAV,
   filterVisibleNav,
   findActiveNav,
   findDrgSectionTab,
+  resolveDefaultWorkstationPath,
   type NavLocation,
   type NavRouteLike,
 } from './workstationNav'
@@ -210,8 +228,100 @@ onBeforeUnmount(workstationConfirmation.dispose)
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const homePath = computed(() => resolveDefaultWorkstationPath(authStore.userRoles ?? []))
 const useFullMessageCenter = computed(() => canUseMessageCenter(authStore.userRoles))
 provide(WORKSTATION_REMINDER_PANEL, computed(() => canUseReminderPanel(authStore.userRoles)))
+
+const sharedMessageUnreadCount = useSharedMessageCenterUnreadCount()
+const messageUnreadCount = computed(() =>
+  useFullMessageCenter.value ? (sharedMessageUnreadCount.value ?? 0) : 0,
+)
+const messageUnreadBadge = computed(() => {
+  const count = messageUnreadCount.value
+  if (count <= 0) return ''
+  return count > 99 ? '99+' : String(count)
+})
+const messageCenterTooltip = computed(() =>
+  messageUnreadCount.value > 0 ? `消息中心（${messageUnreadCount.value} 条未读）` : '消息中心',
+)
+const messageCenterAriaLabel = computed(() =>
+  messageUnreadCount.value > 0 ? `消息中心，${messageUnreadCount.value} 条未读` : '消息中心',
+)
+
+let unreadFetchSeq = 0
+let fetchedUnreadForSessionKey = ''
+
+function isApiAuthenticated(): boolean {
+  return typeof ApiService?.isAuthenticated === 'function' ? ApiService.isAuthenticated() : false
+}
+
+async function fetchMessageUnreadCount(sessionKey: string) {
+  if (
+    !useFullMessageCenter.value ||
+    !isApiAuthenticated() ||
+    typeof ApiService?.get !== 'function'
+  ) {
+    return
+  }
+  const seq = ++unreadFetchSeq
+  const versionBefore = getSharedMessageCenterUnreadVersion()
+  try {
+    const result = await ApiService.get<{ unread_count?: number }>(
+      '/api/v1/notifications',
+      { page: 1, page_size: 1, is_read: false },
+      { skipErrorToast: true },
+    )
+    if (seq !== unreadFetchSeq || fetchedUnreadForSessionKey !== sessionKey) return
+    if (versionBefore !== getSharedMessageCenterUnreadVersion()) return
+    const unreadCount = result?.data?.unread_count
+    if (
+      result?.success &&
+      typeof unreadCount === 'number' &&
+      Number.isInteger(unreadCount) &&
+      unreadCount >= 0
+    ) {
+      syncSharedMessageCenterUnreadCount(unreadCount, { emitEvent: false })
+    }
+  } catch {
+    // 侧栏未读角标拉取失败时静默降级，不阻断工作台外壳渲染
+  }
+}
+
+const messageUnreadSessionKey = computed(() => {
+  if (!useFullMessageCenter.value) return ''
+  const userId = String(authStore.user?.id || '').trim()
+  return userId || (authStore.isAuthenticated ? 'authenticated' : '')
+})
+
+watch(
+  messageUnreadSessionKey,
+  (sessionKey, prevSessionKey) => {
+    if (!sessionKey) {
+      ++unreadFetchSeq
+      fetchedUnreadForSessionKey = ''
+      if (prevSessionKey) {
+        syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
+      }
+      return
+    }
+    if (sessionKey === fetchedUnreadForSessionKey) return
+    if (prevSessionKey && prevSessionKey !== sessionKey) {
+      syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
+    }
+    fetchedUnreadForSessionKey = sessionKey
+    void ensureClinicalSourceModeInitialized()
+    void fetchMessageUnreadCount(sessionKey)
+  },
+  { immediate: true },
+)
+
+function handleUnreadCountEvent(event: Event) {
+  const detail = (event as CustomEvent<{ unreadCount?: number | null }>).detail
+  if (!detail || !('unreadCount' in detail)) return
+  const nextCount = detail.unreadCount ?? null
+  if (nextCount === sharedMessageUnreadCount.value) return
+  syncSharedMessageCenterUnreadCount(nextCount, { emitEvent: false })
+}
 
 // 宽度小于 1280 时默认折叠；用户手动切换后以用户选择为准，直到下次跨越断点
 const COLLAPSE_QUERY = '(max-width: 1279px)'
@@ -227,6 +337,9 @@ function toggleCollapsed() {
 }
 
 onMounted(() => {
+  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+    window.addEventListener(MESSAGE_CENTER_UNREAD_EVENT, handleUnreadCountEvent)
+  }
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return
   collapseMedia = window.matchMedia(COLLAPSE_QUERY)
   syncCollapsedWithViewport(collapseMedia)
@@ -234,14 +347,20 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  ++unreadFetchSeq
+  if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {
+    window.removeEventListener(MESSAGE_CENTER_UNREAD_EVENT, handleUnreadCountEvent)
+  }
   collapseMedia?.removeEventListener('change', syncCollapsedWithViewport)
 })
 
 const ROLE_LABEL_MAP: Record<string, string> = {
   sync_admin: '超级管理员',
+  super_admin: '超级管理员',
   admin: '系统管理员',
   qc_manager: '质控主管',
   QC_MANAGER: '质控主管',
+  qc_staff: '质控员',
   coder: '病案编码员',
   doctor: '临床医生',
   reviewer: '审核员',
@@ -334,6 +453,9 @@ watch(
 const drgActiveTab = computed(() => findDrgSectionTab(navRoute.value))
 
 const handleLogout = async () => {
+  ++unreadFetchSeq
+  fetchedUnreadForSessionKey = ''
+  syncSharedMessageCenterUnreadCount(null, { emitEvent: false })
   await authStore.signOut()
   router.push('/workstation-v5/login')
 }
@@ -370,6 +492,7 @@ const handleLogout = async () => {
   -webkit-backdrop-filter: var(--mq-glass-blur);
   backdrop-filter: var(--mq-glass-blur);
   box-shadow: var(--mq-glass-shadow);
+  overflow: hidden;
   transition:
     width 200ms ease,
     flex-basis 200ms ease;
@@ -387,6 +510,8 @@ const handleLogout = async () => {
   flex-shrink: 0;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
   padding: 0 4px 14px 8px;
 }
 
@@ -402,6 +527,8 @@ const handleLogout = async () => {
   align-items: center;
   gap: 10px;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   color: var(--mq-text-primary);
   text-decoration: none;
 }
@@ -427,26 +554,36 @@ const handleLogout = async () => {
 
 .ws-brand__copy {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   line-height: 16px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-brand__title {
+  overflow: hidden;
   font-size: 14px;
   font-weight: 700;
   letter-spacing: -0.01em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ws-brand__subtitle {
+  overflow: hidden;
   color: var(--mq-text-tertiary);
   font-size: 11px;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ws-nav {
   flex: 1 1 0;
   min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: 0 2px;
   /* 矮屏时导航需要滚动，保留细滚动条作为可滚动提示，避免末项被无提示地藏起来 */
@@ -464,11 +601,14 @@ const handleLogout = async () => {
 }
 
 .ws-nav__group-label {
+  min-width: 0;
+  overflow: hidden;
   padding: 8px 10px 2px;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
   font-weight: 400;
   letter-spacing: 0.04em;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -477,9 +617,11 @@ const handleLogout = async () => {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  min-width: 0;
   height: 24px;
   margin-top: 8px;
   padding: 0 8px;
+  overflow: hidden;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -489,6 +631,13 @@ const handleLogout = async () => {
   transition:
     background-color 140ms ease,
     color 140ms ease;
+}
+
+.ws-nav__group-toggle > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ws-nav__group-toggle:hover {
@@ -529,9 +678,11 @@ const handleLogout = async () => {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
   height: 30px;
   margin: 0;
   padding: 0 8px;
+  overflow: hidden;
   border-radius: 10px;
   color: var(--mq-text-primary);
   font-size: var(--mq-font-14);
@@ -572,8 +723,11 @@ const handleLogout = async () => {
 }
 
 .ws-nav__label {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-sider__toggle {
@@ -607,6 +761,7 @@ const handleLogout = async () => {
   flex-shrink: 0;
   flex-direction: column;
   gap: 6px;
+  min-width: 0;
   margin-top: 4px;
   padding: 8px 2px 0;
   border-top: 0.5px solid var(--mq-border);
@@ -614,18 +769,25 @@ const handleLogout = async () => {
 
 .ws-sider__build {
   display: flex;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   padding-left: 6px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-account {
   display: flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
+  padding-right: 4px;
 }
 
 .ws-shell--collapsed .ws-account {
   flex-direction: column-reverse;
   gap: 8px;
+  padding-right: 0;
 }
 
 /* 主区 */
@@ -637,6 +799,7 @@ const handleLogout = async () => {
 }
 
 .ws-icon-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -649,6 +812,30 @@ const handleLogout = async () => {
   background: transparent;
   color: var(--mq-text-secondary);
   cursor: pointer;
+}
+
+.ws-icon-button__badge {
+  position: absolute;
+  top: -2px;
+  right: -4px;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border: 1.5px solid #ffffff;
+  border-radius: 999px;
+  background: #ff3b30;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 2px 6px rgba(255, 59, 48, 0.35);
 }
 
 .ws-icon-button:hover {
@@ -681,12 +868,14 @@ const handleLogout = async () => {
 
 .ws-user {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-items: center;
   gap: 10px;
   min-width: 0;
   height: 44px;
   padding: 0 6px;
+  overflow: hidden;
+  white-space: nowrap;
   border: 0;
   border-radius: 12px;
   background: transparent;
@@ -702,6 +891,7 @@ const handleLogout = async () => {
 
 .ws-shell--collapsed .ws-user {
   flex: 0 0 auto;
+  width: 36px;
   justify-content: center;
   padding: 0;
 }
@@ -722,15 +912,22 @@ const handleLogout = async () => {
 
 .ws-user__meta {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   align-items: flex-start;
   min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   line-height: 16px;
+  animation: ws-sider-label-in 160ms ease 60ms both;
 }
 
 .ws-user__role {
+  overflow: hidden;
+  max-width: 100%;
   font-size: var(--mq-font-13);
   font-weight: 600;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -816,7 +1013,7 @@ const handleLogout = async () => {
   flex: 1 1 auto;
   min-width: 0;
   padding-top: 18px;
-  overflow-x: hidden;
+  overflow-x: clip;
   background: transparent;
 }
 
@@ -831,22 +1028,26 @@ const handleLogout = async () => {
   background: transparent !important;
 }
 
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 150ms ease;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
+@keyframes ws-sider-label-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .ws-sider,
-  .ws-nav__item,
-  .fade-enter-active,
-  .fade-leave-active {
+  .ws-nav__item {
     transition: none;
+  }
+
+  .ws-brand__copy,
+  .ws-nav__label,
+  .ws-sider__build,
+  .ws-user__meta {
+    animation: none;
   }
 }
 /* ---------- 侧栏精修：去图标灰块、淡蓝选中、滚动条与折叠箭头按需出现 ---------- */

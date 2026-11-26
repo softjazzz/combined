@@ -1,4 +1,4 @@
-"""病历池全院视图只保留登录认证，不保留角色门禁。"""
+"""病历池接口需登录且通过允许角色校验。"""
 
 import asyncio
 from threading import Event
@@ -32,10 +32,21 @@ def test_workstation_route_requires_login(monkeypatch):
     assert response.status_code == 401
 
 
-def test_workstation_route_allows_any_authenticated_role(monkeypatch):
+def test_workstation_route_rejects_unauthorized_role(monkeypatch):
     client = _client_for_workstation_auth(
         monkeypatch,
-        user={"id": "reader-1", "roles": ["read_only_observer"]},
+        user={"id": "reader-1", "roles": ["read_only_observer"], "institute_id": "INST-1"},
+    )
+
+    response = client.get("/api/medical-records/workstation")
+
+    assert response.status_code == 403
+
+
+def test_workstation_route_allows_authorized_role(monkeypatch):
+    client = _client_for_workstation_auth(
+        monkeypatch,
+        user={"id": "qc-1", "roles": ["qc_manager"], "institute_id": "INST-1"},
     )
 
     response = client.get("/api/medical-records/workstation")
@@ -47,7 +58,7 @@ def test_workstation_route_allows_any_authenticated_role(monkeypatch):
 def test_workstation_route_rejects_unsupported_hospital_status(monkeypatch):
     client = _client_for_workstation_auth(
         monkeypatch,
-        user={"id": "reader-1", "roles": ["read_only_observer"]},
+        user={"id": "qc-1", "roles": ["qc_manager"], "institute_id": "INST-1"},
     )
 
     # unknown 是独立 CDM 支持的状态。这里测试合同外的值。
@@ -59,7 +70,7 @@ def test_workstation_route_rejects_unsupported_hospital_status(monkeypatch):
 def test_workstation_route_rejects_unknown_inpatient_sort(monkeypatch):
     client = _client_for_workstation_auth(
         monkeypatch,
-        user={"id": "reader-1", "roles": ["read_only_observer"]},
+        user={"id": "qc-1", "roles": ["qc_manager"], "institute_id": "INST-1"},
     )
 
     response = client.get("/api/medical-records/workstation?inpatient_sort=priority")
@@ -77,8 +88,9 @@ def test_workstation_route_forwards_attending_physician_filter(monkeypatch):
         lambda **kwargs: captured.update(kwargs) or {"records": [], "doctors": [], "total": 0},
     )
     app.dependency_overrides[get_current_user] = lambda: {
-        "id": "reader-1",
-        "roles": ["read_only_observer"],
+        "id": "qc-1",
+        "roles": ["qc_manager"],
+        "institute_id": "INST-1",
     }
     client = TestClient(app)
 

@@ -6,12 +6,26 @@
           <strong class="result-section-title"
             ><ClipboardCheck :size="18" aria-hidden="true" />质控结果</strong
           >
-          <span data-testid="single-record-result-summary">{{ resultExecutionSummary }}</span>
+          <span
+            class="toolbar-count-chip"
+            :class="{ 'is-confirmed': confirmedResultsOnly && viewItems.length > 0 }"
+            data-testid="single-record-result-summary"
+            >{{ resultExecutionSummary }}</span
+          >
+        </div>
+        <div v-if="renderedItems.length > 0" class="toolbar-progress">
+          <span
+            class="toolbar-review-progress"
+            :class="{ 'is-complete': reviewedVisibleCount === renderedItems.length }"
+            data-testid="single-record-review-progress"
+          >
+            已看 {{ reviewedVisibleCount }}/{{ renderedItems.length }}
+          </span>
         </div>
       </div>
       <template v-if="viewItems.length">
         <div
-          v-if="!isGroupedPresentation"
+          v-if="!isGroupedPresentation && statusTabs.length > 1"
           class="result-tabs"
           role="tablist"
           aria-label="质控结果状态筛选"
@@ -32,7 +46,7 @@
           </button>
         </div>
         <div
-          v-else
+          v-else-if="isGroupedPresentation && reportTabs.length > 1"
           class="result-tabs result-report-tabs"
           role="tablist"
           aria-label="病历质控报告分类"
@@ -79,10 +93,13 @@
           `is-${item.tone}`,
           {
             'is-expanded': expandedKey === item.key,
+            'is-active': activeItemKey === item.key,
+            'is-reviewed': reviewedKeys.has(item.key) && activeItemKey !== item.key,
             'is-document-group-start': documentGroupForItem(item.key)?.isFirst,
             'is-document-group-collapsed': !isDocumentGroupExpandedForItem(item.key),
           },
         ]"
+        :aria-current="activeItemKey === item.key ? 'true' : undefined"
         :data-testid="
           isDocumentGroupExpandedForItem(item.key) ? 'single-record-result-row' : undefined
         "
@@ -126,17 +143,40 @@
           @click="handleContentClick($event, item)"
         >
           <span class="result-main">
+            <span class="result-meta-bar">
+              <span class="result-meta-left">
+                <span class="result-index-badge">{{ visibleDisplayIndex(item.key) }}</span>
+                <span
+                  v-if="cardDocumentTag(item)"
+                  class="result-doc-badge"
+                  data-testid="single-record-doc-badge"
+                >
+                  <FileText :size="13" aria-hidden="true" />
+                  {{ cardDocumentTag(item) }}
+                </span>
+              </span>
+              <span class="result-meta-right">
+                <span
+                  v-if="reviewedKeys.has(item.key)"
+                  class="result-reviewed-badge"
+                  data-testid="single-record-reviewed-badge"
+                >
+                  <Check :size="13" :stroke-width="2.4" aria-hidden="true" />
+                  已查看
+                </span>
+                <span
+                  v-if="!isCompliantResult(item) && !isSingleConfirmedView"
+                  class="status-cell status-pill mq-status"
+                  :class="[`is-${item.tone}`, statusModifierClass(item)]"
+                  >{{ item.displayStatus }}</span
+                >
+              </span>
+            </span>
             <span class="result-title-row">
               <span v-if="isCompliantResult(item)" class="status-cell compliant-dot">
                 <span class="visually-hidden">合规</span>
               </span>
-              <strong class="rule-name" :title="displayRuleName(item)">{{ displayRuleName(item) }}</strong>
-              <span
-                v-if="!isCompliantResult(item)"
-                class="status-cell status-pill mq-status"
-                :class="[`is-${item.tone}`, statusModifierClass(item)]"
-                >{{ item.displayStatus }}</span
-              >
+              <strong class="rule-name" :title="displayRuleName(item)">{{ cardHeadlineTitle(item) }}</strong>
             </span>
             <span
               v-if="(!isCompliantResult(item) || expandedKey === item.key) && !copyMatchHeadline(item)"
@@ -146,8 +186,12 @@
               <span
                 class="rule-conclusion"
                 data-testid="single-record-result-conclusion"
-                >{{ resultHeadline(item) }}</span
               >
+                <template
+                  v-for="(segment, segIdx) in conclusionSegments(resultHeadline(item))"
+                  :key="segIdx"
+                ><strong v-if="segment.isDate" class="rule-conclusion-date">{{ segment.text }}</strong><template v-else>{{ segment.text }}</template></template>
+              </span>
             </span>
             <span
               v-if="copyMatchHeadline(item)"
@@ -158,15 +202,14 @@
                 class="copy-match-headline-documents"
                 data-testid="copy-match-headline-documents"
               >
-                <span>
+                <span class="copy-match-doc-line">
+                  <em class="copy-match-seq">篇1</em>
                   <strong>{{ copyMatchHeadline(item)?.leftLabel }}</strong>
-                  <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.leftTime }}</time>
                 </span>
-                <ArrowRight aria-hidden="true" :size="16" :stroke-width="1.6" />
-                <span>
+                <span class="copy-match-doc-line">
+                  <em class="copy-match-seq">篇2</em>
                   <strong>{{ copyMatchHeadline(item)?.rightLabel }}</strong>
-                  <i aria-hidden="true">·</i>
                   <time>{{ copyMatchHeadline(item)?.rightTime }}</time>
                 </span>
               </span>
@@ -175,22 +218,42 @@
                   相似度 <strong>{{ copyMatchHeadline(item)?.similarity }}</strong>
                 </span>
                 <span>
-                  判定阈值 <strong>{{ copyMatchHeadline(item)?.threshold }}</strong>
+                  阈值 <strong>{{ copyMatchHeadline(item)?.threshold }}</strong>
                 </span>
-                <span v-if="copyMatchHeadline(item)?.additionalCount">
+                <span v-if="copyMatchHeadline(item)?.additionalCount" class="copy-match-extra">
                   另有 <strong>{{ copyMatchHeadline(item)?.additionalCount }}</strong> 组
                 </span>
               </span>
             </span>
-            <span class="result-footer">
-              <span class="result-details-hint" aria-hidden="true">
-                {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
-                <ChevronUp v-if="expandedKey === item.key" :size="16" />
-                <ChevronDown v-else :size="16" />
-              </span>
-            </span>
           </span>
         </button>
+        <div
+          v-if="isDocumentGroupExpandedForItem(item.key)"
+          class="result-footer"
+        >
+          <button
+            v-if="primaryEvidence(item)"
+            type="button"
+            class="result-locate-btn"
+            data-testid="single-record-quick-locate"
+            @click="locatePrimaryEvidence(item)"
+          >
+            <FileText :size="13" aria-hidden="true" />
+            <span>定位原文</span>
+            <ArrowRight :size="13" aria-hidden="true" />
+          </button>
+          <span v-else class="result-footer-spacer" aria-hidden="true" />
+          <button
+            type="button"
+            class="result-details-hint"
+            :aria-expanded="expandedKey === item.key"
+            @click="toggle(item.key)"
+          >
+            {{ expandedKey === item.key ? '收起详情' : '展开详情' }}
+            <ChevronUp v-if="expandedKey === item.key" :size="15" />
+            <ChevronDown v-else :size="15" />
+          </button>
+        </div>
 
         <template v-if="isDocumentGroupExpandedForItem(item.key) && expandedKey === item.key">
           <ConsultationRecommendationSummary
@@ -379,13 +442,14 @@
               >
                 <span class="evidence-chips-label">关键证据</span>
                 <button
-                  v-for="evidence in displayEvidence(item)"
-                  :key="evidence.source_ref"
+                  v-for="(evidence, evIndex) in displayEvidence(item)"
+                  :key="`${evidence.source_ref}-${evidence.recommendation_index ?? ''}-${evidence.evidence_role ?? ''}-${evIndex}`"
                   type="button"
                   class="evidence-chip"
+                  :class="{ 'is-active': activeEvidenceKey === evidenceIdentity(item.key, evidence) }"
                   data-testid="single-record-evidence"
                   :title="evidenceHint(evidence)"
-                  @click="emit('locate-evidence', evidence)"
+                  @click="locateEvidenceItem(item, evidence)"
                 >
                   {{ evidenceLabel(evidence) }}
                 </button>
@@ -426,7 +490,7 @@
               :feedback="feedbackByRule[item.rule_id]"
               :loading="feedbackLoading"
               :saving="feedbackSavingRuleId === item.rule_id"
-              :error-message="feedbackError"
+              :error-message="feedbackErrorByRule[item.rule_id] || feedbackError"
               @submit="emit('submit-feedback', item.rule_id, $event)"
             />
           </section>
@@ -491,10 +555,12 @@ import { message } from 'ant-design-vue'
 import { QC_RESULT_STATUS_LABELS } from '../utils/qcResultStatusLabels'
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   ChevronRight,
   ChevronUp,
   ClipboardCheck,
+  FileText,
   ListFilter,
 } from 'lucide-vue-next'
 import { computed, defineComponent, h, ref, watch } from 'vue'
@@ -542,6 +608,7 @@ const props = withDefaults(
     feedbackEnabled?: boolean
     feedbackLoading?: boolean
     feedbackError?: string
+    feedbackErrorByRule?: Record<string, string>
     feedbackSavingRuleId?: string
     debugContext?: QcResultDebugContext
   }>(),
@@ -551,6 +618,7 @@ const props = withDefaults(
     feedbackEnabled: false,
     feedbackLoading: false,
     feedbackError: '',
+    feedbackErrorByRule: () => ({}),
     feedbackSavingRuleId: '',
   },
 )
@@ -734,6 +802,32 @@ function examLabEventPresentation(item: SingleRecordQcResultItem) {
 
 function consultationRecommendationPresentation(item: SingleRecordQcResultItem) {
   return buildConsultationRecommendationPresentation(item)
+}
+
+interface ConclusionSegment {
+  text: string
+  isDate: boolean
+}
+
+const CONCLUSION_DATE_PATTERN =
+  /(\b\d{4}[-/.]\d{1,2}[-/.]\d{1,2}(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b|\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}:\d{2}(?::\d{2})?)?)/g
+
+function conclusionSegments(text: string): ConclusionSegment[] {
+  if (!text) return []
+  const segments: ConclusionSegment[] = []
+  let lastIndex = 0
+  for (const match of text.matchAll(CONCLUSION_DATE_PATTERN)) {
+    const index = match.index ?? 0
+    if (index > lastIndex) {
+      segments.push({ text: text.slice(lastIndex, index), isDate: false })
+    }
+    segments.push({ text: match[0], isDate: true })
+    lastIndex = index + match[0].length
+  }
+  if (lastIndex < text.length) {
+    segments.push({ text: text.slice(lastIndex), isDate: false })
+  }
+  return segments
 }
 
 function resultHeadline(item: SingleRecordQcResultViewItem) {
@@ -996,10 +1090,73 @@ const documentGroupByItemKey = computed(() => {
   return entries
 })
 const hasVisibleResults = computed(() => renderedItems.value.length > 0)
+const isSingleConfirmedView = computed(() => {
+  if (confirmedResultsOnly.value) return true
+  if (isGroupedPresentation.value) return activeReportTab.value === 'non_compliant'
+  return activeTab.value === 'non_compliant'
+})
 const expandedKey = ref('')
+const activeItemKey = ref('')
+const activeEvidenceKey = ref('')
+const reviewedKeys = ref<Set<string>>(new Set())
 const feedbackOpenKey = ref('')
 const ruleTextOpenKey = ref('')
 const collapsedDocumentGroupKeys = ref<Set<string>>(new Set())
+
+const reviewedVisibleCount = computed(
+  () => renderedItems.value.filter((item) => reviewedKeys.value.has(item.key)).length,
+)
+
+function markReviewed(key: string) {
+  if (!key || reviewedKeys.value.has(key)) return
+  const next = new Set(reviewedKeys.value)
+  next.add(key)
+  reviewedKeys.value = next
+}
+
+function splitRuleDocumentPrefix(item: SingleRecordQcResultViewItem): {
+  docTag: string
+  title: string
+} {
+  const full = displayRuleName(item).trim()
+  const match = full.match(/^([^\s：:]{2,12})[：:]\s*(.+)$/)
+  if (match && match[1] && match[2]) {
+    return { docTag: match[1].trim(), title: match[2].trim() }
+  }
+  const sourceDoc = String(item.source_document || '').trim()
+  const copyDoc = copyMatchHeadline(item)?.leftLabel || ''
+  return { docTag: sourceDoc || copyDoc, title: full }
+}
+
+function cardDocumentTag(item: SingleRecordQcResultViewItem): string {
+  return splitRuleDocumentPrefix(item).docTag
+}
+
+function cardHeadlineTitle(item: SingleRecordQcResultViewItem): string {
+  return splitRuleDocumentPrefix(item).title
+}
+
+function evidenceIdentity(itemKey: string, evidence: SingleRecordQcEvidence): string {
+  return `${itemKey}::${evidence.source_ref}::${evidence.field_path || ''}::${evidence.recommendation_index || ''}::${evidence.evidence_role || ''}`
+}
+
+function primaryEvidence(item: SingleRecordQcResultItem): SingleRecordQcEvidence | null {
+  const list = displayEvidence(item)
+  return list.length > 0 ? list[0] : null
+}
+
+function locateEvidenceItem(item: SingleRecordQcResultViewItem, evidence: SingleRecordQcEvidence) {
+  activeItemKey.value = item.key
+  activeEvidenceKey.value = evidenceIdentity(item.key, evidence)
+  markReviewed(item.key)
+  emit('locate-evidence', evidence)
+}
+
+function locatePrimaryEvidence(item: SingleRecordQcResultViewItem) {
+  const target = primaryEvidence(item)
+  if (!target) return
+  locateEvidenceItem(item, target)
+}
 
 function documentGroupForItem(itemKey: string) {
   return documentGroupByItemKey.value.get(itemKey)
@@ -1027,6 +1184,23 @@ function shouldRenderDocumentGroupItem(itemKey: string) {
   return !group || group.count <= 1 || group.isFirst || isDocumentGroupExpanded(group.key)
 }
 
+const visibleDisplayIndexByKey = computed(() => {
+  const indexMap = new Map<string, number>()
+  let visibleIndex = 0
+  for (const item of renderedItems.value) {
+    if (isDocumentGroupExpandedForItem(item.key)) {
+      visibleIndex += 1
+      indexMap.set(item.key, visibleIndex)
+    }
+  }
+  return indexMap
+})
+
+function visibleDisplayIndex(itemKey: string): string {
+  const index = visibleDisplayIndexByKey.value.get(itemKey)
+  return index ? String(index).padStart(2, '0') : ''
+}
+
 function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
   if (confirmedResultsOnly.value) return 'non_compliant'
   if (presentation.value.counts.nonCompliant) return 'non_compliant'
@@ -1035,19 +1209,52 @@ function resolveDefaultReportTab(): SingleRecordQcResultReportTab {
   return 'all'
 }
 
+const itemsDatasetSignature = computed(() => {
+  const contextSignature = [
+    props.debugContext?.instituteId || '',
+    props.debugContext?.patientId || '',
+    props.debugContext?.visitId || '',
+    props.debugContext?.recordId || '',
+    props.debugContext?.recordRef || '',
+    props.debugContext?.jobId || '',
+  ].join('|')
+  const itemsSignature = props.items
+    .map(
+      (item, index) =>
+        `${index}:${item.rule_id}:${item.status}:${item.conclusion || ''}:${item.detail || ''}:${item.source_document || ''}:${(item.evidence || []).map((entry) => entry.source_ref).join(',')}`,
+    )
+    .join('\u0000')
+  return `${contextSignature}::${itemsSignature}`
+})
+
 watch(
-  [() => props.presentationMode, () => props.items],
+  [() => props.presentationMode, itemsDatasetSignature],
   () => {
-    if (!isGroupedPresentation.value) return
-    activeReportTab.value = resolveDefaultReportTab()
-    collapsedDocumentGroupKeys.value = new Set()
     expandedKey.value = ''
+    activeItemKey.value = ''
+    activeEvidenceKey.value = ''
+    reviewedKeys.value = new Set()
+    feedbackOpenKey.value = ''
+    ruleTextOpenKey.value = ''
+    if (isGroupedPresentation.value) {
+      activeReportTab.value = resolveDefaultReportTab()
+      collapsedDocumentGroupKeys.value = new Set()
+    }
   },
   { immediate: true },
 )
 
 function toggle(key: string) {
-  expandedKey.value = expandedKey.value === key ? '' : key
+  if (expandedKey.value === key) {
+    expandedKey.value = ''
+    return
+  }
+  expandedKey.value = key
+  activeItemKey.value = key
+  const item = renderedItems.value.find((entry) => entry.key === key)
+  const primary = item ? primaryEvidence(item) : null
+  activeEvidenceKey.value = primary ? evidenceIdentity(key, primary) : ''
+  markReviewed(key)
   emit('select', key)
 }
 
@@ -1178,6 +1385,8 @@ watch(
   (value) => {
     if (!value || !viewItems.value.some((item) => item.key === value)) return
     expandedKey.value = value
+    activeItemKey.value = value
+    markReviewed(value)
   },
   { immediate: true },
 )
@@ -1466,7 +1675,7 @@ watch(
   padding: 0;
   -webkit-user-select: text;
   user-select: text;
-  cursor: text;
+  cursor: pointer;
 }
 
 .result-row-header {
@@ -1722,7 +1931,7 @@ watch(
 }
 .fact-list {
   display: grid;
-  grid-template-columns: 82px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 5px 10px;
   margin: 0;
 }
@@ -1795,9 +2004,9 @@ watch(
 .implant-event-block {
   overflow: hidden;
   padding: 0 !important;
-  border: 1px solid rgba(217, 45, 32, 0.14);
-  border-radius: 9px;
-  background: rgba(255, 251, 250, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.09);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .implant-event-list {
@@ -1808,26 +2017,40 @@ watch(
 .implant-event-row {
   display: grid;
   gap: 3px;
-  padding: 9px 10px;
-  border-top: 1px solid rgba(217, 45, 32, 0.08);
+  padding: 9px 12px;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
+  background: #ffffff;
 }
 
 .implant-event-row:first-child {
-  border-top: 0;
+  border-top: 1px solid rgba(15, 23, 42, 0.07);
 }
 
 .implant-event-row strong {
-  color: rgba(29, 29, 31, 0.9);
+  color: var(--mq-text-primary, #0f172a);
   font-size: 12px;
   font-weight: 700;
   line-height: 19px;
 }
 
 .implant-event-row span {
-  color: #b42318;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--mq-text-secondary, #334155);
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 19px;
+}
+
+.implant-event-row span::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
+  align-self: center;
 }
 
 .fact-list dt {
@@ -1875,10 +2098,10 @@ watch(
 .copy-pair-row {
   display: grid;
   gap: 5px;
-  padding: 8px 9px;
-  border: 1px solid rgba(0, 0, 0, 0.07);
-  border-radius: 8px;
-  background: rgba(10, 108, 255, 0.025);
+  padding: 9px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.9);
 }
 
 .copy-pair-head {
@@ -1887,15 +2110,32 @@ watch(
 }
 
 .copy-pair-head strong {
-  color: rgba(29, 29, 31, 0.78);
+  color: var(--mq-text-primary, #0f172a);
   font-size: 12px;
   font-weight: 650;
 }
 
 .copy-pair-head span {
-  color: #d92d20;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--mq-text-primary, #0f172a);
   font-size: 11px;
   font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.copy-pair-head span::before {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #d97706;
+  flex: none;
 }
 
 .copy-pair-documents {
@@ -2070,7 +2310,7 @@ watch(
 
 .result-detail :deep(.timeliness-metric) {
   display: grid;
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
   padding: 0;
@@ -2095,7 +2335,8 @@ watch(
 }
 
 .result-detail :deep(.timeliness-metric.is-overdue strong) {
-  color: #c62828;
+  color: var(--mq-text-primary, #0f172a);
+  font-weight: 600;
 }
 
 .result-detail :deep(.timeline-point strong) {
@@ -2116,7 +2357,7 @@ watch(
   padding-top: 6px !important;
 }
 .result-detail .decision-fact-block .fact-list {
-  grid-template-columns: 96px minmax(0, 1fr);
+  grid-template-columns: 92px minmax(0, 1fr);
   gap: 6px 10px;
   padding: 0 0 10px;
 }
@@ -2127,6 +2368,13 @@ watch(
   padding: 0;
   border-bottom: 0;
   text-align: left;
+}
+
+.evidence-chips .evidence-chip.is-active {
+  border-color: var(--mq-brand-600, #0a6cff);
+  background: rgba(10, 108, 255, 0.14);
+  color: var(--mq-brand-700, #0052cc);
+  box-shadow: 0 0 0 2px rgba(10, 108, 255, 0.12);
 }
 </style>
 

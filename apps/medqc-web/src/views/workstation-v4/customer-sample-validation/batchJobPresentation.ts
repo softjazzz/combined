@@ -208,11 +208,23 @@ function resolveRulePrefix(ruleIds: string[]): string {
 
 function selectedRuleIds(job: SichuanBatchJob): string[] {
   const filters = asRecord(job.filters)
-  const fromFilters = normalizeRuleIds(
-    filters.scoped_customer_rule_ids || filters.selected_rule_ids || filters.rule_ids,
-  )
-  if (fromFilters.length) return fromFilters
-  return normalizeRuleIds(job.draft_ids || job.draft_id)
+  const explicitFromScoped = normalizeRuleIds(filters.scoped_customer_rule_ids)
+  if (explicitFromScoped.length) return explicitFromScoped
+  const explicitFromSelected = normalizeRuleIds(filters.selected_rule_ids)
+  if (explicitFromSelected.length) return explicitFromSelected
+
+  const fromFilterRuleIds = normalizeRuleIds(filters.rule_ids)
+  const fallbackIds = fromFilterRuleIds.length
+    ? fromFilterRuleIds
+    : normalizeRuleIds(job.draft_ids || job.draft_id)
+  if (!fallbackIds.length) return []
+
+  const summary = asRecord(job.summary)
+  const explicitCustomerCount = numeric(job.customer_rule_count || summary.customer_rule_count)
+  if (explicitCustomerCount > fallbackIds.length) {
+    return []
+  }
+  return fallbackIds
 }
 
 function resolveRecordCount(job: SichuanBatchJob): number {
@@ -448,7 +460,7 @@ export function buildBatchJobPresentation(
   const baseScopeText = ruleIds.length
     ? `选定 ${ruleIds.length} 个质控点`
     : customerRuleCount > 0
-      ? `全量规则 · ${customerRuleCount} 个客户质控点`
+      ? `全部 ${customerRuleCount} 个质控点`
       : '质控范围未返回'
   const acceptanceRules = job.acceptance_only_rule_ids
   const acceptanceCount = Array.isArray(acceptanceRules) ? acceptanceRules.length : 0

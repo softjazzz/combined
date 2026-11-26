@@ -23,11 +23,20 @@
             rows="3"
             minlength="10"
             maxlength="2000"
+            placeholder="请输入申诉原因（至少 10 字）"
             :disabled="saving || uncertain"
             required
           />
+          <span class="appeal-field-hint" data-testid="appeal-reason-hint">
+            {{
+              reason.trim().length >= 10
+                ? `至少 10 字 · 当前已输入 ${reason.trim().length} 字`
+                : `至少 10 字（当前 ${reason.trim().length}/10 字）`
+            }}
+          </span>
         </label>
         <button
+          type="submit"
           class="mq-btn mq-btn--primary"
           :disabled="saving || uncertain || reason.trim().length < 10"
         >
@@ -52,7 +61,7 @@
             <option v-for="(label, key) in labels" :key="key" :value="key">{{ label }}</option>
           </select></label
         >
-        <button class="mq-btn" :disabled="saving || loading" @click="refresh">
+        <button type="button" class="mq-btn" :disabled="saving || loading" @click="refresh">
           <MqIcon name="sync" :size="16" />刷新核对
         </button>
       </div>
@@ -62,7 +71,7 @@
       <template v-else>
         <ul class="appeal-list">
           <li v-for="item in items" :key="item.id">
-            <button class="appeal-row" :disabled="saving" @click="show(item.id)">
+            <button type="button" class="appeal-row" :disabled="saving" @click="show(item.id)">
               <span
                 >{{ item.scene === 'running' ? '运行' : '终末' }} ·
                 {{ item.target_kind === 'canonical_defect' ? '自动' : '人工' }} ·
@@ -79,9 +88,16 @@
         </ul>
         <p v-if="!error && !items.length">没有符合条件的申诉</p>
         <nav v-if="total" class="appeal-toolbar" aria-label="申诉分页">
-          <button class="mq-btn" :disabled="page === 1 || saving" @click="move(-1)">上一页</button>
+          <button type="button" class="mq-btn" :disabled="page === 1 || saving" @click="move(-1)">
+            上一页
+          </button>
           <span>第 {{ page }} 页 / {{ total }} 条</span>
-          <button class="mq-btn" :disabled="page * 10 >= total || saving" @click="move(1)">
+          <button
+            type="button"
+            class="mq-btn"
+            :disabled="page * 10 >= total || saving"
+            @click="move(1)"
+          >
             下一页
           </button>
         </nav>
@@ -104,13 +120,22 @@
               class="mq-input"
               rows="3"
               maxlength="2000"
+              placeholder="请输入处理意见（至少 10 字）"
               :disabled="saving || uncertain"
             />
+            <span class="appeal-field-hint" data-testid="appeal-comment-hint">
+              {{
+                comment.trim().length >= 10
+                  ? `至少 10 字 · 当前已输入 ${comment.trim().length} 字`
+                  : `至少 10 字（当前 ${comment.trim().length}/10 字）`
+              }}
+            </span>
           </label>
           <div class="appeal-toolbar">
             <button
               v-for="operation in operations"
               :key="operation.value"
+              type="button"
               class="mq-btn"
               :class="{ 'mq-btn--primary': operation.value === 'approve' }"
               :disabled="saving || uncertain || comment.trim().length < 10"
@@ -123,8 +148,8 @@
         <h4>操作记录</h4>
         <ul>
           <li v-for="event in selected.events" :key="event.id">
-            {{ actionLabels[event.action] }} · {{ event.reviewer_name }} · {{ event.comment
-            }}<time class="appeal-time mq-mono">{{ event.created_at }}</time>
+            {{ actionLabels[event.action] || event.action }} · {{ event.reviewer_name }} · {{ event.comment
+            }}<time class="appeal-time mq-mono">{{ formatTime(event.created_at) }}</time>
           </li>
         </ul>
       </article>
@@ -135,6 +160,8 @@
 import { computed, onUnmounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
+import { parseQcTaskTime, QC_TASK_TIME_ZONE } from '@/views/workstation-v4/utils/qcTaskTime'
 import {
   actOnModernAppeal,
   createModernAppeal,
@@ -150,19 +177,53 @@ import type { Rectification } from '@/api/defectRectifications'
 const props = defineProps<{ open: boolean; source?: Rectification | null; appealId?: string }>()
 const emit = defineEmits<{ close: []; changed: [] }>()
 const auth = useAuthStore()
-const doctor = computed(() => auth.hasRole('doctor'))
-const reviewer = computed(() => auth.hasRole('admin') || auth.hasRole('qc_manager'))
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: QC_TASK_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+function formatTime(value?: string | null): string {
+  if (!value) return '时间未知'
+  const parsed = parseQcTaskTime(value)
+  if (!parsed) return value
+  return shanghaiDateTimeFormatter.format(parsed)
+}
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const hasRole = (role: string) =>
+  effectiveUserRoles.value.includes(role) ||
+  (typeof auth.hasRole === 'function' && auth.hasRole(role))
+const doctor = computed(() => hasRole('doctor'))
+const reviewer = computed(() =>
+  ['admin', 'qc_manager', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
+)
 const labels: Record<AppealState, string> = {
   pending: '待审核',
   reviewing: '审核中',
   approved: '已通过',
   rejected: '已驳回',
   withdrawn: '已撤回',
+  superseded: '已失效（重跑关闭）',
 }
 const actionLabels: Record<AppealAction, string> = {
   withdraw: '撤回申诉',
   approve: '审核通过',
   reject: '驳回申诉',
+  close_stale: '重跑关闭',
+  supersede: '新轮次替代关闭',
 }
 const statusClass = (status: AppealState) =>
   ({
@@ -170,7 +231,8 @@ const statusClass = (status: AppealState) =>
     reviewing: 'mq-status--info',
     approved: 'mq-status--success',
     rejected: 'mq-status--danger',
-    withdrawn: 'mq-status--neutral',
+    withdrawn: '',
+    superseded: '',
   })[status]
 const items = ref<ModernAppeal[]>([]),
   selected = ref<AppealDetail | null>(null)
@@ -308,7 +370,7 @@ function reset() {
   uncertain.value = false
 }
 watch(
-  () => [props.open, props.appealId, auth.user?.id, auth.user?.roles],
+  () => [props.open, props.appealId, auth.user?.id, auth.user?.roles, ...effectiveUserRoles.value],
   () => {
     reset()
     page.value = 1
@@ -331,7 +393,49 @@ onUnmounted(reset)
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: end;
+  align-items: center;
+}
+.appeal-toolbar > strong {
+  display: inline-flex;
+  align-items: center;
+  height: 34px;
+  white-space: nowrap;
+}
+.appeal-toolbar .mq-field {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+.appeal-toolbar .mq-field__label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+.appeal-toolbar select.mq-input {
+  box-sizing: border-box;
+  width: auto;
+  min-width: 112px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 10px;
+  line-height: 32px;
+}
+.appeal-toolbar .mq-btn {
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  line-height: 1;
+}
+.appeal-toolbar .mq-btn .mq-icon {
+  flex-shrink: 0;
+  display: block;
+  margin: 0;
 }
 .appeal-form {
   display: grid;
@@ -350,7 +454,7 @@ onUnmounted(reset)
 .appeal-row {
   display: grid;
   gap: 6px;
-  padding: 12px 0;
+  padding: 12px 4px;
   border: 0;
   border-bottom: 1px solid var(--mq-border);
   background: transparent;
@@ -359,6 +463,13 @@ onUnmounted(reset)
   width: 100%;
   cursor: pointer;
   overflow-wrap: anywhere;
+}
+.appeal-row:hover {
+  background: var(--mq-bg-muted);
+}
+.appeal-row:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
 }
 .appeal-detail {
   border-top: 1px solid var(--mq-border);
@@ -371,11 +482,22 @@ onUnmounted(reset)
   overflow-wrap: anywhere;
 }
 .appeal-error {
-  color: var(--mq-danger);
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
 }
 .appeal-time {
   display: block;
-  color: var(--mq-text-muted);
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+}
+.appeal-field-hint {
+  display: block;
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 </style>

@@ -108,9 +108,12 @@ def _context(
         actor = _person(session, actor_id)
     except RectificationError as exc:
         raise TaskManualDefectForbidden(str(exc)) from exc
-    if not actor["roles"] & {"admin", "qc_manager", "qc_staff"}:
+    if not actor["roles"] & {"admin", "super_admin", "qc_manager", "qc_staff"}:
         raise TaskManualDefectForbidden("仅质控人员可录入人工缺陷")
-    if "admin" not in actor["roles"] and (
+    is_global = ("sync_admin" in actor["roles"]) or (
+        bool(actor["roles"] & {"admin", "super_admin"}) and not actor["institute_id"]
+    )
+    if not is_global and (
         not actor["institute_id"] or actor["institute_id"] != record["institute_id"]
     ):
         raise TaskManualDefectForbidden("无权访问该机构任务")

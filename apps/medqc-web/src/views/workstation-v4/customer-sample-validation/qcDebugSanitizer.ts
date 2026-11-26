@@ -23,7 +23,12 @@ const IDENTIFIER_KEY_EXCLUSIONS = new Set([
   'rule_set_id',
 ])
 
-// 仅保留格式有效的四段规则编号；字段中的其他文本和嵌套内容仍须脱敏。
+// 仅保留格式有效的规则编号（LX0609 / LX0916 / SC）；字段中的其他文本和嵌套内容仍须脱敏。
+const PRESERVED_RULE_ID_PATTERN =
+  /^(?:LX0609-\d{2}-\d{2}-\d{2}|LX0916-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*|SC-[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)$/u
+
+const IGNORED_PERSON_NAME_PLACEHOLDERS = new Set(['-', '未知', '未说明'])
+
 const RULE_IDENTITY_KEYS = new Set([
   'criterion_id',
   'missing_rule_ids',
@@ -221,13 +226,34 @@ function aliasFor(state: SanitizationState, category: AliasCategory, value: stri
   return alias
 }
 
+function isPreservedRuleId(value: string): boolean {
+  return PRESERVED_RULE_ID_PATTERN.test(value)
+}
+
+function addPersonName(target: Set<string>, value: string | undefined) {
+  const trimmed = String(value || '').trim()
+  if (!trimmed || IGNORED_PERSON_NAME_PLACEHOLDERS.has(trimmed)) return
+  target.add(trimmed)
+}
+
+function formatAlphabeticIndex(index: number): string {
+  let remaining = Math.max(1, Math.trunc(index))
+  let letters = ''
+  while (remaining > 0) {
+    remaining -= 1
+    letters = String.fromCharCode(65 + (remaining % 26)) + letters
+    remaining = Math.floor(remaining / 26)
+  }
+  return letters
+}
+
 function collectNames(state: SanitizationState, value: string) {
   const patientPatterns = [
     /患者(?:姓名)?[:：]?\s*([\p{Script=Han}·]{2,4})(?=[，,；;\s]*(?:性别[:：]?\s*)?[男女])/gu,
     /姓名[:：]\s*([\p{Script=Han}·]{2,4})(?=[，,；;\s]*(?:性别[:：]?\s*)?[男女])/gu,
   ]
   patientPatterns.forEach((pattern) => {
-    for (const match of value.matchAll(pattern)) state.patientNames.add(match[1])
+    for (const match of value.matchAll(pattern)) addPersonName(state.patientNames, match[1])
   })
 
   const clinicianPatterns = [
@@ -236,25 +262,29 @@ function collectNames(state: SanitizationState, value: string) {
     /(?:^|[，,。；;\s])([\p{Script=Han}·]{2,4})(?=医师会诊)/gu,
   ]
   clinicianPatterns.forEach((pattern) => {
-    for (const match of value.matchAll(pattern)) state.clinicianNames.add(match[1])
+    for (const match of value.matchAll(pattern)) addPersonName(state.clinicianNames, match[1])
   })
 
   const relatedPersonPattern =
     /(?:联系人|紧急联系人|监护人|家属姓名|陪护人)[:：]\s*([\p{Script=Han}·]{2,4})/gu
   for (const match of value.matchAll(relatedPersonPattern)) {
-    state.relatedPersonNames.add(match[1])
+    addPersonName(state.relatedPersonNames, match[1])
   }
 }
 
 function collectNameFromKey(state: SanitizationState, key: string, value: string) {
+  const trimmed = value.trim()
+  if (!trimmed || IGNORED_PERSON_NAME_PLACEHOLDERS.has(trimmed)) return
   const normalized = normalizedKey(key)
-  if (PATIENT_NAME_KEYS.has(normalized)) state.patientNames.add(value.trim())
-  if (CLINICIAN_NAME_KEYS.has(normalized)) state.clinicianNames.add(value.trim())
-  if (RELATED_PERSON_NAME_KEYS.has(normalized)) state.relatedPersonNames.add(value.trim())
+  if (PATIENT_NAME_KEYS.has(normalized)) state.patientNames.add(trimmed)
+  if (CLINICIAN_NAME_KEYS.has(normalized)) state.clinicianNames.add(trimmed)
+  if (RELATED_PERSON_NAME_KEYS.has(normalized)) state.relatedPersonNames.add(trimmed)
 }
 
 function collectSensitiveValues(state: SanitizationState, value: unknown, key = '') {
+  const normalized = normalizedKey(key)
   if (typeof value === 'string') {
+    if (RULE_IDENTITY_KEYS.has(normalized) && isPreservedRuleId(value)) return
     collectNames(state, value)
     collectNameFromKey(state, key, value)
     const category = identifierCategory(key)
@@ -262,9 +292,7 @@ function collectSensitiveValues(state: SanitizationState, value: unknown, key = 
     return
   }
   if (Array.isArray(value)) {
-    const category = identifierCategory(key)
     value.forEach((item) => {
-      if (category && typeof item === 'string') aliasFor(state, category, item)
       collectSensitiveValues(state, item, key)
     })
     return
@@ -312,6 +340,7 @@ function sanitizeText(
 ): string {
   let result = replaceKnownValues(value, state.aliases)
   state.patientNames.forEach((name) => {
+    if (!name) return
     result = result.replace(
       new RegExp(`患者(?:姓名)?[:：]?\\s*${escapeRegExp(name)}`, 'gu'),
       '患者A',
@@ -320,10 +349,12 @@ function sanitizeText(
   })
   let clinicianIndex = 0
   state.clinicianNames.forEach((name) => {
+    if (!name) return
     clinicianIndex += 1
-    result = result.split(name).join(`医务人员${String.fromCharCode(64 + clinicianIndex)}`)
+    result = result.split(name).join(`医务人员${formatAlphabeticIndex(clinicianIndex)}`)
   })
   state.relatedPersonNames.forEach((name) => {
+    if (!name) return
     result = result.split(name).join('[关联人员已脱敏]')
   })
   result = result
@@ -361,7 +392,7 @@ function sanitizeText(
     .replace(/(?<![\da-f])(?:[\da-f]{2}:){5}[\da-f]{2}(?![\da-f])/giu, '[设备地址已脱敏]')
     .replace(/(?<![\da-f:])(?:[\da-f]{1,4}:){3,7}[\da-f]{1,4}(?![\da-f:])/giu, '[网络地址已脱敏]')
     .replace(/(^|[\s"'=:：(])\/(?:[A-Za-z0-9._-]+\/)+[A-Za-z0-9._-]+/gu, '$1[本地路径已脱敏]')
-    .replace(/(\d{4})-(\d{2})-(\d{2})/gu, (_, year, month, day) =>
+    .replace(/(?<![A-Za-z\d])(\d{4})-(\d{2})-(\d{2})(?!-\d)/gu, (_, year, month, day) =>
       preserveVersionDate ? `${year}-${month}-${day}` : shiftedDate(year, month, day, false),
     )
     .replace(/(\d{4})年(\d{1,2})月(\d{1,2})日/gu, (_, year, month, day) =>
@@ -374,7 +405,7 @@ function sanitizeValue(state: SanitizationState, value: unknown, key = ''): unkn
   const normalized = normalizedKey(key)
   if (typeof value === 'boolean' || value === null || value === undefined) return value
   if (RULE_IDENTITY_KEYS.has(normalized)) {
-    if (typeof value === 'string' && /^LX0609-\d{2}-\d{2}-\d{2}$/u.test(value)) return value
+    if (typeof value === 'string' && isPreservedRuleId(value)) return value
     if (Array.isArray(value)) return value.map((item) => sanitizeValue(state, item, key))
   }
   if (isSecretKey(normalized)) return '[访问凭证已脱敏]'
@@ -423,7 +454,7 @@ export function sanitizeQcDebugPayload<T>(value: T, hints: QcDebugSanitizationHi
     clinicianNames: new Set(),
     relatedPersonNames: new Set(),
   }
-  if (hints.patientName?.trim()) state.patientNames.add(hints.patientName.trim())
+  addPersonName(state.patientNames, hints.patientName)
   collectSensitiveValues(state, value)
   return sanitizeValue(state, value) as T
 }

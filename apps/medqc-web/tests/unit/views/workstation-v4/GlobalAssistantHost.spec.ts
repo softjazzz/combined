@@ -1,10 +1,15 @@
-import { defineComponent, nextTick, ref } from 'vue'
+import { defineComponent, nextTick, reactive, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 // 用普通函数而非 vi.fn：避免测试框架给被拒绝的 Promise 再挂一条无人处理的分支。
 const handler = vi.hoisted(() => ({ run: async (): Promise<unknown> => ({}) }))
+const authState = vi.hoisted(() => ({
+  user: { id: 'user-initial' } as { id: string } | null,
+}))
 vi.mock('@/api/businessAgent', () => ({ businessAgentApi: { access: () => handler.run() } }))
+vi.mock('@/stores/auth', () => ({ useAuthStore: () => authStore }))
+const authStore = reactive(authState)
 
 import GlobalAssistantHost from '@/views/workstation-v4/components/GlobalAssistantHost.vue'
 import {
@@ -31,6 +36,7 @@ function mountHost() {
 
 describe('全局智能助手', () => {
   beforeEach(() => {
+    authStore.user = { id: 'user-initial' }
     handler.run = async () => ({})
   })
 
@@ -45,6 +51,7 @@ describe('全局智能助手', () => {
     expect(chat.props('embedded')).toBe(true)
     expect(chat.props('allowCaseSelection')).toBe(true)
     expect(chat.props('userContext')).toEqual({ view: 'manager' })
+    wrapper.unmount()
   })
 
   it('没有任何授权时不显示入口', async () => {
@@ -52,6 +59,7 @@ describe('全局智能助手', () => {
     const wrapper = mountHost()
     await flushPromises()
     expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('读取授权失败时不显示入口', async () => {
@@ -61,6 +69,7 @@ describe('全局智能助手', () => {
     const wrapper = mountHost()
     await flushPromises()
     expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(false)
+    wrapper.unmount()
   })
 
   it('页面登记了带病例上下文的本地助手时让位，注销后恢复', async () => {
@@ -85,6 +94,33 @@ describe('全局智能助手', () => {
     await nextTick()
     expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(true)
     page.unmount()
+    wrapper.unmount()
     expect(hasLocalAssistant.value).toBe(false)
+  })
+
+  it('切换账号时重新查询授权，退出登录隐藏入口，预期403静默不刷错', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    let callCount = 0
+    handler.run = async () => {
+      callCount += 1
+      if (callCount === 1) return { doctor_case_count: 1, manager_scopes: [] }
+      throw { isAxiosError: true, response: { status: 403 } }
+    }
+    const wrapper = mountHost()
+    await flushPromises()
+    expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(true)
+
+    authStore.user = { id: 'user-no-access' }
+    await flushPromises()
+    expect(callCount).toBe(2)
+    expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(false)
+    expect(consoleErrorSpy).not.toHaveBeenCalled()
+
+    authStore.user = null
+    await flushPromises()
+    expect(callCount).toBe(2)
+    expect(wrapper.find('[data-testid="global-assistant-host"]').exists()).toBe(false)
+    consoleErrorSpy.mockRestore()
+    wrapper.unmount()
   })
 })

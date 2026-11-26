@@ -83,8 +83,18 @@
                 </div>
                 <div
                   class="mt-1 text-[14px] font-medium leading-6 text-[var(--mq-text-primary)]"
-                  v-html="highlightMatch(item.name, searchQuery)"
-                />
+                >
+                  <template
+                    v-for="(seg, segIdx) in splitHighlightMatch(item.name, searchQuery)"
+                    :key="segIdx"
+                  >
+                    <mark
+                      v-if="seg.match"
+                      class="rounded bg-blue-100 px-0.5 font-medium text-[#0a5fd6]"
+                    >{{ seg.text }}</mark>
+                    <template v-else>{{ seg.text }}</template>
+                  </template>
+                </div>
               </div>
             </div>
           </div>
@@ -313,13 +323,23 @@ function loadMoreResults() {
   doSearch(searchResults.value.length)
 }
 
-function highlightMatch(text: string, query: string): string {
-  if (!query) return text
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return text.replace(
-    new RegExp(`(${escaped})`, 'gi'),
-    '<mark class="rounded bg-blue-100 px-0.5 font-medium text-[#0a5fd6]">$1</mark>',
-  )
+function splitHighlightMatch(
+  text: string,
+  query: string,
+): Array<{ text: string; match: boolean }> {
+  const source = String(text || '')
+  const trimmed = String(query || '')
+  if (!source) return []
+  if (!trimmed) return [{ text: source, match: false }]
+  const escaped = trimmed.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped})`, 'gi')
+  return source
+    .split(regex)
+    .filter((part) => part.length > 0)
+    .map((part) => ({
+      text: part,
+      match: part.toLowerCase() === trimmed.toLowerCase(),
+    }))
 }
 
 function selectCode(item: any) {

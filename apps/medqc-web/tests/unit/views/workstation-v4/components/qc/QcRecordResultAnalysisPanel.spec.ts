@@ -8,6 +8,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/services/luxian-qc-result-analysis-service', () => ({
   getLuxianQcResultAnalysis: mocks.getLuxianQcResultAnalysis,
 }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    user: { is_demo_account: false, roles: ['admin'] },
+  }),
+}))
 
 import QcRecordResultAnalysisPanel from '@/views/workstation-v4/components/qc/QcRecordResultAnalysisPanel.vue'
 

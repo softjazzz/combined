@@ -16,6 +16,7 @@
         <a-button
           type="text"
           size="small"
+          :aria-label="sidebarCollapsed ? '展开侧边栏' : '收起侧边栏'"
           @click="sidebarCollapsed = !sidebarCollapsed"
         >
           <MenuFoldOutlined v-if="!sidebarCollapsed" />
@@ -95,8 +96,11 @@
       </a-menu>
     </aside>
 
-    <!-- 主内容区 -->
-    <main class="ws-v2-main">
+    <!-- 主内容区（embedded 模式下避开外层 WorkstationLayout 的 <main>，避免嵌套地标） -->
+    <component
+      :is="embedded ? 'section' : 'main'"
+      class="ws-v2-main"
+    >
       <!-- 工作台视图 -->
       <div
         v-if="currentView === 'workbench'"
@@ -295,7 +299,39 @@
       <PaymentMonitoringView v-else-if="currentView === 'payment'" />
 
       <!-- DRG 事后分析 -->
-      <PostEventAnalysisView v-else-if="currentView === 'post-analysis'" />
+      <div
+        v-else-if="currentView === 'post-analysis'"
+        class="post-analysis-host"
+      >
+        <section
+          v-if="uploadedAnalysis"
+          class="uploaded-analysis-banner"
+          data-testid="uploaded-analysis-summary"
+        >
+          <div class="uploaded-analysis-banner__head">
+            <div>
+              <strong>智能上传分析结果已就绪</strong>
+              <span class="uploaded-analysis-banner__meta">
+                共 {{ uploadedAnalysisCaseCount }} 条病例 · {{ uploadedAnalysisChartCount }} 个图表
+              </span>
+            </div>
+            <a-button size="small" @click="clearUploadedAnalysis">清除上传结果</a-button>
+          </div>
+          <ul
+            v-if="uploadedAnalysis.aiInsights.length"
+            class="uploaded-analysis-banner__insights"
+          >
+            <li v-for="(insight, idx) in uploadedAnalysis.aiInsights" :key="idx">
+              {{ insight }}
+            </li>
+          </ul>
+        </section>
+        <PostEventAnalysisView
+          :session-id="selectedSessionId || undefined"
+          :batch-id="selectedBatchId || undefined"
+          :uploaded-analysis="uploadedAnalysis"
+        />
+      </div>
 
       <!-- 数据上传 -->
       <ExcelUploadView
@@ -457,7 +493,7 @@
       >
         <ICDSearchPanel />
       </div>
-    </main>
+    </component>
 
     <!-- 编码优化建议抽屉 -->
     <CodingOptimizationDrawer
@@ -535,6 +571,18 @@ const props = withDefaults(
   },
 )
 
+interface UploadedAnalysisPayload {
+  charts: Record<string, any>
+  aiInsights: string[]
+  analysisResults: Record<string, any>
+}
+
+const UPLOADED_ANALYSIS_STORAGE_KEY = 'medqc:smart-upload-analysis-ready'
+
+const emit = defineEmits<{
+  (e: 'analysis-ready', data: UploadedAnalysisPayload): void
+}>()
+
 // ==================== 布局状态 ====================
 const sidebarCollapsed = ref(false)
 const menuSelectedKeys = ref([props.initialView || 'workbench'])
@@ -574,6 +622,33 @@ const demoCase = ref<DemoCase | null>(null)
 const currentCaseIndex = ref(-1)
 const selectedBatchId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
+
+function readStoredUploadedAnalysis(): UploadedAnalysisPayload | null {
+  try {
+    const raw = window.sessionStorage?.getItem(UPLOADED_ANALYSIS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      charts: parsed.charts && typeof parsed.charts === 'object' ? parsed.charts : {},
+      aiInsights: Array.isArray(parsed.aiInsights) ? parsed.aiInsights : [],
+      analysisResults:
+        parsed.analysisResults && typeof parsed.analysisResults === 'object'
+          ? parsed.analysisResults
+          : {},
+    }
+  } catch {
+    return null
+  }
+}
+
+const uploadedAnalysis = ref<UploadedAnalysisPayload | null>(readStoredUploadedAnalysis())
+const uploadedAnalysisChartCount = computed(
+  () => Object.keys(uploadedAnalysis.value?.charts || {}).length,
+)
+const uploadedAnalysisCaseCount = computed(() =>
+  Number(uploadedAnalysis.value?.analysisResults?.overview?.total_cases || 0),
+)
 
 // ===== Composables =====
 const { extracting, extractionProgress, extractionStatus, extractStructuredData } =
@@ -665,10 +740,39 @@ function handleGoAnalysis(sessionId: string, batchId: string) {
 }
 
 function handleAnalysisReady(data: { charts: any; aiInsights: string[]; analysisResults: any }) {
+  const payload: UploadedAnalysisPayload = {
+    charts: data?.charts && typeof data.charts === 'object' ? data.charts : {},
+    aiInsights: Array.isArray(data?.aiInsights) ? [...data.aiInsights] : [],
+    analysisResults:
+      data?.analysisResults && typeof data.analysisResults === 'object'
+        ? data.analysisResults
+        : {},
+  }
+  uploadedAnalysis.value = payload
+  try {
+    window.sessionStorage?.setItem(UPLOADED_ANALYSIS_STORAGE_KEY, JSON.stringify(payload))
+  } catch {
+    // 忽略存储配额限制，保留内存态
+  }
+  emit('analysis-ready', payload)
   // 智能上传分析完成后，自动切换到事后分析视图
   currentView.value = 'post-analysis'
   menuSelectedKeys.value = ['post-analysis']
 }
+
+function clearUploadedAnalysis() {
+  uploadedAnalysis.value = null
+  try {
+    window.sessionStorage?.removeItem(UPLOADED_ANALYSIS_STORAGE_KEY)
+  } catch {
+    // 忽略存储异常
+  }
+}
+
+defineExpose({
+  uploadedAnalysis,
+  clearUploadedAnalysis,
+})
 
 // ==================== 拖拽分隔线 ====================
 const leftPanelWidth = ref(50)
@@ -881,7 +985,10 @@ onUnmounted(() => {
 /* ==================== 主内容区 ==================== */
 .ws-v2-main {
   flex: 1;
-  overflow: hidden;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   background: #f5f5f7;
@@ -1478,9 +1585,20 @@ onUnmounted(() => {
   background: transparent;
 }
 
-/* 外壳已无顶栏，嵌入高度不再扣除 64px */
+/* 外壳已无顶栏，嵌入模式下允许纵向自然滚动，避免 1280×720 裁切上传/映射操作区 */
 .ws-v2-embedded {
-  height: 100vh;
+  height: auto;
+  min-height: calc(100vh - 18px);
+  overflow: visible;
+}
+
+.ws-v2-embedded .ws-v2-main {
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.ws-v2-embedded .workbench-layout {
+  min-height: calc(100vh - 18px);
 }
 
 .ws-v2-main :deep(.pre-analysis-shell),
@@ -1533,5 +1651,40 @@ onUnmounted(() => {
   border-radius: var(--mq-radius-card) !important;
   background: var(--mq-glass-bg) !important;
   box-shadow: var(--mq-glass-shadow) !important;
+}
+
+.post-analysis-host {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.uploaded-analysis-banner {
+  margin: 16px 24px 0;
+  padding: 14px 18px;
+  border: 1px solid rgba(10, 108, 255, 0.18);
+  border-radius: 14px;
+  background: rgba(10, 108, 255, 0.05);
+}
+
+.uploaded-analysis-banner__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.uploaded-analysis-banner__meta {
+  margin-left: 10px;
+  font-size: 13px;
+  color: rgba(29, 29, 31, 0.65);
+}
+
+.uploaded-analysis-banner__insights {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #1d1d1f;
 }
 </style>

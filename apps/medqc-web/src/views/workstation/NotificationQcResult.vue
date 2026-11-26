@@ -1,12 +1,13 @@
 <template>
-  <main class="mq-page">
-    <a-spin v-if="loading" />
+  <section class="mq-page notification-qc-result" aria-label="质控结果详情">
+    <div v-if="loading" class="notification-qc-result__loading" role="status" aria-live="polite">
+      <a-spin size="large" />
+      <p class="notification-qc-result__loading-text">正在加载质控结果…</p>
+    </div>
     <a-result v-else-if="error" status="warning" title="结果暂不可用" :sub-title="error">
       <template #extra
         ><a-button @click="load">重试</a-button
-        ><a-button @click="close">{{
-          entryMode === 'task' ? '返回病历池' : '返回消息'
-        }}</a-button></template
+        ><a-button @click="close">{{ closeTarget.label }}</a-button></template
       >
     </a-result>
     <SemanticRulesBatchResultDrawer
@@ -18,6 +19,7 @@
       :batch-job-debug-loading="debugLoading"
       :fetch-batch-job-debug-snapshot="fetchDebug"
       :close="close"
+      :back-label="closeTarget.label"
       :export-batch-job-report="exportResult"
       :review-batch-job-result="reviewResult"
       :review-batch-job-loading="reviewing"
@@ -25,15 +27,21 @@
       :get-batch-job-status-text="getBatchJobStatusText"
       :format-date-time="formatBatchJobDateTime"
     />
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
-import { MESSAGE_CENTER_PATH } from './notificationNavigation'
+import {
+  resolveAuthorizedWorkstationPath,
+  resolveDefaultWorkstationPath,
+} from '@/components/layout/workstationNav'
+import { effectiveRoles } from '@/utils/effectiveRoles'
+import { canUseMessageCenter, MESSAGE_CENTER_PATH } from './notificationNavigation'
 import {
   getNotificationQcResult,
   getSichuanWorkspaceBatchJob,
@@ -79,6 +87,7 @@ async function readResult(id: string, mode: 'notification' | 'task') {
 }
 const router = useRouter()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const authScope = computed(() =>
   JSON.stringify([
     authStore.user?.id,
@@ -143,6 +152,9 @@ async function load() {
       return
     }
     job.value = result.data
+    if (!confirmedResultsOnly.value && result.data.id) {
+      void loadDebugSnapshot(result.data.id, undefined, { silent: true })
+    }
   } catch (cause) {
     if (isCurrent(context)) error.value = cause instanceof Error ? cause.message : '结果读取失败'
   } finally {
@@ -150,27 +162,28 @@ async function load() {
   }
 }
 
-// 执行既有抽屉操作前重新核对对应入口权限，失效时不回退到其他结果。
-async function currentJob(context: ReturnType<typeof requestContext>) {
-  const id = context.notice
-  if (typeof id !== 'string') throw new Error(missingIdentityMessage.value)
-  const result = await readResult(id, context.mode)
+// 复用当前上下文已授权加载的 job，避免每次调试/导出/复核重复触发 FOR UPDATE 读取通知接口。
+function resolveLoadedJob(context: ReturnType<typeof requestContext>): SichuanBatchJob {
   if (!isCurrent(context)) throw new Error('结果通知或账号已切换')
-  if (!result.success || !result.data) {
-    job.value = null
-    error.value = result.message || '结果读取失败'
-    throw new Error(error.value)
+  const loaded = job.value
+  if (!loaded || !loaded.id) {
+    throw new Error(missingIdentityMessage.value)
   }
-  return result.data
+  return loaded
 }
 
-async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLimit?: number }) {
+async function loadDebugSnapshot(
+  jobId: string,
+  options?: { ruleJobId?: string; itemLimit?: number },
+  behavior?: { silent?: boolean },
+) {
   const context = requestContext()
   const request = ++debugRequest
   const active = () => isCurrent(context) && request === debugRequest
   debugLoading.value = true
   try {
-    if ((await currentJob(context)).id !== jobId || !active()) return null
+    const current = resolveLoadedJob(context)
+    if (current.id !== jobId || !active()) return null
     const result = await getSichuanWorkspaceBatchJobDebugSnapshot(jobId, {
       rule_job_id: options?.ruleJobId,
       item_limit: options?.itemLimit,
@@ -180,17 +193,23 @@ async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLim
     debugSnapshot.value = result.data
     return result.data
   } catch (cause) {
-    if (active()) message.error(cause instanceof Error ? cause.message : '调试信息读取失败')
+    if (active() && !behavior?.silent) {
+      message.error(cause instanceof Error ? cause.message : '调试信息读取失败')
+    }
     return null
   } finally {
     if (active()) debugLoading.value = false
   }
 }
 
+async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLimit?: number }) {
+  return loadDebugSnapshot(jobId, options, { silent: false })
+}
+
 async function exportResult(format: 'xlsx' | 'csv' | 'html' = 'html') {
   const context = requestContext()
   try {
-    const current = await currentJob(context)
+    const current = resolveLoadedJob(context)
     const result = await exportSichuanWorkspaceBatchJob({ job_id: current.id, format })
     if (!isCurrent(context)) return
     if (!result.success || !result.data) throw new Error(result.message || '导出失败')
@@ -208,11 +227,13 @@ async function reviewResult(): Promise<void> {
   const active = () => isCurrent(context) && request === reviewRequest
   reviewing.value = true
   try {
-    const current = await currentJob(context)
+    const current = resolveLoadedJob(context)
     const result = await reviewSichuanWorkspaceBatchJob(current.id)
     if (!active()) return
     if (!result.success || !result.data?.job) throw new Error(result.message || '复核失败')
     job.value = result.data.job
+    const count = Number(result.data.review_report?.summary?.total_findings || 0)
+    message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
   } catch (cause) {
     if (active()) message.error(cause instanceof Error ? cause.message : '复核失败')
   } finally {
@@ -220,16 +241,84 @@ async function reviewResult(): Promise<void> {
   }
 }
 
+const RUNNING_QC_ROLES = ['admin', 'qc_manager', 'sync_admin', 'super_admin']
+const WORKLIST_ROLES = ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin']
+
+const normalizedUserRoles = computed(() => {
+  const raw = Array.isArray(authStore.userRoles)
+    ? authStore.userRoles
+    : Array.isArray(authStore.user?.roles)
+      ? authStore.user.roles
+      : authStore.user?.role
+        ? [authStore.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+
+const canAccessRunningQc = computed(() =>
+  normalizedUserRoles.value.some((role) => RUNNING_QC_ROLES.includes(role)),
+)
+const canAccessWorklist = computed(() =>
+  normalizedUserRoles.value.some((role) => WORKLIST_ROLES.includes(role)),
+)
+const canAccessMessages = computed(() => canUseMessageCenter(normalizedUserRoles.value))
+
+const closeTarget = computed<{ path: string; label: string }>(() => {
+  const roles = normalizedUserRoles.value
+  const from = typeof route.query.from === 'string' ? route.query.from.trim() : ''
+  const defaultPath =
+    resolveAuthorizedWorkstationPath(roles) ?? resolveDefaultWorkstationPath(roles)
+
+  if (props.entryMode === 'notification') {
+    if (canAccessMessages.value) {
+      return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+    }
+    return { path: defaultPath, label: '返回工作台' }
+  }
+
+  if (from === 'final' && canAccessRunningQc.value) {
+    return { path: '/workstation-v5/records/final', label: '返回终末质控' }
+  }
+  if (from === 'worklist' && canAccessWorklist.value) {
+    return { path: '/workstation-v5/worklist', label: '返回病历池' }
+  }
+  if (from === 'messages' && canAccessMessages.value) {
+    return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+  }
+  if (canAccessRunningQc.value) {
+    return { path: '/workstation-v5/records/running', label: '返回运行质控' }
+  }
+  if (canAccessMessages.value) {
+    return { path: MESSAGE_CENTER_PATH, label: '返回消息中心' }
+  }
+  return { path: defaultPath, label: '返回工作台' }
+})
+
 function close() {
   generation += 1
-  void router.push(
-    props.entryMode === 'task' ? '/workstation-v5/records/running' : MESSAGE_CENTER_PATH,
-  )
+  void router.push(closeTarget.value.path)
 }
 
-watch([selectedId, () => props.entryMode, authScope], load, { immediate: true, flush: 'sync' })
+watch([selectedId, () => props.entryMode, authScope], load, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
   generation += 1
 })
 </script>
+
+<style scoped>
+.notification-qc-result__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: min(60dvh, 420px);
+  padding: 48px 24px;
+  color: var(--mq-text-tertiary);
+  font-size: var(--mq-font-14);
+}
+.notification-qc-result__loading-text {
+  margin: 0;
+}
+</style>

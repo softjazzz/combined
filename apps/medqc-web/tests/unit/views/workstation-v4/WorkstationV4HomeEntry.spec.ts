@@ -3,7 +3,7 @@ import { shallowMount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const routeState = vi.hoisted(() => ({
-  query: {} as Record<string, string>,
+  query: {} as Record<string, string | string[] | null | undefined>,
 }))
 const authState = vi.hoisted(() => ({
   roles: [] as string[],
@@ -95,5 +95,28 @@ describe('WorkstationV4HomeEntry', () => {
     const wrapper = mountHomeEntry()
 
     expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
+  })
+
+  it.each([
+    { task_id: 'task-snake-1' },
+    { taskId: 'task-camel-1' },
+    { task_id: ['  ', 'task-array-1'] },
+    { record_id: ['rec-1'] },
+  ])('支持 task_id / taskId 与数组型启动参数进入病历列表: %o', (query) => {
+    routeState.query = query
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(false)
+  })
+
+  it('空白数组型启动参数不误入病历列表', () => {
+    routeState.query = { task_id: ['   ', ''] }
+
+    const wrapper = mountHomeEntry()
+
+    expect(wrapper.find('[data-testid="qc-overview-view"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="workstation-v4-view"]').exists()).toBe(false)
   })
 })

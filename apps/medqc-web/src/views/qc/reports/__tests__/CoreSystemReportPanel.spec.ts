@@ -8,7 +8,7 @@ vi.mock('@/api/coreSystemReports', () => ({
   getCoreSystemReport: mocks.get,
   exportCoreSystemReport: mocks.export,
 }))
-const actor = reactive({ id: 'synthetic-user' })
+const actor = reactive({ id: 'synthetic-user', is_demo_account: false })
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => ({ user: actor }) }))
 const systems = Array.from({ length: 18 }, (_, index) => ({
   id: `CORE-${String(index + 1).padStart(2, '0')}`,
@@ -110,6 +110,7 @@ describe('核心制度专题页面', () => {
         problems_only: false,
       },
       1,
+      expect.any(AbortSignal),
     )
     const dates = wrapper.findAll('input[type="datetime-local"]')
     expect((dates[0].element as HTMLInputElement).value).toBe('2026-10-01T08:00')
@@ -148,6 +149,7 @@ describe('核心制度专题页面', () => {
         institute_id: '',
       }),
       1,
+      expect.any(AbortSignal),
     )
     expect(wrapper.text()).not.toContain('合成患者')
     wrapper.unmount()
@@ -228,11 +230,13 @@ describe('核心制度专题页面', () => {
       expect(mocks.get).toHaveBeenLastCalledWith(
         expect.objectContaining({ system_id: 'CORE-01', problems_only: true }),
         1,
+        expect.any(AbortSignal),
       )
       await wrapper.get('header button').trigger('click')
       await flushPromises()
       expect(mocks.export).toHaveBeenCalledWith(
         expect.objectContaining({ system_id: 'CORE-01', problems_only: true }),
+        expect.any(AbortSignal),
       )
     } finally {
       wrapper.unmount()
@@ -246,7 +250,11 @@ describe('核心制度专题页面', () => {
       global: { stubs: { 'a-drawer': true } },
     })
     await flushPromises()
-    expect(mocks.get).toHaveBeenLastCalledWith(expect.objectContaining({ scene: 'final' }), 1)
+    expect(mocks.get).toHaveBeenLastCalledWith(
+      expect.objectContaining({ scene: 'final' }),
+      1,
+      expect.any(AbortSignal),
+    )
     wrapper.unmount()
   })
   it('完成时间按上海时区提交，逆序窗口不发送查询', async () => {
@@ -263,6 +271,7 @@ describe('核心制度专题页面', () => {
         completed_to: '2026-10-01T01:00:00.000Z',
       }),
       1,
+      expect.any(AbortSignal),
     )
     const count = mocks.get.mock.calls.length
     await dates[0].setValue('2026-10-02T08:00')
@@ -292,6 +301,7 @@ describe('核心制度专题页面', () => {
     expect(mocks.get).toHaveBeenLastCalledWith(
       expect.objectContaining({ system_id: 'CORE-01', rule_id: 'R1' }),
       1,
+      expect.any(AbortSignal),
     )
   })
   it('病例详情保留三坐标、冻结job和envelope而非重新判定', async () => {
@@ -336,7 +346,10 @@ describe('核心制度专题页面', () => {
       .find((button) => button.text() === '导出 CSV')!
       .trigger('click')
     await flushPromises()
-    expect(mocks.export).toHaveBeenCalledWith(expect.objectContaining({ institute_id: 'H1' }))
+    expect(mocks.export).toHaveBeenCalledWith(
+      expect.objectContaining({ institute_id: 'H1' }),
+      expect.any(AbortSignal),
+    )
     vi.unstubAllGlobals()
     vi.restoreAllMocks()
   })

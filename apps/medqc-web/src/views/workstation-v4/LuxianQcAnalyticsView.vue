@@ -1,6 +1,9 @@
 <template>
   <div class="analytics-shell custom-scrollbar">
-    <main class="analytics-canvas">
+    <section
+      class="analytics-canvas"
+      aria-label="质控统计分析"
+    >
       <section class="analytics-command-surface">
         <div class="analytics-heading">
           <div
@@ -17,7 +20,13 @@
               全院临时范围 · 终末质控
             </p>
             <h1>质控统计分析</h1>
-            <p>聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。</p>
+            <p>
+              {{
+                confirmedResultsOnly
+                  ? '基于已完成终末质控任务的确定问题统计分析。'
+                  : '聚焦已完成任务中可交付的 Canonical 结果，不混入技术异常。'
+              }}
+            </p>
           </div>
 
           <div
@@ -26,25 +35,30 @@
           >
             <a-range-picker
               v-model:value="dateRange"
-              show-time
-              value-format="YYYY-MM-DDTHH:mm:ss"
+              format="YYYY-MM-DD"
+              value-format="YYYY-MM-DD"
+              :placeholder="['开始日期', '结束日期']"
+              aria-label="质控完成时间范围"
             />
             <a-select
               v-if="!isDepartmentReport"
               v-model:value="department"
               allow-clear
               placeholder="全部科室"
+              aria-label="筛选科室"
               :options="departmentOptions"
             />
             <a-input
               v-model:value="jobId"
               allow-clear
+              class="analytics-job-input"
               placeholder="已完成任务 ID（可选）"
+              aria-label="已完成任务 ID"
             />
             <a-button
               type="primary"
               :loading="loading"
-              @click="void fetchAnalytics"
+              @click="handleQuery()"
             >
               查询
             </a-button>
@@ -67,12 +81,13 @@
           data-testid="analytics-scope"
         >
           <div class="analytics-scope-copy">
-            <span>按质控完成时间</span><i />
-            <span>{{ payload.scope.department || '全部科室' }}</span><i />
+            <span>按质控完成时间</span><i aria-hidden="true" />
+            <span>{{ payload.scope.department || '全部科室' }}</span><i aria-hidden="true" />
             <span>泸县0609终末质控</span>
             <small>版本 {{ payload.scope.rule_set_version }}</small>
           </div>
           <div
+            v-if="!confirmedResultsOnly"
             class="analytics-health-indicator"
             :class="{ 'has-attention': payload.data_health.canonical_invalid_or_missing_total > 0 }"
             data-testid="analytics-data-health"
@@ -92,6 +107,7 @@
         v-if="error"
         class="analytics-notice analytics-surface"
         data-testid="analytics-error"
+        role="alert"
       >
         <div>
           <strong>统计范围暂时无法加载</strong>
@@ -99,7 +115,7 @@
         </div>
         <a-button
           size="small"
-          @click="void fetchAnalytics"
+          @click="fetchAnalytics()"
         >
           重新加载
         </a-button>
@@ -114,13 +130,18 @@
         <a-spin size="large" />
         <div>
           <strong>正在汇总统计范围</strong>
-          <span>正在核对已完成任务与 Canonical 结果。</span>
+          <span>{{
+            confirmedResultsOnly
+              ? '正在汇总已完成任务的质控统计结果。'
+              : '正在核对已完成任务与 Canonical 结果。'
+          }}</span>
         </div>
       </section>
 
       <template v-else-if="payload">
         <section
           class="analytics-kpis"
+          :class="{ 'is-confirmed-only': confirmedResultsOnly }"
           data-testid="analytics-kpis"
         >
           <article
@@ -130,7 +151,7 @@
             data-testid="analytics-kpi"
           >
             <span>{{ card.label }}</span>
-            <strong>{{ card.value }}</strong>
+            <strong>{{ card.value.toLocaleString() }}</strong>
           </article>
         </section>
 
@@ -157,16 +178,21 @@
               <div class="conclusion-layout">
                 <div
                   class="status-ring"
+                  role="img"
+                  :aria-label="statusRingAriaLabel"
                   :style="{ background: statusRingBackground }"
                 >
-                  <span><strong>{{ primaryConcernTotal }}</strong><small>需重点关注</small></span>
+                  <span aria-hidden="true"><strong>{{ primaryConcernTotal.toLocaleString() }}</strong><small>需重点关注</small></span>
                 </div>
                 <ul class="status-legend">
                   <li
                     v-for="item in statusItems"
                     :key="item.status"
                   >
-                    <i :style="{ background: item.color }" />
+                    <i
+                      aria-hidden="true"
+                      :style="{ background: item.color }"
+                    />
                     <span>{{ item.label }}</span>
                     <strong>{{ item.count.toLocaleString() }}</strong>
                   </li>
@@ -192,14 +218,18 @@
                 v-if="hasTrend"
                 class="rhythm-chart"
                 data-testid="analytics-trend"
+                role="img"
+                :aria-label="trendChartAriaLabel"
               >
                 <div
                   v-for="item in completionSeries"
                   :key="item.bucket"
                   class="rhythm-bar"
                 >
-                  <span>{{ item.completed_event_total }}</span>
-                  <i :style="{ height: `${trendPercent(item.completed_event_total)}%` }" />
+                  <span>{{ item.completed_event_total.toLocaleString() }}</span>
+                  <div class="rhythm-bar-track">
+                    <i :style="{ height: `${trendPercent(item.completed_event_total)}%` }" />
+                  </div>
                   <small>{{ item.bucket.slice(5) }}</small>
                 </div>
               </div>
@@ -224,7 +254,11 @@
                   <p>整改优先级</p>
                   <h2>科室风险排行</h2>
                 </div>
-                <span class="panel-note">红：确定问题 · 橙：资料待核实</span>
+                <span class="panel-note">{{
+                  confirmedResultsOnly
+                    ? '仅统计确定问题病历'
+                    : '红：确定问题 · 橙：资料待核实 · 灰：待判断'
+                }}</span>
               </header>
               <div
                 v-if="departmentItems.length"
@@ -238,31 +272,38 @@
                   @click="openDepartmentReport(item.department)"
                 >
                   <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="department-name">{{ item.department }}</span>
-                  <span class="department-track">
+                  <span
+                    class="department-name"
+                    :title="item.department"
+                  >{{ item.department }}</span>
+                  <span
+                    class="department-track"
+                    role="img"
+                    :aria-label="riskBarAriaLabel(item.department, item)"
+                  >
                     <i
+                      v-if="item.primaryNonCompliant"
                       class="bar-danger"
                       :style="{
-                        width: `${barPercent(item.non_compliant_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryNonCompliant, departmentMax)}%`,
                       }"
                     />
                     <i
+                      v-if="!confirmedResultsOnly && item.primaryDataGap"
                       class="bar-warning"
                       :style="{
-                        width: `${barPercent(item.data_gap_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryDataGap, departmentMax)}%`,
                       }"
                     />
                     <i
-                      v-if="item.uncertain_record_total"
+                      v-if="!confirmedResultsOnly && item.primaryUncertain"
                       class="bar-uncertain"
                       :style="{
-                        width: `${barPercent(item.uncertain_record_total, departmentMax)}%`,
+                        width: `${barPercent(item.primaryUncertain, departmentMax)}%`,
                       }"
                     />
                   </span>
-                  <strong>{{
-                    item.non_compliant_record_total + item.data_gap_record_total
-                  }}</strong>
+                  <strong>{{ item.problemTotal.toLocaleString() }}</strong>
                 </button>
               </div>
               <a-empty
@@ -274,6 +315,7 @@
 
             <article
               class="analytics-surface analytics-panel analytics-physician-panel"
+              :class="{ 'is-full-span': isDepartmentReport }"
               data-testid="analytics-physician-chart"
             >
               <header class="panel-heading">
@@ -281,7 +323,7 @@
                   <p>责任归属</p>
                   <h2>主治医师风险排行</h2>
                 </div>
-                <span class="panel-note">按首页主治医师签名归属</span>
+                <span class="panel-note">按病历主治医师归属</span>
               </header>
               <div
                 v-if="physicianItems.length"
@@ -296,29 +338,36 @@
                   ]"
                 >
                   <span class="department-rank">{{ String(index + 1).padStart(2, '0') }}</span>
-                  <span class="physician-name">{{ item.physician }}</span>
-                  <span class="department-track">
+                  <span
+                    class="physician-name"
+                    :title="item.physician"
+                  >{{ item.physician }}</span>
+                  <span
+                    class="department-track"
+                    role="img"
+                    :aria-label="riskBarAriaLabel(item.physician, item)"
+                  >
                     <i
+                      v-if="item.primaryNonCompliant"
                       class="bar-danger"
                       :style="{
-                        width: `${barPercent(item.non_compliant_record_total, physicianMax)}%`,
+                        width: `${barPercent(item.primaryNonCompliant, physicianMax)}%`,
                       }"
                     />
                     <i
+                      v-if="!confirmedResultsOnly && item.primaryDataGap"
                       class="bar-warning"
-                      :style="{ width: `${barPercent(item.data_gap_record_total, physicianMax)}%` }"
+                      :style="{ width: `${barPercent(item.primaryDataGap, physicianMax)}%` }"
                     />
                     <i
-                      v-if="item.uncertain_record_total"
+                      v-if="!confirmedResultsOnly && item.primaryUncertain"
                       class="bar-uncertain"
                       :style="{
-                        width: `${barPercent(item.uncertain_record_total, physicianMax)}%`,
+                        width: `${barPercent(item.primaryUncertain, physicianMax)}%`,
                       }"
                     />
                   </span>
-                  <strong>{{
-                    item.non_compliant_record_total + item.data_gap_record_total
-                  }}</strong>
+                  <strong>{{ item.problemTotal.toLocaleString() }}</strong>
                 </div>
               </div>
               <a-empty
@@ -357,14 +406,30 @@
                       <small>{{ item.rule_id }}</small>
                       <strong>{{ item.rule_name }}</strong>
                       <span class="rule-breakdown">
-                        <em v-if="item.non_compliant_count">确定 {{ item.non_compliant_count }}</em>
-                        <em v-if="item.data_gap_count">待核实 {{ item.data_gap_count }}</em>
-                        <em v-if="item.uncertain_count">待判断 {{ item.uncertain_count }}</em>
+                        <em
+                          v-if="item.non_compliant_count"
+                          class="is-danger"
+                        >确定 {{ item.non_compliant_count.toLocaleString() }}</em>
+                        <em
+                          v-if="!confirmedResultsOnly && item.data_gap_count"
+                          class="is-warning"
+                        >待核实 {{ item.data_gap_count.toLocaleString() }}</em>
+                        <em
+                          v-if="!confirmedResultsOnly && item.uncertain_count"
+                          class="is-neutral"
+                        >待判断 {{ item.uncertain_count.toLocaleString() }}</em>
                       </span>
                     </span>
                     <span class="rule-count">
-                      <strong>{{ ruleConcernTotal(item) }}</strong>
-                      <small>问题结果</small>
+                      <strong>{{ ruleConcernTotal(item).toLocaleString() }}</strong>
+                      <small>{{ hasRuleDistinctRecordCount(item) ? '命中病历' : '问题结果' }}</small>
+                      <small
+                        v-if="hasRuleDistinctRecordCount(item) && ruleEventConcernTotal(item) > 0"
+                        class="rule-event-note"
+                        data-testid="rule-event-count"
+                      >
+                        {{ ruleEventConcernTotal(item).toLocaleString() }} 次事件
+                      </small>
                     </span>
                   </button>
                 </li>
@@ -378,16 +443,20 @@
           </section>
         </template>
       </template>
-    </main>
+    </section>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import dayjs from 'dayjs'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { ApiService } from '@/services/apiService'
-import { ANALYTICS_WORKLIST_PATH } from './utils/analyticsDrilldown'
+import {
+  ANALYTICS_PROBLEM_RESULT_STATUS_PARAM,
+  ANALYTICS_WORKLIST_PATH,
+} from './utils/analyticsDrilldown'
 import { QC_RESULT_STATUS_LABELS } from './utils/qcResultStatusLabels'
 
 type Status =
@@ -397,6 +466,24 @@ type Status =
   | 'compliant'
   | 'not_applicable'
   | 'not_executed'
+
+interface RiskDistributionMetrics {
+  distinct_record_total: number
+  non_compliant_record_total: number
+  data_gap_record_total: number
+  uncertain_record_total: number
+  problem_record_total?: number
+  primary_non_compliant_record_total?: number
+  primary_data_gap_record_total?: number
+  primary_uncertain_record_total?: number
+}
+
+interface ResolvedRiskMetrics {
+  primaryNonCompliant: number
+  primaryDataGap: number
+  primaryUncertain: number
+  problemTotal: number
+}
 
 interface AnalyticsPayload {
   scope: {
@@ -417,23 +504,18 @@ interface AnalyticsPayload {
     canonical_invalid_or_missing_total: number
   }
   status_distribution: Array<{ status: Status; count: number }>
-  department_distribution: Array<{
-    department: string
-    distinct_record_total: number
-    non_compliant_record_total: number
-    data_gap_record_total: number
-    uncertain_record_total: number
-  }>
-  physician_distribution: Array<{
-    physician: string
-    distinct_record_total: number
-    non_compliant_record_total: number
-    data_gap_record_total: number
-    uncertain_record_total: number
-  }>
+  department_options?: string[]
+  department_distribution: Array<RiskDistributionMetrics & { department: string }>
+  physician_distribution: Array<RiskDistributionMetrics & { physician: string }>
   rule_distribution: Array<{
     rule_id: string
     rule_name: string
+    distinct_record_count?: number
+    non_compliant_record_count?: number
+    data_gap_record_count?: number
+    uncertain_record_count?: number
+    record_count?: number
+    count?: number
     non_compliant_count: number
     data_gap_count: number
     uncertain_count: number
@@ -443,15 +525,57 @@ interface AnalyticsPayload {
   data_health: { canonical_invalid_or_missing_total: number }
 }
 
+const DEMO_HIDDEN_STATUSES = new Set<Status>(['data_gap', 'uncertain'])
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
+
 const router = useRouter()
 const route = useRoute()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const loading = ref(true)
 const error = ref('')
 const payload = ref<AnalyticsPayload | null>(null)
 const dateRange = ref<[string, string]>()
 const department = ref<string>()
 const jobId = ref('')
-const routeScopeInitialized = ref(false)
+const cachedDepartmentOptions = ref<string[]>([])
+let isMounted = false
+let lastObservedRouteSignature = ''
+let lastSyncedRouteSignature = ''
+
+function cleanDateValue(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function toDatePickerValue(value: unknown): string {
+  const trimmed = cleanDateValue(value)
+  if (!trimmed) return ''
+  const dateMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})/)
+  return dateMatch ? dateMatch[1] : trimmed
+}
+
+function toBoundaryDateTime(value: unknown, boundary: 'start' | 'end'): string | undefined {
+  const trimmed = cleanDateValue(value)
+  if (!trimmed) return undefined
+  if (DATE_ONLY_PATTERN.test(trimmed)) {
+    return boundary === 'start' ? `${trimmed}T00:00:00` : `${trimmed}T23:59:59`
+  }
+  return trimmed
+}
+
+function normalizeDepartmentList(values: unknown): string[] {
+  if (!Array.isArray(values)) return []
+  return [
+    ...new Set(
+      values
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean),
+    ),
+  ]
+}
 
 function routeQueryText(name: string) {
   const value = route.query[name]
@@ -474,19 +598,104 @@ const STATUS_META: Array<{ status: Status; label: string; color: string }> = [
   { status: 'not_executed', label: '未执行', color: '#cbd5e1' },
 ]
 
-const departmentOptions = computed(() =>
-  (payload.value?.department_distribution || []).map((item) => ({
-    label: item.department,
-    value: item.department,
-  })),
-)
+function nonNegativeCount(value: unknown): number {
+  const parsed = Number(value ?? 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+}
+
+function resolveRiskMetrics(item: RiskDistributionMetrics): ResolvedRiskMetrics {
+  const nc = nonNegativeCount(item.non_compliant_record_total)
+  if (confirmedResultsOnly.value) {
+    return {
+      primaryNonCompliant: nc,
+      primaryDataGap: 0,
+      primaryUncertain: 0,
+      problemTotal: nc,
+    }
+  }
+  const hasPrimaryBuckets =
+    item.primary_non_compliant_record_total != null ||
+    item.primary_data_gap_record_total != null ||
+    item.primary_uncertain_record_total != null
+  if (hasPrimaryBuckets) {
+    const primaryNonCompliant = nonNegativeCount(
+      item.primary_non_compliant_record_total ?? item.non_compliant_record_total,
+    )
+    const primaryDataGap = nonNegativeCount(item.primary_data_gap_record_total)
+    const primaryUncertain = nonNegativeCount(item.primary_uncertain_record_total)
+    const bucketSum = primaryNonCompliant + primaryDataGap + primaryUncertain
+    const problemTotal =
+      item.problem_record_total != null
+        ? nonNegativeCount(item.problem_record_total)
+        : bucketSum
+    return {
+      primaryNonCompliant,
+      primaryDataGap,
+      primaryUncertain,
+      problemTotal,
+    }
+  }
+  // 向后兼容无新字段的旧返回：按 non_compliant > data_gap > uncertain 互斥分桶，
+  // 并在 distinct_record_total > 0 时限制不超过去重总病历数，同时计入 uncertain。
+  const dg = nonNegativeCount(item.data_gap_record_total)
+  const unc = nonNegativeCount(item.uncertain_record_total)
+  const distinctTotal = nonNegativeCount(item.distinct_record_total)
+  const explicitProblem =
+    item.problem_record_total != null ? nonNegativeCount(item.problem_record_total) : null
+  const cap =
+    distinctTotal > 0
+      ? explicitProblem != null
+        ? Math.min(explicitProblem, distinctTotal)
+        : distinctTotal
+      : explicitProblem
+  if (cap != null) {
+    const primaryNonCompliant = Math.min(nc, cap)
+    const primaryDataGap = Math.min(dg, Math.max(0, cap - primaryNonCompliant))
+    const primaryUncertain = Math.min(unc, Math.max(0, cap - primaryNonCompliant - primaryDataGap))
+    const problemTotal =
+      explicitProblem != null
+        ? explicitProblem
+        : primaryNonCompliant + primaryDataGap + primaryUncertain
+    return {
+      primaryNonCompliant,
+      primaryDataGap,
+      primaryUncertain,
+      problemTotal,
+    }
+  }
+  return {
+    primaryNonCompliant: nc,
+    primaryDataGap: dg,
+    primaryUncertain: unc,
+    problemTotal: nc + dg + unc,
+  }
+}
+
+const departmentOptions = computed(() => {
+  const fromPayloadOptions = normalizeDepartmentList(payload.value?.department_options)
+  const fromDistribution = normalizeDepartmentList(
+    (payload.value?.department_distribution || []).map((item) => item.department),
+  )
+  const selected = department.value?.trim() ? [department.value.trim()] : []
+  const merged = [
+    ...new Set([
+      ...cachedDepartmentOptions.value,
+      ...fromPayloadOptions,
+      ...fromDistribution,
+      ...selected,
+    ]),
+  ]
+  return merged.map((dept) => ({ label: dept, value: dept }))
+})
 const statusItems = computed(() =>
-  STATUS_META.map((meta) => ({
-    ...meta,
-    count: Number(
-      payload.value?.status_distribution.find((item) => item.status === meta.status)?.count || 0,
-    ),
-  })).filter((item) => item.count > 0),
+  STATUS_META.filter((meta) => !confirmedResultsOnly.value || !DEMO_HIDDEN_STATUSES.has(meta.status))
+    .map((meta) => ({
+      ...meta,
+      count: Number(
+        payload.value?.status_distribution.find((item) => item.status === meta.status)?.count || 0,
+      ),
+    }))
+    .filter((item) => item.count > 0),
 )
 const statusTotal = computed(() => statusItems.value.reduce((total, item) => total + item.count, 0))
 const primaryConcernTotal = computed(() =>
@@ -506,139 +715,282 @@ const statusRingBackground = computed(() => {
     .join(', ')})`
 })
 const departmentItems = computed(() =>
-  [...(payload.value?.department_distribution || [])]
-    .filter(
-      (item) =>
-        item.non_compliant_record_total ||
-        item.data_gap_record_total ||
-        item.uncertain_record_total,
-    )
-    .sort(
-      (a, b) =>
-        b.non_compliant_record_total - a.non_compliant_record_total ||
-        b.data_gap_record_total - a.data_gap_record_total ||
-        b.uncertain_record_total - a.uncertain_record_total,
+  (payload.value?.department_distribution || [])
+    .map((item) => ({ ...item, ...resolveRiskMetrics(item) }))
+    .filter((item) => item.problemTotal > 0)
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? b.primaryNonCompliant - a.primaryNonCompliant ||
+          a.department.localeCompare(b.department)
+        : b.primaryNonCompliant - a.primaryNonCompliant ||
+          b.problemTotal - a.problemTotal ||
+          b.primaryDataGap - a.primaryDataGap ||
+          b.primaryUncertain - a.primaryUncertain ||
+          a.department.localeCompare(b.department),
     )
     .slice(0, 8),
 )
 const departmentMax = computed(() =>
   Math.max(
     1,
-    ...departmentItems.value.map(
-      (item) =>
-        item.non_compliant_record_total + item.data_gap_record_total + item.uncertain_record_total,
+    ...departmentItems.value.map((item) =>
+      Math.max(
+        item.problemTotal,
+        item.primaryNonCompliant + item.primaryDataGap + item.primaryUncertain,
+      ),
     ),
   ),
 )
 const physicianItems = computed(() =>
-  [...(payload.value?.physician_distribution || [])]
-    .filter(
-      (item) =>
-        item.non_compliant_record_total ||
-        item.data_gap_record_total ||
-        item.uncertain_record_total,
-    )
-    .sort(
-      (a, b) =>
-        b.non_compliant_record_total - a.non_compliant_record_total ||
-        b.data_gap_record_total - a.data_gap_record_total ||
-        b.uncertain_record_total - a.uncertain_record_total ||
-        a.physician.localeCompare(b.physician),
+  (payload.value?.physician_distribution || [])
+    .map((item) => ({ ...item, ...resolveRiskMetrics(item) }))
+    .filter((item) => item.problemTotal > 0)
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? b.primaryNonCompliant - a.primaryNonCompliant ||
+          a.physician.localeCompare(b.physician)
+        : b.primaryNonCompliant - a.primaryNonCompliant ||
+          b.problemTotal - a.problemTotal ||
+          b.primaryDataGap - a.primaryDataGap ||
+          b.primaryUncertain - a.primaryUncertain ||
+          a.physician.localeCompare(b.physician),
     )
     .slice(0, 8),
 )
 const physicianMax = computed(() =>
   Math.max(
     1,
-    ...physicianItems.value.map(
-      (item) =>
-        item.non_compliant_record_total + item.data_gap_record_total + item.uncertain_record_total,
+    ...physicianItems.value.map((item) =>
+      Math.max(
+        item.problemTotal,
+        item.primaryNonCompliant + item.primaryDataGap + item.primaryUncertain,
+      ),
     ),
   ),
 )
 const ruleItems = computed(() =>
   [...(payload.value?.rule_distribution || [])]
-    .sort(
-      (a, b) =>
-        b.non_compliant_count - a.non_compliant_count ||
-        b.data_gap_count - a.data_gap_count ||
-        b.uncertain_count - a.uncertain_count ||
-        a.rule_id.localeCompare(b.rule_id),
+    .filter((item) => ruleConcernTotal(item) > 0)
+    .sort((a, b) =>
+      confirmedResultsOnly.value
+        ? ruleConcernTotal(b) - ruleConcernTotal(a) ||
+          b.non_compliant_count - a.non_compliant_count ||
+          a.rule_id.localeCompare(b.rule_id)
+        : ruleConcernTotal(b) - ruleConcernTotal(a) ||
+          b.non_compliant_count - a.non_compliant_count ||
+          b.data_gap_count - a.data_gap_count ||
+          b.uncertain_count - a.uncertain_count ||
+          a.rule_id.localeCompare(b.rule_id),
     )
     .slice(0, 5),
 )
 const completionSeries = computed(() => payload.value?.completion_time_series || [])
 const hasTrend = computed(() => completionSeries.value.length >= 2)
-const kpiCards = computed(() => [
-  {
-    label: '纳入病历',
-    value: payload.value?.kpis.distinct_record_total || 0,
-    detail: '按三坐标去重',
-    tone: 'brand',
-  },
-  {
-    label: '质控事件',
-    value: payload.value?.kpis.completed_event_total || 0,
-    detail: '已完成根任务',
-    tone: 'neutral',
-  },
-  {
-    label: '需优先处理',
-    value: payload.value?.kpis.records_with_non_compliant || 0,
-    detail: '至少一项确定问题',
-    tone: 'danger',
-  },
-  {
-    label: '资料待核实',
-    value: payload.value?.kpis.records_with_data_gap || 0,
-    detail: '至少一项资料待核实',
-    tone: 'warning',
-  },
-])
+const statusRingAriaLabel = computed(() => {
+  if (!statusTotal.value) return '质控结论分布：暂无有效结论'
+  const breakdown = statusItems.value
+    .map((item) => `${item.label} ${item.count.toLocaleString()} 条`)
+    .join('，')
+  return `质控结论分布：共 ${statusTotal.value.toLocaleString()} 条有效结论，需重点关注 ${primaryConcernTotal.value.toLocaleString()} 条；${breakdown}`
+})
+const trendChartAriaLabel = computed(() => {
+  if (!completionSeries.value.length) return '近期质控完成量趋势：暂无连续时间序列'
+  const summary = completionSeries.value
+    .map((item) => `${item.bucket} 完成 ${item.completed_event_total.toLocaleString()} 次`)
+    .join('，')
+  return `近期质控完成量趋势（共 ${completionSeries.value.length} 天）：${summary}`
+})
+const kpiCards = computed(() => {
+  const cards = [
+    {
+      label: '纳入病历',
+      value: payload.value?.kpis.distinct_record_total || 0,
+      detail: '按三坐标去重',
+      tone: 'brand',
+    },
+    {
+      label: '质控事件',
+      value: payload.value?.kpis.completed_event_total || 0,
+      detail: '已完成根任务',
+      tone: 'neutral',
+    },
+    {
+      label: '需优先处理',
+      value: payload.value?.kpis.records_with_non_compliant || 0,
+      detail: '至少一项确定问题',
+      tone: 'danger',
+    },
+  ]
+  if (!confirmedResultsOnly.value) {
+    cards.push({
+      label: '资料待核实',
+      value: payload.value?.kpis.records_with_data_gap || 0,
+      detail: '至少一项资料待核实',
+      tone: 'warning',
+    })
+  }
+  return cards
+})
 
 function formatTime(value: string) {
   const parsed = dayjs(value)
   return parsed.isValid() ? parsed.format('YYYY-MM-DD HH:mm') : '暂未返回'
 }
 function barPercent(value: number, maximum: number) {
-  return Math.max(0, Math.round((value / maximum) * 100))
+  if (value <= 0 || maximum <= 0) return 0
+  return Math.min(100, Math.floor((value * 10000) / maximum) / 100)
 }
 function trendPercent(value: number) {
   const maximum = Math.max(1, ...completionSeries.value.map((item) => item.completed_event_total))
-  return Math.max(10, Math.round((value / maximum) * 100))
+  return Math.min(100, Math.max(10, Math.round((value / maximum) * 100)))
+}
+function riskBarAriaLabel(name: string, item: ResolvedRiskMetrics) {
+  if (confirmedResultsOnly.value) {
+    return `${name}风险分布：共 ${item.problemTotal.toLocaleString()} 份确定问题病历`
+  }
+  return `${name}风险分布：共 ${item.problemTotal.toLocaleString()} 份问题病历（确定问题 ${item.primaryNonCompliant.toLocaleString()}，资料待核实 ${item.primaryDataGap.toLocaleString()}，待判断 ${item.primaryUncertain.toLocaleString()}）`
+}
+function ruleEventConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
+  if (confirmedResultsOnly.value) return nonNegativeCount(item.non_compliant_count)
+  return (
+    nonNegativeCount(item.non_compliant_count) +
+    nonNegativeCount(item.data_gap_count) +
+    nonNegativeCount(item.uncertain_count)
+  )
+}
+function hasRuleDistinctRecordCount(item: AnalyticsPayload['rule_distribution'][number]) {
+  if (confirmedResultsOnly.value) {
+    return (
+      item.non_compliant_record_count != null ||
+      item.distinct_record_count != null ||
+      item.record_count != null
+    )
+  }
+  return (
+    item.distinct_record_count != null ||
+    item.record_count != null ||
+    item.count != null
+  )
 }
 function ruleConcernTotal(item: AnalyticsPayload['rule_distribution'][number]) {
-  return item.non_compliant_count + item.data_gap_count + item.uncertain_count
+  if (confirmedResultsOnly.value) {
+    if (nonNegativeCount(item.non_compliant_count) <= 0 && item.non_compliant_record_count == null) {
+      return 0
+    }
+    const explicit =
+      item.non_compliant_record_count ?? item.distinct_record_count ?? item.record_count
+    if (explicit != null) return nonNegativeCount(explicit)
+    return nonNegativeCount(item.non_compliant_count)
+  }
+  const explicit = item.distinct_record_count ?? item.record_count ?? item.count
+  if (explicit != null) return nonNegativeCount(explicit)
+  return ruleEventConcernTotal(item)
 }
-function resetFilters() {
+function querySignature(query: Record<string, unknown>): string {
+  const pick = (key: string) => {
+    const raw = query[key]
+    const value = Array.isArray(raw) ? raw[0] : raw
+    return typeof value === 'string' ? value.trim() : ''
+  }
+  return [
+    pick('view'),
+    pick('department'),
+    toBoundaryDateTime(pick('completed_from'), 'start') || '',
+    toBoundaryDateTime(pick('completed_to'), 'end') || '',
+    pick('job_id'),
+  ].join('|')
+}
+
+function buildSyncedQuery(): Record<string, string | undefined> {
+  const completedFrom = toBoundaryDateTime(dateRange.value?.[0], 'start')
+  const completedTo = toBoundaryDateTime(dateRange.value?.[1], 'end')
+  const dept = department.value?.trim() || undefined
+  const trimmedJobId = jobId.value.trim() || undefined
+  const nextQuery: Record<string, string | undefined> = {}
+  if (isDepartmentReport.value && dept) nextQuery.view = 'department'
+  if (dept) nextQuery.department = dept
+  if (completedFrom) nextQuery.completed_from = completedFrom
+  if (completedTo) nextQuery.completed_to = completedTo
+  if (trimmedJobId) nextQuery.job_id = trimmedJobId
+  return nextQuery
+}
+
+async function syncFiltersToRoute() {
+  if (typeof router.replace !== 'function') return
+  const nextQuery = buildSyncedQuery()
+  const nextSig = querySignature(nextQuery)
+  const currentSig = querySignature((route.query || {}) as Record<string, unknown>)
+  if (nextSig === currentSig) return
+  lastSyncedRouteSignature = nextSig
+  try {
+    await router.replace({
+      path: route.path || '/workstation-v5/stats',
+      query: nextQuery,
+    })
+    await nextTick()
+  } finally {
+    if (lastSyncedRouteSignature === nextSig) {
+      lastSyncedRouteSignature = ''
+    }
+  }
+}
+
+async function handleQuery() {
+  const trimmedJobId = jobId.value.trim()
+  if (trimmedJobId && !UUID_PATTERN.test(trimmedJobId)) {
+    analyticsAbortController?.abort()
+    analyticsAbortController = null
+    loading.value = false
+    error.value = '任务 ID 格式不正确，请输入有效的 UUID'
+    return
+  }
+  await syncFiltersToRoute()
+  await fetchAnalytics()
+}
+
+async function resetFilters() {
   dateRange.value = undefined
   department.value = isDepartmentReport.value ? activeDepartmentName.value : undefined
   jobId.value = ''
-  void fetchAnalytics()
+  await syncFiltersToRoute()
+  await fetchAnalytics()
 }
+
 function openDepartmentReport(departmentName: string) {
   void router.push({
     path: '/workstation-v5/stats',
     query: {
       view: 'department',
       department: departmentName,
-      completed_from: dateRange.value?.[0],
-      completed_to: dateRange.value?.[1],
-      job_id: jobId.value || undefined,
+      completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
+      job_id: jobId.value.trim() || undefined,
     },
   })
 }
+
 function returnToHospitalAnalytics() {
   void router.push({
     path: '/workstation-v5/stats',
     query: {
-      completed_from: dateRange.value?.[0],
-      completed_to: dateRange.value?.[1],
-      job_id: jobId.value || undefined,
+      completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
+      job_id: jobId.value.trim() || undefined,
     },
   })
 }
-function drillDown(filters: { department?: string; rule_id?: string; rule_name?: string }) {
+
+function drillDown(filters: {
+  department?: string
+  rule_id?: string
+  rule_name?: string
+  result_status?: string
+}) {
+  const defaultRuleResultStatus = confirmedResultsOnly.value
+    ? 'non_compliant'
+    : ANALYTICS_PROBLEM_RESULT_STATUS_PARAM
+  const resultStatus =
+    filters.result_status ?? (filters.rule_id ? defaultRuleResultStatus : undefined)
   void router.push({
     // 下钻目标是病历池列表；工作台根路径是首页总览，不承载统计筛选
     path: ANALYTICS_WORKLIST_PATH,
@@ -646,59 +998,122 @@ function drillDown(filters: { department?: string; rule_id?: string; rule_name?:
       source: 'analytics',
       analytics_scope: 'final',
       department: filters.department || department.value,
-      analytics_completed_from: dateRange.value?.[0],
-      analytics_completed_to: dateRange.value?.[1],
-      analytics_job_id: jobId.value || undefined,
+      analytics_completed_from: toBoundaryDateTime(dateRange.value?.[0], 'start'),
+      analytics_completed_to: toBoundaryDateTime(dateRange.value?.[1], 'end'),
+      analytics_job_id: jobId.value.trim() || undefined,
       analytics_rule_id: filters.rule_id,
+      analytics_result_status: resultStatus,
       // 仅供病历池展示下钻上下文，不参与后端筛选
       analytics_rule_name: filters.rule_name || undefined,
     },
   })
 }
+
+let analyticsRequestSeq = 0
+let analyticsAbortController: AbortController | null = null
+
 async function fetchAnalytics() {
+  const trimmedJobId = jobId.value.trim()
+  if (trimmedJobId && !UUID_PATTERN.test(trimmedJobId)) {
+    analyticsAbortController?.abort()
+    analyticsAbortController = null
+    loading.value = false
+    error.value = '任务 ID 格式不正确，请输入有效的 UUID'
+    return
+  }
+
+  const requestSeq = ++analyticsRequestSeq
+  analyticsAbortController?.abort()
+  const controller = new AbortController()
+  analyticsAbortController = controller
   loading.value = true
   error.value = ''
   try {
+    const completedFrom = toBoundaryDateTime(dateRange.value?.[0], 'start')
+    const completedTo = toBoundaryDateTime(dateRange.value?.[1], 'end')
+    const selectedDept = department.value?.trim() || undefined
     const response = await ApiService.get<AnalyticsPayload>(
       '/api/v1/workstation/analytics/luxian-0609',
       {
-        completed_from: dateRange.value?.[0],
-        completed_to: dateRange.value?.[1],
-        department: department.value,
-        job_id: jobId.value || undefined,
+        completed_from: completedFrom,
+        completed_to: completedTo,
+        department: selectedDept,
+        job_id: trimmedJobId || undefined,
       },
+      { signal: controller.signal },
     )
+    if (controller.signal.aborted || requestSeq !== analyticsRequestSeq) return
     if (!response.success || !response.data) {
       throw new Error(String(response.error || '统计接口未返回数据'))
     }
     payload.value = response.data
+    const incomingOptions = normalizeDepartmentList(response.data.department_options)
+    if (incomingOptions.length > 0) {
+      cachedDepartmentOptions.value = incomingOptions
+    } else {
+      const fromDist = normalizeDepartmentList(
+        (response.data.department_distribution || []).map((item) => item.department),
+      )
+      if (fromDist.length > 0) {
+        cachedDepartmentOptions.value = selectedDept
+          ? [...new Set([...cachedDepartmentOptions.value, ...fromDist])]
+          : fromDist
+      }
+    }
   } catch (caught) {
+    if (controller.signal.aborted || requestSeq !== analyticsRequestSeq) return
     payload.value = null
     error.value = caught instanceof Error ? caught.message : '请稍后重试'
   } finally {
-    loading.value = false
+    if (analyticsAbortController === controller) {
+      analyticsAbortController = null
+    }
+    if (requestSeq === analyticsRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
+function applyRouteQueryToFilters() {
+  const selectedDepartment = routeQueryText('department')
+  const completedFrom = toDatePickerValue(routeQueryText('completed_from'))
+  const completedTo = toDatePickerValue(routeQueryText('completed_to'))
+  department.value = selectedDepartment || undefined
+  dateRange.value = completedFrom || completedTo ? [completedFrom, completedTo] : undefined
+  jobId.value = routeQueryText('job_id')
+}
+
+lastObservedRouteSignature = querySignature((route.query || {}) as Record<string, unknown>)
+applyRouteQueryToFilters()
+
 watch(
-  () => route.fullPath,
-  () => {
-    const selectedDepartment = isDepartmentReport.value ? routeQueryText('department') : ''
-    const completedFrom = routeQueryText('completed_from')
-    const completedTo = routeQueryText('completed_to')
-    department.value = selectedDepartment || undefined
-    dateRange.value = completedFrom && completedTo ? [completedFrom, completedTo] : undefined
-    jobId.value = routeQueryText('job_id')
-    if (routeScopeInitialized.value) {
+  () => querySignature((route.query || {}) as Record<string, unknown>),
+  (currentSig) => {
+    if (route.path && !route.path.includes('/stats')) return
+    if (currentSig === lastObservedRouteSignature) return
+    lastObservedRouteSignature = currentSig
+    if (lastSyncedRouteSignature && currentSig === lastSyncedRouteSignature) {
+      lastSyncedRouteSignature = ''
+      return
+    }
+    lastSyncedRouteSignature = ''
+    applyRouteQueryToFilters()
+    if (isMounted) {
       void fetchAnalytics()
     }
-    routeScopeInitialized.value = true
   },
-  { immediate: true },
 )
 
 onMounted(() => {
+  isMounted = true
   void fetchAnalytics()
+})
+
+onBeforeUnmount(() => {
+  isMounted = false
+  ++analyticsRequestSeq
+  analyticsAbortController?.abort()
+  analyticsAbortController = null
 })
 </script>
 
@@ -732,8 +1147,13 @@ onMounted(() => {
 .analytics-heading {
   align-items: center;
   display: flex;
-  gap: 28px;
+  gap: 16px 20px;
   justify-content: space-between;
+}
+
+.analytics-heading > div:first-child {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .analytics-eyebrow,
@@ -775,7 +1195,7 @@ onMounted(() => {
 }
 
 .analytics-heading p:not(.analytics-eyebrow) {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   margin: 5px 0 0;
 }
@@ -786,18 +1206,25 @@ onMounted(() => {
   flex: 1;
   gap: 8px;
   justify-content: flex-end;
+  min-width: 0;
 }
 
 .analytics-toolbar :deep(.ant-picker) {
-  min-width: 218px;
+  flex: 0 1 224px;
+  min-width: 210px;
+  max-width: 248px;
 }
 
 .analytics-toolbar :deep(.ant-select) {
-  min-width: 148px;
+  flex: 0 1 152px;
+  min-width: 136px;
+  max-width: 184px;
 }
 
 .analytics-toolbar :deep(.ant-input-affix-wrapper) {
-  min-width: 184px;
+  flex: 0 1 180px;
+  min-width: 164px;
+  max-width: 216px;
 }
 
 .analytics-toolbar :deep(.ant-btn) {
@@ -817,7 +1244,7 @@ onMounted(() => {
 
 .analytics-scope-copy {
   align-items: center;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   display: flex;
   flex-wrap: wrap;
   font-size: 12px;
@@ -826,21 +1253,21 @@ onMounted(() => {
 }
 
 .analytics-scope-copy i {
-  background: rgba(29, 29, 31, 0.24);
+  background: var(--mq-border-strong, rgba(29, 29, 31, 0.24));
   border-radius: 50%;
   height: 3px;
   width: 3px;
 }
 
 .analytics-scope-copy small {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 500;
 }
 
 .analytics-health-indicator {
   align-items: center;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-secondary);
   display: flex;
   font-size: 11px;
   gap: 7px;
@@ -848,20 +1275,20 @@ onMounted(() => {
 }
 
 .analytics-health-indicator span {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-secondary);
 }
 
 .analytics-health-indicator strong {
-  color: #059669;
+  color: #047857;
   font-weight: 700;
 }
 
 .analytics-health-indicator.has-attention strong {
-  color: #c17a08;
+  color: #9a4a00;
 }
 
 .analytics-health-indicator small {
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
 }
 
 .analytics-notice,
@@ -882,7 +1309,7 @@ onMounted(() => {
 
 .analytics-notice span,
 .analytics-loading span {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   display: block;
   font-size: 13px;
   margin-top: 3px;
@@ -895,6 +1322,10 @@ onMounted(() => {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   overflow: hidden;
+}
+
+.analytics-kpis.is-confirmed-only {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .analytics-kpi {
@@ -931,7 +1362,7 @@ onMounted(() => {
 }
 
 .analytics-kpi span {
-  color: rgba(29, 29, 31, 0.55);
+  color: var(--mq-text-secondary);
   display: block;
   font-size: 15px;
   font-weight: 600;
@@ -939,7 +1370,7 @@ onMounted(() => {
 }
 
 .analytics-kpi strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   display: block;
   font-size: 28px;
   letter-spacing: -0.03em;
@@ -956,7 +1387,7 @@ onMounted(() => {
 }
 
 .analytics-kpi.is-warning strong {
-  color: #c17a08;
+  color: #9a4a00;
 }
 
 .analytics-overview-grid,
@@ -993,7 +1424,7 @@ onMounted(() => {
 }
 
 .panel-note {
-  color: rgba(29, 29, 31, 0.44);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   line-height: 18px;
   text-align: right;
@@ -1026,7 +1457,7 @@ onMounted(() => {
 }
 
 .status-ring span {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   grid-area: 1 / 1;
   position: relative;
   text-align: center;
@@ -1039,7 +1470,7 @@ onMounted(() => {
 }
 
 .status-ring strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 26px;
   letter-spacing: -0.04em;
   line-height: 30px;
@@ -1074,7 +1505,7 @@ onMounted(() => {
 }
 
 .status-legend span {
-  color: rgba(29, 29, 31, 0.63);
+  color: var(--mq-text-secondary);
 }
 
 .status-legend strong {
@@ -1087,26 +1518,36 @@ onMounted(() => {
 }
 
 .rhythm-chart {
-  align-items: end;
+  align-items: stretch;
   display: flex;
   flex: 1;
   gap: 8px;
   height: 170px;
   margin: 20px 0 0;
-  padding: 0 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0 4px 4px;
 }
 
 .rhythm-bar {
   align-items: center;
   display: flex;
-  flex: 1;
+  flex: 1 0 32px;
   flex-direction: column;
   height: 100%;
-  justify-content: end;
-  min-width: 24px;
+  min-width: 32px;
 }
 
-.rhythm-bar i {
+.rhythm-bar-track {
+  align-items: flex-end;
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  min-height: 0;
+  width: 100%;
+}
+
+.rhythm-bar-track i {
   background: #0a6cff;
   border-radius: 6px 6px 2px 2px;
   display: block;
@@ -1117,12 +1558,16 @@ onMounted(() => {
 
 .rhythm-bar span,
 .rhythm-bar small {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
+  flex: none;
   font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
 }
 
 .rhythm-bar span {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
+  font-variant-numeric: tabular-nums;
   font-weight: 700;
   margin-bottom: 5px;
 }
@@ -1133,7 +1578,7 @@ onMounted(() => {
 
 .rhythm-empty {
   align-items: center;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1142,7 +1587,7 @@ onMounted(() => {
 }
 
 .rhythm-empty strong {
-  color: rgba(29, 29, 31, 0.7);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -1166,7 +1611,7 @@ onMounted(() => {
   cursor: pointer;
   display: grid;
   gap: 10px;
-  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) 32px;
+  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) minmax(40px, auto);
   padding: 4px 6px;
   text-align: left;
   transition: background 200ms ease;
@@ -1178,7 +1623,7 @@ onMounted(() => {
 }
 
 .department-rank {
-  color: rgba(29, 29, 31, 0.34);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
@@ -1216,9 +1661,15 @@ onMounted(() => {
 }
 
 .department-row strong {
-  color: rgba(29, 29, 31, 0.76);
+  color: var(--mq-text-secondary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
+}
+
+.analytics-physician-panel.is-full-span {
+  grid-column: 1 / -1;
 }
 
 .physician-chart {
@@ -1231,12 +1682,12 @@ onMounted(() => {
   align-items: center;
   display: grid;
   gap: 10px;
-  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) 32px;
+  grid-template-columns: 20px minmax(88px, 0.95fr) minmax(120px, 2fr) minmax(40px, auto);
   padding: 4px 6px;
 }
 
 .physician-row.is-unassigned .physician-name {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
 }
 
 .physician-name {
@@ -1247,9 +1698,11 @@ onMounted(() => {
 }
 
 .physician-row strong {
-  color: rgba(29, 29, 31, 0.76);
+  color: var(--mq-text-secondary);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
   text-align: right;
+  white-space: nowrap;
 }
 
 .analytics-rule-panel {
@@ -1286,6 +1739,19 @@ onMounted(() => {
   background: rgba(10, 108, 255, 0.045);
 }
 
+.department-row:focus-visible,
+.rule-list button:focus-visible,
+.analytics-toolbar :deep(.ant-btn:focus-visible),
+.analytics-notice :deep(.ant-btn:focus-visible) {
+  outline: 2px solid var(--mq-brand-600, #0a6cff);
+  outline-offset: 2px;
+}
+
+.department-row:focus-visible,
+.rule-list button:focus-visible {
+  background: rgba(10, 108, 255, 0.045);
+}
+
 .rule-rank {
   color: #0a6cff;
   font-size: 13px;
@@ -1306,7 +1772,7 @@ onMounted(() => {
 
 .rule-copy small,
 .rule-count small {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 10px;
 }
 
@@ -1318,22 +1784,27 @@ onMounted(() => {
 }
 
 .rule-breakdown em {
-  background: rgba(148, 163, 184, 0.14);
+  background: var(--mq-neutral-bg, rgba(148, 163, 184, 0.14));
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.52);
-  font-size: 10px;
+  color: var(--mq-neutral-text, #4a5468);
+  font-size: 11px;
   font-style: normal;
-  padding: 1px 6px;
+  padding: 1px 7px;
 }
 
-.rule-breakdown em:first-child {
-  background: rgba(239, 68, 68, 0.1);
-  color: #c2410c;
+.rule-breakdown em.is-danger {
+  background: var(--mq-danger-bg, rgba(239, 68, 68, 0.1));
+  color: #b91c1c;
 }
 
-.rule-breakdown em:nth-child(2) {
-  background: rgba(245, 158, 11, 0.12);
-  color: #a16207;
+.rule-breakdown em.is-warning {
+  background: var(--mq-warning-bg, rgba(245, 158, 11, 0.12));
+  color: #9a4a00;
+}
+
+.rule-breakdown em.is-neutral {
+  background: var(--mq-neutral-bg, rgba(148, 163, 184, 0.14));
+  color: var(--mq-neutral-text, #4a5468);
 }
 
 .rule-copy strong {
@@ -1347,110 +1818,23 @@ onMounted(() => {
 }
 
 .rule-count strong {
-  color: #c2410c;
+  color: #b91c1c;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 
 .rule-count small {
   margin-top: 1px;
 }
 
-@media (max-width: 1280px) {
-  .analytics-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .analytics-toolbar {
-    justify-content: flex-start;
-    width: 100%;
-  }
+.rule-count .rule-event-note {
+  color: var(--mq-text-tertiary);
+  font-size: 10px;
+  margin-top: 2px;
+  white-space: nowrap;
 }
 
-@media (max-width: 980px) {
-  .analytics-shell {
-    padding: 16px;
-  }
-
-  .analytics-toolbar,
-  .analytics-context {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-
-  .analytics-toolbar :deep(.ant-picker),
-  .analytics-toolbar :deep(.ant-select),
-  .analytics-toolbar :deep(.ant-input-affix-wrapper) {
-    flex: 1 1 180px;
-    min-width: 0;
-  }
-
-  .analytics-health-indicator {
-    justify-content: flex-start;
-    white-space: normal;
-    width: 100%;
-  }
-
-  .analytics-overview-grid,
-  .analytics-detail-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 640px) {
-  .analytics-command-surface,
-  .analytics-panel {
-    padding: 16px;
-  }
-
-  .analytics-heading h1 {
-    font-size: 23px;
-  }
-
-  .analytics-toolbar > :deep(*) {
-    flex: 1 1 auto;
-  }
-
-  .analytics-kpis {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .analytics-kpi:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .analytics-kpi:nth-child(n + 3) {
-    border-top: 1px solid rgba(0, 0, 0, 0.07);
-  }
-
-  .conclusion-layout {
-    gap: 18px;
-  }
-
-  .status-ring {
-    height: 122px;
-    width: 122px;
-  }
-
-  .status-ring::before {
-    height: 88px;
-    width: 88px;
-  }
-
-  .status-ring strong {
-    font-size: 21px;
-  }
-
-  .department-row {
-    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
-  }
-
-  .physician-row {
-    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) 28px;
-  }
-}
-
-/* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
+/* ===== v7.1 液态玻璃基础覆写（置于所有 @media 之前以保证响应式断点完整生效） ===== */
 .analytics-shell {
   padding: 8px 28px 32px 22px;
   background: transparent;
@@ -1508,10 +1892,30 @@ onMounted(() => {
 .analytics-toolbar :deep(.ant-picker),
 .analytics-toolbar :deep(.ant-select-selector),
 .analytics-toolbar :deep(.ant-input-affix-wrapper) {
+  height: 36px;
   border: 1px solid rgba(255, 255, 255, 0.9) !important;
   border-radius: var(--mq-radius-control) !important;
   background: rgba(255, 255, 255, 0.75) !important;
   box-shadow: 0 1px 3px rgba(10, 55, 115, 0.06);
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper) {
+  align-items: center;
+  padding: 0 10px;
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper .ant-input),
+.analytics-toolbar :deep(.ant-picker-input > input) {
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.analytics-toolbar :deep(.ant-input-affix-wrapper .ant-input) {
+  height: 100%;
+  padding: 0;
 }
 
 .analytics-toolbar :deep(.ant-btn) {
@@ -1528,6 +1932,10 @@ onMounted(() => {
 .analytics-kpi {
   padding: 18px 22px;
   border-right: 0.5px solid var(--mq-border);
+}
+
+.analytics-kpi:last-child {
+  border-right: 0;
 }
 
 .analytics-kpi::before {
@@ -1556,5 +1964,128 @@ onMounted(() => {
 .panel-heading p {
   color: var(--mq-text-tertiary);
   letter-spacing: 0;
+}
+
+@media (max-width: 1440px) {
+  .analytics-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .analytics-toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 1280px) {
+  .analytics-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .analytics-toolbar {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    width: 100%;
+  }
+}
+
+@media (max-width: 980px) {
+  .analytics-shell {
+    padding: 16px;
+  }
+
+  .analytics-toolbar,
+  .analytics-context {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .analytics-toolbar :deep(.ant-picker),
+  .analytics-toolbar :deep(.ant-select),
+  .analytics-toolbar :deep(.ant-input-affix-wrapper) {
+    flex: 1 1 180px;
+    min-width: 0;
+    max-width: none;
+  }
+
+  .analytics-health-indicator {
+    justify-content: flex-start;
+    white-space: normal;
+    width: 100%;
+  }
+
+  .analytics-overview-grid,
+  .analytics-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .analytics-command-surface {
+    padding: 0;
+  }
+
+  .analytics-panel {
+    padding: 16px;
+  }
+
+  .analytics-heading h1 {
+    font-size: 23px;
+  }
+
+  .analytics-toolbar > :deep(*) {
+    flex: 1 1 auto;
+  }
+
+  .analytics-kpis,
+  .analytics-kpis.is-confirmed-only {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analytics-kpi {
+    padding: 14px 16px;
+  }
+
+  .analytics-kpi:nth-child(2n) {
+    border-right: 0;
+  }
+
+  .analytics-kpi:nth-child(n + 3) {
+    border-top: 1px solid var(--mq-border);
+  }
+
+  .analytics-kpi strong,
+  .analytics-kpi.is-brand strong,
+  .analytics-kpi.is-danger strong,
+  .analytics-kpi.is-warning strong {
+    font-size: 28px;
+  }
+
+  .conclusion-layout {
+    gap: 18px;
+  }
+
+  .status-ring {
+    height: 122px;
+    width: 122px;
+  }
+
+  .status-ring::before {
+    height: 88px;
+    width: 88px;
+  }
+
+  .status-ring strong {
+    font-size: 21px;
+  }
+
+  .department-row,
+  .physician-row {
+    grid-template-columns: 20px minmax(72px, 0.9fr) minmax(80px, 1.5fr) minmax(40px, auto);
+  }
 }
 </style>

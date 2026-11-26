@@ -1,9 +1,11 @@
 """病历沟通唯一事实所有者；不写审核、任务完成或缺陷状态。"""
 
 from datetime import datetime, timezone
+import threading
 from uuid import NAMESPACE_URL, uuid4, uuid5
+import weakref
 
-from sqlalchemy import func, select
+from sqlalchemy import func, inspect as sa_inspect, select, text
 from sqlalchemy.exc import IntegrityError
 
 from ..database.connection import SessionLocal
@@ -15,7 +17,69 @@ from .defect_rectification_service import (
     _person,
     _persistent_roles,
 )
+from .medical_records.query_service import (
+    _normalize_department_sql_expr,
+    normalize_department_name,
+)
 from .user_scope_owner import user_owner_options
+
+_ENSURE_LOCK = threading.Lock()
+_ENSURED_ENGINES: "weakref.WeakSet[object]" = weakref.WeakSet()
+_ENSURED_ENGINE_IDS: set[tuple[int, str | None]] = set()
+
+
+def _department_equals(left, right) -> bool:
+    return normalize_department_name(left) == normalize_department_name(right)
+
+
+def _event_execution_options(session) -> dict:
+    bind = session.get_bind()
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    if dialect_name == "sqlite" and Event.__table__.schema:
+        return {"schema_translate_map": {Event.__table__.schema: None}}
+    return {}
+
+
+def _ensure_communication_table(session) -> None:
+    """幂等确保病历沟通表存在，兼顾 single / split 与 SQLite。"""
+    bind = session.get_bind()
+    if bind is None:
+        return
+    target_engine = getattr(bind, "engine", bind)
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    schema = None if dialect_name == "sqlite" else Event.__table__.schema
+    cache_key = (id(target_engine), schema)
+    with _ENSURE_LOCK:
+        try:
+            already = target_engine in _ENSURED_ENGINES and cache_key in _ENSURED_ENGINE_IDS
+        except TypeError:
+            already = cache_key in _ENSURED_ENGINE_IDS
+        if already:
+            return
+        inspector = sa_inspect(bind)
+        if not inspector.has_table(Event.__table__.name, schema=schema):
+            if hasattr(target_engine, "begin"):
+                with target_engine.begin() as ddl_conn:
+                    if dialect_name == "postgresql" and schema:
+                        ddl_conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema}"'))
+                    ddl_target = (
+                        ddl_conn.execution_options(schema_translate_map={Event.__table__.schema: None})
+                        if dialect_name == "sqlite" and Event.__table__.schema
+                        else ddl_conn
+                    )
+                    Event.__table__.create(bind=ddl_target, checkfirst=True)
+            else:
+                ddl_target = (
+                    bind.execution_options(schema_translate_map={Event.__table__.schema: None})
+                    if dialect_name == "sqlite" and Event.__table__.schema
+                    else bind
+                )
+                Event.__table__.create(bind=ddl_target, checkfirst=True)
+        try:
+            _ENSURED_ENGINES.add(target_engine)
+        except TypeError:
+            pass
+        _ENSURED_ENGINE_IDS.add(cache_key)
 
 SOURCE = "v5_doctor_feedback"
 IDENTITY_FIELDS = ("institute_id", "patient_id", "visit_id")
@@ -45,9 +109,20 @@ def _valid_source(source):
         raise RectificationError("病历沟通缺少可信冻结来源", 409)
 
 
+MANAGERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
+
+
+def _is_global_scope(person):
+    roles = person["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not person["institute_id"]
+    )
+
+
 def _manager(person, institute_id):
-    if not person["roles"] & {"admin", "qc_manager", "qc_staff"} or (
-        "admin" not in person["roles"] and person["institute_id"] != institute_id
+    if not person["roles"] & MANAGERS or (
+        not _is_global_scope(person)
+        and (not person["institute_id"] or person["institute_id"] != institute_id)
     ):
         raise RectificationError("无权管理该机构病历沟通", 403)
 
@@ -57,7 +132,7 @@ def _recipient(person, event):
         "doctor" not in person["roles"]
         or person["id"] != event.recipient_id
         or person["institute_id"] != event.institute_id
-        or person["department"] != event.department
+        or not _department_equals(person["department"], event.department)
     ):
         raise RectificationError("无权读取该病历沟通", 403)
 
@@ -132,6 +207,17 @@ def event_view(event, notice, *, withdrawn=False):
     }
 
 
+def _verify_envelope(session, data):
+    from .feedback_result_source import verify_historical_envelope
+
+    return verify_historical_envelope(
+        session,
+        tuple(data[key] for key in IDENTITY_FIELDS),
+        data["root_job_id"],
+        data["envelope_id"],
+    )
+
+
 class CaseCommunicationService:
     def __init__(
         self,
@@ -140,6 +226,7 @@ class CaseCommunicationService:
         department=None,
         person=None,
         notification_writer=None,
+        envelope_verifier=None,
     ):
         self.sessions = sessions or SessionLocal
         self.source = source or _source
@@ -148,10 +235,17 @@ class CaseCommunicationService:
         self.notification_writer = (
             notification_writer or publish_case_communication_notification
         )
+        if envelope_verifier is not None:
+            self.envelope_verifier = envelope_verifier
+        elif source is None:
+            self.envelope_verifier = _verify_envelope
+        else:
+            self.envelope_verifier = None
 
     def _rows(self, session, *conditions, page=None, page_size=20):
         from .doctor_notification_service import Notification
 
+        exec_options = _event_execution_options(session)
         query = (
             select(Event, Notification)
             .outerjoin(Notification, Notification.id == Event.notification_id)
@@ -160,14 +254,15 @@ class CaseCommunicationService:
         query = query.order_by(Event.created_at.desc(), Event.id.desc())
         if page is not None:
             query = query.offset((page - 1) * page_size).limit(page_size)
-        rows = session.execute(query).all()
+        rows = session.execute(query, execution_options=exec_options).all()
         ids = [event.id for event, _ in rows]
         withdrawn = (
             set(
                 session.scalars(
                     select(Event.related_event_id).where(
                         Event.action == "withdraw", Event.related_event_id.in_(ids)
-                    )
+                    ),
+                    execution_options=exec_options,
                 ).all()
             )
             if ids
@@ -180,16 +275,17 @@ class CaseCommunicationService:
 
     def candidates(self, actor_id, data):
         with self.sessions() as session:
+            _ensure_communication_table(session)
             _manager(self.person(session, actor_id), data["institute_id"])
             identity = tuple(data[key] for key in IDENTITY_FIELDS)
-            department = self.department(session, identity)
+            department = normalize_department_name(self.department(session, identity))
             source = self.source(session, data, candidate=True)
             _valid_source(source)
             people = session.scalars(
                 select(SysUser).where(
                     SysUser.is_active.is_(True),
                     SysUser.institute_id == identity[0],
-                    SysUser.department == department,
+                    _normalize_department_sql_expr(SysUser.department) == department,
                 ),
                 execution_options=user_owner_options(session),
             ).all()
@@ -209,10 +305,12 @@ class CaseCommunicationService:
             }
 
     def _existing(self, session, actor_id, data):
+        exec_options = _event_execution_options(session)
         previous = session.scalar(
             select(Event).where(
                 Event.actor_id == actor_id, Event.request_id == data["request_id"]
-            )
+            ),
+            execution_options=exec_options,
         )
         if previous is None:
             return None
@@ -238,50 +336,74 @@ class CaseCommunicationService:
         if (data["action"] == "withdraw") != bool(data.get("related_event_id")):
             raise RectificationError("撤回须且仅须提供原催办事件", 422)
         data = {**data, "content": data["content"].strip()}
+        with self.sessions() as init_session:
+            _ensure_communication_table(init_session)
         try:
             with self.sessions() as session, session.begin():
+                exec_options = _event_execution_options(session)
                 _manager(self.person(session, actor_id), data["institute_id"])
                 previous = self._existing(session, actor_id, data)
                 if previous:
                     return previous
-                source = self.source(session, data)
-                _valid_source(source)
-                if any(source[key] != data[key] for key in SOURCE_FIELDS):
-                    raise RectificationError("病历沟通冻结来源已变化", 409)
-                department = self.department(
-                    session, tuple(data[key] for key in IDENTITY_FIELDS)
-                )
-                recipient = self.person(session, data["recipient_id"])
-                if (
-                    "doctor" not in recipient["roles"]
-                    or recipient["institute_id"] != source["institute_id"]
-                    or recipient["department"] != department
-                ):
-                    raise RectificationError("受领人须为同院本科室有效医生", 403)
                 if data["action"] == "withdraw":
+                    _valid_source(data)
+                    department = normalize_department_name(
+                        self.department(
+                            session, tuple(data[key] for key in IDENTITY_FIELDS)
+                        )
+                    )
+                    recipient = self.person(session, data["recipient_id"])
+                    if (
+                        "doctor" not in recipient["roles"]
+                        or recipient["institute_id"] != data["institute_id"]
+                        or not _department_equals(recipient["department"], department)
+                    ):
+                        raise RectificationError("受领人须为同院本科室有效医生", 403)
                     original = session.scalar(
                         select(Event)
                         .where(Event.id == data["related_event_id"])
-                        .with_for_update()
+                        .with_for_update(),
+                        execution_options=exec_options,
                     )
                     if (
                         not original
                         or original.action != "urge"
                         or original.recipient_id != recipient["id"]
-                        or original.department != department
+                        or not _department_equals(original.department, department)
                         or any(
-                            getattr(original, key) != source[key]
+                            getattr(original, key) != data[key]
                             for key in SOURCE_FIELDS
                         )
                     ):
                         raise RectificationError(
                             "原催办与当前病历、收件人或冻结轮次不一致", 409
                         )
+                    if self.envelope_verifier is not None:
+                        self.envelope_verifier(session, data)
                     if session.scalar(
-                        select(Event.id).where(Event.related_event_id == original.id)
+                        select(Event.id).where(Event.related_event_id == original.id),
+                        execution_options=exec_options,
                     ):
                         raise RectificationError("该催办已撤回", 409)
                     self._rows(session, Event.id == original.id)
+                    source = {key: getattr(original, key) for key in SOURCE_FIELDS}
+                else:
+                    source = self.source(session, data)
+                    _valid_source(source)
+                    if any(source[key] != data[key] for key in SOURCE_FIELDS):
+                        raise RectificationError("病历沟通冻结来源已变化", 409)
+                    department = normalize_department_name(
+                        self.department(
+                            session, tuple(data[key] for key in IDENTITY_FIELDS)
+                        )
+                    )
+                    recipient = self.person(session, data["recipient_id"])
+                    if (
+                        "doctor" not in recipient["roles"]
+                        or recipient["institute_id"] != source["institute_id"]
+                        or not _department_equals(recipient["department"], department)
+                    ):
+                        raise RectificationError("受领人须为同院本科室有效医生", 403)
                 event = Event(
                     id=str(uuid4()),
                     **source,
@@ -319,6 +441,8 @@ class CaseCommunicationService:
         ):
             raise RectificationError("分页参数无效", 422)
         with self.sessions() as session:
+            _ensure_communication_table(session)
+            exec_options = _event_execution_options(session)
             actor = self.person(session, actor_id)
             if (
                 "doctor" not in actor["roles"]
@@ -326,10 +450,11 @@ class CaseCommunicationService:
                 or not actor["department"]
             ):
                 raise RectificationError("仅有可信院科的医生可读取病历沟通", 403)
+            normalized_actor_dept = normalize_department_name(actor["department"])
             conditions = (
                 Event.recipient_id == actor_id,
                 Event.institute_id == actor["institute_id"],
-                Event.department == actor["department"],
+                _normalize_department_sql_expr(Event.department) == normalized_actor_dept,
                 Notification.id == Event.notification_id,
                 Notification.recipient_id == actor_id,
                 Notification.source_key == SOURCE,
@@ -350,7 +475,8 @@ class CaseCommunicationService:
                 select(func.count())
                 .select_from(Event)
                 .join(Notification, Notification.id == Event.notification_id)
-                .where(*conditions)
+                .where(*conditions),
+                execution_options=exec_options,
             )
             rows = self._rows(session, *conditions, page=page, page_size=page_size)
             return {
@@ -363,14 +489,20 @@ class CaseCommunicationService:
 
     def detail(self, actor_id, event_id):
         with self.sessions() as session:
-            event = session.get(Event, event_id)
+            _ensure_communication_table(session)
+            exec_options = _event_execution_options(session)
+            event = session.scalar(
+                select(Event).where(Event.id == event_id),
+                execution_options=exec_options,
+            )
             if not event:
                 raise RectificationError("病历沟通不存在", 404)
             _recipient(self.person(session, actor_id), event)
             history = self._rows(
                 session,
                 Event.recipient_id == actor_id,
-                Event.department == event.department,
+                _normalize_department_sql_expr(Event.department)
+                == normalize_department_name(event.department),
                 *(getattr(Event, key) == getattr(event, key) for key in SOURCE_FIELDS),
             )
             result = next(item for item in history if item["id"] == event.id)

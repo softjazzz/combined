@@ -371,12 +371,15 @@ async def test_review_luxian_workspace_batch_job_persists_report(monkeypatch: py
             )
         ],
     )
+    from app.services import saved_result_access
+
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _uid: None)
 
     response = await qc_sichuan.review_workspace_batch_job(
         _request(),
         "job-lx-review",
-        current_user={"id": "u-1"},
+        current_user={"id": "u-1", "roles": ["admin"]},
     )
 
     assert response["success"] is True
@@ -406,13 +409,16 @@ async def test_review_luxian_workspace_batch_job_rejects_missing_canonical_envel
             ],
         }
     )
+    from app.services import saved_result_access
+
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _uid: None)
 
     with pytest.raises(HTTPException) as exc_info:
         await qc_sichuan.review_workspace_batch_job(
             _request(),
             "job-lx-missing-envelope",
-            current_user={"id": "u-1"},
+            current_user={"id": "u-1", "roles": ["admin"]},
         )
 
     assert exc_info.value.status_code == 409
@@ -432,13 +438,16 @@ async def test_review_non_luxian_workspace_batch_job_returns_422(monkeypatch: py
             "summary": {"rule_count": 1},
         },
     )
+    from app.services import saved_result_access
+
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _uid: None)
 
     with pytest.raises(HTTPException) as exc_info:
         await qc_sichuan.review_workspace_batch_job(
             _request(),
             "job-sc-review",
-            current_user={"id": "u-1"},
+            current_user={"id": "u-1", "roles": ["admin"]},
         )
 
     assert exc_info.value.status_code == 422
@@ -544,12 +553,15 @@ async def test_review_response_uses_customer_safe_projection_and_recomputes_issu
             ),
         ],
     )
+    from app.services import saved_result_access
+
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _uid: None)
 
     response = await qc_sichuan.review_workspace_batch_job(
         _request(),
         "job-lx-safe",
-        current_user={"id": "u-1"},
+        current_user={"id": "u-1", "roles": ["admin"]},
     )
 
     safe_job = response["data"]["job"]

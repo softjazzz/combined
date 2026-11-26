@@ -29,6 +29,7 @@ export function useQcResultFeedback(
   const feedbackByRule = ref<Record<string, QcResultFeedbackRecord>>({})
   const loading = ref(false)
   const error = ref('')
+  const errorByRule = ref<Record<string, string>>({})
   const savingRuleId = ref('')
   const requestGeneration = ref(0)
 
@@ -51,30 +52,45 @@ export function useQcResultFeedback(
         .trim()
         .toLowerCase() === 'admin@medqc.com',
   )
-  const isEnabled = computed(
-    () => (isDemoAccount.value || authStore?.userRoles?.includes('sync_admin')) && Boolean(rootJobId.value && recordRef.value),
+  const isEnabled = computed(() =>
+    Boolean(
+      (isDemoAccount.value || authStore?.userRoles?.includes('sync_admin')) &&
+        rootJobId.value &&
+        recordRef.value,
+    ),
   )
 
   async function load() {
     const generation = ++requestGeneration.value
     feedbackByRule.value = {}
     error.value = ''
+    errorByRule.value = {}
+    savingRuleId.value = ''
+    loading.value = false
     if (!isEnabled.value) return
 
     loading.value = true
-    const result = await getQcResultFeedbackDemo({
-      rootJobId: rootJobId.value,
-      recordRef: recordRef.value,
-    })
-    if (generation !== requestGeneration.value) return
-    loading.value = false
-    if (!result.success || !result.data) {
+    try {
+      const result = await getQcResultFeedbackDemo({
+        rootJobId: rootJobId.value,
+        recordRef: recordRef.value,
+      })
+      if (generation !== requestGeneration.value) return
+      if (!result.success || !result.data) {
+        error.value = '反馈暂时无法使用，质控结果仍可正常查看。'
+        return
+      }
+      feedbackByRule.value = Object.fromEntries(
+        Object.entries(result.data).filter(([ruleId]) => Boolean(normalizeFeedbackRuleId(ruleId))),
+      )
+    } catch {
+      if (generation !== requestGeneration.value) return
       error.value = '反馈暂时无法使用，质控结果仍可正常查看。'
-      return
+    } finally {
+      if (generation === requestGeneration.value) {
+        loading.value = false
+      }
     }
-    feedbackByRule.value = Object.fromEntries(
-      Object.entries(result.data).filter(([ruleId]) => Boolean(normalizeFeedbackRuleId(ruleId))),
-    )
   }
 
   async function save(ruleId: string, input: SaveQcResultFeedbackInput) {
@@ -83,31 +99,59 @@ export function useQcResultFeedback(
       return { success: false, message: '当前账号暂不支持结果反馈' }
     }
 
+    const generation = requestGeneration.value
+    const targetRootJobId = rootJobId.value
+    const targetRecordRef = recordRef.value
+    const isCurrentContext = () =>
+      generation === requestGeneration.value &&
+      rootJobId.value === targetRootJobId &&
+      recordRef.value === targetRecordRef
+
     savingRuleId.value = normalizedRuleId
-    error.value = ''
-    const result = await saveQcResultFeedbackDemo({
-      rootJobId: rootJobId.value,
-      recordRef: recordRef.value,
-      ruleId: normalizedRuleId,
-      input,
-    })
-    if (result.success && result.data) {
-      const returnedRuleId = normalizeFeedbackRuleId(result.data.rule_id)
-      if (returnedRuleId) {
-        feedbackByRule.value = {
-          ...feedbackByRule.value,
-          [returnedRuleId]: result.data,
+    const nextErrors = { ...errorByRule.value }
+    delete nextErrors[normalizedRuleId]
+    errorByRule.value = nextErrors
+
+    try {
+      const result = await saveQcResultFeedbackDemo({
+        rootJobId: targetRootJobId,
+        recordRef: targetRecordRef,
+        ruleId: normalizedRuleId,
+        input,
+      })
+      if (!isCurrentContext()) return result
+      if (result.success && result.data) {
+        const returnedRuleId = normalizeFeedbackRuleId(result.data.rule_id)
+        if (returnedRuleId) {
+          feedbackByRule.value = {
+            ...feedbackByRule.value,
+            [returnedRuleId]: result.data,
+          }
+        }
+      } else {
+        errorByRule.value = {
+          ...errorByRule.value,
+          [normalizedRuleId]: '反馈暂时无法保存，质控结果仍可正常查看。',
         }
       }
-    } else {
-      error.value = '反馈暂时无法保存，质控结果仍可正常查看。'
+      return result
+    } catch {
+      if (isCurrentContext()) {
+        errorByRule.value = {
+          ...errorByRule.value,
+          [normalizedRuleId]: '反馈暂时无法保存，质控结果仍可正常查看。',
+        }
+      }
+      return { success: false, message: '反馈暂时无法保存，质控结果仍可正常查看。' }
+    } finally {
+      if (isCurrentContext() && savingRuleId.value === normalizedRuleId) {
+        savingRuleId.value = ''
+      }
     }
-    savingRuleId.value = ''
-    return result
   }
 
   watch(
-    [isDemoAccount, rootJobId, recordRef],
+    [isEnabled, rootJobId, recordRef],
     () => {
       void load()
     },
@@ -118,6 +162,7 @@ export function useQcResultFeedback(
     feedbackByRule: computed(() => feedbackByRule.value),
     loading: computed(() => loading.value),
     error: computed(() => error.value),
+    errorByRule: computed(() => errorByRule.value),
     savingRuleId: computed(() => savingRuleId.value),
     isDemoAccount,
     isEnabled,

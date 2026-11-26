@@ -22,6 +22,18 @@ type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+  canceled?: boolean
+}
+
+export type CustomRuleRequestOptions = {
+  signal?: AbortSignal
+  skipErrorToast?: boolean
+}
+
+export function isWorkspaceRequestCanceled(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; name?: unknown }
+  return candidate.code === 'ERR_CANCELED' || candidate.name === 'CanceledError' || candidate.name === 'AbortError'
 }
 
 function toErrorMessage(error: unknown, fallback: string): string {
@@ -41,6 +53,12 @@ async function requestEnvelope<T>(
       message: normalized.message,
     }
   } catch (error) {
+    if (isWorkspaceRequestCanceled(error)) {
+      return {
+        success: false,
+        canceled: true,
+      }
+    }
     return {
       success: false,
       message: toErrorMessage(error, fallbackMessage),
@@ -48,12 +66,15 @@ async function requestEnvelope<T>(
   }
 }
 
-export async function listWorkspaceDrafts(params: {
-  status?: WorkspaceDraftStatus
-  q?: string
-  page?: number
-  page_size?: number
-}) {
+export async function listWorkspaceDrafts(
+  params: {
+    status?: WorkspaceDraftStatus
+    q?: string
+    page?: number
+    page_size?: number
+  },
+  options?: CustomRuleRequestOptions,
+) {
   return requestEnvelope<{
     items: CustomRuleDraft[]
     total: number
@@ -64,6 +85,7 @@ export async function listWorkspaceDrafts(params: {
       method: 'GET',
       url: '/api/v1/custom-qc/workspace/drafts',
       params,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '获取草稿列表失败',
   )
@@ -129,21 +151,28 @@ export async function publishWorkspaceDraft(draftId: string) {
   )
 }
 
-export async function getWorkspaceRecordFilters(params: {
-  scope: 'all' | 'running' | 'final'
-  department?: string
-}) {
+export async function getWorkspaceRecordFilters(
+  params: {
+    scope: 'all' | 'running' | 'final'
+    department?: string
+  },
+  options?: CustomRuleRequestOptions,
+) {
   return requestEnvelope<CustomRuleWorkspaceFilters>(
     {
       method: 'GET',
       url: '/api/v1/custom-qc/workspace/filters',
       params,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '获取筛选项失败',
   )
 }
 
-export async function getWorkspaceRecords(params: CustomRuleWorkspaceRecordQuery) {
+export async function getWorkspaceRecords(
+  params: CustomRuleWorkspaceRecordQuery,
+  options?: CustomRuleRequestOptions,
+) {
   return requestEnvelope<{
     items: CustomRuleWorkspaceRecord[]
     total: number
@@ -154,23 +183,28 @@ export async function getWorkspaceRecords(params: CustomRuleWorkspaceRecordQuery
       method: 'GET',
       url: '/api/v1/custom-qc/workspace/records',
       params,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '获取病历列表失败',
   )
 }
 
-export async function runWorkspaceSingleTest(payload: {
-  draft_id: string
-  records: CustomRuleWorkspaceTestRecord[]
-  temperature?: number
-  top_p?: number
-  max_tokens?: number
-}) {
+export async function runWorkspaceSingleTest(
+  payload: {
+    draft_id: string
+    records: CustomRuleWorkspaceTestRecord[]
+    temperature?: number
+    top_p?: number
+    max_tokens?: number
+  },
+  options?: CustomRuleRequestOptions,
+) {
   return requestEnvelope<CustomRuleSingleTestResult>(
     {
       method: 'POST',
       url: '/api/v1/custom-qc/workspace/test',
       data: payload,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '单病历测试失败',
   )
@@ -228,7 +262,10 @@ export async function createWorkspaceBatchJob(payload: CustomRuleWorkspaceBatchJ
   )
 }
 
-export async function listWorkspaceBatchJobs(params: CustomRuleBatchJobQuery) {
+export async function listWorkspaceBatchJobs(
+  params: CustomRuleBatchJobQuery,
+  options?: CustomRuleRequestOptions,
+) {
   return requestEnvelope<{
     items: CustomRuleBatchJob[]
     total: number
@@ -239,16 +276,18 @@ export async function listWorkspaceBatchJobs(params: CustomRuleBatchJobQuery) {
       method: 'GET',
       url: '/api/v1/custom-qc/workspace/batch-jobs',
       params,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '获取批量任务失败',
   )
 }
 
-export async function getWorkspaceBatchJob(jobId: string) {
+export async function getWorkspaceBatchJob(jobId: string, options?: CustomRuleRequestOptions) {
   return requestEnvelope<CustomRuleBatchJob>(
     {
       method: 'GET',
       url: `/api/v1/custom-qc/workspace/batch-jobs/${encodeURIComponent(jobId)}`,
+      ...(options ? { signal: options.signal, skipErrorToast: options.skipErrorToast } : {}),
     },
     '获取批量任务详情失败',
   )

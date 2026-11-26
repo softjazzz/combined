@@ -3,6 +3,7 @@ from app.services.material_admission import safe_material_failure
 from typing import List, Dict, Any, Literal, Optional, Sequence
 
 import asyncio
+import copy
 import uuid
 import json
 import hashlib
@@ -14,7 +15,7 @@ from pydantic import BaseModel, ValidationError
 from fastapi import APIRouter, Body, HTTPException, Query, Request, Depends
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_rule_ids
 from ..services.sample_validation_rule_sets import get_luxian_0609_customer_delivery_rule_ids
@@ -57,8 +58,10 @@ from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
     LX0609_CUSTOMER_RESULT_CONTRACT_ERROR,
     customer_safe_projection_key,
+    is_sample_validation_batch_job,
     project_batch_job_overview,
     project_customer_safe_batch_job,
+    resolve_batch_job_origin,
 )
 from ..services.luxian_0609_result_export_service import (
     export_filtered_record_results_workbook,
@@ -136,7 +139,11 @@ async def surgery_procedure_catalog(
     source: str = Query(default="", description="等级口径来源"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "qc_staff", "super_admin")
+    ),
 ):
+    del current_user
     """分页查询质控引擎正在使用的手术/操作分级目录。"""
 
     catalog = load_surgery_procedure_catalog()
@@ -824,9 +831,12 @@ def _workspace_batch_response_item(job: Dict[str, Any], *, compact: bool = False
         response_job["rule_results"] = []
         response_job["children"] = []
         response_job["child_jobs"] = []
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         **response_job,
         "execution_mode": "batch",
+        "is_sample_validation": is_sample_validation,
+        "task_origin": resolve_batch_job_origin(job),
         "rule_count": int(summary.get("rule_count") or filters.get("rule_count") or job.get("rule_count") or 0),
         "customer_rule_count": int(filters.get("customer_rule_count") or job.get("customer_rule_count") or 0),
         "execution_rule_count": int(filters.get("execution_rule_count") or job.get("execution_rule_count") or 0),
@@ -1145,6 +1155,441 @@ def _can_export_record_results(current_user: Optional[Dict[str, Any]]) -> bool:
     )
 
 
+_DEMO_FULL_RESULT_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+_BATCH_JOB_SUPER_ADMIN_ROLES = frozenset({"super_admin", "sync_admin"})
+_QC_SICHUAN_ADMIN_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
+_QC_SICHUAN_OPERATOR_ROLES = frozenset({"admin", "qc_manager", "sync_admin", "super_admin"})
+
+
+def _is_batch_job_super_admin(current_user: Optional[Dict[str, Any]]) -> bool:
+    """超级管理员（super_admin / sync_admin）允许跨用户诊断与管理批量质控任务。"""
+    if not isinstance(current_user, dict):
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_BATCH_JOB_SUPER_ADMIN_ROLES))
+
+
+def _batch_job_owner_filter(current_user: Dict[str, Any]) -> Optional[str]:
+    return None if _is_batch_job_super_admin(current_user) else _current_user_id(current_user)
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    """仅对显式 is_demo_account == True 且非 sync_admin/super_admin/developer 的演示账号生效。"""
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _can_view_raw_llm_output(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    """复核持久账号全局管理员身份：仅 sync_admin 或未绑定 institute_id 的 admin/super_admin。"""
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = _current_user_id(current_user)
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许执行该操作",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _can_review_batch_job(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not current_user:
+        return False
+    return bool(_extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES))
+
+
+def _resolve_batch_job_institute_scope_sync(current_user: Dict[str, Any]) -> Optional[str]:
+    from ..services import saved_result_access
+    from ..services.defect_rectification_service import RectificationError
+    from ..services.report_institute_scope import authorized_report_institute
+
+    actor_id = _current_user_id(current_user)
+    roles = _extract_user_roles(current_user)
+    institute_scope = saved_result_access.saved_result_institute_scope(actor_id)
+    if institute_scope is None and "sync_admin" not in roles:
+        raw_inst = current_user.get("institute_id")
+        if isinstance(raw_inst, str) and raw_inst.strip():
+            return raw_inst.strip()
+        if (
+            getattr(saved_result_access.saved_result_institute_scope, "__module__", "")
+            == saved_result_access.__name__
+        ):
+            try:
+                return authorized_report_institute(actor_id)
+            except RectificationError as exc:
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+            except Exception:
+                raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+    return institute_scope
+
+
+def _is_confirmed_issue_item(item: Any) -> bool:
+    if not isinstance(item, dict):
+        return False
+    if isinstance(item.get("is_confirmed_issue"), bool):
+        return item["is_confirmed_issue"] is True
+    status = str(
+        item.get("status")
+        or item.get("result_status")
+        or item.get("display_status")
+        or ""
+    ).strip().lower()
+    return status == "non_compliant"
+
+
+def _trim_batch_job_for_demo_account(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """演示账号结果裁剪：仅保留确定问题，剥离非确定项与内部 review_report 排障字段，保持响应 schema 兼容。"""
+    if not isinstance(payload, dict):
+        return payload
+    trimmed = dict(payload)
+    trimmed.pop("review_report", None)
+
+    raw_items = trimmed.get("items")
+    confirmed_items: List[Dict[str, Any]] = []
+    if isinstance(raw_items, list):
+        confirmed_items = [item for item in raw_items if _is_confirmed_issue_item(item)]
+        trimmed["items"] = confirmed_items
+
+    if isinstance(trimmed.get("failed_records"), list):
+        trimmed["failed_records"] = []
+
+    raw_rule_results = trimmed.get("rule_results")
+    if isinstance(raw_rule_results, list):
+        next_rule_results: List[Dict[str, Any]] = []
+        for rr in raw_rule_results:
+            if not isinstance(rr, dict):
+                continue
+            rr_copy = dict(rr)
+            rr_copy.pop("debug", None)
+            if isinstance(rr_copy.get("items"), list):
+                rr_copy["items"] = [
+                    item for item in rr_copy["items"] if _is_confirmed_issue_item(item)
+                ]
+            next_rule_results.append(rr_copy)
+        trimmed["rule_results"] = next_rule_results
+
+    for child_key in ("children", "child_jobs"):
+        raw_children = trimmed.get(child_key)
+        if isinstance(raw_children, list) and raw_children:
+            trimmed[child_key] = [
+                _trim_batch_job_for_demo_account(child)
+                if isinstance(child, dict)
+                else child
+                for child in raw_children
+            ]
+
+    raw_summary = trimmed.get("summary")
+    if isinstance(raw_summary, dict):
+        summary = dict(raw_summary)
+        summary.pop("review_report", None)
+        summary.pop("rule_results", None)
+        summary.pop("failed_rule_ids", None)
+        summary.pop("automatic_failed_rule_retry", None)
+        summary.pop("material_failure", None)
+        summary.pop("semantic_extraction_failures", None)
+        for zero_key in (
+            "uncertain_records",
+            "data_quality_gap_count",
+            "not_applicable_records",
+            "not_executed_records",
+            "rejected_by_system_count",
+            "technical_error_internal_count",
+        ):
+            if zero_key in summary:
+                summary[zero_key] = 0
+
+        if isinstance(raw_items, list) and (raw_items or "result_count" in summary):
+            confirmed_count = len(confirmed_items)
+            confirmed_status_counts = (
+                {"non_compliant": confirmed_count} if confirmed_count > 0 else {}
+            )
+            if raw_items:
+                summary["result_count"] = confirmed_count
+                confirmed_refs = {
+                    str(
+                        item.get("record_ref")
+                        or item.get("record_id")
+                        or item.get("visit_id")
+                        or ""
+                    ).strip()
+                    for item in confirmed_items
+                } - {""}
+                if confirmed_refs or "issue_records" in summary:
+                    summary["issue_records"] = (
+                        len(confirmed_refs)
+                        if confirmed_refs
+                        else (confirmed_count if confirmed_count else 0)
+                    )
+            for count_key in ("status_counts", "status_breakdown", "display_status_counts"):
+                if isinstance(summary.get(count_key), dict):
+                    if raw_items:
+                        summary[count_key] = dict(confirmed_status_counts)
+                    else:
+                        non_compliant_val = int(summary[count_key].get("non_compliant") or 0)
+                        summary[count_key] = (
+                            {"non_compliant": non_compliant_val}
+                            if non_compliant_val > 0
+                            else {}
+                        )
+
+        if isinstance(summary.get("history_issue_summaries"), list):
+            summary["history_issue_summaries"] = [
+                entry
+                for entry in summary["history_issue_summaries"]
+                if isinstance(entry, dict)
+                and str(entry.get("status") or "").strip().lower() == "non_compliant"
+            ]
+
+        stream_state = summary.get("stream_state")
+        if isinstance(stream_state, dict):
+            stream_copy = dict(stream_state)
+            for list_key in ("recent_results", "recent_items", "latest_results"):
+                if isinstance(stream_copy.get(list_key), list):
+                    stream_copy[list_key] = [
+                        entry
+                        for entry in stream_copy[list_key]
+                        if _is_confirmed_issue_item(entry)
+                    ]
+            if isinstance(stream_copy.get("status_counts"), dict):
+                nc = int(stream_copy["status_counts"].get("non_compliant") or 0)
+                stream_copy["status_counts"] = {"non_compliant": nc} if nc > 0 else {}
+            summary["stream_state"] = stream_copy
+
+        trimmed["summary"] = summary
+
+    return trimmed
+
+
+def _request_scoped_qc_service(
+    qc_service: Any,
+    *,
+    current_user: Optional[Dict[str, Any]],
+    model: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+) -> Any:
+    """返回请求级隔离的质控服务浅拷贝，严禁原地修改全局共享 client 参数。"""
+    normalized_model = str(model).strip() if isinstance(model, str) and model.strip() else None
+    has_override = bool(
+        normalized_model is not None or temperature is not None or max_tokens is not None
+    )
+    if not has_override:
+        return qc_service
+    if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_ADMIN_ROLES):
+        raise HTTPException(status_code=403, detail="仅管理员允许覆写模型配置")
+    scoped_service = copy.copy(qc_service)
+    client = getattr(qc_service, "client", None)
+    if client is not None:
+        scoped_client = copy.copy(client)
+        if normalized_model is not None:
+            scoped_client.model = normalized_model
+        if temperature is not None:
+            scoped_client.temperature = temperature
+        if max_tokens is not None:
+            scoped_client.max_tokens = max_tokens
+        scoped_service.client = scoped_client
+    rule_engine = getattr(qc_service, "rule_engine", None)
+    if rule_engine is not None and hasattr(scoped_service, "_generate_with_current_client"):
+        scoped_rule_engine = copy.copy(rule_engine)
+        if hasattr(scoped_rule_engine, "_llm_generate"):
+            scoped_rule_engine._llm_generate = scoped_service._generate_with_current_client
+        scoped_service.rule_engine = scoped_rule_engine
+    return scoped_service
+
+
+def _extract_bundle_institute_id(bundle_input: Any) -> Optional[str]:
+    if not isinstance(bundle_input, dict):
+        return None
+    for candidate in (
+        bundle_input.get("institute_id"),
+        (bundle_input.get("case") or {}).get("institute_id") if isinstance(bundle_input.get("case"), dict) else None,
+        (bundle_input.get("identity") or {}).get("institute_id") if isinstance(bundle_input.get("identity"), dict) else None,
+        (bundle_input.get("record") or {}).get("institute_id") if isinstance(bundle_input.get("record"), dict) else None,
+    ):
+        if isinstance(candidate, str) and candidate.strip():
+            return candidate
+    return None
+
+
+def _job_belongs_to_institute_scope(job: Dict[str, Any], institute_scope: Optional[str]) -> bool:
+    """校验批量任务所含病历全部属于指定机构范围；非全局账号缺少可验证机构归属时 fail-closed。"""
+    if institute_scope is None:
+        return True
+    if not isinstance(job, dict):
+        return False
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    record_refs = filters.get("record_refs")
+    items = job.get("items")
+    checked = False
+    if isinstance(record_refs, list) and record_refs:
+        for ref in record_refs:
+            if not isinstance(ref, dict):
+                return False
+            ref_inst = ref.get("institute_id")
+            if not isinstance(ref_inst, str) or not ref_inst.strip() or ref_inst != institute_scope:
+                return False
+        checked = True
+    if isinstance(items, list) and items:
+        for item in items:
+            if not isinstance(item, dict):
+                return False
+            item_inst = item.get("institute_id")
+            if item_inst is not None:
+                if not isinstance(item_inst, str) or not item_inst.strip() or item_inst != institute_scope:
+                    return False
+                checked = True
+            elif not checked:
+                return False
+    if checked:
+        return True
+    filter_inst = filters.get("institute_id")
+    if isinstance(filter_inst, str) and filter_inst.strip() and filter_inst == institute_scope:
+        if int(job.get("total_records") or 0) == 0:
+            return True
+    return False
+
+
+def _parse_history_date_bound(value: str, *, field_name: str) -> tuple[bool, date | datetime]:
+    text = str(value or "").strip()
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        try:
+            return True, date.fromisoformat(text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"{field_name} 日期格式无效") from exc
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"{field_name} 时间格式无效") from exc
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+    return False, parsed
+
+
+def _parse_history_timestamp(value: Any) -> Optional[tuple[date, datetime]]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if len(text) == 10 and text[4] == "-" and text[7] == "-":
+        try:
+            parsed_date = date.fromisoformat(text)
+            return parsed_date, datetime(parsed_date.year, parsed_date.month, parsed_date.day)
+        except ValueError:
+            return None
+    normalized = text[:-1] + "+00:00" if text.endswith("Z") else text
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    local_date = parsed.date()
+    utc_naive = parsed.astimezone(timezone.utc).replace(tzinfo=None) if parsed.tzinfo is not None else parsed
+    return local_date, utc_naive
+
+
+def _history_created_at_in_range(
+    created_at: Any,
+    start_bound: Optional[tuple[bool, date | datetime]],
+    end_bound: Optional[tuple[bool, date | datetime]],
+) -> bool:
+    if start_bound is None and end_bound is None:
+        return True
+    parsed = _parse_history_timestamp(created_at)
+    if parsed is None:
+        return False
+    created_date, created_dt_utc = parsed
+    if start_bound is not None:
+        is_date_only, bound_val = start_bound
+        if is_date_only:
+            if created_date < bound_val:
+                return False
+        elif created_dt_utc < bound_val:
+            return False
+    if end_bound is not None:
+        is_date_only, bound_val = end_bound
+        if is_date_only:
+            if created_date > bound_val:
+                return False
+        elif created_dt_utc > bound_val:
+            return False
+    return True
+
+
 
 
 def _trace_pick(item: Dict[str, Any], keys: List[str]) -> Dict[str, Any]:
@@ -1170,8 +1615,11 @@ def _matches_trace_item(
     *,
     record_id: Optional[str] = None,
     visit_id: Optional[str] = None,
+    record_ref: Optional[str] = None,
     rule_id: Optional[str] = None,
 ) -> bool:
+    if record_ref and str(item.get("record_ref") or "").strip() != str(record_ref).strip():
+        return False
     if record_id and str(item.get("record_id") or "").strip() != str(record_id).strip():
         return False
     if visit_id and str(item.get("visit_id") or "").strip() != str(visit_id).strip():
@@ -1193,6 +1641,7 @@ def _find_result_trace_item(
     *,
     record_id: Optional[str] = None,
     visit_id: Optional[str] = None,
+    record_ref: Optional[str] = None,
     rule_id: Optional[str] = None,
     item_index: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
@@ -1206,7 +1655,13 @@ def _find_result_trace_item(
         (
             item
             for item in items
-            if _matches_trace_item(item, record_id=record_id, visit_id=visit_id, rule_id=rule_id)
+            if _matches_trace_item(
+                item,
+                record_id=record_id,
+                visit_id=visit_id,
+                record_ref=record_ref,
+                rule_id=rule_id,
+            )
         ),
         None,
     )
@@ -1268,6 +1723,7 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
             "rule_code",
             "qc_point_id",
             "rule_name",
+            "record_ref",
             "record_id",
             "visit_id",
             "patient_name",
@@ -1275,8 +1731,10 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
             "status",
             "display_status",
             "result_status",
+            "reason_code",
             "is_compliant",
             "defect_level",
+            "conclusion",
             "findings",
             "evidence",
             "suggestion",
@@ -1328,7 +1786,8 @@ def _build_result_trace_snapshot(job: Dict[str, Any], item: Dict[str, Any]) -> D
 async def evaluate_fast(
     request: Request,
     req: SichuanEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     快速质控模式：一次 API 调用评估所有规则
@@ -1344,12 +1803,15 @@ async def evaluate_fast(
     - plan_c: 方案C - 平衡版（提取【检查要点】+【判定逻辑】）
     """
     try:
-        # Allow runtime override of model
-        if req.model:
-            qc_service.client.model = req.model
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行快速质控试跑")
+        scoped_qc_service = _request_scoped_qc_service(
+            qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
 
         # 调用快速质控方法（传递 prompt_mode）
-        result = await qc_service.evaluate_document_fast(
+        result = await scoped_qc_service.evaluate_document_fast(
             document_id=req.document_id,
             content=req.document_content,
             document_type=req.document_type or "病程记录",
@@ -1358,22 +1820,31 @@ async def evaluate_fast(
         )
 
         return result
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"快速质控评估失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("快速质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="快速质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate")
 async def evaluate(
     request: Request,
     req: SichuanEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(get_current_user),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        # Allow runtime override of model (for A/B testing different LLMs)
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行质控试跑")
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+            temperature=req.temperature,
+            max_tokens=req.max_tokens,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate",
             rule_ids=req.rule_ids,
             block_batch=False,
@@ -1381,7 +1852,7 @@ async def evaluate(
         # running/final bundle 直入旧规则链入口（不依赖独立 runtime）
         if isinstance(req.bundle_input, dict) and req.bundle_input:
             bundle_result = await evaluate_running_final_bundle(
-                qc_service=qc_service,
+                qc_service=scoped_qc_service,
                 bundle_input=req.bundle_input,
                 rule_ids=req.rule_ids,
             )
@@ -1437,7 +1908,7 @@ async def evaluate(
                     print(f"Warning: Failed to fetch grouped rules: {e}")
                     rules_by_document_type = None
             
-            md = await qc_service.evaluate_multi_document(
+            md = await scoped_qc_service.evaluate_multi_document(
                 document_id=req.document_id,
                 document_content=req.document_content,
                 document_types=req.document_types,
@@ -1480,12 +1951,7 @@ async def evaluate(
             return response
         else:
             # ── P1 收口：单文书主路径统一走 orchestrator（保持响应壳兼容） ──
-            if req.temperature is not None:
-                qc_service.client.temperature = req.temperature
-            if req.max_tokens is not None:
-                qc_service.client.max_tokens = req.max_tokens
-
-            result = await qc_service.evaluate_document(
+            result = await scoped_qc_service.evaluate_document(
                 document_id=req.document_id,
                 content=req.document_content,
                 document_type=req.document_type or "病程记录",
@@ -1507,7 +1973,7 @@ async def evaluate(
                     "compliance_rate": round(compliance_rate, 2),
                     "overall_grade": _grade_from_rate(compliance_rate),
                     "critical_violations": summary.get("issues_found", 0),
-                    "model": summary.get("model", qc_service.client.model),
+                    "model": summary.get("model", scoped_qc_service.client.model),
                     "executor_breakdown": summary.get("executor_breakdown") or {},
                     "cache_breakdown": summary.get("cache_breakdown") or {},
                     "pack_metrics": summary.get("pack_metrics") or {},
@@ -1531,8 +1997,7 @@ async def evaluate(
                 "cache_breakdown": result.get("cache_breakdown") or {},
                 "pack_metrics": result.get("pack_metrics") or {},
                 "llm_info": {
-                    "model": qc_service.client.model,
-                    "api_endpoint": qc_service.client.api_endpoint,
+                    "model": scoped_qc_service.client.model,
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "status": "success",
@@ -1543,27 +2008,54 @@ async def evaluate(
             return response
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省质控评估失败: {e}")
+    except Exception:
+        logger.exception("四川省质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="四川省质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate-bundle")
 async def evaluate_bundle(
     request: Request,
     req: SichuanBundleEvaluateRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行质控试跑")
+        from ..services.saved_result_access import (
+            check_saved_result_institute,
+            saved_result_institute_scope,
+        )
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
+        bundle_institute = _extract_bundle_institute_id(req.bundle_input)
+        if req.institute_id is not None and str(req.institute_id).strip():
+            check_saved_result_institute(institute_scope, req.institute_id)
+        if bundle_institute is not None:
+            check_saved_result_institute(institute_scope, bundle_institute)
+        if institute_scope is not None and not (
+            (isinstance(req.institute_id, str) and req.institute_id.strip())
+            or bundle_institute is not None
+        ):
+            raise HTTPException(status_code=403, detail="缺少可信病历机构范围")
+
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate_bundle",
             rule_ids=req.rule_ids,
             block_batch=False,
         )
         result = await evaluate_running_final_bundle(
-            qc_service=qc_service,
+            qc_service=scoped_qc_service,
             scene=req.scene,
             institute_id=req.institute_id,
             patient_id=req.patient_id,
@@ -1583,26 +2075,43 @@ async def evaluate_bundle(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"bundle 质控评估失败: {exc}")
+    except Exception:
+        logger.exception("bundle 质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="bundle 质控评估失败，请稍后重试")
 
 
 @router.post("/evaluate-rule-for-visit")
 async def evaluate_rule_for_visit(
     request: Request,
     req: SichuanRuleVisitEvaluateRequest,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
-        if req.model:
-            qc_service.client.model = req.model
-        _enforce_sc_source_guard(
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行规则试跑")
+        from ..services.saved_result_access import (
+            check_saved_result_institute,
+            saved_result_institute_scope,
+        )
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
+        check_saved_result_institute(institute_scope, req.institute_id)
+        scoped_qc_service = _request_scoped_qc_service(
             qc_service,
+            current_user=current_user,
+            model=req.model,
+        )
+        _enforce_sc_source_guard(
+            scoped_qc_service,
             context="evaluate_rule_for_visit",
             rule_ids=[req.rule_id],
             block_batch=False,
         )
-        result = await qc_service.evaluate_rule_for_visit(
+        result = await scoped_qc_service.evaluate_rule_for_visit(
             rule_id=req.rule_id,
             institute_id=req.institute_id,
             patient_id=req.patient_id,
@@ -1622,17 +2131,22 @@ async def evaluate_rule_for_visit(
         raise HTTPException(status_code=404, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"规则级 visit 质控失败: {exc}")
+    except Exception:
+        logger.exception("规则级 visit 质控失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="规则级 visit 质控失败，请稍后重试")
 
 
 @router.post("/evaluate/batch")
 async def evaluate_batch(
     request: Request,
     req: SichuanBatchRequest,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     try:
+        _reject_restricted_demo_account(current_user, "演示账号禁止执行批量质控试跑")
         _enforce_sc_source_guard(
             qc_service,
             context="evaluate_batch",
@@ -1704,8 +2218,11 @@ async def evaluate_batch(
             "status": "success",
         }
         return response
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"四川省批量质控评估失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("四川省批量质控评估失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="四川省批量质控评估失败，请稍后重试")
 
 
 def _sichuan_workspace_service(*, readonly: bool = False) -> CustomQCWorkspaceService:
@@ -1860,6 +2377,14 @@ def _resolve_shared_sample_pool_latest_job(
 ) -> Optional[Dict[str, Any]]:
     if not _extract_user_roles(current_user).intersection(_SHARED_SAMPLE_JOB_READ_ROLES):
         return None
+    from ..services.saved_result_access import saved_result_institute_scope
+
+    try:
+        institute_scope = saved_result_institute_scope(_current_user_id(current_user))
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return None
+        raise
     resolved = _shared_sample_pool_service().resolve_unique_pool_id_for_latest_job(
         job_id=job_id
     )
@@ -1874,6 +2399,8 @@ def _resolve_shared_sample_pool_latest_job(
         return None
     source = str(filters.get("source") or "").strip().lower()
     if source not in _SHARED_SAMPLE_JOB_SOURCES:
+        return None
+    if not _job_belongs_to_institute_scope(job, institute_scope):
         return None
     return job
 
@@ -1967,6 +2494,9 @@ async def create_workspace_batch_job(
     request: Request,
     payload: SichuanWorkspaceBatchJobCreateRequest,
     current_user: Dict[str, Any] = Depends(require_product_activation),
+    _role_guard: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "sync_admin", "super_admin")
+    ),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     return await admit_workspace_batch_job(request, payload, current_user, qc_service)
@@ -1974,8 +2504,18 @@ async def create_workspace_batch_job(
 
 async def admit_workspace_batch_job(request, payload, current_user, qc_service, *, scheduled_origin=None):
     """手动与定时共用接纳owner；定时来源不是HTTP输入字段。"""
+    institute_scope: Optional[str] = None
+    if scheduled_origin is None:
+        if not _extract_user_roles(current_user).intersection(_QC_SICHUAN_OPERATOR_ROLES):
+            raise HTTPException(status_code=403, detail="当前账号无权创建四川规则批量任务")
+        from ..services.saved_result_access import saved_result_institute_scope
+
+        institute_scope = await run_in_threadpool(
+            saved_result_institute_scope, _current_user_id(current_user)
+        )
     requested_rule_set = get_sichuan_rule_set(payload.rule_set_key)
     if payload.diagnostic_capture:
+        _reject_restricted_demo_account(current_user, "演示账号禁止采集排障诊断包")
         if not set(current_user.get("roles", [])).intersection({"admin", "super_admin"}):
             raise HTTPException(403, "仅管理员可采集完整排障包")
         if payload.rule_set_key != LUXIAN_0609_RULE_SET_KEY or len(payload.record_refs or []) != 1:
@@ -2117,6 +2657,11 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     if payload.record_refs and len(requested_record_refs) != len(payload.record_refs):
         raise HTTPException(status_code=422, detail="record_refs 不可重复")
+    if scheduled_origin is None and requested_record_refs:
+        from ..services.saved_result_access import check_saved_result_institute
+
+        for case_ref in requested_record_refs:
+            check_saved_result_institute(institute_scope, case_ref.institute_id)
     collect_kwargs: Dict[str, Any] = dict(
         scope=normalized_scope,
         department=payload.department,
@@ -2132,6 +2677,8 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         collect_kwargs["sync_scope"] = payload.sync_scope
     if scheduled_origin is not None:
         collect_kwargs["institute_id"] = scheduled_origin["institute_id"]
+    elif institute_scope is not None:
+        collect_kwargs["institute_id"] = institute_scope
     admission_reader = getattr(workspace, "collect_records_for_admission", None)
     if is_direct_native_selection and callable(admission_reader):
         records, scene_rejections = admission_reader(**collect_kwargs)
@@ -2155,6 +2702,11 @@ async def admit_workspace_batch_job(request, payload, current_user, qc_service, 
         effective_record_refs = case_refs_from_records(records)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail="病历缺少完整三坐标，无法创建质控任务") from exc
+    if scheduled_origin is None:
+        from ..services.saved_result_access import check_saved_result_institute
+
+        for case_ref in effective_record_refs:
+            check_saved_result_institute(institute_scope, case_ref.institute_id)
     if requested_record_refs and set(effective_record_refs) != set(requested_record_refs):
         raise HTTPException(status_code=422, detail="所选病历与服务端匹配结果不一致，请刷新后重试")
     if payload.record_ids and not requested_record_refs:
@@ -2424,6 +2976,8 @@ def _workspace_batch_list_item(job: Dict[str, Any]) -> Dict[str, Any]:
         if key in job
     }
     metadata["rule_set_key"] = LUXIAN_0609_RULE_SET_KEY
+    metadata["is_sample_validation"] = is_sample_validation_batch_job(job)
+    metadata["task_origin"] = resolve_batch_job_origin(job)
     safe = _workspace_batch_response_item(metadata, compact=True)
     for container in (safe, safe["summary"]):
         for key in (
@@ -2447,33 +3001,51 @@ async def list_workspace_batch_jobs(
     created_end_date: Optional[str] = Query(None),
     record_id: Optional[str] = Query(None),
     view: Optional[str] = Query(None),
+    exclude_validation: bool = Query(False, description="是否排除客户样本验证任务"),
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service(readonly=True)
+    owner_filter = _batch_job_owner_filter(current_user)
+    exclude_validation_flag = exclude_validation is True
     if str(view or "").strip().lower() == "overview":
         # 质控记录页：只要任务元数据与进度，不读结果明细，也不返回结果计数。
-        overview = await run_in_threadpool(
-            workspace.list_batch_job_overviews,
-            created_by=_current_user_id(current_user),
-            status=status,
-            scope=scope,
-            query=q,
-            created_start_date=created_start_date,
-            created_end_date=created_end_date,
-            record_id=record_id,
-            page=page,
-            page_size=page_size,
-        )
+        overview_kwargs: Dict[str, Any] = {
+            "created_by": owner_filter,
+            "status": status,
+            "scope": scope,
+            "query": q,
+            "created_start_date": created_start_date,
+            "created_end_date": created_end_date,
+            "record_id": record_id,
+            "page": page,
+            "page_size": page_size,
+        }
+        if exclude_validation_flag:
+            overview_kwargs["exclude_validation"] = True
+        try:
+            overview = await run_in_threadpool(workspace.list_batch_job_overviews, **overview_kwargs)
+            overview_items = list(overview.items)
+            overview_total = overview.total
+        except TypeError:
+            overview_kwargs.pop("exclude_validation", None)
+            overview = await run_in_threadpool(workspace.list_batch_job_overviews, **overview_kwargs)
+            overview_items = list(overview.items)
+            overview_total = overview.total
+            if exclude_validation_flag:
+                overview_items = [
+                    item for item in overview_items if not is_sample_validation_batch_job(item)
+                ]
+                overview_total = len(overview_items)
         return success_response(
             data={
                 "items": [
                     project_batch_job_overview(item)
-                    for item in overview.items
+                    for item in overview_items
                     if _is_workspace_batch_job(item)
                 ],
-                "total": overview.total,
+                "total": overview_total,
                 "page": overview.page,
                 "page_size": overview.page_size,
             },
@@ -2488,8 +3060,8 @@ async def list_workspace_batch_jobs(
     elif cache_hit_value in {"miss", "false", "0", "no"}:
         cache_hit_filter = False
 
-    list_kwargs = {
-        "created_by": _current_user_id(current_user),
+    list_kwargs: Dict[str, Any] = {
+        "created_by": owner_filter,
         "draft_id": None,
         "status": status,
         "scope": scope,
@@ -2501,22 +3073,40 @@ async def list_workspace_batch_jobs(
         "page": page,
         "page_size": page_size,
     }
+    if exclude_validation_flag:
+        list_kwargs["exclude_validation"] = True
     # 查询与逐行客户安全投影都是同步重活（一页可达数秒），放到线程池，避免阻塞其他请求。
+    fallback_filter_validation = False
     try:
         result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, query=q)
     except TypeError:
-        result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+        try:
+            result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+        except TypeError:
+            list_kwargs.pop("exclude_validation", None)
+            fallback_filter_validation = exclude_validation_flag
+            try:
+                result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, query=q)
+            except TypeError:
+                result = await run_in_threadpool(workspace.list_batch_jobs, **list_kwargs, q=q)
+    raw_items = list(result.items)
+    total_count = result.total
+    if fallback_filter_validation:
+        raw_items = [item for item in raw_items if not is_sample_validation_batch_job(item)]
+        total_count = len(raw_items)
     items = await run_in_threadpool(
         lambda: [
             _workspace_batch_list_item(item)
-            for item in result.items
+            for item in raw_items
             if _is_workspace_batch_job(item)
         ]
     )
+    if _is_restricted_demo_account(current_user):
+        items = [_trim_batch_job_for_demo_account(item) for item in items]
     return success_response(
         data={
             "items": items,
-            "total": result.total,
+            "total": total_count,
             "page": result.page,
             "page_size": result.page_size,
         },
@@ -2549,11 +3139,12 @@ async def get_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
+    owner_filter = _batch_job_owner_filter(current_user)
     shared_read = False
     job = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,
-        created_by=_current_user_id(current_user),
+        created_by=owner_filter,
     )
     if not job:
         job = await run_in_threadpool(
@@ -2594,6 +3185,8 @@ async def get_workspace_batch_job(
             detail=exc.detail,
             headers={**(exc.headers or {}), BATCH_JOB_STATUS_HEADER: job_status},
         ) from exc
+    if _is_restricted_demo_account(current_user):
+        response_data = _trim_batch_job_for_demo_account(response_data)
     return success_response(
         data=response_data,
         message="获取四川规则批量任务详情成功",
@@ -2942,13 +3535,22 @@ async def export_filtered_workspace_record_results(
             raise HTTPException(status_code=422, detail="所选病历范围已变化，请重新勾选后导出")
         export_filters = {**filters, "export_mode": "selected"}
     else:
-        record_count = workspace.count_records(**filters)
-        if record_count > 1000:
+        query_filters = {
+            **filters,
+            **({"institute_id": institute_scope} if institute_scope is not None else {}),
+        }
+        try:
+            record_count = workspace.count_records(**query_filters)
+        except TypeError:
+            records = workspace.collect_records(**query_filters)
+            record_count = len(records)
+        else:
+            if record_count > 1000:
+                raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
+            records = workspace.collect_records(**query_filters)
+        if record_count > 1000 or len(records) > 1000:
             raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
-        records = workspace.collect_records(**filters)
-        if len(records) > 1000:
-            raise HTTPException(status_code=422, detail="当前筛选超过1000份病历，请缩小范围后导出")
-        export_filters = filters
+        export_filters = query_filters
 
     identities: set[tuple[str, str, str]] = set()
     canonical_record_refs: List[Dict[str, str]] = []
@@ -3007,13 +3609,18 @@ async def get_workspace_batch_job_record_identities(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     """结果页病历身份回查（2026-10-23）：权限与任务详情一致，只返回住院号、科室、主治医生与入出院日期。"""
-    from ..services.qc_workspace.batch_record_identity import build_batch_job_record_identities
+    from ..services.qc_workspace.batch_record_identity import (
+        _job_case_refs,
+        build_batch_job_record_identities,
+    )
+    from ..services.qc_workspace.canonical_result_store import keyed_ref
 
     workspace = _sichuan_workspace_service()
+    owner_filter = _batch_job_owner_filter(current_user)
     job = await run_in_threadpool(
         workspace.get_batch_job,
         job_id=job_id,
-        created_by=_current_user_id(current_user),
+        created_by=owner_filter,
     )
     if not job:
         job = await run_in_threadpool(
@@ -3033,6 +3640,20 @@ async def get_workspace_batch_job_record_identities(
         collect_records=workspace.collect_records,
         case_refs=case_refs,
     )
+    if _is_batch_job_super_admin(current_user):
+        resolved_refs = list(dict.fromkeys(case_refs or ())) or _job_case_refs(job)
+        projection_key = customer_safe_projection_key()
+        coords_by_record_ref = {
+            keyed_ref("rec", ref.as_key(), hmac_key=projection_key): ref.as_dict()
+            for ref in resolved_refs
+        }
+        identities = [
+            {
+                **item,
+                **coords_by_record_ref.get(str(item.get("record_ref") or ""), {}),
+            }
+            for item in identities
+        ]
     return success_response(
         data={"items": identities},
         message="获取病历标识成功",
@@ -3046,11 +3667,20 @@ async def review_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权执行批量任务结果复核")
+    if not _can_review_batch_job(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权复核批量任务结果")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
-    created_by = _current_user_id(current_user)
-    job = workspace.get_batch_job(job_id=job_id, created_by=created_by)
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权复核其他机构批量任务结果")
     filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
     if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
         job = _hydrate_luxian_canonical_batch_job_or_409(
@@ -3070,7 +3700,7 @@ async def review_workspace_batch_job(
         raise HTTPException(status_code=422, detail="当前复核 Loop 仅支持泸县0609质控任务")
     updated_job = workspace.update_batch_job_review_report(
         job_id=job_id,
-        created_by=created_by,
+        created_by=owner_filter,
         review_report=review_report,
     )
     if not _is_workspace_batch_job(updated_job):
@@ -3105,7 +3735,8 @@ async def cancel_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
     workspace = _sichuan_workspace_service()
-    job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.cancel_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
@@ -3121,8 +3752,10 @@ async def retry_workspace_batch_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(require_product_activation),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止重试批量任务")
     workspace = _sichuan_workspace_service()
-    existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    existing = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(existing):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     try:
@@ -3132,14 +3765,22 @@ async def retry_workspace_batch_job(
             await run_in_threadpool(require_retry_record_institutes, _current_user_id(current_user),
                                     existing["filters"].get("record_refs"))
             runtime_snapshot = capture_luxian_0609_task_runtime(await get_qc_service())
-        job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user),
+        else:
+            from ..services.saved_result_access import saved_result_institute_scope
+
+            institute_scope = await run_in_threadpool(
+                saved_result_institute_scope, _current_user_id(current_user)
+            )
+            if not _job_belongs_to_institute_scope(existing, institute_scope):
+                raise HTTPException(status_code=403, detail="无权重试其他机构批量任务")
+        job = workspace.retry_batch_job(job_id=job_id, created_by=owner_filter,
                                         task_runtime_snapshot=runtime_snapshot)
     except QCDispatchSchemaUnavailable as exc:
         raise HTTPException(status_code=503, detail="质控任务调度存储尚未就绪") from exc
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not _is_workspace_batch_job(job):
-        existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+        existing = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
         if _is_workspace_batch_job(existing) and (
             (existing.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
         ):
@@ -3150,7 +3791,7 @@ async def retry_workspace_batch_job(
     if submit_legacy and str(job.get("job_kind") or "").strip().lower() == "parent":
         child_jobs = list(job.get("child_jobs") or job.get("children") or [])
         if not child_jobs:
-            child_jobs = workspace.get_child_batch_jobs(parent_job_id=new_job_id, created_by=_current_user_id(current_user))
+            child_jobs = workspace.get_child_batch_jobs(parent_job_id=new_job_id, created_by=owner_filter)
         if not all(should_submit_detached_qc_task(child_job) for child_job in child_jobs):
             raise HTTPException(status_code=503, detail="父子任务调度身份不一致")
         for child_job in child_jobs:
@@ -3182,10 +3823,20 @@ async def get_workspace_batch_job_debug(
     item_limit: int = Query(30, ge=1, le=200),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权查看批量任务调试快照")
+    if not _can_view_result_trace(current_user):
+        raise HTTPException(status_code=403, detail="当前账号无权查看批量任务调试快照")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权查看其他机构批量任务调试快照")
     return success_response(
         data=_build_debug_snapshot(job, rule_job_id=rule_job_id, item_limit=item_limit),
         message="获取批量任务调试快照成功",
@@ -3199,20 +3850,37 @@ async def get_workspace_batch_job_result_trace(
     job_id: str,
     record_id: Optional[str] = Query(None),
     visit_id: Optional[str] = Query(None),
+    record_ref: Optional[str] = Query(None),
     rule_id: Optional[str] = Query(None),
     item_index: Optional[int] = Query(None, ge=0),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权查看诊断追踪")
     if not _can_view_result_trace(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权查看诊断追踪")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权查看其他机构批量任务诊断追踪")
+    filters = job.get("filters") if isinstance(job.get("filters"), dict) else {}
+    if str(filters.get("rule_set_key") or "").strip() == LUXIAN_0609_RULE_SET_KEY:
+        job = await run_in_threadpool(
+            _hydrate_luxian_canonical_batch_job_or_409,
+            workspace=workspace,
+            job=job,
+        )
     trace_item = _find_result_trace_item(
         job,
         record_id=record_id,
         visit_id=visit_id,
+        record_ref=record_ref,
         rule_id=rule_id,
         item_index=item_index,
     )
@@ -3232,12 +3900,20 @@ async def export_workspace_batch_job(
     format: str = Query("xlsx"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail="演示账号无权导出批量任务结果")
     if not _can_export_record_results(current_user):
         raise HTTPException(status_code=403, detail="当前账号无权导出质控结果")
+    institute_scope = await run_in_threadpool(
+        _resolve_batch_job_institute_scope_sync, current_user
+    )
     workspace = _sichuan_workspace_service()
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    owner_filter = _batch_job_owner_filter(current_user)
+    job = workspace.get_batch_job(job_id=job_id, created_by=owner_filter)
     if not _is_workspace_batch_job(job):
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权导出其他机构批量质控结果")
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     normalized_format = str(format or "").lower()
     if normalized_format == "html":
@@ -3291,6 +3967,7 @@ async def save_qc_result(
     req: SaveQCResultRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止保存质控结果")
     try:
         base_dir = _saved_qc_results_directory()
         base_dir.mkdir(parents=True, exist_ok=True)
@@ -3325,8 +4002,11 @@ async def save_qc_result(
             message="质控结果保存成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
-        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"保存质控结果失败: {e}")
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("保存质控结果失败")
+        raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="保存质控结果失败，请稍后重试")
 
 
 @router.get("/results/history")
@@ -3343,6 +4023,16 @@ async def get_qc_history(
 ):
     """获取质控结果历史列表"""
     try:
+        start_bound = (
+            _parse_history_date_bound(start_date, field_name="start_date")
+            if start_date
+            else None
+        )
+        end_bound = (
+            _parse_history_date_bound(end_date, field_name="end_date")
+            if end_date
+            else None
+        )
         base_dir = _saved_qc_results_directory()
         if not base_dir.exists():
             return success_response(
@@ -3387,9 +4077,7 @@ async def get_qc_history(
                     continue
 
                 created_at = data.get("created_at") or data.get("saved_at")
-                if start_date and created_at < start_date:
-                    continue
-                if end_date and created_at > end_date:
+                if not _history_created_at_in_range(created_at, start_bound, end_bound):
                     continue
 
                 # 优先从 evaluation_summary 获取合规率和问题数量，否则从 stats 获取
@@ -3444,6 +4132,8 @@ async def get_qc_history(
             message="获取质控历史成功",
             trace_id=get_trace_id(request),
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取质控历史失败: {e}")
 
@@ -3514,7 +4204,8 @@ async def get_qc_result_detail(
 @router.get("/stats")
 async def stats(
     request: Request,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "super_admin", "sync_admin")),
+    qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     try:
         st = qc_service.stats()
@@ -3531,15 +4222,8 @@ async def stats(
                 "total_api_time": st.get("total_api_time", 0.0),
                 "total_tokens": st.get("total_tokens", 0),
             },
-            "optimization_achievements": {
-                "token_savings_rate": 0.80,
-                "estimated_original_tokens": st.get("total_tokens", 0) * 5,
-                "actual_tokens_saved": st.get("total_tokens", 0) * 4,
-                "total_cost_savings": st.get("total_tokens", 0) * 4 / 1000 * 0.002,
-            },
             "real_time_status": {
                 "service_health": "healthy",
-                "api_endpoint": str(s.LLM_API_ENDPOINT) if s.LLM_API_ENDPOINT else None,
                 "model": s.LLM_MODEL,
                 "last_updated": datetime.now(timezone.utc).isoformat(),
             },
@@ -3547,6 +4231,8 @@ async def stats(
             "status": "success",
         }
         return response
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取四川省质控统计失败: {e}")
 
@@ -3558,7 +4244,11 @@ async def rules(
     document_types: Optional[str] = Query(default=None, description="逗号分隔的文书类型（中文）"),
     grouped: Optional[bool] = Query(default=False, description="是否按文书类型分组返回"),
     rule_set_key: Optional[str] = Query(default=None, description="规则集 key"),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "qc_staff", "super_admin")
+    ),
 ):
+    del current_user
     """
     返回四川省质控规则。
     优先从 Supabase 的 `qc_rules` 表读取；如果未配置或查询失败，则回退到内置示例规则。
@@ -3921,9 +4611,13 @@ def _load_single_test_rule(qc_service: SichuanQCService, rule_id: str) -> tuple[
 async def test_rule(
     request: Request,
     req: TestRuleRequest,
-    qc_service: SichuanQCService = Depends(get_qc_service)
+    qc_service: SichuanQCService = Depends(get_qc_service),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
 ):
     """测试单条质控规则的有效性和正确性"""
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行规则试跑")
     try:
         target_rule, is_luxian_wrapper = _load_single_test_rule(qc_service, req.rule_id)
         if target_rule is None:
@@ -3949,8 +4643,12 @@ async def test_rule(
             }
         )
 
-        # 统一的响应结构，确保前端字段兼容
-        metadata = engine_result.get("metadata", {}) or {}
+        # 统一的响应结构，确保前端字段兼容；非调试角色脱敏 llm_raw_output
+        can_view_raw = _can_view_raw_llm_output(current_user)
+        raw_metadata = engine_result.get("metadata", {}) or {}
+        metadata = dict(raw_metadata) if isinstance(raw_metadata, dict) else {}
+        if not can_view_raw:
+            metadata.pop("llm_raw_output", None)
         response_data = {
             "rule_id": engine_result.get("rule_id"),
             "rule_name": engine_result.get("rule_name"),
@@ -3960,7 +4658,7 @@ async def test_rule(
             "evidence": engine_result.get("evidence", ""),
             "suggestion": engine_result.get("suggestion", ""),
             "confidence": engine_result.get("confidence", 0.7),
-            "llm_raw_output": engine_result.get("llm_raw_output"),
+            "llm_raw_output": engine_result.get("llm_raw_output") if can_view_raw else None,
             "status": engine_result.get("status"),
             "applicability": engine_result.get("applicability"),
             "not_applicable": not engine_result.get("applicability", {}).get("is_applicable", True),
@@ -3977,12 +4675,11 @@ async def test_rule(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("规则测试失败 rule_id=%s", req.rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则测试失败: {str(e)}",
+            error="规则测试失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4005,10 +4702,14 @@ class RuleRegistryBootstrapRequest(BaseModel):
 async def get_rule_source(
     request: Request,
     qc_service: SichuanQCService = Depends(get_qc_service),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin")
+    ),
 ):
     """
     获取当前四川规则来源与版本摘要（PG 治理表 / JSON 回退）。
     """
+    del current_user
     try:
         overview = qc_service.get_rule_source_overview()
         return success_response(
@@ -4016,10 +4717,11 @@ async def get_rule_source(
             message="获取规则来源成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取规则来源失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取规则来源失败: {str(e)}",
+            error="获取规则来源失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4029,13 +4731,14 @@ async def check_rule_consistency(
     request: Request,
     include_custom_rules: bool = Query(default=True),
     sample_limit: int = Query(default=100, ge=10, le=500),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     发布前后规则一致性校验：
     对比治理表 active 规则与本地基线 JSON（SC + 可选 LX/LXE）。
     """
+    _require_global_admin(admin_user, "仅全局管理员可校验全局规则一致性")
     try:
         result = qc_service.check_rule_registry_consistency(
             include_custom_rules=bool(include_custom_rules),
@@ -4046,10 +4749,11 @@ async def check_rule_consistency(
             message="规则一致性校验完成",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("规则一致性校验失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则一致性校验失败: {str(e)}",
+            error="规则一致性校验失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4058,12 +4762,14 @@ async def check_rule_consistency(
 async def bootstrap_rules_to_registry(
     request: Request,
     req: RuleRegistryBootstrapRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
     """
     将本地 JSON 规则（SC + LX/LXE）增量导入治理表（幂等）。
     """
+    _reject_restricted_demo_account(admin_user, "演示账号禁止导入全局规则治理表")
+    _require_global_admin(admin_user, "仅全局管理员可导入全局规则治理表")
     try:
         result = await qc_service.bootstrap_rule_registry(
             operator=_current_user_id(admin_user),
@@ -4074,10 +4780,11 @@ async def bootstrap_rules_to_registry(
             message="规则导入治理表完成",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("规则导入治理表失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"规则导入治理表失败: {str(e)}",
+            error="规则导入治理表失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4087,9 +4794,10 @@ async def list_rule_versions(
     request: Request,
     rule_id: str,
     limit: int = Query(default=20, ge=1, le=200),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则版本")
     try:
         versions = qc_service.list_rule_versions(rule_id=rule_id, limit=limit)
         return success_response(
@@ -4101,10 +4809,11 @@ async def list_rule_versions(
             message="获取规则版本成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取规则版本失败: {str(e)}",
+            error="获取规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4114,9 +4823,10 @@ async def list_rule_publish_history(
     request: Request,
     rule_id: str,
     limit: int = Query(default=50, ge=1, le=500),
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则发布历史")
     try:
         history = qc_service.list_rule_publish_history(rule_id=rule_id, limit=limit)
         return success_response(
@@ -4128,10 +4838,11 @@ async def list_rule_publish_history(
             message="获取发布历史成功",
             trace_id=get_trace_id(request),
         )
-    except Exception as e:
+    except Exception:
+        logger.exception("获取发布历史失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取发布历史失败: {str(e)}",
+            error="获取发布历史失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4141,9 +4852,11 @@ async def publish_rule_version(
     request: Request,
     rule_id: str,
     req: RuleVersionActionRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _reject_restricted_demo_account(admin_user, "演示账号禁止发布全局规则版本")
+    _require_global_admin(admin_user, "仅全局管理员可发布全局规则版本")
     try:
         ok = qc_service.publish_rule_version(
             rule_id=rule_id,
@@ -4160,10 +4873,11 @@ async def publish_rule_version(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("发布规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"发布规则版本失败: {str(e)}",
+            error="发布规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4173,9 +4887,11 @@ async def rollback_rule_version(
     request: Request,
     rule_id: str,
     req: RuleVersionActionRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service),
 ):
+    _reject_restricted_demo_account(admin_user, "演示账号禁止回滚全局规则版本")
+    _require_global_admin(admin_user, "仅全局管理员可回滚全局规则版本")
     try:
         ok = qc_service.rollback_rule_version(
             rule_id=rule_id,
@@ -4192,10 +4908,11 @@ async def rollback_rule_version(
         )
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
+        logger.exception("回滚规则版本失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"回滚规则版本失败: {str(e)}",
+            error="回滚规则版本失败，请稍后重试",
             trace_id=get_trace_id(request),
         )
 
@@ -4204,19 +4921,20 @@ async def rollback_rule_version(
 async def get_rule_prompt(
     request: Request,
     rule_id: str,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     """
-    获取规则的提示词（仅系统管理员）
+    获取规则的提示词（仅全局系统管理员）
 
     Args:
         rule_id: 规则ID（如 "SC-010"）
-        admin_user: 管理员用户（由 require_admin 依赖注入）
+        admin_user: 全局管理员用户
 
     Returns:
         规则的提示词（自定义或默认）
     """
+    _require_global_admin(admin_user, "仅全局管理员可查看全局规则提示词")
     try:
         # 获取规则
         rule = qc_service.get_rule_by_id(rule_id)
@@ -4275,13 +4993,13 @@ async def get_rule_prompt(
 - 综合判断整体逻辑的一致性
 
 **输出格式（JSON）：**
-{{{{
+{{
   "is_compliant": true/false,
   "findings": "详细描述发现的所有问题，包括时间矛盾、症状否定矛盾、系统不一致、诊断支撑不足等各个维度的问题。如果合规则说明符合哪些要求",
   "evidence": "从病历中提取的相关文本片段，特别要引用包含否定词、时间信息、诊断信息的关键句子",
   "suggestion": "针对发现的问题提供改进建议，如果合规可以为空",
   "confidence": 0.85
-}}}}
+}}
 
 请直接输出 JSON，不要包含其他文字："""
 
@@ -4298,12 +5016,11 @@ async def get_rule_prompt(
 
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("获取提示词失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取提示词失败: {str(e)}",
+            error="获取提示词失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4313,20 +5030,22 @@ async def update_rule_prompt(
     request: Request,
     rule_id: str,
     req: UpdatePromptRequest,
-    admin_user: dict = Depends(require_admin),
+    admin_user: dict = Depends(require_roles("admin", "sync_admin", "super_admin")),
     qc_service: SichuanQCService = Depends(get_qc_service)
 ):
     """
-    更新规则的自定义提示词（仅系统管理员）
+    更新规则的自定义提示词（仅全局系统管理员）
 
     Args:
         rule_id: 规则ID
         req: 包含 custom_prompt 的请求体（None 表示恢复默认）
-        admin_user: 管理员用户
+        admin_user: 全局管理员用户
 
     Returns:
         更新结果
     """
+    _reject_restricted_demo_account(admin_user, "演示账号禁止修改全局规则提示词")
+    _require_global_admin(admin_user, "仅全局管理员可修改全局规则提示词")
     try:
         # 更新提示词
         success = qc_service.update_rule_prompt(
@@ -4354,12 +5073,11 @@ async def update_rule_prompt(
 
     except HTTPException:
         raise
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except Exception:
+        logger.exception("更新提示词失败 rule_id=%s", rule_id)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"更新提示词失败: {str(e)}",
+            error="更新提示词失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
@@ -4386,7 +5104,8 @@ async def reload_llm_config(
     Returns:
         重新加载结果
     """
-    del system_config_user
+    _reject_restricted_demo_account(system_config_user, "演示账号禁止重载 LLM 配置")
+    _require_global_admin(system_config_user, "仅全局管理员可重载全局 LLM 配置")
     try:
         qc_service = await get_qc_service()
         success = await qc_service.reload_config(config_name, user_id)
@@ -4411,27 +5130,34 @@ async def reload_llm_config(
         else:
             return error_response(
                 code=ErrorCode.INTERNAL_ERROR,
-                message="LLM 配置重新加载失败",
+                error="LLM 配置重新加载失败",
                 trace_id=get_trace_id(request)
             )
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("重新加载配置失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"重新加载配置失败: {str(e)}",
+            error="重新加载配置失败，请稍后重试",
             trace_id=get_trace_id(request)
         )
 
 
 @router.get("/current-config")
-async def get_current_config(request: Request):
+async def get_current_config(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "sync_admin", "super_admin")
+    ),
+):
     """
-    获取当前使用的 LLM 配置信息
+    获取当前使用的 LLM 配置信息（仅全局管理员）
 
     Returns:
         当前配置信息
     """
+    _require_global_admin(current_user, "仅全局管理员可查看当前 LLM 配置")
     try:
         qc_service = await get_qc_service()
         return success_response(
@@ -4445,9 +5171,12 @@ async def get_current_config(request: Request):
             message="获取当前配置成功",
             trace_id=get_trace_id(request)
         )
-    except Exception as e:
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("获取当前配置失败")
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取当前配置失败: {str(e)}",
+            error="获取当前配置失败，请稍后重试",
             trace_id=get_trace_id(request)
         )

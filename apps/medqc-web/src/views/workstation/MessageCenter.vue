@@ -1,5 +1,9 @@
 <template>
-  <main class="mq-page message-center" :class="{ 'message-center--reading': mobileReading }">
+  <section
+    class="mq-page message-center"
+    :class="{ 'message-center--reading': mobileReading }"
+    aria-label="消息中心"
+  >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">质控作业 · 消息与反馈</span>
@@ -15,7 +19,7 @@
             :class="{ 'is-active': status === option.value }"
             :aria-pressed="status === option.value"
             :disabled="!!busy"
-            @click="status = option.value"
+            @click="setStatus(option.value)"
           >
             {{ option.label }}
           </button>
@@ -25,11 +29,12 @@
         >
         <a-tooltip title="刷新消息"
           ><a-button
+            shape="circle"
             class="message-center__refresh"
             aria-label="刷新消息"
             :loading="loading"
             @click="load"
-            ><MqIcon v-if="!loading" name="sync" :size="16" /></a-button
+            ><template #icon><MqIcon name="sync" :size="16" /></template></a-button
         ></a-tooltip>
       </div>
     </header>
@@ -48,13 +53,14 @@
           <a-tooltip title="全部标为已读">
             <a-button
               type="text"
+              shape="circle"
               class="message-center__refresh"
               aria-label="全部标为已读"
               :disabled="loading || !!busy || !!error || !unread"
               :loading="busy === '*'"
               @click="markAllRead"
-              ><MqIcon v-if="busy !== '*'" name="success" :size="18"
-            /></a-button>
+              ><template #icon><MqIcon name="success" :size="18" /></template
+            ></a-button>
           </a-tooltip>
         </div>
         <div class="message-center__filters">
@@ -104,16 +110,17 @@
           </ul>
           <div v-else class="message-center__empty">
             <MqIconTile name="pool" :size="48" />
-            <strong>{{
-              loading
-                ? '正在读取消息'
-                : error
-                  ? '消息暂不可用'
-                  : status === 'unread'
-                    ? '未读消息已处理完毕'
-                    : '暂无消息'
-            }}</strong>
-            <a-button v-if="!loading && !error && status === 'unread'" @click="status = 'all'"
+            <strong>{{ emptyTitle }}</strong>
+            <a-button
+              v-if="!loading && !error && hasActiveFilter"
+              data-testid="message-center-reset-filters"
+              @click="resetFilters"
+              >重置筛选</a-button
+            >
+            <a-button
+              v-else-if="!loading && !error && status === 'unread'"
+              data-testid="message-center-view-all"
+              @click="setStatus('all')"
               >查看全部消息</a-button
             >
           </div>
@@ -180,7 +187,7 @@
         </div>
       </article>
     </section>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -191,6 +198,7 @@ import MqIconTile from '@/components/icons/MqIconTile.vue'
 import type { MqIconName } from '@/components/icons/mqIcons'
 import type { NotificationVM } from '@/views/workstation-v4/types'
 import {
+  isAccountRegistrationNotification,
   MESSAGE_TYPE_LABELS,
   messageActionLabel,
   messageTime,
@@ -206,12 +214,15 @@ const {
   pageSize,
   status,
   type,
+  hasActiveFilter,
   loading,
   error,
   busy,
   selected,
   mobileReading,
   load,
+  setStatus,
+  resetFilters,
   select,
   markRead,
   markAllRead,
@@ -223,11 +234,21 @@ const statuses = [
   { value: 'read' as const, label: '已读' },
 ]
 const statusLabel = computed(() => statuses.find((option) => option.value === status.value)?.label)
+const emptyTitle = computed(() => {
+  if (loading.value) return '正在读取消息'
+  if (error.value) return '消息暂不可用'
+  if (hasActiveFilter.value) return '当前筛选条件下暂无匹配消息'
+  if (status.value === 'unread' && (unread.value === 0 || unread.value === null)) {
+    return '未读消息已处理完毕'
+  }
+  return '暂无消息'
+})
 const typeOptions = [
   { value: '', label: '全部类型' },
   ...Object.entries(MESSAGE_TYPE_LABELS).map(([value, label]) => ({ value, label })),
 ]
 function messageIcon(item: NotificationVM): MqIconName {
+  if (isAccountRegistrationNotification(item)) return 'settings'
   if (item.type === 'drg_alert') return 'drg'
   if (item.type === 'qc_result_ready') return 'fp_qc'
   if (item.type === 'system') return 'settings'
@@ -237,3 +258,29 @@ function messageIcon(item: NotificationVM): MqIconName {
 </script>
 
 <style scoped src="./styles/message-center.css"></style>
+<style scoped>
+.message-center :deep(.ant-btn.message-center__refresh) {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  line-height: 1;
+  box-sizing: border-box;
+}
+
+.message-center :deep(.ant-btn.message-center__refresh > span),
+.message-center :deep(.ant-btn.message-center__refresh .mq-icon),
+.message-center :deep(.ant-btn.message-center__refresh .ant-btn-loading-icon),
+.message-center :deep(.ant-btn.message-center__refresh .anticon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  line-height: 1;
+  transform: none;
+}
+</style>

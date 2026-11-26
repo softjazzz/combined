@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 from ..core.response import StatusCode, get_trace_id
 from ..core.http import safe_post_json
+from ..core.security import require_roles
 from ..core.settings import get_settings
 from ..services.llm_observability import (
     llm_observation_context,
@@ -12,7 +13,10 @@ from ..services.llm_observability import (
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-proxy"])
 
 
-@router.post("/parse-text")
+@router.post(
+    "/parse-text",
+    dependencies=[Depends(require_roles("admin", "qc_manager", "super_admin", "sync_admin"))],
+)
 async def llm_parse_text_proxy(
     request: Request,payload: Dict[str, Any]):
     # Minimal safe placeholder: validate input shape and refuse if missing

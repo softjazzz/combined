@@ -1,5 +1,11 @@
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
+import { ref } from 'vue'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
+
 import SemanticRulesTableSection from '@/views/workstation-v4/semantic-rules/components/SemanticRulesTableSection.vue'
 import type { SemanticRuleItem } from '@/views/workstation-v4/semantic-rules/types'
 
@@ -39,6 +45,10 @@ const ProStandardTableStub = {
 }
 
 describe('SemanticRulesTableSection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it('行级操作应保持“查看结果”主按钮和“评估”次按钮', () => {
     const demoRule: SemanticRuleItem = {
       rule_id: 'SC-001',

@@ -195,14 +195,21 @@ watch(
 async function submit(decision: 'approved' | 'rejected') {
   busy.value = true
   error.value = ''
-  const response = await approveRule(props.detail.rule.rule_id, decision, note.value.trim())
-  busy.value = false
-  if (!response.success) {
-    error.value = response.error || '提交失败'
-    return
+  try {
+    const response = await approveRule(props.detail.rule.rule_id, decision, note.value.trim())
+    if (!response.success) {
+      error.value = response.error || '提交失败'
+      return
+    }
+    note.value = ''
+    message.success(decision === 'approved' ? '已批准，发布单已生成' : '已驳回')
+    emit('done')
+    if (decision === 'rejected') {
+      emit('close')
+    }
+  } finally {
+    busy.value = false
   }
-  message.success(decision === 'approved' ? '已批准，发布单已生成' : '已驳回')
-  emit('done')
 }
 
 async function copySheet() {

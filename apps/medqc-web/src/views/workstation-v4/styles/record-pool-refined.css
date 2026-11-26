@@ -111,6 +111,10 @@
   background: transparent;
 }
 
+.wv4-list .workbench-hosp-filter {
+  flex-wrap: wrap;
+}
+
 .wv4-list .record-pool-field-label,
 .wv4-list .workbench-hosp-filter__label {
   display: inline-flex;
@@ -166,21 +170,26 @@
 }
 
 .wv4-list .wv4-record-pool-filter__summary {
+  display: block;
+  width: 100%;
   margin: 0;
-  padding: 0 2px;
+  padding: 2px 2px 0;
   border: 0;
+  border-radius: 0;
   background: transparent;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+  line-height: 1.5;
+  white-space: normal;
 }
 
-/* antd 控件：与 .mq-input 同外观 */
+/* antd 控件：与 .mq-input 同外观，统一 36px 高度与 10px 圆角 */
 .wv4-list :deep(.ant-input-affix-wrapper),
 .wv4-list :deep(.ant-select:not(.ant-select-customize-input) .ant-select-selector),
 .wv4-list :deep(.ant-picker) {
   min-height: 36px;
   border: 1px solid rgba(60, 60, 80, 0.1);
-  border-radius: var(--mq-radius-control);
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.85);
   box-shadow: inset 0 1px 2px rgba(10, 55, 115, 0.04);
 }
@@ -219,10 +228,10 @@
   background: transparent;
 }
 
-/* 住院状态：antd 分段控件改为 .mq-segmented 外观 */
+/* 住院状态：antd 分段控件改为 .mq-segmented 外观，总高 36px、圆角 10px */
 .wv4-list .workbench-hosp-segmented {
   padding: 3px;
-  border-radius: 13px;
+  border-radius: 10px;
   background: var(--mq-bg-muted);
 }
 
@@ -231,20 +240,20 @@
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item) {
-  border-radius: 10px;
+  border-radius: 7px;
   color: var(--mq-text-secondary);
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-label) {
   min-height: 30px;
-  padding: 0 14px;
+  padding: 0 12px;
   font-size: var(--mq-font-13);
   line-height: 30px;
 }
 
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-item-selected),
 .wv4-list .workbench-hosp-segmented :deep(.ant-segmented-thumb) {
-  border-radius: 10px;
+  border-radius: 7px;
   background: #ffffff;
   box-shadow: 0 2px 6px rgba(10, 55, 115, 0.12);
   color: var(--mq-text-primary);
@@ -354,6 +363,41 @@
   font-size: var(--mq-font-13);
 }
 
+.wv4-list :deep(.wv4-list__status-alert.ant-alert) {
+  padding: 10px 16px;
+  border: 1px solid rgba(118, 128, 160, 0.22);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  box-shadow: 0 2px 8px rgba(10, 45, 90, 0.04);
+  color: var(--mq-text-primary);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--warning.ant-alert) {
+  border-color: rgba(118, 128, 160, 0.24);
+  background: rgba(255, 255, 255, 0.84);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--warning .ant-alert-icon) {
+  color: var(--mq-warning-icon);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--error.ant-alert) {
+  border-color: rgba(224, 38, 58, 0.22);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.wv4-list :deep(.wv4-list__status-alert--error .ant-alert-icon) {
+  color: var(--mq-danger-icon);
+}
+
+.wv4-list :deep(.wv4-list__status-alert .ant-alert-message) {
+  color: var(--mq-text-primary);
+  font-size: var(--mq-font-13);
+  line-height: 20px;
+}
+
 .wv4-list .wv4-list__empty {
   display: flex;
   flex-direction: column;
@@ -379,26 +423,49 @@
 /* ---------- 病历池：左列表 + 右预览 ---------- */
 .wv4-list .wv4-record-pool-main--preview {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   align-items: start;
   gap: 16px;
 }
 
-.wv4-list :deep(.batch-table-panel__row--selectable) {
+.wv4-list :deep(.batch-table-panel__row--selectable),
+.wv4-list :deep(.batch-table-panel__row--active) {
   cursor: pointer;
 }
 
-.wv4-list :deep(.batch-table-panel__row--active > td) {
-  background: rgba(255, 255, 255, 0.92) !important;
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td) {
+  background: rgba(10, 108, 255, 0.065);
 }
 
-.wv4-list :deep(.batch-table-panel__row--active > td:first-child) {
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.095);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.batch-table-panel__row--active > td:first-child) {
   box-shadow: inset 3px 0 0 var(--mq-brand-600);
 }
 
-@media (max-width: 1360px) {
+.wv4-list :deep(.ant-table-tbody > tr:focus-visible) {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: -2px;
+}
+
+@media (max-width: 1420px) {
+  .wv4-list .wv4-list__page {
+    padding: 8px 18px 24px 16px;
+  }
+
   .wv4-list .wv4-record-pool-main--preview {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr) 292px;
+    gap: 14px;
+  }
+}
+
+@media (max-width: 1320px) {
+  .wv4-list .wv4-record-pool-main--preview {
+    grid-template-columns: minmax(0, 1fr) 272px;
+    gap: 12px;
   }
 }
 
@@ -461,10 +528,43 @@
   color: var(--mq-info-text);
 }
 
-.wv4-list :deep(.batch-table-panel__action.ant-btn) {
-  height: 34px;
-  padding-inline: 16px;
-  font-size: var(--mq-font-13);
+.wv4-list :deep(.batch-table-panel__action.ant-btn),
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn) {
+  height: 36px !important;
+  padding-inline: 14px !important;
+  border-radius: 10px !important;
+  font-size: var(--mq-font-13) !important;
+  font-weight: 500 !important;
+}
+
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn) {
+  border: 1px solid rgba(20, 40, 80, 0.12) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--mq-text-secondary) !important;
+}
+
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn:hover) {
+  border-color: rgba(10, 108, 255, 0.32) !important;
+  background: rgba(10, 108, 255, 0.05) !important;
+  color: var(--mq-brand-600) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn) {
+  border: 1px solid rgba(20, 40, 80, 0.12) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  color: var(--mq-text-primary) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn:hover:not(:disabled)) {
+  border-color: rgba(10, 108, 255, 0.32) !important;
+  background: rgba(10, 108, 255, 0.05) !important;
+  color: var(--mq-brand-600) !important;
+}
+
+.wv4-list :deep(.batch-table-panel__action--secondary.ant-btn:disabled) {
+  border-color: rgba(20, 40, 80, 0.08) !important;
+  background: rgba(118, 128, 160, 0.08) !important;
+  color: var(--mq-text-disabled) !important;
 }
 
 .wv4-list :deep(.batch-table-panel__action--primary:not(:disabled)) {
@@ -512,7 +612,21 @@
 }
 
 .wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected > td) {
-  background: rgba(10, 108, 255, 0.06);
+  background: rgba(10, 108, 255, 0.085);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.115);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active > td) {
+  background: rgba(10, 108, 255, 0.12);
+}
+
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active:hover > td),
+.wv4-list :deep(.ant-table-tbody > tr.ant-table-row-selected.batch-table-panel__row--active > td.ant-table-cell-row-hover) {
+  background: rgba(10, 108, 255, 0.15);
 }
 
 .wv4-list :deep(.batch-table-panel__patient-name) {
@@ -549,19 +663,52 @@
 .wv4-list :deep(.batch-table-panel__hospitalization-status) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+  gap: 5px;
+  padding: 3px 9px;
   border: 0;
   border-radius: 999px;
   background: var(--mq-neutral-bg);
   color: var(--mq-text-secondary);
   font-size: var(--mq-font-12);
-  font-weight: 600;
+  font-weight: 500;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status::before) {
+  flex-shrink: 0;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #a1a7b3;
+  content: '';
 }
 
 .wv4-list :deep(.batch-table-panel__hospitalization-status--inpatient) {
   background: var(--mq-info-bg);
   color: var(--mq-info-text);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--inpatient::before) {
+  background: var(--mq-info-icon);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--discharged) {
+  background: var(--mq-neutral-bg);
+  color: var(--mq-text-secondary);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--discharged::before) {
+  background: #a1a7b3;
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--unknown) {
+  background: var(--mq-warning-bg);
+  color: var(--mq-warning-text);
+}
+
+.wv4-list :deep(.batch-table-panel__hospitalization-status--unknown::before) {
+  background: var(--mq-warning-icon);
 }
 
 .wv4-list :deep(.batch-table-panel__detail-button) {
@@ -713,9 +860,25 @@
 }
 
 /* 右侧预览 */
+.wv4-list :deep(.pool-preview) {
+  top: 12px;
+  max-height: calc(100vh - 24px);
+}
+
+.wv4-list :deep(.pool-preview__head) {
+  gap: 10px;
+  padding: 14px 16px 12px;
+}
+
+.wv4-list :deep(.pool-preview__avatar) {
+  width: 42px;
+  height: 42px;
+}
+
 .wv4-list :deep(.pool-preview__name) {
-  font-size: var(--mq-font-20);
+  font-size: 18px;
   font-weight: 600;
+  line-height: 1.25;
 }
 
 .wv4-list :deep(.pool-preview__eyebrow),
@@ -723,15 +886,78 @@
   font-weight: 400;
 }
 
-.wv4-list :deep(.pool-preview__facts dd) {
-  font-size: var(--mq-font-14);
-  font-weight: 500;
+/* 1280px / 1366px 预览栏保持 2 列紧凑信息网，避免退化为单列拉长导致底部按钮落出首屏 */
+.wv4-list :deep(.pool-preview__facts) {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-/* 行内「查看」：去眼睛图标，改为安静的浅灰胶囊；悬停与选中行时转为浅蓝 */
+.wv4-list :deep(.pool-preview__facts > div) {
+  gap: 2px;
+  padding: 9px 14px;
+}
+
+.wv4-list :deep(.pool-preview__facts > div:nth-child(odd)) {
+  border-right: 0.5px solid var(--mq-border);
+}
+
+.wv4-list :deep(.pool-preview__facts > div:last-child:nth-child(odd)) {
+  grid-column: 1 / -1;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 14px;
+  border-right: 0;
+}
+
+.wv4-list :deep(.pool-preview__facts dt) {
+  white-space: nowrap;
+}
+
+.wv4-list :deep(.pool-preview__facts dd) {
+  font-size: var(--mq-font-13);
+  font-weight: 500;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.wv4-list :deep(.pool-preview__qc) {
+  gap: 4px;
+  margin: 10px 14px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+
+.wv4-list :deep(.pool-preview__qc-head) {
+  font-size: var(--mq-font-13);
+}
+
+.wv4-list :deep(.pool-preview__qc-summary) {
+  font-size: var(--mq-font-12);
+  line-height: 1.45;
+}
+
+.wv4-list :deep(.pool-preview__actions) {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.94);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.wv4-list :deep(.pool-preview__actions .mq-btn) {
+  height: 36px;
+  padding: 0 12px;
+  font-size: var(--mq-font-13);
+}
+
+/* 行内「查看」与阶段操作按钮：单行不折行 */
 .wv4-list :deep(.batch-table-panel__detail-button.ant-btn) {
   height: 26px !important;
-  padding: 0 12px !important;
+  padding: 0 10px !important;
   border: 0 !important;
   border-radius: 999px !important;
   background: rgba(118, 128, 160, 0.12) !important;
@@ -739,6 +965,7 @@
   color: var(--mq-text-primary) !important;
   font-size: var(--mq-font-12) !important;
   font-weight: 500 !important;
+  white-space: nowrap !important;
 }
 
 .wv4-list :deep(.batch-table-panel__detail-button svg) {
@@ -749,4 +976,255 @@
 .wv4-list :deep(.batch-table-panel__row--active .batch-table-panel__detail-button.ant-btn) {
   background: rgba(10, 108, 255, 0.12) !important;
   color: var(--mq-brand-600) !important;
+}
+
+/* ---------- 办公屏（1280×800 / 1366×860）工具栏防折行与表格列宽收敛 ---------- */
+.wv4-list :deep(.batch-table-panel__toolbar) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+}
+
+.wv4-list :deep(.batch-table-panel__toolbar-meta > div) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.wv4-list :deep(.batch-table-panel__title),
+.wv4-list :deep(.batch-table-panel__summary-pill),
+.wv4-list :deep(.batch-table-panel__clear-selection) {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.wv4-list :deep(.batch-table-panel__actions) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.wv4-list :deep(.batch-table-panel__action.ant-btn),
+.wv4-list :deep(.record-pool-task-history__entry.ant-btn),
+.wv4-list :deep(.batch-table-panel__clear-selection.ant-btn) {
+  white-space: nowrap !important;
+  flex-shrink: 0;
+}
+
+/* 阶段状态标签单行不折行（如「待首页质控」「待结算清单质控」） */
+.wv4-list :deep(.batch-table-panel__tag) {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 病历池表格：用定宽固定列 + 自适应患者列，消除 100% + checkbox 导致的右侧「操作」列裁切 */
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-content > table) {
+  width: 100% !important;
+  min-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col) {
+  width: 36px !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col) {
+  width: auto !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col + col) {
+  width: 20% !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col + col + col) {
+  width: 76px !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col + col + col + col) {
+  width: 92px !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col + col + col + col + col) {
+  width: 92px !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool colgroup col.ant-table-selection-col + col + col + col + col + col + col) {
+  width: 66px !important;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th),
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td) {
+  padding-inline: 8px;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th.ant-table-selection-column),
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td.ant-table-selection-column) {
+  padding-inline: 4px;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-thead > tr > th:last-child),
+.wv4-list :deep(.batch-table-panel--record-pool .ant-table-tbody > tr > td:last-child) {
+  padding-inline: 6px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool .batch-table-panel__visit-line) {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.wv4-list :deep(.batch-table-panel--record-pool .batch-table-panel__visit-id) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 阶段队列（如 stage=frontpage_qc）：紧凑分配列宽，1280px 起消除底部横向滚动条 */
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-content > table) {
+  width: 100% !important;
+  min-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col) {
+  width: 36px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col) {
+  width: auto !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col) {
+  width: 108px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col + col) {
+  width: 118px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col + col + col) {
+  width: 132px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col + col + col + col) {
+  width: 178px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col + col + col + col + col) {
+  width: 108px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) colgroup col.ant-table-selection-col + col + col + col + col + col + col + col) {
+  width: 108px !important;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-thead > tr > th),
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-tbody > tr > td) {
+  padding-inline: 8px;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-thead > tr > th.ant-table-selection-column),
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-tbody > tr > td.ant-table-selection-column) {
+  padding-inline: 4px;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-thead > tr > th:last-child),
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-tbody > tr > td:last-child) {
+  padding-inline: 6px;
+  white-space: nowrap;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .batch-table-panel__hospitalization) {
+  gap: 6px;
+  min-width: 0;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .batch-table-panel__date-pair) {
+  min-width: 0;
+  font-size: 11px;
+}
+
+.wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .batch-table-panel__risk) {
+  display: block;
+  max-width: 100%;
+}
+
+@media (max-width: 1420px), (max-height: 880px) {
+  .wv4-list__stack {
+    gap: 12px;
+  }
+
+  .wv4-list .wv4-record-pool-hero,
+  .wv4-list .wv4-analysis-overview {
+    gap: 10px;
+  }
+
+  .wv4-list .wv4-analysis-overview__title {
+    font-size: 26px;
+  }
+
+  .wv4-list .wv4-record-pool-filter {
+    gap: 8px;
+    padding: 12px 16px;
+  }
+
+  .wv4-list .workbench-filter-toolbar {
+    gap: 8px 10px;
+  }
+
+  .wv4-list :deep(.batch-table-panel__header) {
+    padding: 12px 16px 10px;
+  }
+
+  .wv4-list :deep(.batch-table-panel__title) {
+    font-size: 16px;
+  }
+
+  .wv4-list :deep(.batch-table-panel__summary-pill) {
+    padding: 0 8px;
+  }
+
+  .wv4-list :deep(.batch-table-panel__action.ant-btn),
+  .wv4-list :deep(.record-pool-task-history__entry.ant-btn) {
+    height: 32px !important;
+    padding-inline: 10px !important;
+    font-size: var(--mq-font-12) !important;
+  }
+}
+
+@media (max-height: 820px) {
+  .wv4-list :deep(.pool-preview__head) {
+    padding: 10px 14px;
+  }
+
+  .wv4-list :deep(.pool-preview__facts > div) {
+    padding: 7px 12px;
+  }
+
+  .wv4-list :deep(.pool-preview__qc) {
+    margin: 8px 12px;
+    padding: 8px 10px;
+  }
+
+  .wv4-list :deep(.pool-preview__actions) {
+    padding: 8px 12px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .wv4-list :deep(.batch-table-panel--record-pool .ant-table-content > table) {
+    min-width: 660px !important;
+  }
+
+  .wv4-list :deep(.batch-table-panel:not(.batch-table-panel--record-pool) .ant-table-content > table) {
+    min-width: 900px !important;
+  }
 }

@@ -1,18 +1,26 @@
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
 
 import RecordPoolQcTaskHistory from '@/views/workstation-v4/components/workbench/RecordPoolQcTaskHistory.vue'
 
 const listJobs = vi.fn()
 const getJob = vi.fn()
 const getDebug = vi.fn()
+const reviewJob = vi.fn()
+const cancelJob = vi.fn()
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   listSichuanWorkspaceBatchJobs: (...args: unknown[]) => listJobs(...args),
   getSichuanWorkspaceBatchJob: (...args: unknown[]) => getJob(...args),
   getSichuanWorkspaceBatchJobDebugSnapshot: (...args: unknown[]) => getDebug(...args),
   exportSichuanWorkspaceBatchJob: vi.fn(),
+  reviewSichuanWorkspaceBatchJob: (...args: unknown[]) => reviewJob(...args),
+  cancelSichuanWorkspaceBatchJob: (...args: unknown[]) => cancelJob(...args),
 }))
 
 const passthrough = (name: string, tag = 'div') =>
@@ -95,6 +103,7 @@ describe('RecordPoolQcTaskHistory', () => {
             props: {
               open: Boolean,
               batchJobDetail: Object,
+              backLabel: String,
             },
             setup(props) {
               return () =>
@@ -102,6 +111,7 @@ describe('RecordPoolQcTaskHistory', () => {
                   'data-testid': 'batch-job-detail-drawer',
                   'data-open': String(props.open),
                   'data-job-id': String((props.batchJobDetail as { id?: string } | null)?.id || ''),
+                  'data-back-label': String(props.backLabel || ''),
                 })
             },
           }),
@@ -112,7 +122,11 @@ describe('RecordPoolQcTaskHistory', () => {
     await wrapper.get('[data-testid="record-pool-qc-task-history-entry"]').trigger('click')
     await flushPromises()
 
-    expect(listJobs).toHaveBeenCalledWith({ page: 1, page_size: 30 })
+    expect(listJobs).toHaveBeenCalledWith({
+      page: 1,
+      page_size: 30,
+      exclude_validation: true,
+    })
     expect(wrapper.text()).toContain('泸县0609质控点验证 v1')
     expect(wrapper.text()).not.toContain('其他规则任务')
 
@@ -129,6 +143,112 @@ describe('RecordPoolQcTaskHistory', () => {
     )
     expect(wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-job-id')).toBe(
       'record-pool-job',
+    )
+    expect(
+      wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-back-label'),
+    ).toBe('返回病历池')
+  })
+
+  it('wires review-batch-job-result and cancel-batch-job to SemanticRulesBatchResultDrawer', async () => {
+    reviewJob.mockResolvedValue({
+      success: true,
+      data: {
+        job: {
+          id: 'record-pool-job',
+          rule_code: 'LX0609',
+          rule_name: '泸县0609质控',
+          rule_set_key: 'luxian_0609_qc_v1',
+          scope: 'all',
+          status: 'completed',
+          summary: {
+            review_report: {
+              scope: 'luxian_0609_qc_v1',
+              summary: { total_findings: 1 },
+              findings: [],
+            },
+          },
+        },
+        review_report: {
+          scope: 'luxian_0609_qc_v1',
+          summary: { total_findings: 1 },
+          findings: [],
+        },
+      },
+    })
+    cancelJob.mockResolvedValue({
+      success: true,
+      data: {
+        id: 'record-pool-job',
+        rule_code: 'LX0609',
+        rule_name: '泸县0609质控',
+        rule_set_key: 'luxian_0609_qc_v1',
+        scope: 'all',
+        status: 'canceled',
+      },
+    })
+
+    let capturedReview: (() => Promise<void> | void) | undefined
+    let capturedCancel: ((jobId: string) => Promise<void> | void) | undefined
+    const wrapper = mount(RecordPoolQcTaskHistory, {
+      global: {
+        stubs: {
+          AButton: passthrough('AButton', 'button'),
+          ADrawer: passthrough('ADrawer'),
+          ASpin: passthrough('ASpin'),
+          AEmpty: passthrough('AEmpty'),
+          SemanticRulesBatchResultDrawer: defineComponent({
+            name: 'SemanticRulesBatchResultDrawer',
+            props: {
+              open: Boolean,
+              batchJobDetail: Object,
+              reviewBatchJobResult: Function,
+              cancelBatchJob: Function,
+            },
+            setup(props) {
+              return () => {
+                capturedReview = props.reviewBatchJobResult as typeof capturedReview
+                capturedCancel = props.cancelBatchJob as typeof capturedCancel
+                return h('div', {
+                  'data-testid': 'batch-job-detail-drawer',
+                  'data-status': String(
+                    (props.batchJobDetail as { status?: string } | null)?.status || '',
+                  ),
+                })
+              }
+            },
+          }),
+        },
+      },
+    })
+
+    await wrapper.get('[data-testid="record-pool-qc-task-history-entry"]').trigger('click')
+    await flushPromises()
+    await wrapper.get('.record-pool-task-history__item').trigger('click')
+    await flushPromises()
+
+    expect(typeof capturedReview).toBe('function')
+    expect(typeof capturedCancel).toBe('function')
+
+    await capturedReview?.()
+    await flushPromises()
+    expect(reviewJob).toHaveBeenCalledWith('record-pool-job')
+
+    getJob.mockResolvedValueOnce({
+      success: true,
+      data: {
+        id: 'record-pool-job',
+        rule_code: 'LX0609',
+        rule_name: '泸县0609质控',
+        rule_set_key: 'luxian_0609_qc_v1',
+        scope: 'all',
+        status: 'canceled',
+      },
+    })
+    await capturedCancel?.('record-pool-job')
+    await flushPromises()
+    expect(cancelJob).toHaveBeenCalledWith('record-pool-job')
+    expect(wrapper.get('[data-testid="batch-job-detail-drawer"]').attributes('data-status')).toBe(
+      'canceled',
     )
   })
 })

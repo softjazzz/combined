@@ -42,10 +42,17 @@ vi.mock('vue-router', () => ({
   useRoute: () => routeState,
 }))
 
+const authState = vi.hoisted(() => ({
+  user: {
+    id: 'qc-result-list-test',
+    email: 'qc-result-list-test@example.com',
+    is_demo_account: false,
+    roles: ['sync_admin'] as string[],
+  },
+}))
+
 vi.mock('@/stores/auth', () => ({
-  useAuthStore: () => ({
-    user: { id: 'qc-result-list-test', email: 'qc-result-list-test@example.com' },
-  }),
+  useAuthStore: () => authState,
 }))
 
 import QcRecordResultListView from '@/views/workstation-v4/QcRecordResultListView.vue'
@@ -234,6 +241,12 @@ describe('QcRecordResultListView', () => {
     )
     vi.clearAllMocks()
     window.sessionStorage.clear()
+    authState.user = {
+      id: 'qc-result-list-test',
+      email: 'qc-result-list-test@example.com',
+      is_demo_account: false,
+      roles: ['sync_admin'],
+    }
     routeState.path = '/workstation-v4/records/running'
     routeState.query = {}
     mockWorkstationResponse(response())
@@ -305,14 +318,18 @@ describe('QcRecordResultListView', () => {
       expect(wrapper.find('.qc-record-result-list-view__header').text()).not.toContain(
         '仅展示当前范围内病历的最新质控结果，不混入其他业务流程。',
       )
-      expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-        qc_summary_mode: 'deferred',
-        page: 1,
-        page_size: 15,
-        source_id: 'independent_cdm',
-        date_field: dateField,
-        hospital_status: carePhase,
-      })
+      expect(mocks.getRaw).toHaveBeenCalledWith(
+        '/api/medical-records/workstation',
+        {
+          qc_summary_mode: 'deferred',
+          page: 1,
+          page_size: 15,
+          source_id: 'independent_cdm',
+          date_field: dateField,
+          hospital_status: carePhase,
+        },
+        { signal: expect.any(AbortSignal) },
+      )
       expect(mocks.postRaw).toHaveBeenCalledWith(
         '/api/medical-records/workstation/qc-summary',
         { record_keys: response().data.records.map((row) => row.record_key) },
@@ -471,18 +488,22 @@ describe('QcRecordResultListView', () => {
     department.vm.$emit('change', '重症医学科')
     await flushPromises()
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'discharge',
-      dept: '重症医学科',
-      keyword: '患者甲',
-      start_date: '2026-08-01',
-      end_date: '2026-08-10',
-      hospital_status: 'discharged',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'discharge',
+        dept: '重症医学科',
+        keyword: '患者甲',
+        start_date: '2026-08-01',
+        end_date: '2026-08-10',
+        hospital_status: 'discharged',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('日期选择允许开放区间，并清除已应用的日期筛选', async () => {
@@ -627,8 +648,8 @@ describe('QcRecordResultListView', () => {
     await flushPromises()
 
     const rows = wrapper.findAll('tbody tr[data-record-key]')
-    // 整行点击只切换右侧预览，不打开抽屉
-    await rows[0]!.trigger('click')
+    // 整行点击只切换右侧预览，不打开抽屉（保持后端分页顺序，H-2 为第 2 行）
+    await rows[1]!.trigger('click')
 
     const preview = wrapper.getComponent(QcRecordReviewPreview)
     expect(preview.props('row')).toMatchObject({
@@ -663,15 +684,19 @@ describe('QcRecordResultListView', () => {
     const wrapper = mountView('discharged')
     await flushPromises()
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'discharge',
-      keyword: 'V-priority',
-      hospital_status: 'discharged',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'discharge',
+        keyword: 'V-priority',
+        hospital_status: 'discharged',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
     const drawer = wrapper.getComponent(ResultDrawerStub)
     expect(drawer.props('open')).toBe(true)
     expect(drawer.props('focus')).toMatchObject({
@@ -827,5 +852,194 @@ describe('QcRecordResultListView', () => {
     expect(wrapper.find('[data-testid="result-analysis-stub"]').exists()).toBe(false)
     expect(wrapper.text()).toContain('东华CDM')
     wrapper.unmount()
+  })
+
+  it('演示账号隐藏资料待核实与未全部完成指标卡，并向列表摘要传递 confirmedOnly 口径', async () => {
+    authState.user = {
+      id: 'demo-qc-user',
+      email: 'demo@example.com',
+      is_demo_account: true,
+      roles: ['qc_manager'],
+    }
+    const payload = response()
+    Object.assign(payload.data.qc_summary, {
+      failed_records: 1,
+      partial_failed_records: 2,
+    })
+    mockWorkstationResponse(payload)
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(
+      wrapper
+        .findAll('.review-workbench-metrics > div > span:first-child')
+        .map((item) => item.text()),
+    ).toEqual(['纳入病历', '已完成质控', '确定问题'])
+    expect(wrapper.find('.review-metric--dataGap').exists()).toBe(false)
+    expect(wrapper.find('.review-metric--failed').exists()).toBe(false)
+    expect(wrapper.text()).toContain('有 2 项确定问题')
+    expect(wrapper.text()).not.toContain('待核实 1')
+    expect(wrapper.text()).not.toContain('待判断 3')
+    expect(wrapper.text()).not.toContain('资料同步待核实')
+  })
+
+  it('打开完整质控结果时转发 admissionTime 和 dischargeTime 到抽屉焦点', async () => {
+    const wrapper = mountView('discharged')
+    await flushPromises()
+
+    await wrapper
+      .get('tr[data-record-key*="V-priority"] [data-testid="open-saved-result"]')
+      .trigger('click')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('focus')).toMatchObject({
+      visitId: 'V-priority',
+      admissionTime: '2026-08-09 08:00',
+      dischargeTime: '2026-08-12 10:00',
+    })
+  })
+
+  it('导出当前筛选使用已提交筛选值而非草稿输入，且重置筛选同步清空主管医师', async () => {
+    window.history.replaceState({}, '', '/workstation-v4/records/final?doctor=%E5%BC%A0%E5%8C%BB%E7%94%9F')
+    try {
+      const wrapper = mountView('discharged')
+      await flushPromises()
+
+      // 用户输入草稿关键词但未点击查询/回车
+      await wrapper.get('input[aria-label="关键词筛选"]').setValue('未提交草稿')
+      await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+      await wrapper.get('[data-testid="qc-result-export-filtered"]').trigger('click')
+      await flushPromises()
+
+      expect(mocks.exportFilteredLuxian0609RecordResults).toHaveBeenCalledWith({
+        scope: 'final',
+        doctor: '张医生',
+        date_field: 'discharge',
+      })
+
+      // 重置筛选应同时清空 activeDoctor
+      await wrapper.get('[data-testid="qc-result-reset-filters"]').trigger('click')
+      await flushPromises()
+      const [, afterReset] = mocks.getRaw.mock.lastCall!
+      expect(afterReset).not.toHaveProperty('doctor')
+      expect(afterReset).not.toHaveProperty('keyword')
+    } finally {
+      window.history.replaceState({}, '', '/workstation-v4/records/running')
+    }
+  })
+
+  it('二阶段摘要失败提示支持「重试摘要」，且导出提示展示在表格上方并区分错误态样式', async () => {
+    mocks.postRaw.mockRejectedValueOnce(new Error('摘要接口超时'))
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('质控摘要暂不可用')
+    const retrySummaryBtn = wrapper.get('[data-testid="qc-result-retry-summary"]')
+    expect(retrySummaryBtn.text()).toContain('重试摘要')
+
+    mockWorkstationResponse(response())
+    await retrySummaryBtn.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="qc-result-retry-summary"]').exists()).toBe(false)
+
+    mocks.exportFilteredLuxian0609RecordResults.mockResolvedValueOnce({
+      success: false,
+      message: '导出服务异常',
+    })
+    await wrapper.get('[data-testid="qc-result-export-trigger"]').trigger('click')
+    await wrapper.get('[data-testid="qc-result-export-filtered"]').trigger('click')
+    await flushPromises()
+
+    const notice = wrapper.get('[data-testid="qc-result-notice"]')
+    expect(notice.text()).toContain('导出服务异常')
+    expect(notice.classes()).toContain('qc-record-result-list-view__notice--error')
+    const split = wrapper.get('.review-workbench-split')
+    expect(
+      notice.element.compareDocumentPosition(split.element) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+  })
+
+  it('根节点使用 div 避免嵌套 main，数据源以徽标呈现，导出菜单内部按 Esc 可关闭', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    expect(wrapper.element.tagName).toBe('DIV')
+    expect(wrapper.find('main').exists()).toBe(false)
+    expect(wrapper.get('.qc-record-result-list-view__source-badge').text()).toBe('东华CDM')
+
+    const trigger = wrapper.get('[data-testid="qc-result-export-trigger"]')
+    await trigger.trigger('click')
+    expect(wrapper.find('[role="menu"]').exists()).toBe(true)
+
+    const filteredOption = wrapper.get('[data-testid="qc-result-export-filtered"]')
+    await filteredOption.trigger('keydown.esc')
+    expect(wrapper.find('[role="menu"]').exists()).toBe(false)
+  })
+
+  it('仅携带 ?record_key= 深链且目标不在当前页时展示准确提示而非身份错误', async () => {
+    routeState.query = {
+      record_key: '["H","P","V-on-page-2"]',
+    }
+
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(false)
+    const notice = wrapper.get('[data-testid="qc-result-notice"]')
+    expect(notice.text()).toBe('未在当前筛选页找到目标病历，请调整筛选条件或翻页查看')
+    expect(notice.text()).not.toContain('无法确认当前病历身份')
+  })
+
+  it('手动刷新后自动清理已不在当前页范围的过期勾选 selectedRecordKeys', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    await wrapper.get('input[aria-label="选择患者甲"]').setValue(true)
+    await wrapper.get('input[aria-label="选择患者乙"]').setValue(true)
+    expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 2 份')
+
+    // 刷新后患者甲（V-priority）离开当前页，仅保留患者乙（V-data-gap）
+    const payload = response()
+    payload.data.records = payload.data.records.filter((record) => record.visit_id === 'V-data-gap')
+    mockWorkstationResponse(payload)
+
+    await wrapper.get('.qc-record-result-list-view__refresh-button').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.get('.qc-record-result-list-view__selected-count').text()).toBe('已选 1 份')
+    expect(wrapper.getComponent(QcRunSelectedControl).props('recordRefs')).toEqual([
+      {
+        institute_id: 'H',
+        patient_id: 'P',
+        visit_id: 'V-data-gap',
+      },
+    ])
+  })
+
+  it('预览组件「原文核对」携带 ruleId 发射 open-full 时正常打开抽屉并记录规则焦点', async () => {
+    const wrapper = mountView('inpatient')
+    await flushPromises()
+
+    const preview = wrapper.getComponent(QcRecordReviewPreview)
+    preview.vm.$emit('open-full', '["H","P","V-priority"]', undefined, 'LX0609-01-01-01')
+    await flushPromises()
+
+    const drawer = wrapper.getComponent(ResultDrawerStub)
+    expect(drawer.props('open')).toBe(true)
+    expect(drawer.props('focus')).toMatchObject({
+      instituteId: 'H',
+      patientId: 'P',
+      visitId: 'V-priority',
+    })
+    const setupState = (wrapper.vm as unknown as { $: { setupState: Record<string, unknown> } }).$.setupState
+    expect(setupState.activeFocusRuleId).toBe('LX0609-01-01-01')
+
+    drawer.vm.$emit('close')
+    await flushPromises()
+    expect(setupState.activeFocusRuleId).toBe('')
   })
 })

@@ -643,3 +643,100 @@ def test_communication_target_rechecks_frozen_owner_before_read_and_count(
                 session.get(CaseCommunication, "communication").content
                 == "合成病历级意见"
             )
+
+
+def test_super_admin_sees_cross_institute_registration_notification(setup):
+    from sqlalchemy import MetaData
+    from app.database.models.account_registration import registration_tables
+    from app.services.doctor_notification_service import REGISTRATION_SOURCE
+
+    sessions, _, _, _, _ = setup
+    with sessions() as session:
+        engine = session.get_bind()
+    users_meta = SysUser.__table__.to_metadata(MetaData(), schema=None)
+    applications, _ = registration_tables(users_meta)
+    applications.create(engine, checkfirst=True)
+
+    people = {
+        "super-a": dict(
+            id="super-a",
+            name="超级管理员",
+            roles={"super_admin", "admin"},
+            institute_id="INST-A",
+            department="",
+        ),
+        "admin-a": dict(
+            id="admin-a",
+            name="本院管理员",
+            roles={"admin"},
+            institute_id="INST-A",
+            department="",
+        ),
+    }
+
+    with sessions.begin() as session:
+        for uid, role, roles in (
+            ("super-a", "super_admin", ["super_admin", "admin"]),
+            ("admin-a", "admin", ["admin"]),
+            ("applicant-b", "doctor", ["doctor"]),
+        ):
+            session.add(
+                SysUser(
+                    id=uid,
+                    username=uid,
+                    display_name=uid,
+                    institute_id="INST-A" if uid != "applicant-b" else None,
+                    department="内科",
+                    role=role,
+                    roles_json=json.dumps(roles),
+                    is_active=True,
+                )
+            )
+        session.flush()
+        session.execute(
+            applications.insert().values(
+                user_id="applicant-b",
+                status="pending",
+                requested_institute_id="INST-B",
+                requested_department="内科",
+                version=1,
+                submitted_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+            )
+        )
+        for recipient_id, notice_id in (
+            ("super-a", "reg-notice-super"),
+            ("admin-a", "reg-notice-admin"),
+        ):
+            session.add(
+                Notification(
+                    id=notice_id,
+                    type="system",
+                    title="账号注册待审批",
+                    content="跨院区新申请",
+                    record_id="registration:applicant-b:1",
+                    identity_version=1,
+                    source_key=REGISTRATION_SOURCE,
+                    institute_id="INST-B",
+                    sender_id="applicant-b",
+                    recipient_id=recipient_id,
+                    related_type="account_registration",
+                    related_id="applicant-b",
+                    severity="info",
+                    is_read=False,
+                    created_at=datetime.utcnow(),
+                )
+            )
+
+    service = DoctorNotificationService(sessions, person_loader=lambda _s, uid: people[uid])
+
+    super_list = service.list("super-a")
+    assert [item["id"] for item in super_list["items"]] == ["reg-notice-super"]
+    service.mark_read("super-a", "reg-notice-super")
+    assert service.list("super-a")["unread_count"] == 0
+
+    # 普通本院管理员仍被隔离，不能查看其他院区注册审批通知
+    admin_list = service.list("admin-a")
+    assert admin_list["items"] == []
+    with pytest.raises(RectificationError):
+        service.mark_read("admin-a", "reg-notice-admin")

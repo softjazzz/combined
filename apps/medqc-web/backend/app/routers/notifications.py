@@ -15,17 +15,43 @@ from typing import Optional, Any, Dict
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Request, HTTPException, Depends, Query
+from sqlalchemy import literal_column
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from starlette.concurrency import run_in_threadpool
 
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id
 from ..core.security import get_current_user
-from ..services.doctor_notification_service import DoctorNotificationService
+from ..services.doctor_notification_service import DoctorNotificationService, Notification
 from ..services.defect_rectification_service import RectificationError
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 logger = logging.getLogger(__name__)
 service = DoctorNotificationService()
+
+SHANGHAI_TZ = timezone(timedelta(hours=8))
+BATCH_SUMMARY_ROLES = {"admin", "super_admin", "qc_manager", "qc_staff", "sync_admin"}
+
+
+def _shanghai_day_utc_bounds(date_str: Optional[str]) -> tuple[str, datetime, datetime]:
+    """将东八区自然日换算为库内无时区 UTC 查询边界 [start, end)。"""
+    if date_str:
+        try:
+            parsed = datetime.strptime(date_str, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(status_code=422, detail="date 格式必须为 YYYY-MM-DD")
+        local_start = datetime(
+            parsed.year, parsed.month, parsed.day, tzinfo=SHANGHAI_TZ
+        )
+    else:
+        local_start = datetime.now(SHANGHAI_TZ).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+    local_end = local_start + timedelta(days=1)
+    utc_start = local_start.astimezone(timezone.utc).replace(tzinfo=None)
+    utc_end = local_end.astimezone(timezone.utc).replace(tzinfo=None)
+    return local_start.strftime("%Y-%m-%d"), utc_start, utc_end
 
 
 async def _owned_call(user, method, *args, **kwargs):
@@ -143,7 +169,10 @@ def _safe_int(value: object) -> int:
 @router.get("")
 async def list_notifications(
     request: Request,
-    type: Optional[str] = Query(None, description="消息类型: defect_urge/task_assign/appeal_result/remediation/system"),
+    type: Optional[str] = Query(
+        None,
+        description="消息类型: qc_result_ready/remediation/defect_urge/appeal_result/case_communication/account_registration/task_assign/drg_alert/system/general",
+    ),
     is_read: Optional[bool] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
@@ -162,16 +191,7 @@ async def list_notification_overview(
 ):
     """按问题类型/严重度/科室/病历聚合当天通知集中点。"""
     try:
-
-        if date:
-            try:
-                target_date = datetime.strptime(date, "%Y-%m-%d")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="date 格式必须为 YYYY-MM-DD")
-        else:
-            target_date = datetime.now()
-        start_dt = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
-        end_dt = start_dt + timedelta(days=1)
+        summary_date, start_dt, end_dt = _shanghai_day_utc_bounds(date)
 
         rows = await _owned_call(current_user, service.overview_rows, start_dt, end_dt)
 
@@ -231,7 +251,7 @@ async def list_notification_overview(
 
         return success_response(
             data={
-                "date": start_dt.strftime("%Y-%m-%d"),
+                "date": summary_date,
                 "items": items,
                 "total": len(items),
             },
@@ -239,9 +259,9 @@ async def list_notification_overview(
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"查询通知概览失败: {e}")
-        raise HTTPException(status_code=500, detail=f"查询通知概览失败: {str(e)}")
+    except Exception:
+        logger.exception("查询通知概览失败")
+        raise HTTPException(status_code=500, detail="查询通知概览失败，请稍后重试")
 
 
 def _load_ready_batch_result(job_id, actor_id):
@@ -267,10 +287,85 @@ async def get_notification_qc_result(
     notification_id: str, request: Request,
     current_user: dict = Depends(get_current_user),
 ):
+    from .qc_sichuan import _is_restricted_demo_account, _trim_batch_job_for_demo_account
+
     data = await _owned_call(
         current_user, service.result_ready, notification_id, _load_ready_batch_result
     )
+    if _is_restricted_demo_account(current_user) and isinstance(data, dict):
+        data = _trim_batch_job_for_demo_account(data)
     return success_response(data=data, trace_id=get_trace_id(request))
+
+
+def _upsert_qc_batch_summary_owned(
+    actor_id: str,
+    *,
+    workflow_type: str,
+    summary_date: str,
+    notif_type: str,
+    title: str,
+    content: str,
+    record_id: str,
+    severity: str,
+) -> Dict[str, Any]:
+    notification_id = _stable_notification_id(
+        "qc_batch_summary", actor_id, workflow_type, summary_date
+    )
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    table = Notification.__table__
+
+    with service.sessions() as session, session.begin():
+        actor = service.person(session, actor_id)
+        if not (actor["roles"] & BATCH_SUMMARY_ROLES):
+            raise RectificationError("仅管理员或质控人员可保存批量汇总消息", 403)
+
+        bind = session.get_bind()
+        dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+        insert_fn = sqlite_insert if dialect_name == "sqlite" else pg_insert
+
+        values = {
+            "id": notification_id,
+            "type": notif_type,
+            "title": title,
+            "content": content,
+            "record_id": record_id,
+            "severity": severity,
+            "sender_id": actor_id,
+            "recipient_id": actor_id,
+            "related_type": "batch_summary",
+            "related_id": None,
+            "is_read": False,
+            "read_at": None,
+            "created_at": now,
+        }
+        update_values = {
+            key: value
+            for key, value in values.items()
+            if key not in {"id", "created_at"}
+        }
+        upsert_stmt = insert_fn(table).values(**values).on_conflict_do_update(
+            index_elements=[table.c.id],
+            set_=update_values,
+        )
+
+        if dialect_name == "postgresql":
+            inserted = bool(
+                session.execute(
+                    upsert_stmt.returning(literal_column("(xmax = 0)").label("inserted"))
+                ).scalar_one()
+            )
+        else:
+            existed = session.get(Notification, notification_id) is not None
+            session.execute(upsert_stmt)
+            inserted = not existed
+
+    return {
+        "id": notification_id,
+        "created": inserted,
+        "updated": not inserted,
+        "workflow_type": workflow_type,
+        "date": summary_date,
+    }
 
 
 @router.post("/qc-batch-summary")
@@ -280,19 +375,10 @@ async def upsert_qc_batch_summary(
     current_user: dict = Depends(get_current_user),
 ):
     """为当天批量执行生成或更新一条 workflow 级汇总消息。"""
-    sb = _ensure_db()
     try:
-        user_id = str(current_user.get("id") or current_user.get("user_id") or "")
         workflow_type = _pick_text(payload, ["workflow_type"]) or "general"
         target_date_raw = _pick_text(payload, ["date"])
-        if target_date_raw:
-            try:
-                target_date = datetime.strptime(target_date_raw, "%Y-%m-%d")
-            except ValueError:
-                raise HTTPException(status_code=422, detail="date 格式必须为 YYYY-MM-DD")
-        else:
-            target_date = datetime.now()
-        summary_date = target_date.strftime("%Y-%m-%d")
+        summary_date, _, _ = _shanghai_day_utc_bounds(target_date_raw or None)
         total_count = _safe_int(payload.get("total_count"))
         success_count = _safe_int(payload.get("success_count"))
         failed_count = _safe_int(payload.get("failed_count"))
@@ -308,63 +394,30 @@ async def upsert_qc_batch_summary(
             f"成功 {success_count} 条，失败 {failed_count} 条，"
             f"高风险 {high_risk_count} 条。"
         )
-        notification_id = _stable_notification_id("qc_batch_summary", user_id or "anonymous", workflow_type, summary_date)
         record_id = f"batch_summary::{workflow_type}::{summary_date}"
         notif_type = _workflow_batch_summary_type(workflow_type)
 
-        existing_resp = await async_execute(
-            sb.table("notifications").select("id, created_at").eq("id", notification_id).limit(1)
+        data = await _owned_call(
+            current_user,
+            _upsert_qc_batch_summary_owned,
+            workflow_type=workflow_type,
+            summary_date=summary_date,
+            notif_type=notif_type,
+            title=title,
+            content=content,
+            record_id=record_id,
+            severity=severity,
         )
-        existing_rows = list(getattr(existing_resp, "data", None) or [])
-        created_at = None
-        if existing_rows:
-            created_at = existing_rows[0].get("created_at")
-
-        payload_row = {
-            "id": notification_id,
-            "type": notif_type,
-            "title": title,
-            "content": content,
-            "record_id": record_id,
-            "severity": severity,
-            "sender_id": user_id or None,
-            "recipient_id": user_id or None,
-            "related_type": "batch_summary",
-            "related_id": None,
-            "is_read": False,
-            "read_at": None,
-            "created_at": created_at or datetime.now().isoformat(),
-        }
-
-        if existing_rows:
-            await async_execute(
-                sb.table("notifications")
-                .update({key: value for key, value in payload_row.items() if key != "id"})
-                .eq("id", notification_id)
-            )
-            created = False
-            updated = True
-        else:
-            await async_execute(sb.table("notifications").insert(payload_row))
-            created = True
-            updated = False
-
         return success_response(
-            data={
-                "id": notification_id,
-                "created": created,
-                "updated": updated,
-                "workflow_type": workflow_type,
-                "date": summary_date,
-            },
+            data=data,
             message="批量汇总消息已保存",
             trace_id=get_trace_id(request),
         )
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error(f"保存批量汇总消息失败: {e}")
-        raise HTTPException(status_code=500, detail=f"保存批量汇总消息失败: {str(e)}")
+    except Exception:
+        logger.exception("保存批量汇总消息失败")
+        raise HTTPException(status_code=500, detail="保存批量汇总消息失败，请稍后重试")
 
 
 @router.put("/{notification_id}/read")

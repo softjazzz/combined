@@ -1699,7 +1699,7 @@ def read_luxian_0609_discharge_horizon_rows(
     raw_rows: list[Mapping[str, Any]] = []
     selected_table = ""
     readable_source_found = False
-    for table_name in ("inpat_registration", "discharge_record"):
+    for table_name in ("inpat_registration", "discharge_record", "death_record"):
         try:
             columns = set(
                 bundle_assembly._get_table_columns(trusted_schema, table_name)
@@ -1708,18 +1708,19 @@ def read_luxian_0609_discharge_horizon_rows(
             raise SourceEvidenceQueryError() from None
         if not required.issubset(columns):
             continue
-        time_fields = (
-            [field for field in ("discharge_date", "discharge_time") if field in columns]
-            if table_name == "discharge_record"
-            else ["discharge_datetime"] if "discharge_datetime" in columns else []
-        )
+        if table_name == "discharge_record":
+            time_fields = [field for field in ("discharge_date", "discharge_time") if field in columns]
+        elif table_name == "death_record":
+            time_fields = ["death_datetime"] if "death_datetime" in columns else []
+        else:
+            time_fields = ["discharge_datetime"] if "discharge_datetime" in columns else []
         if not time_fields:
             continue
         readable_source_found = True
         document_filter, document_params = (
             _material_document_filter(schema=trusted_schema, table=table_name, columns=columns,
                 institute_id=institute_id, patient_id=patient_id, visit_id=visit_id)
-            if table_name == "discharge_record" else ("", {})
+            if table_name in {"discharge_record", "death_record"} else ("", {})
         )
         sql = (
             f"SELECT {', '.join(bundle_assembly._quote_ident(field) for field in time_fields)} "
@@ -1763,6 +1764,7 @@ def read_luxian_0609_discharge_horizon_rows(
         selected = select_discharge_time(
             registration=row.get("discharge_datetime") if selected_table == "inpat_registration" else None,
             document_date=row.get("discharge_date"), document_time=row.get("discharge_time"),
+            death_time=row.get("death_datetime") if selected_table == "death_record" else None,
         )
         value = (selected.value.isoformat(sep=" ")
                  if isinstance(selected.value, datetime) else selected.value)

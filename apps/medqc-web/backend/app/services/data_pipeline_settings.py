@@ -9,8 +9,20 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from .clinical_source_policy import fixed_cdm
 
-TABLE = "qc.sync_config_registry"
+TABLE = "sync_config_registry"
 NAMESPACE, KEY = "sync", "data_pipelines_v1"
+
+
+def _config_table(session=None) -> str:
+    from ..database import connection as db_connection
+    mode = str(getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single").strip().lower()
+    if mode != "split":
+        return "sync_config_registry"
+    bind = session.get_bind() if session is not None and hasattr(session, "get_bind") else None
+    dialect_name = str(getattr(getattr(bind, "dialect", None), "name", "") or "").lower()
+    if dialect_name == "sqlite":
+        return "sync_config_registry"
+    return "qc.sync_config_registry"
 
 
 class PipelineError(ValueError):
@@ -27,8 +39,9 @@ class PipelineSettings(BaseModel):
 
 
 def load(session) -> tuple[PipelineSettings, str | None]:
+    table_name = _config_table(session)
     row = session.execute(text(
-        f"SELECT payload_json FROM {TABLE} WHERE namespace=:ns AND config_key=:key"
+        f"SELECT payload_json FROM {table_name} WHERE namespace=:ns AND config_key=:key"
     ), {"ns": NAMESPACE, "key": KEY}).first()
     if row is None:
         return PipelineSettings(default_pipeline="independent_cdm") if fixed_cdm() else PipelineSettings(), None
@@ -51,15 +64,16 @@ def save(session, proposed: PipelineSettings, actor_id: str) -> PipelineSettings
         from .sync_control_client import deployment
         deployment()  # 仅静态校验；不创建HTTP或数据库连接。
     saved = proposed.model_copy(update={"version": current.version + 1})
+    table_name = _config_table(session)
     params = {"ns": NAMESPACE, "key": KEY, "value": saved.model_dump_json(), "actor": actor_id}
     if raw is None:
-        statement = text(f"""INSERT INTO {TABLE}
+        statement = text(f"""INSERT INTO {table_name}
             (namespace,config_key,payload_json,updated_by,source,change_reason,updated_at)
             VALUES (:ns,:key,:value,:actor,'data_pipeline_settings','configure pipelines',CURRENT_TIMESTAMP)
             ON CONFLICT(namespace,config_key) DO NOTHING""")
     else:
         params["old"] = raw
-        statement = text(f"""UPDATE {TABLE} SET payload_json=:value,updated_by=:actor,
+        statement = text(f"""UPDATE {table_name} SET payload_json=:value,updated_by=:actor,
             source='data_pipeline_settings',change_reason='configure pipelines',updated_at=CURRENT_TIMESTAMP
             WHERE namespace=:ns AND config_key=:key AND payload_json=:old""")
     if session.execute(statement, params).rowcount != 1:

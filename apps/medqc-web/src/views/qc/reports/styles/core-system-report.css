@@ -259,7 +259,7 @@ small {
   flex-shrink: 0;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   .core-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref } from 'vue'
 import '@/styles/source-han-sans-sc.css'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import { AuditOutlined, LockOutlined } from '@ant-design/icons-vue'
-import { ArrowRight, LoaderCircle, MonitorPlay } from 'lucide-vue-next'
+import { ArrowRight, LoaderCircle, Sparkles } from 'lucide-vue-next'
+import {
+  resolveDefaultWorkstationPath,
+  WORKSTATION_BASE,
+} from '@/components/layout/workstationNav'
 import { useAuthStore } from '@/stores/auth'
 import WorkstationLoginForm from '@/views/workstation-v4/components/WorkstationLoginForm.vue'
 import type { LoginRequest } from '@/types/auth'
@@ -14,15 +18,37 @@ const route = useRoute()
 const authStore = useAuthStore()
 const loading = ref(false)
 
-const redirectTarget = computed(() => {
-  const raw = route.query.redirect
-  if (typeof raw !== 'string') return '/workstation-v5'
-  if (raw.startsWith('/workstation-v5')) return raw
-  if (raw.startsWith('/workstation-v4')) {
-    return `/workstation-v5${raw.slice('/workstation-v4'.length)}`
+function resolveExplicitWorkstationRedirect(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  const normalized = trimmed.startsWith(WORKSTATION_BASE)
+    ? trimmed
+    : trimmed.startsWith('/workstation-v4')
+      ? `${WORKSTATION_BASE}${trimmed.slice('/workstation-v4'.length)}`
+      : null
+  if (!normalized || normalized === WORKSTATION_BASE || normalized === `${WORKSTATION_BASE}/`) {
+    return null
   }
-  return '/workstation-v5'
-})
+  return normalized
+}
+
+function resolveSignedInRoles(userData?: { roles?: string[]; role?: string } | null): string[] {
+  if (Array.isArray(authStore.userRoles) && authStore.userRoles.length > 0) {
+    return authStore.userRoles
+  }
+  if (Array.isArray(userData?.roles) && userData.roles.length > 0) {
+    return userData.roles
+  }
+  if (typeof userData?.role === 'string' && userData.role.trim()) {
+    return [userData.role.trim()]
+  }
+  return []
+}
+
+const resolvePostLoginTarget = (userData?: { roles?: string[]; role?: string } | null) =>
+  resolveExplicitWorkstationRedirect(route.query.redirect) ??
+  resolveDefaultWorkstationPath(resolveSignedInRoles(userData))
 
 const loginAccountAliases: Record<string, string> = {
   admin: 'admin@medqc.com',
@@ -31,7 +57,8 @@ const loginAccountAliases: Record<string, string> = {
 
 const demoAccounts = [
   {
-    label: '功能演示账号',
+    label: '演示账号快速登录',
+    subtitle: '管理员视角 · 一键体验全流程质控',
     role: 'admin' as const,
     account: 'admin',
     password: 'admin888',
@@ -39,7 +66,7 @@ const demoAccounts = [
   },
 ]
 
-const navigateAfterLogin = async (target = redirectTarget.value) => {
+const navigateAfterLogin = async (target: string) => {
   try {
     await router.replace(target)
   } catch (error) {
@@ -69,7 +96,7 @@ const handleLogin = async (loginData: LoginRequest) => {
     }
 
     message.success('登录成功')
-    await navigateAfterLogin()
+    await navigateAfterLogin(resolvePostLoginTarget(result.data))
   } catch (error) {
     console.error('workstation 登录失败:', error)
     message.error('登录失败，请稍后重试')
@@ -177,41 +204,63 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
               <router-link to="/auth/register">申请账号</router-link>
               <router-link to="/auth/register?mode=status">查询开通结果</router-link>
             </div>
-            <!-- 演示账号：整行即按钮，点一次直接登录 -->
-            <div class="login-demo-list mt-4">
-              <button
-                v-for="account in demoAccounts"
-                :key="account.role"
-                type="button"
-                class="login-demo"
-                :disabled="loading"
-                aria-label="演示账号快速登录"
-                @click="handleDemoLogin(account)"
+            <!-- 演示账号：极简玻璃质感快捷体验卡片 -->
+            <div class="login-demo-section mt-5">
+              <div
+                class="login-demo-divider"
+                aria-hidden="true"
               >
-                <span
-                  class="login-demo__icon"
-                  aria-hidden="true"
+                <span class="login-demo-divider__line" />
+                <span class="login-demo-divider__label">快速体验</span>
+                <span class="login-demo-divider__line" />
+              </div>
+
+              <div class="login-demo-list">
+                <button
+                  v-for="account in demoAccounts"
+                  :key="account.role"
+                  type="button"
+                  class="login-demo"
+                  :disabled="loading"
+                  aria-label="演示账号快速登录"
+                  @click="handleDemoLogin(account)"
                 >
-                  <MonitorPlay :size="18" />
-                </span>
-                <span class="login-demo__copy">
-                  <span class="login-demo__title">演示账号快速登录</span>
-                </span>
-                <span
-                  class="login-demo__go"
-                  aria-hidden="true"
-                >
-                  <LoaderCircle
-                    v-if="loading"
-                    :size="16"
-                    class="login-demo__spin"
-                  />
-                  <template v-else>
-                    一键进入
-                    <ArrowRight :size="14" />
-                  </template>
-                </span>
-              </button>
+                  <span
+                    class="login-demo__icon"
+                    aria-hidden="true"
+                  >
+                    <Sparkles
+                      :size="17"
+                      :stroke-width="1.9"
+                    />
+                  </span>
+                  <span class="login-demo__copy">
+                    <span class="login-demo__head">
+                      <span class="login-demo__title">{{ account.label }}</span>
+                      <span class="login-demo__badge">{{ account.badge }}</span>
+                    </span>
+                    <span class="login-demo__subtitle">{{ account.subtitle }}</span>
+                  </span>
+                  <span
+                    class="login-demo__go"
+                    aria-hidden="true"
+                  >
+                    <LoaderCircle
+                      v-if="loading"
+                      :size="15"
+                      class="login-demo__spin"
+                    />
+                    <template v-else>
+                      <span>进入</span>
+                      <ArrowRight
+                        :size="13"
+                        :stroke-width="2.1"
+                        class="login-demo__arrow"
+                      />
+                    </template>
+                  </span>
+                </button>
+              </div>
             </div>
 
             <div class="mt-3 flex justify-center text-[13px] text-slate-400">
@@ -563,36 +612,97 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   }
 }
 /* ---------- 演示账号一键登录 ---------- */
+.login-demo-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-demo-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.login-demo-divider__line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    rgba(148, 163, 184, 0) 0%,
+    rgba(148, 163, 184, 0.28) 50%,
+    rgba(148, 163, 184, 0) 100%
+  );
+}
+
+.login-demo-divider__label {
+  flex-shrink: 0;
+  color: #8a9bb0;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+}
+
 .login-demo-list {
   display: grid;
   gap: 8px;
 }
 
 .login-demo {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 12px 14px;
-  border: 1px solid rgba(10, 108, 255, 0.14);
-  border-radius: 14px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.78), rgba(234, 243, 255, 0.7));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  color: #1d2b3f;
+  padding: 11px 12px 11px 13px;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(241, 247, 255, 0.78));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.96),
+    0 6px 18px -12px rgba(15, 23, 42, 0.18),
+    0 1px 2px rgba(15, 23, 42, 0.04);
+  color: #0f172a;
   text-align: left;
   cursor: pointer;
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.login-demo::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    260px 120px at 0% 0%,
+    rgba(10, 108, 255, 0.08) 0%,
+    rgba(10, 108, 255, 0) 70%
+  );
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 220ms ease;
 }
 
 .login-demo:hover:not(:disabled) {
-  border-color: rgba(10, 108, 255, 0.4);
+  border-color: rgba(10, 108, 255, 0.34);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(235, 245, 255, 0.88));
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.9),
-    0 8px 20px -10px rgba(10, 108, 255, 0.45);
+    inset 0 1px 0 rgba(255, 255, 255, 1),
+    0 12px 26px -14px rgba(10, 108, 255, 0.38),
+    0 2px 6px rgba(15, 23, 42, 0.04);
   transform: translateY(-1px);
+}
+
+.login-demo:hover:not(:disabled)::before {
+  opacity: 1;
+}
+
+.login-demo:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 .login-demo:focus-visible {
@@ -602,22 +712,43 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
 
 .login-demo:disabled {
   cursor: progress;
-  opacity: 0.8;
+  opacity: 0.78;
 }
 
 .login-demo__icon {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: rgba(10, 108, 255, 0.1);
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #f0f6ff 0%, #ddebff 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    0 0 0 1px rgba(10, 108, 255, 0.14);
   color: #0a6cff;
+  transition:
+    background 200ms ease,
+    box-shadow 200ms ease,
+    color 200ms ease,
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.login-demo:hover:not(:disabled) .login-demo__icon {
+  background: var(--mq-brand-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 6px 14px -6px rgba(10, 108, 255, 0.55);
+  color: #ffffff;
+  transform: scale(1.03);
 }
 
 .login-demo__copy {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -625,32 +756,84 @@ const handleDemoLogin = async (account: (typeof demoAccounts)[number]) => {
   min-width: 0;
 }
 
+.login-demo__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
 .login-demo__title {
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 20px;
+  color: #0f172a;
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 19px;
+  letter-spacing: -0.01em;
+}
+
+.login-demo__badge {
+  display: inline-flex;
+  align-items: center;
+  height: 17px;
+  padding: 0 5.5px;
+  border: 1px solid rgba(10, 108, 255, 0.18);
+  border-radius: 5px;
+  background: rgba(10, 108, 255, 0.06);
+  color: #0a6cff;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  line-height: 1;
+}
+
+.login-demo__subtitle {
+  overflow: hidden;
+  color: #64748b;
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .login-demo__go {
+  position: relative;
+  z-index: 1;
   display: inline-flex;
   flex-shrink: 0;
   align-items: center;
   gap: 4px;
   height: 30px;
-  padding: 0 12px;
-  border-radius: 999px;
-  background: rgba(10, 108, 255, 0.1);
-  color: #0a6cff;
-  font-size: 13px;
-  font-weight: 500;
+  padding: 0 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 600;
   transition:
-    background-color 160ms ease,
-    color 160ms ease;
+    border-color 180ms ease,
+    background 180ms ease,
+    box-shadow 180ms ease,
+    color 180ms ease;
+}
+
+.login-demo__arrow {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .login-demo:hover:not(:disabled) .login-demo__go {
-  background: #0a6cff;
+  border-color: transparent;
+  background: var(--mq-brand-gradient);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.3),
+    0 6px 14px -6px rgba(10, 108, 255, 0.55);
   color: #ffffff;
+}
+
+.login-demo:hover:not(:disabled) .login-demo__arrow {
+  transform: translateX(2px);
 }
 
 .login-demo__spin {

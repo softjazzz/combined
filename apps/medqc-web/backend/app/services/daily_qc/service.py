@@ -25,15 +25,41 @@ def require_manager(store, actor_id):
     try:
         with store.sessions() as session:
             person = _person(session, actor_id)
-        if "admin" not in person["roles"]:
+        if not (person["roles"] & {"admin", "super_admin", "sync_admin"}):
             raise HTTPException(403, "仅持久管理员可管理定时质控")
         return person
     except RectificationError as exc:
         raise HTTPException(exc.status, "管理账号不可用或权限不足") from exc
 
 
+def _scoped_institute(person) -> str | None:
+    roles = set(person.get("roles") or [])
+    inst = str(person.get("institute_id") or "").strip()
+    if "sync_admin" in roles:
+        return None
+    if bool(roles & {"admin", "super_admin"}) and not inst:
+        return None
+    return inst or None
+
+
+def can_manage_all_owners(person) -> bool:
+    roles = set(person.get("roles") or [])
+    return bool(roles & {"super_admin", "sync_admin"}) and _scoped_institute(person) is None
+
+
+def assert_plan_institute_scope(store, actor_id, institute_id: str) -> dict:
+    person = require_manager(store, actor_id)
+    scoped_inst = _scoped_institute(person)
+    if scoped_inst is not None and institute_id != scoped_inst:
+        raise HTTPException(403, "仅可配置本机构的定时质控计划")
+    return person
+
+
 def options(store, actor_id, *, institute_id=None, scope="final"):
-    require_manager(store, actor_id)
+    person = require_manager(store, actor_id)
+    scoped_inst = _scoped_institute(person)
+    if scoped_inst is not None and institute_id and institute_id != scoped_inst:
+        raise HTTPException(403, "无权访问其他机构的定时质控选项")
     from ..clinical_source_policy import fixed_cdm
     from ..clinical_sources import ordinary_snapshot
     from ...database.clinical_connection import selected
@@ -41,11 +67,21 @@ def options(store, actor_id, *, institute_id=None, scope="final"):
     # 管理路由仍绑定业务库；只有临床筛选读取进入固定来源，退出后恢复。
     if fixed_cdm():
         with selected(ordinary_snapshot()):
-            return _options(store, institute_id=institute_id, scope=scope)
-    return _options(store, institute_id=institute_id, scope=scope)
+            return _options(
+                store,
+                institute_id=institute_id,
+                scope=scope,
+                scoped_institute_id=scoped_inst,
+            )
+    return _options(
+        store,
+        institute_id=institute_id,
+        scope=scope,
+        scoped_institute_id=scoped_inst,
+    )
 
 
-def _options(store, *, institute_id, scope):
+def _options(store, *, institute_id, scope, scoped_institute_id=None):
     from ...database.models.cdm import InpatRegistration, MedicalRecordFrontpage
     from ..clinical_read import clinical_query
     from ..qc_workspace.record_repository import RecordRepository
@@ -53,10 +89,11 @@ def _options(store, *, institute_id, scope):
 
     from ...database.clinical_connection import configured
 
+    effective_query_institute = institute_id or scoped_institute_id
     if configured():
         from ..clinical_case_catalog import schedule_options
 
-        clinical_options = schedule_options(scope=scope, institute_id=institute_id)
+        clinical_options = schedule_options(scope=scope, institute_id=effective_query_institute)
         institutes = clinical_options["institutes"]
         filters = clinical_options
     else:
@@ -71,11 +108,15 @@ def _options(store, *, institute_id, scope):
             )
         filters = (
             RecordRepository(session_factory=store.sessions).get_record_filters(
-                scope=scope, department=None, institute_id=institute_id
+                scope=scope, department=None, institute_id=effective_query_institute
             )
-            if institute_id
+            if effective_query_institute
             else {"departments": []}
         )
+    if scoped_institute_id is not None:
+        institutes = [item for item in institutes if item == scoped_institute_id]
+        if not institutes:
+            filters = {"departments": []}
     if institute_id and institute_id not in institutes:
         raise HTTPException(422, "请选择已同步机构")
     return {
@@ -95,6 +136,7 @@ def _options(store, *, institute_id, scope):
 
 
 def validate_definition(store, actor_id, data: PlanInput):
+    assert_plan_institute_scope(store, actor_id, data.institute_id)
     selected = data.model_dump()
     choices = options(store, actor_id, institute_id=data.institute_id, scope=data.scope)
     if data.department and data.department not in choices["departments"]:
@@ -205,6 +247,9 @@ class BatchAdmission:
         if not current or not current["enabled"]:
             raise HTTPException(409, "schedule_disabled")
         definition = json.loads(run["definition_json"])
+        scoped_inst = _scoped_institute(person)
+        if scoped_inst is not None and definition.get("institute_id") != scoped_inst:
+            raise HTTPException(403, "计划机构超出管理员授权范围")
         start, end = date_window(date.fromisoformat(run["local_date"]), definition)
         payload = SichuanWorkspaceBatchJobCreateRequest(
             rule_set_key=definition["rule_set_key"],

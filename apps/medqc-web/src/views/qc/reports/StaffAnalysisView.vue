@@ -1,5 +1,8 @@
 <template>
-  <main class="mq-page staff-analysis">
+  <section
+    class="mq-page staff-analysis"
+    :aria-label="reportTab === 'manual' ? '人工质控报表' : '质控员工作分析'"
+  >
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -18,14 +21,19 @@
         <div class="mq-segmented" role="tablist" aria-label="报表切换">
           <button
             v-for="option in reportTabs"
+            :id="`staff-report-tab-${option.value}`"
             :key="option.value"
+            :ref="(el) => setReportTabRef(option.value, el)"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === option.value }"
             role="tab"
             :aria-selected="reportTab === option.value"
+            :aria-controls="`staff-report-panel-${option.value}`"
+            :tabindex="reportTab === option.value ? 0 : -1"
             :data-testid="`staff-report-tab-${option.value}`"
-            @click="reportTab = option.value"
+            @click="setReportTab(option.value)"
+            @keydown="onReportTabKeydown($event, option.value)"
           >
             {{ option.label }}
           </button>
@@ -51,7 +59,14 @@
         </div>
       </div>
     </header>
-    <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
+    <div
+      id="staff-report-panel-manual"
+      role="tabpanel"
+      aria-labelledby="staff-report-tab-manual"
+      :hidden="reportTab !== 'manual'"
+    >
+      <ManualQualityReportPanel v-if="reportTab === 'manual'" @changed="loadReport" />
+    </div>
     <ModernAppealWorkflowDrawer
       v-if="appealOpen"
       :open="appealOpen"
@@ -66,7 +81,14 @@
       @close="reviewOpen = false"
       @changed="loadReport"
     />
-    <div v-show="reportTab === 'staff'" class="staff-body">
+    <div
+      id="staff-report-panel-staff"
+      v-show="reportTab === 'staff'"
+      class="staff-body"
+      role="tabpanel"
+      aria-labelledby="staff-report-tab-staff"
+      :hidden="reportTab !== 'staff'"
+    >
       <section class="filters mq-card mq-card--padded" aria-label="工作分析筛选">
         <div class="filter-switches">
           <div class="filter-field mq-field">
@@ -77,9 +99,9 @@
                 :key="option.value"
                 type="button"
                 class="mq-segmented__item"
-                :class="{ 'is-active': draft.period === option.value }"
-                :aria-pressed="draft.period === option.value"
-                @click="draft.period = option.value"
+                :class="{ 'is-active': activeDraftPeriod === option.value }"
+                :aria-pressed="activeDraftPeriod === option.value"
+                @click="selectPeriod(option.value)"
               >
                 {{ option.label }}
               </button>
@@ -161,7 +183,7 @@
         <p v-if="filterError" class="filter-error" role="alert">
           {{ filterError }}
         </p>
-        <p v-if="report?.filter_options_unavailable_reason" class="filter-hint">
+        <p v-if="!confirmedResultsOnly && report?.filter_options_unavailable_reason" class="filter-hint">
           {{ filterOptionsUnavailableText(report.filter_options_unavailable_reason) }}
         </p>
       </section>
@@ -194,7 +216,7 @@
               {{ rangeLabel(report.range) }}
             </p>
             <p
-              v-if="report.defect_snapshot_coverage"
+              v-if="!confirmedResultsOnly && report.defect_snapshot_coverage"
               class="context-notice"
               data-testid="staff-defect-snapshot-coverage"
             >
@@ -216,7 +238,7 @@
               </div>
             </div>
             <div
-              v-if="report.context_unavailable_count > 0"
+              v-if="!confirmedResultsOnly && report.context_unavailable_count > 0"
               class="context-notice"
               data-testid="staff-context-unavailable"
             >
@@ -242,7 +264,7 @@
                     v-model="rankMetric"
                     class="mq-input"
                     data-testid="staff-rank-metric"
-                    @change="loadReport"
+                    @change="onRankMetricChange"
                   >
                     <option v-for="metric in rowMetrics" :key="metric.key" :value="metric.key">
                       {{ metric.label }}
@@ -286,6 +308,7 @@
                         {{ metricValue(staff, metric.key) ?? '未知'
                         }}<small
                           v-if="
+                            !confirmedResultsOnly &&
                             metric.key === 'confirmed_defect_count' &&
                             metricValue(staff, metric.key) === null
                           "
@@ -335,7 +358,7 @@
           </p>
           <template v-else>
             <div
-              v-if="detailsPage.total_complete === false"
+              v-if="!confirmedResultsOnly && detailsPage.total_complete === false"
               class="drawer-summary mq-soft"
               data-testid="staff-details-known-only"
             >
@@ -345,7 +368,7 @@
               次初审缺少完整缺陷明细。
             </div>
             <div v-else class="drawer-summary mq-soft">
-              共 {{ detailsPage.total ?? '未知' }} 条可核实记录
+              共 {{ detailsPage.total ?? detailsPage.known_total ?? '未知' }} 条可核实记录
             </div>
             <div class="table-scroll drawer-table">
               <table class="mq-table">
@@ -440,7 +463,7 @@
         </template>
       </a-drawer>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -448,16 +471,11 @@ import { DatePicker as ADatePicker } from 'ant-design-vue'
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 import ManualQualityReportPanel from './ManualQualityReportPanel.vue'
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
 import RecordReviewWorkflowDrawer from '@/components/qc/RecordReviewWorkflowDrawer.vue'
-type ReportTab = 'staff' | 'manual'
-const reportTabs: Array<{ value: ReportTab; label: string }> = [
-  { value: 'staff', label: '质控员工作分析' },
-  { value: 'manual', label: '人工质控报表' },
-]
-const reportTab = ref<ReportTab>('staff')
 import { exportStaffAnalysis, getStaffAnalysis, getStaffAnalysisDetails } from '@/api/staffAnalysis'
 import type {
   StaffAnalysisAppliedFilters,
@@ -470,6 +488,12 @@ import type {
   StaffAnalysisScene,
   StaffWorkRow,
 } from '@/api/staffAnalysis'
+
+type ReportTab = 'staff' | 'manual'
+const reportTabs: Array<{ value: ReportTab; label: string }> = [
+  { value: 'staff', label: '质控员工作分析' },
+  { value: 'manual', label: '人工质控报表' },
+]
 
 const periodOptions: Array<{ value: StaffAnalysisPeriod; label: string }> = [
   { value: 'this_week', label: '本周' },
@@ -495,11 +519,39 @@ const rowMetrics: Array<{ key: StaffAnalysisMetric; label: string }> = [
   { key: 'appeal_rejected_count', label: '申诉驳回' },
   { key: 'urged_defect_count', label: '催办缺陷' },
 ]
-const rankMetric = ref<StaffAnalysisMetric>('record_review_count')
-
+const validRankMetrics = new Set<StaffAnalysisMetric>(rowMetrics.map((item) => item.key))
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
+
+function queryString(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+function periodFromQuery(value: unknown): StaffAnalysisPeriod {
+  const raw = queryString(value)
+  return raw === 'this_week' || raw === 'last_week' || raw === 'this_month' ? raw : 'this_month'
+}
+function rankMetricFromQuery(value: unknown): StaffAnalysisMetric {
+  const raw = queryString(value) as StaffAnalysisMetric
+  return validRankMetrics.has(raw) ? raw : 'record_review_count'
+}
+function departmentKeyFromQuery(query: Record<string, unknown> | undefined): string {
+  const inst = queryString(query?.institute_id).trim()
+  const dept = queryString(query?.department).trim()
+  return inst && dept ? JSON.stringify([inst, dept]) : ''
+}
+
+const reportTab = ref<ReportTab>(queryString(route?.query?.tab) === 'manual' ? 'manual' : 'staff')
+const reportTabRefs = reactive<Record<ReportTab, HTMLButtonElement | null>>({
+  staff: null,
+  manual: null,
+})
+function setReportTabRef(tab: ReportTab, el: unknown): void {
+  reportTabRefs[tab] = el instanceof HTMLButtonElement ? el : null
+}
+const rankMetric = ref<StaffAnalysisMetric>(rankMetricFromQuery(route?.query?.rank_metric))
 const appealOpen = ref(false)
 const appealId = ref<string>()
 const reviewOpen = ref(false)
@@ -509,17 +561,20 @@ function openReviewHistory(id?: string) {
   reviewOpen.value = true
 }
 const canReviewRecords = computed(() =>
-  authStore.userRoles.some((role) => ['admin', 'qc_manager', 'qc_staff'].includes(role)),
+  authStore.userRoles.some((role) =>
+    ['super_admin', 'admin', 'qc_manager', 'qc_staff'].includes(role),
+  ),
 )
 function openAppealHistory(id?: string) {
   appealId.value = id
   appealOpen.value = true
 }
 const canReviewAppeals = computed(() =>
-  authStore.userRoles.some((role) => ['admin', 'qc_manager'].includes(role)),
+  authStore.userRoles.some((role) => ['super_admin', 'admin', 'qc_manager'].includes(role)),
 )
 const scene = computed<StaffAnalysisScene>(() => {
-  if (route.query.scene === 'running' || route.query.scene === 'final') return route.query.scene
+  const raw = queryString(route?.query?.scene)
+  if (raw === 'running' || raw === 'final') return raw
   return 'all'
 })
 const authKey = computed(() => {
@@ -527,14 +582,41 @@ const authKey = computed(() => {
   if (!id) return ''
   return `${id}|${[...authStore.userRoles].sort().join(',')}`
 })
+const initialStartDate = /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.start_date))
+  ? queryString(route?.query?.start_date)
+  : ''
+const initialEndDate = /^\d{4}-\d{2}-\d{2}$/.test(queryString(route?.query?.end_date))
+  ? queryString(route?.query?.end_date)
+  : ''
 const draft = reactive({
-  period: 'this_month' as StaffAnalysisPeriod,
-  departmentKey: '',
-  task_id: '',
-  start_date: '',
-  end_date: '',
+  period:
+    initialStartDate && initialEndDate ? 'this_month' : periodFromQuery(route?.query?.period),
+  departmentKey: departmentKeyFromQuery(route?.query as Record<string, unknown> | undefined),
+  task_id: queryString(route?.query?.task_id).trim(),
+  start_date: initialStartDate,
+  end_date: initialEndDate,
 })
-const appliedFilters = ref<StaffAnalysisFilters>({ period: draft.period, scene: scene.value })
+const activeDraftPeriod = computed<StaffAnalysisPeriod | null>(() =>
+  draft.start_date || draft.end_date ? null : draft.period,
+)
+function selectPeriod(value: StaffAnalysisPeriod): void {
+  draft.period = value
+  draft.start_date = ''
+  draft.end_date = ''
+}
+function buildInitialFilters(): StaffAnalysisFilters {
+  const deptInst = queryString(route?.query?.institute_id).trim()
+  const deptName = queryString(route?.query?.department).trim()
+  const hasCustomRange = Boolean(draft.start_date && draft.end_date)
+  return {
+    period: hasCustomRange ? 'this_month' : draft.period,
+    scene: scene.value,
+    ...(deptInst && deptName ? { institute_id: deptInst, department: deptName } : {}),
+    ...(draft.task_id ? { task_id: draft.task_id } : {}),
+    ...(hasCustomRange ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
+  }
+}
+const appliedFilters = ref<StaffAnalysisFilters>(buildInitialFilters())
 const report = ref<StaffAnalysisReport | null>(null)
 const loading = ref(false)
 const errorMessage = ref('')
@@ -554,6 +636,22 @@ const detailSelection = ref<{ userId: string; metric: StaffAnalysisMetric } | nu
 let reportRequest = 0
 let detailsRequest = 0
 let exportRequest = 0
+let reportController: AbortController | null = null
+let detailsController: AbortController | null = null
+let exportController: AbortController | null = null
+
+function abortReport(): void {
+  reportController?.abort()
+  reportController = null
+}
+function abortDetails(): void {
+  detailsController?.abort()
+  detailsController = null
+}
+function abortExport(): void {
+  exportController?.abort()
+  exportController = null
+}
 
 const sceneWorkLabel = computed(() => {
   if (report.value?.scene === 'running') return '运行质控工作记录'
@@ -645,6 +743,17 @@ function selectedDepartment(): { institute_id: string; department: string } | nu
   }
   return null
 }
+function filtersEqual(left: StaffAnalysisFilters, right: StaffAnalysisFilters): boolean {
+  return (
+    left.period === right.period &&
+    left.scene === right.scene &&
+    (left.institute_id || '') === (right.institute_id || '') &&
+    (left.department || '') === (right.department || '') &&
+    (left.task_id || '') === (right.task_id || '') &&
+    (left.start_date || '') === (right.start_date || '') &&
+    (left.end_date || '') === (right.end_date || '')
+  )
+}
 function makeFilters(): StaffAnalysisFilters | null {
   filterError.value = ''
   if (Boolean(draft.start_date) !== Boolean(draft.end_date)) {
@@ -655,13 +764,18 @@ function makeFilters(): StaffAnalysisFilters | null {
     filterError.value = '开始日期不能晚于结束日期'
     return null
   }
+  const hasCustomRange = Boolean(draft.start_date && draft.end_date)
+  if (hasCustomRange) {
+    // 自定义日期生效时清理过期快捷周期，避免残留 period=last_week 误导状态与 URL
+    draft.period = 'this_month'
+  }
   const department = selectedDepartment()
   return {
-    period: draft.period,
+    period: hasCustomRange ? 'this_month' : draft.period,
     scene: scene.value,
     ...(department || {}),
     ...(draft.task_id ? { task_id: draft.task_id } : {}),
-    ...(draft.start_date ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
+    ...(hasCustomRange ? { start_date: draft.start_date, end_date: draft.end_date } : {}),
   }
 }
 function frozenFilters(filters: StaffAnalysisAppliedFilters): StaffAnalysisFilters {
@@ -681,6 +795,8 @@ function frozenFilters(filters: StaffAnalysisAppliedFilters): StaffAnalysisFilte
 function invalidateSecondary(): void {
   ++detailsRequest
   ++exportRequest
+  abortDetails()
+  abortExport()
   detailsLoading.value = false
   detailsPage.value = null
   detailsError.value = ''
@@ -689,10 +805,97 @@ function invalidateSecondary(): void {
 }
 function clearAll(): void {
   ++reportRequest
+  abortReport()
   invalidateSecondary()
   loading.value = false
   report.value = null
   errorMessage.value = ''
+}
+let pendingNonSceneKey: string | null = null
+let urlSyncSeq = 0
+let staffNeedsLoad = false
+function syncUrlQuery(overrides?: { scene?: StaffAnalysisScene; tab?: ReportTab }): void {
+  if (!route || !router || typeof router.replace !== 'function') return
+  const nextScene = overrides?.scene ?? scene.value
+  const nextTab = overrides?.tab ?? reportTab.value
+  const nextQuery: Record<string, string> = {}
+  for (const [key, value] of Object.entries(route.query || {})) {
+    if (
+      [
+        'tab',
+        'scene',
+        'period',
+        'institute_id',
+        'department',
+        'task_id',
+        'start_date',
+        'end_date',
+        'rank_metric',
+      ].includes(key)
+    )
+      continue
+    const str = queryString(value)
+    if (str) nextQuery[key] = str
+  }
+  nextQuery.scene = nextScene
+  if (nextTab !== 'staff') nextQuery.tab = nextTab
+  const hasCustomRange = Boolean(appliedFilters.value.start_date && appliedFilters.value.end_date)
+  if (!hasCustomRange && appliedFilters.value.period && appliedFilters.value.period !== 'this_month') {
+    nextQuery.period = appliedFilters.value.period
+  }
+  if (appliedFilters.value.institute_id && appliedFilters.value.department) {
+    nextQuery.institute_id = appliedFilters.value.institute_id
+    nextQuery.department = appliedFilters.value.department
+  }
+  if (appliedFilters.value.task_id) nextQuery.task_id = appliedFilters.value.task_id
+  if (hasCustomRange) {
+    nextQuery.start_date = appliedFilters.value.start_date!
+    nextQuery.end_date = appliedFilters.value.end_date!
+  }
+  if (rankMetric.value !== 'record_review_count') nextQuery.rank_metric = rankMetric.value
+  const currentEntries = Object.entries(route.query || {})
+    .map(([k, v]) => [k, queryString(v)] as const)
+    .filter(([, v]) => Boolean(v))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const nextEntries = Object.entries(nextQuery).sort(([a], [b]) => a.localeCompare(b))
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return
+  const targetNonSceneKey = routeNonSceneKey(nextQuery)
+  const syncSeq = ++urlSyncSeq
+  pendingNonSceneKey = targetNonSceneKey
+  void Promise.resolve(router.replace({ path: route.path, query: nextQuery }))
+    .catch(() => {})
+    .finally(() => {
+      if (syncSeq === urlSyncSeq) {
+        lastNonSceneQueryKey = routeNonSceneKey(route?.query as Record<string, unknown> | undefined)
+        pendingNonSceneKey = null
+      }
+    })
+}
+function setReportTab(tab: ReportTab): void {
+  if (reportTab.value === tab) return
+  reportTab.value = tab
+  syncUrlQuery({ tab })
+  if (tab === 'staff' && staffNeedsLoad && authKey.value) {
+    staffNeedsLoad = false
+    void loadReport()
+  }
+}
+function onReportTabKeydown(event: KeyboardEvent, current: ReportTab): void {
+  const order: ReportTab[] = reportTabs.map((item) => item.value)
+  const index = order.indexOf(current)
+  let next: ReportTab | null = null
+  if (event.key === 'ArrowRight') next = order[(index + 1) % order.length]!
+  else if (event.key === 'ArrowLeft') next = order[(index - 1 + order.length) % order.length]!
+  else if (event.key === 'Home') next = order[0]!
+  else if (event.key === 'End') next = order[order.length - 1]!
+  if (!next) return
+  event.preventDefault()
+  setReportTab(next)
+  reportTabRefs[next]?.focus()
+}
+function onRankMetricChange(): void {
+  syncUrlQuery()
+  void loadReport()
 }
 async function loadReport(): Promise<void> {
   const identity = authKey.value
@@ -701,15 +904,18 @@ async function loadReport(): Promise<void> {
     return
   }
   const request = ++reportRequest
+  abortReport()
   invalidateSecondary()
+  const controller = new AbortController()
+  reportController = controller
   loading.value = true
   errorMessage.value = ''
   report.value = null
   const result =
     rankMetric.value === 'record_review_count'
-      ? await getStaffAnalysis({ ...appliedFilters.value })
-      : await getStaffAnalysis({ ...appliedFilters.value }, rankMetric.value)
-  if (request !== reportRequest || identity !== authKey.value) return
+      ? await getStaffAnalysis({ ...appliedFilters.value }, undefined, controller.signal)
+      : await getStaffAnalysis({ ...appliedFilters.value }, rankMetric.value, controller.signal)
+  if (request !== reportRequest || identity !== authKey.value || controller.signal.aborted) return
   loading.value = false
   if (!result.success || !result.data) {
     errorMessage.value = result.message || '质控员工作分析暂不可用'
@@ -721,6 +927,8 @@ function applyFilters(): void {
   const filters = makeFilters()
   if (!filters) return
   appliedFilters.value = filters
+  syncUrlQuery()
+  staffNeedsLoad = false
   void loadReport()
 }
 function resetFilters(): void {
@@ -732,8 +940,7 @@ function resetFilters(): void {
   applyFilters()
 }
 function setScene(value: StaffAnalysisScene): void {
-  if (scene.value !== value)
-    void router.replace({ path: route.path, query: { ...route.query, scene: value } })
+  if (scene.value !== value) syncUrlQuery({ scene: value })
 }
 function metricValue(row: StaffWorkRow, metric: StaffAnalysisMetric): number | null {
   return row[metric] ?? null
@@ -756,6 +963,9 @@ async function loadDetails(page = 1): Promise<void> {
   const identity = authKey.value
   if (!selection || !currentReport || !identity) return
   const request = ++detailsRequest
+  abortDetails()
+  const controller = new AbortController()
+  detailsController = controller
   detailsLoading.value = true
   detailsError.value = ''
   detailsPage.value = null
@@ -765,8 +975,15 @@ async function loadDetails(page = 1): Promise<void> {
     selection.metric,
     page,
     20,
+    controller.signal,
   )
-  if (request !== detailsRequest || identity !== authKey.value || !drawerOpen.value) return
+  if (
+    request !== detailsRequest ||
+    identity !== authKey.value ||
+    !drawerOpen.value ||
+    controller.signal.aborted
+  )
+    return
   detailsLoading.value = false
   if (!result.success || !result.data) {
     detailsError.value = result.message || '人员工作明细暂不可用'
@@ -779,16 +996,20 @@ async function download(): Promise<void> {
   const identity = authKey.value
   if (!currentReport || !identity) return
   const request = ++exportRequest
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   const filters = frozenFilters(currentReport.filters)
   const fingerprint = JSON.stringify(filters)
   exporting.value = true
   const result =
     currentReport.rank_metric && currentReport.rank_metric !== 'record_review_count'
-      ? await exportStaffAnalysis(filters, currentReport.rank_metric)
-      : await exportStaffAnalysis(filters)
+      ? await exportStaffAnalysis(filters, currentReport.rank_metric, controller.signal)
+      : await exportStaffAnalysis(filters, undefined, controller.signal)
   if (
     request !== exportRequest ||
     identity !== authKey.value ||
+    controller.signal.aborted ||
     fingerprint !== JSON.stringify(frozenFilters(currentReport.filters))
   )
     return
@@ -892,14 +1113,93 @@ watch(
     const previousScene = previous?.[0]
     appliedFilters.value = { ...appliedFilters.value, scene: nextScene }
     if (previousScene !== undefined && previousScene !== nextScene) filterError.value = ''
-    if (!nextAuth) clearAll()
-    else void loadReport()
+    if (!nextAuth) {
+      staffNeedsLoad = false
+      clearAll()
+    } else if (reportTab.value === 'manual') {
+      staffNeedsLoad = true
+    } else {
+      staffNeedsLoad = false
+      void loadReport()
+    }
   },
   { immediate: true },
+)
+function routeNonSceneKey(query: Record<string, unknown> | undefined): string {
+  return JSON.stringify([
+    queryString(query?.tab),
+    queryString(query?.period),
+    queryString(query?.institute_id),
+    queryString(query?.department),
+    queryString(query?.task_id),
+    queryString(query?.start_date),
+    queryString(query?.end_date),
+    queryString(query?.rank_metric),
+  ])
+}
+let lastNonSceneQueryKey = routeNonSceneKey(route?.query as Record<string, unknown> | undefined)
+watch(
+  () => routeNonSceneKey(route?.query as Record<string, unknown> | undefined),
+  (nextKey) => {
+    if (nextKey === lastNonSceneQueryKey) return
+    lastNonSceneQueryKey = nextKey
+    if (pendingNonSceneKey !== null && nextKey === pendingNonSceneKey) {
+      pendingNonSceneKey = null
+      return
+    }
+    const q = route?.query as Record<string, unknown> | undefined
+    const nextTab: ReportTab = queryString(q?.tab) === 'manual' ? 'manual' : 'staff'
+    if (reportTab.value !== nextTab) reportTab.value = nextTab
+    const nextDeptKey = departmentKeyFromQuery(q)
+    const nextTaskId = queryString(q?.task_id).trim()
+    const nextStart = /^\d{4}-\d{2}-\d{2}$/.test(queryString(q?.start_date))
+      ? queryString(q?.start_date)
+      : ''
+    const nextEnd = /^\d{4}-\d{2}-\d{2}$/.test(queryString(q?.end_date))
+      ? queryString(q?.end_date)
+      : ''
+    const hasCustomRange = Boolean(nextStart && nextEnd)
+    const nextPeriod: StaffAnalysisPeriod = hasCustomRange
+      ? 'this_month'
+      : periodFromQuery(q?.period)
+    const nextRank = rankMetricFromQuery(q?.rank_metric)
+    const nextInst = queryString(q?.institute_id).trim()
+    const nextDept = queryString(q?.department).trim()
+    const nextFilters: StaffAnalysisFilters = {
+      period: nextPeriod,
+      scene: scene.value,
+      ...(nextInst && nextDept ? { institute_id: nextInst, department: nextDept } : {}),
+      ...(nextTaskId ? { task_id: nextTaskId } : {}),
+      ...(hasCustomRange ? { start_date: nextStart, end_date: nextEnd } : {}),
+    }
+    const changed =
+      !filtersEqual(nextFilters, appliedFilters.value) || nextRank !== rankMetric.value
+    draft.period = nextPeriod
+    draft.departmentKey = nextDeptKey
+    draft.task_id = nextTaskId
+    draft.start_date = nextStart
+    draft.end_date = nextEnd
+    rankMetric.value = nextRank
+    if (changed) {
+      appliedFilters.value = nextFilters
+      if (authKey.value) {
+        if (reportTab.value === 'staff') {
+          staffNeedsLoad = false
+          void loadReport()
+        } else {
+          staffNeedsLoad = true
+        }
+      }
+    } else if (nextTab === 'staff' && staffNeedsLoad && authKey.value) {
+      staffNeedsLoad = false
+      void loadReport()
+    }
+  },
 )
 watch(drawerOpen, (open) => {
   if (!open) {
     ++detailsRequest
+    abortDetails()
     detailsLoading.value = false
   }
 })
@@ -907,6 +1207,9 @@ onBeforeUnmount(() => {
   ++reportRequest
   ++detailsRequest
   ++exportRequest
+  abortReport()
+  abortDetails()
+  abortExport()
 })
 </script>
 

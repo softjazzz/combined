@@ -11,6 +11,7 @@ from ..database.models.v36_reports import DefectRectification as Task
 from ..database.models.v36_reports import DefectRectificationEvent as Event
 from ..database.models.v36_reports import QCAppeal
 from .defect_rectification_service import RectificationError, _active_urge_ids, _person
+from .report_institute_scope import authorized_institute
 from .defect_workflow_filter_service import SOURCE_KEYS, _load_jobs, source_key
 from .record_quality_report_service import RecordQualityReportInvalid, _csv_cell
 from .record_review_service import RecordReviewConflict, _workspace_scene_from_job
@@ -161,15 +162,31 @@ def build_analysis(
 ):
     """病例/owner/历史分块批读；只匹配三坐标+场景+本轮job/envelope+目标。"""
     with sessions() as session:
-        actor = person_loader(session, actor_id)
-        if not actor["roles"] & {"admin", "qc_manager"}:
-            raise RectificationError("无整改分析访问权限", 403)
-        if "admin" not in actor["roles"] and not actor["institute_id"]:
-            raise RectificationError("账号缺少可信机构范围", 403)
+        if person_loader is _person:
+            allowed_institute = authorized_institute(session, actor_id)
+        else:
+            actor = person_loader(session, actor_id)
+            roles = actor["roles"]
+            if not roles & {"admin", "super_admin", "qc_manager"}:
+                raise RectificationError("无整改分析访问权限", 403)
+            actor_institute = actor.get("institute_id")
+            is_global = ("sync_admin" in roles) or (
+                bool(roles & {"admin", "super_admin"}) and not actor_institute
+            )
+            if is_global:
+                allowed_institute = None
+            elif (
+                not isinstance(actor_institute, str)
+                or not actor_institute.strip()
+                or actor_institute != actor_institute.strip()
+            ):
+                raise RectificationError("账号缺少可信机构范围", 403)
+            else:
+                allowed_institute = actor_institute
         cases = {
             row.identity: row
             for row in context.rows
-            if "admin" in actor["roles"] or row.identity[0] == actor["institute_id"]
+            if allowed_institute is None or row.identity[0] == allowed_institute
         }
         targets = []
         for identity, row in cases.items():

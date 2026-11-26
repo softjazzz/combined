@@ -13,12 +13,12 @@
             <div class="wv4-analysis-overview__header mq-page-head">
               <div class="mq-page-head__copy">
                 <span class="mq-page-eyebrow">{{ overviewEyebrow }}</span>
-                <h3
+                <h1
                   id="workstation-list-overview-title"
                   class="wv4-analysis-overview__title mq-page-title"
                 >
                   {{ overviewTitle }}
-                </h3>
+                </h1>
                 <p
                   v-if="isStageQueueMode"
                   class="wv4-analysis-overview__subtitle"
@@ -41,7 +41,7 @@
                 <a-button
                   size="small"
                   class="wv4-analysis-overview__action"
-                  @click="emit('page-change', currentPage)"
+                  @click="emit('refresh')"
                 >
                   刷新
                 </a-button>
@@ -67,10 +67,11 @@
                   :value="searchText"
                   class="workbench-controls__search-input"
                   :placeholder="searchPlaceholder"
+                  :aria-label="searchPlaceholder"
                   size="large"
                   allow-clear
                   @update:value="emit('update:searchText', $event)"
-                  @press-enter="emit('page-change', 1)"
+                  @press-enter="emit('search')"
                 >
                   <template #prefix>
                     <SearchOutlined class="text-slate-400" />
@@ -95,6 +96,7 @@
                   <a-range-picker
                     :value="dateRange || undefined"
                     class="workbench-date-row__range"
+                    :aria-label="`${formatWorkstationDateFieldLabel(dateField)}范围`"
                     size="large"
                     allow-clear
                     :allow-empty="[true, true]"
@@ -116,9 +118,12 @@
                     :value="hospFilter"
                     :options="hospOptions"
                     class="workbench-hosp-segmented"
+                    aria-label="住院状态"
                     @update:value="emit('selectHospFilter', normalizeHospFilterValue($event))"
                   />
+                  <!-- 暂按用户要求隐藏「核验当日在院」快捷按钮，保留 props / emits 及父级联动逻辑 -->
                   <a-button
+                    v-if="false"
                     :type="syncScope === 'today_inpatient' ? 'primary' : 'default'"
                     :loading="hospitalizationStatusVerifying"
                     :disabled="hospitalizationStatusVerifying"
@@ -165,6 +170,7 @@
                   />科室</span>
                   <a-select
                     :aria-labelledby="!isStageQueueMode ? 'record-pool-dept-label' : undefined"
+                    aria-label="科室筛选"
                     :value="activeDept"
                     class="workbench-dept-select"
                     size="large"
@@ -182,7 +188,7 @@
                       <span class="workbench-dept-select__option">
                         <span class="workbench-dept-select__name">{{ dept.name }}</span>
                         <span
-                          v-if="isStageQueueMode"
+                          v-if="showStageDepartmentOptionCount"
                           class="workbench-dept-select__count"
                         >{{
                           dept.total
@@ -193,7 +199,7 @@
                   <span
                     v-if="isStageQueueMode"
                     class="workbench-dept-filter__count"
-                    :aria-label="`当前科室共 ${activeDepartmentTotal} 份病历`"
+                    :aria-label="`当前阶段共 ${activeDepartmentTotal} 份病历`"
                   >
                     {{ activeDepartmentTotal }}
                   </span>
@@ -212,6 +218,7 @@
                   />主管医师</span>
                   <a-select
                     aria-labelledby="record-pool-doctor-label"
+                    aria-label="主管医师筛选"
                     :value="activeDoctor"
                     class="workbench-doctor-select"
                     size="large"
@@ -238,7 +245,7 @@
                     type="primary"
                     size="small"
                     class="wv4-filter-actions__button"
-                    @click="emit('page-change', 1)"
+                    @click="emit('search')"
                   >
                     查询
                   </a-button>
@@ -287,13 +294,14 @@
         <Alert
           v-if="!displayLoading && loadError"
           type="error"
+          class="wv4-list__status-alert wv4-list__status-alert--error"
           message="病历列表加载失败"
           show-icon
         >
           <template #action>
             <a-button
               size="small"
-              @click="emit('page-change', currentPage)"
+              @click="emit('refresh')"
             >
               重试
             </a-button>
@@ -302,8 +310,27 @@
         <Alert
           v-else-if="!isStageQueueMode && !displayLoading && qcSummaryState === 'unavailable'"
           type="warning"
+          class="wv4-list__status-alert wv4-list__status-alert--warning"
           message="质控摘要暂不可用"
           show-icon
+        >
+          <template #action>
+            <a-button
+              size="small"
+              data-testid="retry-qc-summary"
+              @click="emit('refresh')"
+            >
+              重试
+            </a-button>
+          </template>
+        </Alert>
+        <Alert
+          v-if="filterQcBlockedReason"
+          type="warning"
+          class="wv4-list__status-alert wv4-list__status-alert--warning"
+          :message="filterQcBlockedReason"
+          show-icon
+          data-testid="filter-qc-blocked-warning"
         />
 
         <div
@@ -322,7 +349,17 @@
         </div>
 
         <div class="workstation-surface-enter workstation-surface-enter--delay-1">
+          <BatchQcResultsPanel
+            v-if="batchQcResults && !isStageQueueMode"
+            :items="batchQcResults.items"
+            :loading="batchQcResults.loading"
+            :active-record-key="batchQcResults.activeRecordKey"
+            export-scope="all"
+            @open-record="emit('open-batch-qc-result', $event)"
+            @exit="emit('exit-batch-qc-results')"
+          />
           <div
+            v-else
             class="wv4-record-pool-main"
             :class="{ 'wv4-record-pool-main--preview': !isStageQueueMode }"
           >
@@ -344,7 +381,7 @@
                     : `质控所选（${selectedWorkbenchKeys.length}）`
                 "
                 :primary-action-loading="batchActionLoading"
-                :show-filter-qc-action="!isStageQueueMode"
+                :show-filter-qc-action="!isStageQueueMode && !filterQcBlockedReason"
                 :filter-qc-count="qcScopeTotal"
                 :filter-qc-loading="batchActionLoading"
                 :row-action-label="stageMeta.singleActionText"
@@ -376,7 +413,12 @@
                 >
                   <RecordPoolQcTaskStatusBar
                     :job="recordPoolQcTask"
+                    :inline-result-viewer="true"
                     @dismiss="emit('dismiss-qc-task')"
+                    @canceled="emit('canceled-qc-task', $event)"
+                    @results-updated="handleQcTaskRefresh"
+                    @completed="handleQcTaskRefresh"
+                    @view-results="emit('view-qc-results', $event)"
                   />
                 </template>
               </BatchTablePanel>
@@ -387,7 +429,7 @@
               :qc-loading="batchActionLoading"
               :qc-summary-state="qcSummaryState"
               @open-record="emit('open-record', $event)"
-              @run-qc="emit('batch-extract', [$event])"
+              @run-qc="emit('preview-run-qc', $event)"
             />
           </div>
         </div>
@@ -416,8 +458,10 @@ import {
 } from '@ant-design/icons-vue'
 
 import BatchTablePanel, { type WorkbenchRow } from './workbench/BatchTablePanel.vue'
+import BatchQcResultsPanel from './workbench/BatchQcResultsPanel.vue'
 import RecordPoolQcTaskHistory from './workbench/RecordPoolQcTaskHistory.vue'
 import RecordPoolQcTaskStatusBar from './workbench/RecordPoolQcTaskStatusBar.vue'
+import type { BatchResultRecordItem } from '../utils/batchResultViewer'
 import AnalyticsDrilldownBar from './workbench/AnalyticsDrilldownBar.vue'
 import type { AnalyticsDrilldown } from '../utils/analyticsDrilldown'
 import RecordPoolPreviewPanel from './workbench/RecordPoolPreviewPanel.vue'
@@ -486,6 +530,12 @@ const props = defineProps<{
   qcScopeTotal: number
   qcSummaryState: QcSummaryLoadState
   recordPoolQcTask?: SichuanBatchJob | null
+  batchQcResults?: {
+    jobId: string
+    loading: boolean
+    items: BatchResultRecordItem[]
+    activeRecordKey?: string
+  } | null
   analyticsDrilldown?: AnalyticsDrilldown | null
   loadError: boolean
 }>()
@@ -505,13 +555,20 @@ const emit = defineEmits<{
   toggleTodayInpatient: []
   'open-record': [recordId: string]
   'batch-extract': [keys: string[]]
+  'preview-run-qc': [recordKey: string]
   'filter-qc': []
   'dismiss-qc-task': []
+  'canceled-qc-task': [job: SichuanBatchJob]
+  'view-qc-results': [job: SichuanBatchJob]
+  'open-batch-qc-result': [payload: { item: BatchResultRecordItem; queue: BatchResultRecordItem[]; index: number }]
+  'exit-batch-qc-results': []
   'back-to-analytics': []
   'clear-analytics-drilldown': []
   'batch-defer': [keys: string[]]
   'batch-assign': [keys: string[]]
   'clear-filters': []
+  search: []
+  refresh: []
   'page-change': [page: number, pageSize?: number]
 }>()
 
@@ -568,6 +625,30 @@ const showInpatientSort = computed(
 )
 
 const isAnalyticsDrilldown = computed(() => Boolean(props.analyticsDrilldown) && !props.isStageQueueMode)
+const filterQcBlockedReason = computed(() => {
+  if (props.isStageQueueMode) return ''
+  if (isAnalyticsDrilldown.value) {
+    return '统计分析下钻结果暂不支持「质控当前筛选」，请勾选病历后使用「质控所选」。'
+  }
+  if (props.hospFilter === 'unknown') {
+    return '「状态未知」筛选暂不支持「质控当前筛选」，请勾选病历后使用「质控所选」。'
+  }
+  return ''
+})
+
+let lastRefreshedTaskId = ''
+watch(
+  () => props.recordPoolQcTask?.id,
+  () => {
+    lastRefreshedTaskId = ''
+  },
+)
+function handleQcTaskRefresh() {
+  const jobId = String(props.recordPoolQcTask?.id || '')
+  if (jobId && lastRefreshedTaskId === jobId) return
+  lastRefreshedTaskId = jobId
+  emit('refresh')
+}
 
 const overviewEyebrow = computed(() => {
   if (props.isStageQueueMode) return '首页与结算清单 · 批量工作台'
@@ -594,10 +675,23 @@ const searchPlaceholder = computed(() =>
 )
 
 const activeDepartmentTotal = computed(() => {
+  if (props.isStageQueueMode) {
+    return Math.max(0, Number(props.displayServerTotal || 0))
+  }
   const selected = props.departmentSelectOptions.find(
     (department) => department.name === props.activeDept,
   )
   return selected?.total ?? props.qcScopeTotal
+})
+
+const showStageDepartmentOptionCount = computed(() => {
+  if (!props.isStageQueueMode) return false
+  if (props.searchText.trim()) return false
+  const serverTotal = Math.max(0, Number(props.displayServerTotal || 0))
+  const selected = props.departmentSelectOptions.find(
+    (department) => department.name === props.activeDept,
+  )
+  return Boolean(selected && Number(selected.total || 0) === serverTotal)
 })
 
 const totalRows = computed(() =>

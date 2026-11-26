@@ -9,13 +9,102 @@ from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id, ErrorCode, StatusCode
 from ..services.records_ingest_service import get_classification_mapping
 from ..services.qc_service import QCService
-from ..core.security import get_current_user
+from ..services.saved_result_access import saved_result_institute_scope
+from ..services.defect_rectification_service import RectificationError, _person
+from ..core.security import get_current_user, require_roles
 from ..core.settings import get_settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1", tags=["medical-documents"])
 qc_service = QCService()
+
+_IMMUTABLE_DOCUMENT_FIELDS = frozenset({"id", "record_id", "institute_id"})
+
+
+def _resolve_persistent_institute_scope(current_user: dict, *, write: bool = False) -> Optional[str]:
+    """解析持久院区隔离作用域：全局角色返回 None，非全局角色返回持久 institute_id。"""
+    actor_id = str((current_user or {}).get("id") or (current_user or {}).get("user_id") or "").strip()
+    if write:
+        return saved_result_institute_scope(actor_id)
+    if not actor_id:
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="缺少可信账号身份")
+    from ..database.connection import SessionLocal
+    if SessionLocal is None:
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="账号机构权限来源暂不可用")
+    try:
+        with SessionLocal() as session:
+            actor = _person(session, actor_id)
+        if actor["roles"] & {"admin", "sync_admin", "super_admin"}:
+            return None
+        scope = actor.get("institute_id")
+        if not isinstance(scope, str) or not scope.strip() or scope != scope.strip():
+            raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="账号缺少可信机构范围")
+        return scope
+    except RectificationError:
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="账号或机构权限无效") from None
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=StatusCode.SERVICE_UNAVAILABLE, detail="账号机构权限来源暂不可用") from None
+
+
+def _extract_row_institute(row: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(row, dict):
+        return ""
+    inst = str(row.get("institute_id") or "").strip()
+    if inst:
+        return inst
+    meta = row.get("metadata")
+    if isinstance(meta, dict):
+        return str(meta.get("institute_id") or "").strip()
+    return ""
+
+
+async def _enforce_record_institute(
+    supabase,
+    settings,
+    record_id: str,
+    allowed_institute: Optional[str],
+    record_row: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """校验病历记录的院区归属；全局角色直接放行。"""
+    if allowed_institute is None:
+        return record_row
+    row = record_row
+    if row is None:
+        resp = await async_execute(
+            supabase.table(settings.RECORDS_TABLE).select("*").eq("id", record_id)
+        )
+        rows = resp.data or []
+        if not rows:
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
+        row = rows[0]
+    row_inst = _extract_row_institute(row)
+    if not row_inst or row_inst != allowed_institute:
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="无权访问或修改其他院区的医疗文书")
+    return row
+
+
+async def _enforce_document_institute(
+    supabase,
+    settings,
+    document_row: Dict[str, Any],
+    allowed_institute: Optional[str],
+) -> None:
+    """校验医疗文书（或其父级病历）的院区归属。"""
+    if allowed_institute is None:
+        return
+    doc_inst = _extract_row_institute(document_row)
+    if doc_inst:
+        if doc_inst != allowed_institute:
+            raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="无权访问或修改其他院区的医疗文书")
+        return
+    record_id = str(document_row.get("record_id") or "").strip()
+    if record_id:
+        await _enforce_record_institute(supabase, settings, record_id, allowed_institute)
+        return
+    raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="文书缺少可信院区归属，拒绝访问")
 
 
 # Pydantic models for request/response
@@ -40,7 +129,10 @@ class DocumentTypeInfo(BaseModel):
 
 
 @router.get("/document-types")
-async def get_document_types(request: Request):
+async def get_document_types(
+    request: Request,
+    current_user: dict = Depends(get_current_user),
+):
     """获取所有文档类型列表，按分类分组"""
     supabase = get_supabase()
     if not supabase:
@@ -110,7 +202,11 @@ async def get_document_types(request: Request):
 
 
 @router.get("/medical-records/{record_id}")
-async def get_medical_record_detail(record_id: str):
+async def get_medical_record_detail(
+    record_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=False)
     supabase = get_supabase()
     settings = get_settings()
     if supabase:
@@ -119,6 +215,7 @@ async def get_medical_record_detail(record_id: str):
             rows = resp.data or []
             if not rows:
                 raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
+            await _enforce_record_institute(supabase, settings, record_id, allowed_institute, record_row=rows[0])
             return rows[0]
         except HTTPException:
             raise
@@ -129,10 +226,16 @@ async def get_medical_record_detail(record_id: str):
     rec = medical_records_db.get(record_id)
     if not rec:
         raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
+    if allowed_institute is not None and _extract_row_institute(rec) != allowed_institute:
+        raise HTTPException(status_code=StatusCode.FORBIDDEN, detail="无权访问其他院区的医疗记录")
     return rec
 
 @router.get("/medical-records/{record_id}/documents")
-async def get_medical_record_documents(request: Request, record_id: str):
+async def get_medical_record_documents(
+    request: Request,
+    record_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """
     返回与前端期望对齐的结构：
     {
@@ -146,11 +249,14 @@ async def get_medical_record_documents(request: Request, record_id: str):
       }
     }
     """
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=False)
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
+        if allowed_institute is not None:
+            await _enforce_record_institute(supabase, settings, record_id, allowed_institute)
         # 取文档
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("*").eq("record_id", record_id))
         raw_docs: List[Dict[str, Any]] = resp.data or []
@@ -273,28 +379,39 @@ async def get_medical_record_documents(request: Request, record_id: str):
             },
             trace_id=get_trace_id(request)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"获取文档失败: {e}")
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"获取文档失败: {e}")
 
 
 @router.post("/medical-records/{record_id}/documents")
-async def create_medical_document(req: Request, record_id: str, doc_request: CreateDocumentRequest):
+async def create_medical_document(
+    req: Request,
+    record_id: str,
+    doc_request: CreateDocumentRequest,
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
     """为指定医疗记录创建新文档"""
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=True)
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
 
     try:
-        # 验证医疗记录是否存在
+        # 验证医疗记录是否存在并校验院区归属
         record_resp = await async_execute(
             supabase.table(settings.RECORDS_TABLE)
-            .select("id")
+            .select("*")
             .eq("id", record_id)
         )
         if not record_resp.data:
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="医疗记录不存在")
+        await _enforce_record_institute(
+            supabase, settings, record_id, allowed_institute, record_row=record_resp.data[0]
+        )
 
         # 获取分类映射以确定category_id和type_id
         mapping = await get_classification_mapping()
@@ -393,18 +510,39 @@ async def create_medical_document(req: Request, record_id: str, doc_request: Cre
 
 
 @router.put("/medical-documents/{document_id}")
-async def update_medical_document(request: Request, document_id: str, update_data: Dict[str, Any]):
+async def update_medical_document(
+    request: Request,
+    document_id: str,
+    update_data: Dict[str, Any],
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=True)
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
-        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).update(update_data).eq("id", document_id))
+        doc_resp = await async_execute(
+            supabase.table(settings.DOCUMENTS_TABLE).select("*").eq("id", document_id)
+        )
+        if not doc_resp.data:
+            raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
+        await _enforce_document_institute(supabase, settings, doc_resp.data[0], allowed_institute)
+
+        safe_update = {
+            k: v for k, v in (update_data or {}).items()
+            if k not in _IMMUTABLE_DOCUMENT_FIELDS
+        }
+        resp = await async_execute(
+            supabase.table(settings.DOCUMENTS_TABLE).update(safe_update).eq("id", document_id)
+        )
         return success_response(
             data={"updated": len(resp.data or [])},
             message="更新成功",
             trace_id=get_trace_id(request)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"更新失败: {e}")
 
@@ -414,9 +552,10 @@ async def delete_medical_document(
     request: Request,
     document_id: str,
     hard_delete: bool = False,
-    # current_user: dict = Depends(get_current_user)  # 暂时注释掉认证
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
 ):
     """删除医疗文档，支持软删除和硬删除"""
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=True)
     supabase = get_supabase()
     settings = get_settings()
     if not supabase:
@@ -426,13 +565,14 @@ async def delete_medical_document(
         # 验证文档是否存在
         doc_resp = await async_execute(
             supabase.table(settings.DOCUMENTS_TABLE)
-            .select("id, title, record_id")
+            .select("*")
             .eq("id", document_id)
         )
         if not doc_resp.data:
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
 
         document = doc_resp.data[0]
+        await _enforce_document_institute(supabase, settings, document, allowed_institute)
 
         if hard_delete:
             # 硬删除：直接从数据库删除
@@ -450,9 +590,10 @@ async def delete_medical_document(
                     "status": "deleted",
                     "updated_at": datetime.utcnow().isoformat(),
                     "metadata": {
-                        **document.get("metadata", {}),
+                        **(document.get("metadata") or {}),
                         "deleted_at": datetime.utcnow().isoformat(),
-                        "deletion_reason": "user_deleted"
+                        "deletion_reason": "user_deleted",
+                        "deleted_by": str(current_user.get("id") or current_user.get("user_id") or ""),
                     }
                 })
                 .eq("id", document_id)
@@ -464,7 +605,7 @@ async def delete_medical_document(
                 "deleted": len(resp.data or []),
                 "operation": operation,
                 "document_id": document_id,
-                "document_title": document["title"],
+                "document_title": document.get("title", ""),
             },
             message=f"文档已{operation}成功",
             trace_id=get_trace_id(request)
@@ -478,12 +619,19 @@ async def delete_medical_document(
 
 
 @router.post("/medical-records/{record_id}/batch-qc-analysis")
-async def batch_qc_analysis(request: Request, record_id: str, current_user: dict = Depends(get_current_user)):
+async def batch_qc_analysis(
+    request: Request,
+    record_id: str,
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=True)
     supabase = get_supabase()
     if not supabase:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         settings = get_settings()
+        if allowed_institute is not None:
+            await _enforce_record_institute(supabase, settings, record_id, allowed_institute)
         resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select("id, content, title").eq("record_id", record_id))
         docs = resp.data or []
         started = []
@@ -501,21 +649,29 @@ async def batch_qc_analysis(request: Request, record_id: str, current_user: dict
             message="批量质控已启动",
             trace_id=get_trace_id(request)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail=f"批量质控启动失败: {e}")
 
 
 @router.post("/medical-documents/{document_id}/qc-analysis")
-async def analyze_medical_document(request: Request, document_id: str, current_user: dict = Depends(get_current_user)):
+async def analyze_medical_document(
+    request: Request,
+    document_id: str,
+    current_user: dict = Depends(require_roles("admin", "qc_manager")),
+):
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=True)
     supabase = get_supabase()
     if not supabase:
         raise HTTPException(status_code=StatusCode.INTERNAL_SERVER_ERROR, detail="数据库连接未初始化")
     try:
         settings = get_settings()
-        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select('id, content, title').eq('id', document_id))
+        resp = await async_execute(supabase.table(settings.DOCUMENTS_TABLE).select('*').eq('id', document_id))
         data = (resp.data or [])
         if not data:
             raise HTTPException(status_code=StatusCode.NOT_FOUND, detail="文档不存在")
+        await _enforce_document_institute(supabase, settings, data[0], allowed_institute)
         res = await qc_service.evaluate({"record_id": document_id})
         # 写入 PG qc_results
         try:
@@ -535,16 +691,32 @@ async def analyze_medical_document(request: Request, document_id: str, current_u
 
 
 @router.get("/medical-documents/{document_id}/qc-results")
-async def get_document_qc_results(request: Request, document_id: str):
+async def get_document_qc_results(
+    request: Request,
+    document_id: str,
+    current_user: dict = Depends(get_current_user),
+):
     """获取文书质控结果，从 PG qc_results 表读取"""
+    allowed_institute = _resolve_persistent_institute_scope(current_user, write=False)
     sb = get_supabase()
     if sb is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
     try:
+        settings = get_settings()
+        if allowed_institute is not None:
+            doc_resp = await async_execute(
+                sb.table(settings.DOCUMENTS_TABLE).select('*').eq('id', document_id)
+            )
+            doc_rows = list(getattr(doc_resp, 'data', None) or [])
+            if not doc_rows:
+                raise HTTPException(status_code=404, detail="文档不存在")
+            await _enforce_document_institute(sb, settings, doc_rows[0], allowed_institute)
         resp = await async_execute(
             sb.table('qc_results').select('*').eq('record_id', document_id).order('created_at', desc=True).limit(1)
         )
         data = list(getattr(resp, 'data', None) or [])
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"查询质控结果失败: {str(e)}")
     if not data:

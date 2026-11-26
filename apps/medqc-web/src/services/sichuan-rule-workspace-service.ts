@@ -18,6 +18,8 @@ type ServiceResult<T> = {
   success: boolean
   data?: T
   message?: string
+  /** 失败时后端返回的结构化 detail（例如 case_scene_admission_failed） */
+  errorDetail?: Record<string, unknown>
   /** 失败时的 HTTP 状态码，供轮询区分确定性失败与临时失败 */
   status?: number
   /** 任务详情 409 时后端附带的任务状态（X-Batch-Job-Status），旧后端没有 */
@@ -25,8 +27,21 @@ type ServiceResult<T> = {
 }
 
 type ErrorResponseLike = {
-  response?: { status?: unknown; headers?: Record<string, unknown> }
+  response?: { status?: unknown; headers?: Record<string, unknown>; data?: unknown }
 } | null
+
+function toErrorDetail(error: unknown): Record<string, unknown> | undefined {
+  const data = (error as ErrorResponseLike)?.response?.data
+  if (!data || typeof data !== 'object') return undefined
+  const record = data as Record<string, unknown>
+  for (const key of ['detail', 'error', 'details'] as const) {
+    const candidate = record[key]
+    if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+      return candidate as Record<string, unknown>
+    }
+  }
+  return undefined
+}
 
 function toErrorStatus(error: unknown): number | undefined {
   const status = (error as ErrorResponseLike)?.response?.status
@@ -58,6 +73,7 @@ async function requestEnvelope<T>(
     return {
       success: false,
       message: toErrorMessage(error, fallbackMessage),
+      errorDetail: toErrorDetail(error),
       status: toErrorStatus(error),
       jobStatus: toErrorJobStatus(error),
     }
@@ -94,6 +110,7 @@ export async function createSichuanWorkspaceBatchJob(payload: {
       method: 'POST',
       url: '/api/v1/qc/sichuan/workspace/batch-jobs',
       data: payload,
+      skipErrorToast: true,
     },
     '创建四川规则批量任务失败',
   )
@@ -147,6 +164,10 @@ export type BatchJobRecordIdentity = {
   doctor: string
   admission_date: string
   discharge_date: string
+  /** 仅超级管理员回查返回，用于单条深度复核与病历对照定位，不含患者姓名。 */
+  institute_id?: string
+  patient_id?: string
+  visit_id?: string
 }
 
 export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string) {
@@ -161,11 +182,15 @@ export async function getSichuanWorkspaceBatchJobRecordIdentities(jobId: string)
 }
 
 /** 单病历结果页唯一允许使用的三坐标结果读取接口。 */
-export async function getLatestLuxian0609RecordResult(record: {
-  instituteId: string
-  patientId: string
-  visitId: string
-}, previous?: PreviousResultRequest) {
+export async function getLatestLuxian0609RecordResult(
+  record: {
+    instituteId: string
+    patientId: string
+    visitId: string
+  },
+  previous?: PreviousResultRequest,
+  options?: { signal?: AbortSignal },
+) {
   return requestEnvelope<SingleRecordQcResultPayload>(
     {
       method: 'GET',
@@ -176,6 +201,7 @@ export async function getLatestLuxian0609RecordResult(record: {
         ...(previous && { result_view: previous.resultView, anchor_job_id: previous.anchorJobId }),
       },
       timeout: SICHUAN_WORKSPACE_QUERY_TIMEOUT_MS,
+      ...(options?.signal ? { signal: options.signal } : {}),
     },
     '获取该病历最近一次质控结果失败',
   )
@@ -272,6 +298,7 @@ export async function cancelSichuanWorkspaceBatchJob(jobId: string) {
     {
       method: 'POST',
       url: `/api/v1/qc/sichuan/workspace/batch-jobs/${encodeURIComponent(jobId)}/cancel`,
+      skipErrorToast: true,
     },
     '停止四川规则批量任务失败',
   )
@@ -322,6 +349,7 @@ export async function getSichuanWorkspaceBatchJobDebugSnapshot(
 export async function getSichuanWorkspaceBatchJobResultTrace(
   jobId: string,
   params: {
+    record_ref?: string
     record_id?: string
     visit_id?: string
     rule_id?: string

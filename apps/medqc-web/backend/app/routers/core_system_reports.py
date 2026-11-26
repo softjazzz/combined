@@ -2,7 +2,7 @@
 
 import logging
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
@@ -15,10 +15,77 @@ from ..services.record_quality_report_service import (
     RecordQualityReportInvalid,
     RecordQualityReportTooLarge,
 )
+from .quality_reports import (
+    _DEMO_UNCERTAIN_STATUSES,
+    _is_restricted_demo_account,
+    _strip_diagnostic_fields,
+)
 
 router = APIRouter(prefix="/api/v1/core-system-reports", tags=["core-system-reports"])
 service = CoreSystemReportService()
 logger = logging.getLogger(__name__)
+
+
+def _trim_core_system_row_for_demo(row: Any) -> dict | None:
+    if not isinstance(row, dict):
+        return None
+    if row.get("coverage") == "unavailable":
+        return None
+    cleaned = _strip_diagnostic_fields(row)
+    points = cleaned.get("points")
+    if isinstance(points, list):
+        kept_points = [
+            _strip_diagnostic_fields(point)
+            for point in points
+            if isinstance(point, dict)
+            and str(point.get("status") or "").strip().lower()
+            not in _DEMO_UNCERTAIN_STATUSES
+            and point.get("system_ids") is not None
+        ]
+        cleaned["points"] = kept_points
+        if cleaned.get("coverage") == "unknown":
+            if not kept_points:
+                return None
+            cleaned["coverage"] = "known"
+    return cleaned
+
+
+def _trim_core_system_report_for_demo(
+    data: Any, *, system_id: str | None = None, page: int = 1, page_size: int = 20
+) -> Any:
+    if not isinstance(data, dict):
+        return data
+    trimmed = dict(data)
+    summary = trimmed.get("summary")
+    if isinstance(summary, dict):
+        patched_summary = _strip_diagnostic_fields(summary)
+        for key in (
+            "unavailable_records",
+            "unknown_records",
+            "unknown_points",
+            "unknown_defects",
+        ):
+            if key in patched_summary:
+                patched_summary[key] = 0
+        trimmed["summary"] = patched_summary
+    source_rows = trimmed.get("_export_rows")
+    if not isinstance(source_rows, list):
+        source_rows = trimmed.get("items") if isinstance(trimmed.get("items"), list) else []
+    if system_id == "unknown":
+        kept_rows = []
+    else:
+        kept_rows = [
+            cleaned
+            for row in source_rows
+            if (cleaned := _trim_core_system_row_for_demo(row)) is not None
+        ]
+    trimmed["_export_rows"] = kept_rows
+    trimmed["total"] = len(kept_rows)
+    start = max(0, (page - 1) * page_size)
+    trimmed["items"] = kept_rows[start : start + page_size]
+    if isinstance(trimmed.get("systems"), list):
+        trimmed["systems"] = [_strip_diagnostic_fields(s) for s in trimmed["systems"]]
+    return trimmed
 
 
 def filters(
@@ -70,6 +137,10 @@ def report(
     user=Depends(get_current_user),
 ):
     data = _read(user, params, page, page_size)
+    if _is_restricted_demo_account(user):
+        data = _trim_core_system_report_for_demo(
+            data, system_id=params.get("system_id"), page=page, page_size=page_size
+        )
     data.pop("_export_rows", None)
     return {"success": True, "data": data}
 
@@ -77,6 +148,10 @@ def report(
 @router.get("/export")
 def export(request: Request, params=Depends(filters), user=Depends(get_current_user)):
     data = _read(user, params)
+    if _is_restricted_demo_account(user):
+        data = _trim_core_system_report_for_demo(
+            data, system_id=params.get("system_id")
+        )
     audit_event(
         request,
         action="quality_reports.core_system.export",

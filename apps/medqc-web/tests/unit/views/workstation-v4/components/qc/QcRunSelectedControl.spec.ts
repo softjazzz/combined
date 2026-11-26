@@ -1,4 +1,5 @@
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { Popconfirm } from 'ant-design-vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -21,6 +22,15 @@ const recordRefs = [
   { institute_id: 'H1', patient_id: 'P1', visit_id: 'V1' },
   { institute_id: 'H2', patient_id: 'P2', visit_id: 'V2' },
 ]
+
+async function clickAndConfirmRunSelected(wrapper: ReturnType<typeof mount>) {
+  await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
+  await flushPromises()
+  const popconfirm = wrapper.getComponent(Popconfirm)
+  expect(popconfirm.props('open')).toBe(true)
+  popconfirm.vm.$emit('confirm')
+  await flushPromises()
+}
 
 enableAutoUnmount(afterEach)
 
@@ -50,6 +60,26 @@ describe('QcRunSelectedControl', () => {
     expect(wrapper.text()).toContain('质控所选')
   })
 
+  it('点击质控所选后弹出二次确认，点击取消不触发质控任务', async () => {
+    const wrapper = mount(QcRunSelectedControl, {
+      props: { carePhase: 'discharged', recordRefs: [recordRefs[0]!], selectedCount: 1 },
+    })
+
+    await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
+    await flushPromises()
+
+    const popconfirm = wrapper.getComponent(Popconfirm)
+    expect(popconfirm.props('open')).toBe(true)
+    expect(popconfirm.props('title')).toBe('将对已勾选的 1 份病历执行质控，是否继续？')
+    expect(mocks.createJob).not.toHaveBeenCalled()
+
+    popconfirm.vm.$emit('cancel')
+    await flushPromises()
+
+    expect(popconfirm.props('open')).toBe(false)
+    expect(mocks.createJob).not.toHaveBeenCalled()
+  })
+
   it('只用勾选病历三坐标创建本地质控任务，不触发资料同步', async () => {
     mocks.createJob.mockResolvedValue({
       success: true,
@@ -63,8 +93,7 @@ describe('QcRunSelectedControl', () => {
       props: { carePhase: 'discharged', recordRefs },
     })
 
-    await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await flushPromises()
+    await clickAndConfirmRunSelected(wrapper)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(mocks.createJob).toHaveBeenCalledWith({
@@ -99,8 +128,7 @@ describe('QcRunSelectedControl', () => {
         },
       })
       const wrapper = mount(QcRunSelectedControl, { props: { carePhase, recordRefs } })
-      await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-      await flushPromises()
+      await clickAndConfirmRunSelected(wrapper)
       expect(wrapper.emitted('results-updated')).toHaveLength(1)
       expect(wrapper.emitted('completed')).toBeUndefined()
       expect(wrapper.text()).toContain('不适合自动补跑')
@@ -124,8 +152,7 @@ describe('QcRunSelectedControl', () => {
         })
         .mockResolvedValueOnce({ success: true, data: { id: 'retry', status: 'completed' } })
       const wrapper = mount(QcRunSelectedControl, { props: { carePhase: 'inpatient', recordRefs } })
-      await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-      await flushPromises()
+      await clickAndConfirmRunSelected(wrapper)
       expect(wrapper.emitted('results-updated')).toBeUndefined()
       expect(wrapper.get('[data-testid="run-selected-qc-trigger"]').attributes('disabled')).toBe('')
       await vi.advanceTimersByTimeAsync(3000)
@@ -142,8 +169,7 @@ describe('QcRunSelectedControl', () => {
     mocks.createJob.mockResolvedValue({ success: true, data: { id: 'canceled', status: 'queued' } })
     mocks.getJob.mockResolvedValue({ success: true, data: { id: 'canceled', status: 'canceled' } })
     const wrapper = mount(QcRunSelectedControl, { props: { carePhase: 'discharged', recordRefs } })
-    await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await flushPromises()
+    await clickAndConfirmRunSelected(wrapper)
     expect(wrapper.emitted('results-updated')).toHaveLength(1)
     expect(wrapper.emitted('completed')).toBeUndefined()
   })
@@ -153,8 +179,7 @@ describe('QcRunSelectedControl', () => {
     mocks.createJob.mockResolvedValue({ success: true, data: { id: 'network', status: 'queued' } })
     mocks.getJob.mockResolvedValue({ success: false, message: '网络不可用' })
     const wrapper = mount(QcRunSelectedControl, { props: { carePhase: 'inpatient', recordRefs } })
-    await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await flushPromises()
+    await clickAndConfirmRunSelected(wrapper)
     await vi.advanceTimersByTimeAsync(6000)
     await flushPromises()
     expect(mocks.getJob).toHaveBeenCalledTimes(3)
@@ -171,8 +196,7 @@ describe('QcRunSelectedControl', () => {
       props: { carePhase: 'inpatient', recordRefs: [recordRefs[0]!] },
     })
 
-    await wrapper.get('[data-testid="run-selected-qc-trigger"]').trigger('click')
-    await flushPromises()
+    await clickAndConfirmRunSelected(wrapper)
     await new Promise((resolve) => setTimeout(resolve, 0))
 
     expect(mocks.createJob).toHaveBeenCalledTimes(1)

@@ -17,8 +17,16 @@ import json
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
 from .llm_observability import observe_llm_http_attempt
+from .luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_profile_text_for_llm(text: str) -> str:
+    raw = str(text or "")
+    if not raw:
+        return ""
+    return redact_luxian_0609_patient_privacy(raw)
 
 
 # ============================================================================
@@ -175,9 +183,13 @@ class DiagnosisSurgeryProfilingService:
 
     async def analyze_medical_profile(
         self,
-        medical_text: str,
+        medical_text: str = "",
         frontpage_diagnoses: Optional[List[str]] = None,
         frontpage_procedures: Optional[List[str]] = None,
+        *,
+        institute_id: Optional[str] = None,
+        patient_id: Optional[str] = None,
+        visit_id: Optional[str] = None,
     ) -> MedicalProfile:
         """
         分析病历生成医疗画像
@@ -186,26 +198,42 @@ class DiagnosisSurgeryProfilingService:
             medical_text: 病历全文
             frontpage_diagnoses: 首页已填诊断列表
             frontpage_procedures: 首页已填手术列表
+            institute_id: 机构 ID（三坐标隔离）
+            patient_id: 患者 ID（三坐标隔离）
+            visit_id: 就诊 ID（三坐标隔离；未传 medical_text 时按三坐标安全加载）
             
         Returns:
             MedicalProfile 包含时间轴、手术验证和差异分析
         """
         profile = MedicalProfile()
-        
-        if not self._use_llm or not medical_text:
+
+        resolved_text = str(medical_text or "")
+        if not resolved_text.strip() and visit_id:
+            from .frontpage_extraction_service import default_frontpage_service
+
+            resolved_text = await default_frontpage_service._get_medical_text(
+                str(visit_id).strip(),
+                allow_demo_fallback=False,
+                patient_id=patient_id,
+                institute_id=institute_id,
+            )
+
+        if not self._use_llm or not resolved_text.strip():
             logger.warning("LLM 未配置或病历为空，返回空画像")
             return profile
+
+        safe_medical_text = _redact_profile_text_for_llm(resolved_text)
         
         # 1. 提取诊断时间轴
         try:
-            profile.diagnosis_timeline = await self._extract_diagnosis_timeline(medical_text)
+            profile.diagnosis_timeline = await self._extract_diagnosis_timeline(safe_medical_text)
             logger.info(f"诊断时间轴提取完成: {len(profile.diagnosis_timeline)} 个诊断")
         except Exception as e:
             logger.error(f"诊断时间轴提取失败: {e}")
         
         # 2. 手术闭环验证
         try:
-            profile.surgery_verification = await self._verify_surgeries(medical_text)
+            profile.surgery_verification = await self._verify_surgeries(safe_medical_text)
             logger.info(f"手术验证完成: {len(profile.surgery_verification)} 个手术")
         except Exception as e:
             logger.error(f"手术验证失败: {e}")
@@ -223,7 +251,9 @@ class DiagnosisSurgeryProfilingService:
 
     async def _extract_diagnosis_timeline(self, medical_text: str) -> List[DiagnosisTimeline]:
         """提取诊断时间轴"""
-        prompt = DIAGNOSIS_TIMELINE_PROMPT.format(medical_text=medical_text)
+        prompt = DIAGNOSIS_TIMELINE_PROMPT.format(
+            medical_text=_redact_profile_text_for_llm(medical_text)
+        )
         response = await self._call_llm(prompt)
         result = self._parse_json(response)
         
@@ -254,7 +284,9 @@ class DiagnosisSurgeryProfilingService:
 
     async def _verify_surgeries(self, medical_text: str) -> List[SurgeryVerification]:
         """手术闭环验证"""
-        prompt = SURGERY_VERIFICATION_PROMPT.format(medical_text=medical_text)
+        prompt = SURGERY_VERIFICATION_PROMPT.format(
+            medical_text=_redact_profile_text_for_llm(medical_text)
+        )
         response = await self._call_llm(prompt)
         result = self._parse_json(response)
         
@@ -348,9 +380,10 @@ class DiagnosisSurgeryProfilingService:
         return discrepancies
 
     async def _call_llm(self, prompt: str) -> str:
-        """调用 LLM"""
+        """调用 LLM（发往模型前强制脱敏 PHI）"""
         if not self._use_llm:
             return ""
+        safe_prompt = _redact_profile_text_for_llm(prompt)
         
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -360,7 +393,7 @@ class DiagnosisSurgeryProfilingService:
             "model": self.model,
             "messages": [
                 {"role": "system", "content": "你是专业的病案分析专家。"},
-                {"role": "user", "content": prompt},
+                {"role": "user", "content": safe_prompt},
             ],
             "temperature": 0.1,
             "max_tokens": 4000,

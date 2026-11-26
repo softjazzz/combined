@@ -1,4 +1,5 @@
 import { isAxiosError } from 'axios'
+import { EXTENDED_REQUEST_TIMEOUT_MS, LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, normalizeApiSuccess } from '@/utils/api-envelope'
 
@@ -216,15 +217,86 @@ export function errorCode(error: unknown): string | undefined {
   return undefined
 }
 
+/** 解析后端嵌套错误对象或 Blob JSON 错误载荷（兼容 detail/error/message 及 code）。 */
+function extractNestedMessage(body: unknown): string | undefined {
+  if (!body || typeof body !== 'object' || body instanceof Blob) return undefined
+  const record = body as Record<string, unknown>
+  for (const key of ['detail', 'error', 'message'] as const) {
+    const candidate = record[key]
+    if (typeof candidate === 'string' && candidate.trim()) return candidate.trim()
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) {
+        if (item && typeof item === 'object') {
+          const msg =
+            (item as Record<string, unknown>).msg ?? (item as Record<string, unknown>).message
+          if (typeof msg === 'string' && msg.trim()) return msg.trim()
+        }
+      }
+    }
+    if (candidate && typeof candidate === 'object') {
+      const obj = candidate as Record<string, unknown>
+      const msg = obj.message ?? obj.detail ?? obj.msg
+      if (typeof msg === 'string' && msg.trim()) return msg.trim()
+    }
+  }
+  return undefined
+}
+
+async function readBlobText(blob: Blob): Promise<string> {
+  const text = Reflect.get(blob, 'text')
+  if (typeof text === 'function') return String(await Reflect.apply(text, blob, []))
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () =>
+      typeof reader.result === 'string'
+        ? resolve(reader.result)
+        : reject(new Error('Blob读取结果不是文本'))
+    reader.onerror = () => reject(reader.error || new Error('Blob读取失败'))
+    reader.onabort = () => reject(new Error('Blob读取已中止'))
+    reader.readAsText(blob, 'utf-8')
+  })
+}
+
+async function parseBlobError(value: unknown): Promise<{ message?: string; code?: string }> {
+  if (!(value instanceof Blob) || value.size === 0) return {}
+  try {
+    const raw = (await readBlobText(value)).trim()
+    if (!raw) return {}
+    const parsed: unknown = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return {}
+    const record = parsed as Record<string, unknown>
+    let code: string | undefined
+    for (const key of ['detail', 'error'] as const) {
+      const detail = record[key]
+      if (
+        detail &&
+        typeof detail === 'object' &&
+        typeof (detail as Record<string, unknown>).code === 'string'
+      ) {
+        code = (detail as { code: string }).code
+        break
+      }
+    }
+    if (!code && typeof record.code === 'string' && record.code.trim()) code = record.code.trim()
+    return { message: extractNestedMessage(record), code }
+  } catch {
+    return {}
+  }
+}
+
 async function read<T>(
   url: string,
   filters: RecordQualityFilters | RecordDrilldownFilters,
+  signal?: AbortSignal,
 ): Promise<QualityReportResult<T>> {
   try {
     const response = await ApiService.requestRaw<T>({
       method: 'GET',
       url,
       params: paramsOf(filters),
+      skipErrorToast: true,
+      timeout: EXTENDED_REQUEST_TIMEOUT_MS,
+      ...(signal ? { signal } : {}),
     })
     const result = normalizeApiSuccess<T>(response.data)
     return {
@@ -234,42 +306,55 @@ async function read<T>(
       status: response.status,
     }
   } catch (error) {
+    const nested = isAxiosError(error) ? extractNestedMessage(error.response?.data) : undefined
     return {
       success: false,
       status: isAxiosError(error) ? error.response?.status : undefined,
       code: errorCode(error),
-      message: extractApiErrorMessageFromError(error, '病历质量报表暂不可用'),
+      message: nested || extractApiErrorMessageFromError(error, '病历质量报表暂不可用'),
     }
   }
 }
 
-export function getRecordQualityReport(filters: RecordQualityFilters) {
-  return read<RecordQualityReport>(BASE, filters)
+export function getRecordQualityReport(filters: RecordQualityFilters, signal?: AbortSignal) {
+  return read<RecordQualityReport>(BASE, filters, signal)
 }
 
-export function getRecordQualityRecords(filters: RecordDrilldownFilters) {
-  return read<RecordQualityRecordsPage>(`${BASE}/records`, filters)
+export function getRecordQualityRecords(filters: RecordDrilldownFilters, signal?: AbortSignal) {
+  return read<RecordQualityRecordsPage>(`${BASE}/records`, filters, signal)
 }
 
-export function getRecordRemediationAnalysis(filters: RemediationFilters) {
-  return read<RecordRemediationAnalysis>(`${BASE}/remediations`, filters)
+export function getRecordRemediationAnalysis(filters: RemediationFilters, signal?: AbortSignal) {
+  return read<RecordRemediationAnalysis>(`${BASE}/remediations`, filters, signal)
 }
 
 export async function exportRecordRemediationAnalysis(
   filters: RemediationFilters,
+  signal?: AbortSignal,
 ): Promise<QualityReportResult<Blob>> {
   try {
     const response = await ApiService.getRaw<Blob>(
       `${BASE}/remediations/export`,
       paramsOf(filters),
-      { responseType: 'blob' },
+      {
+        responseType: 'blob',
+        skipErrorToast: true,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
+        ...(signal ? { signal } : {}),
+      },
     )
     return { success: true, data: response.data, status: response.status }
   } catch (error) {
+    const body = isAxiosError(error) ? error.response?.data : undefined
+    const blobErr = await parseBlobError(body)
     return {
       success: false,
       status: isAxiosError(error) ? error.response?.status : undefined,
-      message: extractApiErrorMessageFromError(error, '导出整改分析失败'),
+      code: blobErr.code || errorCode(error),
+      message:
+        blobErr.message ||
+        extractNestedMessage(body) ||
+        extractApiErrorMessageFromError(error, '导出整改分析失败'),
     }
   }
 }
@@ -278,20 +363,31 @@ export async function exportRecordQualityReport(
   filters: RecordDrilldownFilters,
   sheet: ReportSheet,
   columns?: string[],
+  signal?: AbortSignal,
 ): Promise<QualityReportResult<Blob>> {
   try {
     const response = await ApiService.getRaw<Blob>(
       `${BASE}/export`,
       { ...paramsOf(filters), sheet, ...(columns ? { columns: JSON.stringify(columns) } : {}) },
-      { responseType: 'blob' },
+      {
+        responseType: 'blob',
+        skipErrorToast: true,
+        timeout: LONG_REQUEST_TIMEOUT_MS,
+        ...(signal ? { signal } : {}),
+      },
     )
     return { success: true, data: response.data, status: response.status }
   } catch (error) {
+    const body = isAxiosError(error) ? error.response?.data : undefined
+    const blobErr = await parseBlobError(body)
     return {
       success: false,
       status: isAxiosError(error) ? error.response?.status : undefined,
-      code: errorCode(error),
-      message: extractApiErrorMessageFromError(error, '导出病历质量报表失败'),
+      code: blobErr.code || errorCode(error),
+      message:
+        blobErr.message ||
+        extractNestedMessage(body) ||
+        extractApiErrorMessageFromError(error, '导出病历质量报表失败'),
     }
   }
 }

@@ -61,5 +61,5 @@ def test_smart_upload_rejects_file_too_large(client, monkeypatch):
         headers=_headers(token),
         files={"file": ("sample.csv", payload, "text/csv")},
     )
-    assert resp.status_code == 400
+    assert resp.status_code == 413
     assert "大小不能超过" in _error_message(resp)

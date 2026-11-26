@@ -60,7 +60,13 @@ describe('QcRecordResultTable', () => {
     })
     const row = wrapper.get('tr[data-record-key]')
     expect(row.classes()).toContain('qc-record-result-table__row--active')
+    expect(row.attributes('aria-current')).toBe('true')
+    expect(row.attributes('aria-selected')).toBeUndefined()
     expect(row.classes()).not.toContain('qc-record-result-table__row--selected')
+    expect(wrapper.get('.qc-record-result-table__bed-number').attributes('title')).toBe('12 床')
+    expect(wrapper.get('[data-testid="open-saved-result"]').attributes('aria-label')).toBe(
+      '查看患者甲质控结果',
+    )
     const checkbox = wrapper.get('tbody input')
     await checkbox.trigger('click')
     await checkbox.trigger('change')
@@ -71,6 +77,7 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.emitted('update:selectedRecordKeys')?.at(-1)).toEqual([[rows[0].recordKey]])
     await wrapper.setProps({ selectedRecordKeys: [rows[0].recordKey], activeRecordKey: undefined })
     expect(row.classes()).not.toContain('qc-record-result-table__row--active')
+    expect(row.attributes('aria-current')).toBeUndefined()
     expect(row.classes()).toContain('qc-record-result-table__row--selected')
     await row.trigger('click')
     expect(wrapper.emitted('open-result')).toEqual([[rows[0].recordKey]])
@@ -160,13 +167,35 @@ describe('QcRecordResultTable', () => {
     expect(wrapper.emitted('update:selectedRecordKeys')).toEqual([[[rows[0].recordKey]]])
     expect(wrapper.emitted('open-result')).toBeUndefined()
 
-    await wrapper.setProps({ selectedRecordKeys: [rows[0].recordKey] })
-    expect(wrapper.get('tr[data-record-key]').attributes('aria-selected')).toBe('true')
+    await wrapper.setProps({ selectedRecordKeys: [rows[0].recordKey], activeRecordKey: rows[0].recordKey })
+    expect(wrapper.get('tr[data-record-key]').attributes('aria-selected')).toBeUndefined()
+    expect(wrapper.get('tr[data-record-key]').attributes('aria-current')).toBe('true')
     expect(wrapper.get('tr[data-record-key]').classes()).toContain(
       'qc-record-result-table__row--selected',
     )
     await wrapper.get('input[aria-label="选择当前页全部病历"]').setValue(false)
     expect(wrapper.emitted('update:selectedRecordKeys')?.at(-1)).toEqual([[]])
+  })
+
+  it('部分勾选当前页病历时全选复选框呈 indeterminate 状态', async () => {
+    const twoRows = [
+      rows[0],
+      { ...rows[0], recordKey: '["H-1","P-2","V-2"]', patientId: 'P-2', visitId: 'V-2', patientName: '患者乙' },
+    ]
+    const wrapper = mount(QcRecordResultTable, {
+      props: { carePhase: 'inpatient', compactReview: true, rows: twoRows, selectedRecordKeys: [] },
+    })
+    const selectAll = wrapper.get('input[aria-label="选择当前页全部病历"]').element as HTMLInputElement
+    expect(selectAll.checked).toBe(false)
+    expect(selectAll.indeterminate).toBe(false)
+
+    await wrapper.setProps({ selectedRecordKeys: [twoRows[0].recordKey] })
+    expect(selectAll.checked).toBe(false)
+    expect(selectAll.indeterminate).toBe(true)
+
+    await wrapper.setProps({ selectedRecordKeys: [twoRows[0].recordKey, twoRows[1].recordKey] })
+    expect(selectAll.checked).toBe(true)
+    expect(selectAll.indeterminate).toBe(false)
   })
 
   it('固定展示选择列与七列业务字段，并按病历阶段显示实际时间字段', () => {

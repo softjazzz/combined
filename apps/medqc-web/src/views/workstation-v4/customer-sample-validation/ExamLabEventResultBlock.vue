@@ -166,8 +166,8 @@ const otherSummary = computed(() => {
 }
 
 .exam-event-summary span.is-danger {
-  color: #c62828;
-  font-weight: 500;
+  color: var(--mq-text-primary, #0f172a);
+  font-weight: 600;
 }
 
 .exam-event-more {
@@ -244,29 +244,57 @@ const otherSummary = computed(() => {
 }
 
 .exam-event-status {
-  padding: 1px 7px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border: 1px solid rgba(15, 23, 42, 0.09);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.045);
-  color: rgba(29, 29, 31, 0.58);
+  background: #ffffff;
+  color: var(--mq-text-secondary, #475569);
   font-size: 12px;
-  font-weight: 400;
+  font-weight: 500;
   line-height: 18px;
   white-space: nowrap;
 }
 
+.exam-event-status::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex: none;
+}
+
 .exam-event-status.is-danger {
-  background: rgba(239, 68, 68, 0.08);
-  color: #c62828;
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: var(--mq-text-primary, #0f172a);
+}
+
+.exam-event-status.is-danger::before {
+  background: #dc2626;
 }
 
 .exam-event-status.is-success {
-  background: rgba(16, 185, 129, 0.09);
-  color: #087443;
+  border-color: rgba(15, 23, 42, 0.1);
+  background: #ffffff;
+  color: var(--mq-text-primary, #0f172a);
+}
+
+.exam-event-status.is-success::before {
+  background: #10b981;
 }
 
 .exam-event-status.is-warning {
-  background: rgba(245, 158, 11, 0.1);
-  color: #9a6200;
+  border-color: rgba(15, 23, 42, 0.12);
+  background: #ffffff;
+  color: var(--mq-text-primary, #0f172a);
+}
+
+.exam-event-status.is-warning::before {
+  background: #d97706;
 }
 
 .exam-event-row p {
@@ -282,18 +310,20 @@ const otherSummary = computed(() => {
   gap: 4px;
   margin-top: 2px;
   padding: 8px 10px;
-  border-left: 3px solid rgba(100, 116, 139, 0.3);
-  border-radius: 0 6px 6px 0;
-  background: rgba(255, 255, 255, 0.78);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-left: 3px solid rgba(100, 116, 139, 0.38);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .exam-event-report-result.is-danger {
-  border-left-color: rgba(198, 40, 40, 0.62);
-  background: rgba(239, 68, 68, 0.045);
+  border-left-color: #d97706;
+  background: #ffffff;
 }
 
 .exam-event-report-result.is-success {
-  border-left-color: rgba(8, 116, 67, 0.52);
+  border-left-color: #10b981;
+  background: #ffffff;
 }
 
 .exam-event-report-result strong {

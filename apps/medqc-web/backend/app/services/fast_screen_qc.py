@@ -17,6 +17,7 @@ from app.database.connection import SessionLocal
 
 from .sc_rule_family import DEFAULT_RULE_FAMILY
 from .bundles import assemble_final_record_bundle
+from .clinical_read import clinical_table_sql
 from .effect_priority_qc import (
     BATCH_OUTPUT_MODE_MINIMAL,
     QUALITY_PROFILE_THROUGHPUT,
@@ -31,6 +32,7 @@ from .formal_qc_rule_criteria import (
     enrich_rule_with_specific_criteria,
     rule_criteria_metadata,
 )
+from .luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy
 from .qc_cancellation import raise_if_cancelled
 
 if TYPE_CHECKING:
@@ -580,6 +582,78 @@ def _categorize_pack_parse_failure(*, raw_output: Any, parse_error: bool, missin
     return ""
 
 
+_FAST_SCREEN_SKIP_REDACT_KEYS = frozenset({
+    "rule_id",
+    "rule_code",
+    "applies_to_rule_ids",
+    "source_table",
+    "document_type",
+    "execution_domain",
+    "doc_scope",
+    "model_version",
+    "pack_id",
+    "purpose",
+    "coverage_flags",
+    "data_quality_flags",
+    "source_fields",
+})
+
+
+def _extract_bundle_identity_values(bundle: dict[str, Any] | None) -> tuple[str, ...]:
+    if not isinstance(bundle, dict):
+        return ()
+    identities: list[str] = []
+    for container in (
+        bundle,
+        bundle.get("patient_info"),
+        bundle.get("structured_context"),
+        (bundle.get("structured_context") or {}).get("patient_info")
+        if isinstance(bundle.get("structured_context"), dict)
+        else None,
+    ):
+        if not isinstance(container, dict):
+            continue
+        for key in ("patient_name", "name", "id_card_no", "id_number", "contact_name", "contact_phone"):
+            val = str(container.get(key) or "").strip()
+            if val and val not in identities:
+                identities.append(val)
+    return tuple(identities)
+
+
+def _redact_fast_screen_value(
+    value: Any,
+    *,
+    identity_values: tuple[str, ...] | None = None,
+    key_name: str = "",
+) -> Any:
+    if key_name in _FAST_SCREEN_SKIP_REDACT_KEYS:
+        return value
+    if isinstance(value, str):
+        if not value:
+            return value
+        return redact_luxian_0609_patient_privacy(value, identity_values=identity_values)
+    if isinstance(value, list):
+        return [
+            _redact_fast_screen_value(item, identity_values=identity_values)
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _redact_fast_screen_value(item, identity_values=identity_values)
+            for item in value
+        )
+    if isinstance(value, dict):
+        return {
+            k: _redact_fast_screen_value(
+                v,
+                identity_values=identity_values,
+                key_name=str(k),
+            )
+            for k, v in value.items()
+        }
+    return value
+
+
 def _build_pack_uncertain_result_item(
     *,
     qc_service: "SichuanQCService",
@@ -588,13 +662,14 @@ def _build_pack_uncertain_result_item(
     quality_profile: str,
     batch_output_mode: str,
     reason: str,
+    status: str = "uncertain",
 ) -> dict[str, Any]:
     findings = str(reason or "").strip() or "批量执行结果不完整，已降级为待复核。"
     return {
         "rule_id": str(rule.get("rule_id") or ""),
         "rule_name": str(rule.get("name") or rule.get("rule_name") or ""),
         "is_compliant": False,
-        "status": "uncertain",
+        "status": status,
         "findings": findings,
         "evidence": "",
         "suggestion": "建议人工复核该规则。",
@@ -631,7 +706,7 @@ def _build_pack_uncertain_result_item(
             "qc_stage": "screening",
             "refined": False,
             "refine_reason": "",
-            "screening_status": "uncertain",
+            "screening_status": status,
             "final_decision_source": "batch",
             "target_document_type": document_type,
         },
@@ -645,6 +720,9 @@ def _apply_copy_content_result_fallback_for_pack(
     item: dict[str, Any],
     documents: list[dict[str, Any]],
     bundle: dict[str, Any],
+    institute_id: str = "",
+    patient_id: str = "",
+    visit_id: str = "",
 ) -> dict[str, Any]:
     normalized_rule_id = _normalize_fast_screen_rule_id(item.get("rule_id") or item.get("rule_code"))
     if normalized_rule_id != "LX0609-12-01-02":
@@ -707,10 +785,17 @@ def _apply_copy_content_result_fallback_for_pack(
                 "hit": bool(doc.get("hit")),
             }
         )
+    copy_truncated = False
     if len(source_documents) < 2:
-        source_documents.extend(
-            _load_copy_course_documents_for_visit(str(item.get("visit_id") or item.get("record_id") or ""))
+        resolved_iid = str(institute_id or item.get("institute_id") or bundle.get("institute_id") or "").strip()
+        resolved_pid = str(patient_id or item.get("patient_id") or bundle.get("patient_id") or "").strip()
+        resolved_vid = str(visit_id or item.get("visit_id") or item.get("record_id") or bundle.get("visit_id") or "").strip()
+        loaded_docs, copy_truncated = _load_copy_course_documents_for_visit(
+            resolved_vid,
+            institute_id=resolved_iid,
+            patient_id=resolved_pid,
         )
+        source_documents.extend(loaded_docs)
         deduped_documents: list[dict[str, Any]] = []
         seen_loaded_keys: set[tuple[str, str, str]] = set()
         for doc in source_documents:
@@ -725,7 +810,13 @@ def _apply_copy_content_result_fallback_for_pack(
             deduped_documents.append(doc)
         source_documents = deduped_documents
     metadata["copy_compare_source_document_count"] = len(source_documents)
+    metadata["copy_compare_truncated"] = copy_truncated
     if len(source_documents) < 2:
+        if copy_truncated:
+            item = dict(item)
+            item["status"] = "data_gap"
+            item["is_compliant"] = False
+            metadata["data_gap_reason"] = "copy_course_documents_truncated"
         return item
 
     patched = qc_service._apply_copy_content_semantic_fallback(
@@ -735,31 +826,64 @@ def _apply_copy_content_result_fallback_for_pack(
         ),
         engine_result=item,
     )
-    return dict(patched or item)
+    patched_item = dict(patched or item)
+    if copy_truncated and str(patched_item.get("status") or "").strip() == "compliant":
+        patched_item["status"] = "data_gap"
+        patched_item["is_compliant"] = False
+        patched_meta = patched_item.setdefault("metadata", {})
+        if isinstance(patched_meta, dict):
+            patched_meta["copy_compare_truncated"] = True
+            patched_meta["data_gap_reason"] = "copy_course_documents_truncated"
+    return patched_item
 
 
-def _load_copy_course_documents_for_visit(visit_id: str) -> list[dict[str, Any]]:
-    visit_id = str(visit_id or "").strip()
-    if not visit_id or SessionLocal is None:
-        return []
+def _load_copy_course_documents_for_visit(
+    visit_id: str,
+    *,
+    institute_id: str = "",
+    patient_id: str = "",
+    max_rows_per_table: int = 8,
+) -> tuple[list[dict[str, Any]], bool]:
+    """按三坐标读取病程文书以支持复制病程比对；使用 LIMIT N+1 探测截断且不吞 DB 异常。"""
+    iid = str(institute_id or "").strip()
+    pid = str(patient_id or "").strip()
+    vid = str(visit_id or "").strip()
+    if not (iid and pid and vid):
+        raise ValueError("复制病程查询缺少完整三坐标 (institute_id, patient_id, visit_id)")
+    if SessionLocal is None:
+        raise RuntimeError("数据库连接未配置，无法读取复制病程源文书")
+    limit_cap = max(1, int(max_rows_per_table))
     rows: list[dict[str, Any]] = []
+    truncated = False
     session = SessionLocal()
     try:
         for source_table in ("daily_course_record", "senior_course_record", "first_course_record"):
+            table_sql = clinical_table_sql(source_table)
             result = session.execute(
                 text(
                     f"""
                     SELECT document_id, document_title, record_time, record_content
-                    FROM cdm.{source_table}
-                    WHERE visit_id = :visit_id
+                    FROM {table_sql}
+                    WHERE institute_id = :institute_id
+                      AND patient_id = :patient_id
+                      AND visit_id = :visit_id
                       AND COALESCE(record_content, '') <> ''
                     ORDER BY record_time NULLS LAST, document_id
-                    LIMIT 8
+                    LIMIT :limit_rows
                     """
                 ),
-                {"visit_id": visit_id},
+                {
+                    "institute_id": iid,
+                    "patient_id": pid,
+                    "visit_id": vid,
+                    "limit_rows": limit_cap + 1,
+                },
             )
-            for row in result.mappings():
+            fetched = list(result.mappings().all())
+            if len(fetched) > limit_cap:
+                truncated = True
+                fetched = fetched[:limit_cap]
+            for row in fetched:
                 rows.append(
                     {
                         "document_type": source_table,
@@ -771,11 +895,9 @@ def _load_copy_course_documents_for_visit(visit_id: str) -> list[dict[str, Any]]
                         "hit": True,
                     }
                 )
-    except Exception:
-        return []
     finally:
         session.close()
-    return rows
+    return rows, truncated
 
 
 def _pick_primary_document(
@@ -2023,6 +2145,15 @@ async def run_final_fast_screen(
             if sc146_single_rule_pack
             else str(primary_document.get("content") or "")
         )
+        bundle_identities = _extract_bundle_identity_values(bundle)
+        redacted_primary_content_for_llm = _redact_fast_screen_value(
+            primary_content_for_pack,
+            identity_values=bundle_identities or None,
+        )
+        redacted_evidence_payload_for_llm = _redact_fast_screen_value(
+            evidence_payload_for_pack,
+            identity_values=bundle_identities or None,
+        )
         targeted_context_by_rule = _targeted_context_by_rule(
             list(evidence_payload_for_pack.get("targeted_evidence_context") or [])
         )
@@ -2030,14 +2161,14 @@ async def run_final_fast_screen(
             "first_pass_prompt_hash": "",
             "first_pass_prompt_chars": 0,
             "targeted_evidence_context_hash": _hash_payload(
-                evidence_payload_for_pack.get("targeted_evidence_context") or []
+                redacted_evidence_payload_for_llm.get("targeted_evidence_context") or []
             ),
             "targeted_evidence_context_chars": len(
-                _stable_json_text(evidence_payload_for_pack.get("targeted_evidence_context") or [])
+                _stable_json_text(redacted_evidence_payload_for_llm.get("targeted_evidence_context") or [])
             ),
-            "primary_document_chars": len(primary_content_for_pack),
+            "primary_document_chars": len(redacted_primary_content_for_llm),
             "sc146_compact_evidence_context": bool(
-                evidence_payload_for_pack.get("sc146_compact_evidence_context")
+                redacted_evidence_payload_for_llm.get("sc146_compact_evidence_context")
             ),
         }
         build_prompt = getattr(qc_service.rule_engine, "_build_batch_prompt_compact", None)
@@ -2046,8 +2177,8 @@ async def run_final_fast_screen(
                 prompt_text, _ = build_prompt(
                     pack_rules,
                     {
-                        "content": primary_content_for_pack,
-                        "evidence_payload": evidence_payload_for_pack,
+                        "content": redacted_primary_content_for_llm,
+                        "evidence_payload": redacted_evidence_payload_for_llm,
                         "execution_domain": "final_fast_screen",
                         "doc_scope": "primary",
                         "model_version": str(qc_service.client.model or ""),
@@ -2143,8 +2274,8 @@ async def run_final_fast_screen(
                     evaluated = await qc_service.rule_engine.evaluate_batch_compact(
                         rules=pack_rules,
                         medical_record={
-                            "content": primary_content_for_pack,
-                            "evidence_payload": evidence_payload_for_pack,
+                            "content": redacted_primary_content_for_llm,
+                            "evidence_payload": redacted_evidence_payload_for_llm,
                             "execution_domain": "final_fast_screen",
                             "doc_scope": "primary",
                             "model_version": str(qc_service.client.model or ""),
@@ -2259,6 +2390,9 @@ async def run_final_fast_screen(
                     item=item,
                     documents=documents,
                     bundle=bundle,
+                    institute_id=institute_id,
+                    patient_id=patient_id,
+                    visit_id=visit_id,
                 )
                 normalized_pack_results.append(item)
             pack_results = normalized_pack_results
@@ -2416,6 +2550,7 @@ async def run_final_fast_screen(
                 quality_profile=quality_profile_normalized,
                 batch_output_mode=batch_output_mode_normalized,
                 reason="批量执行异常，已降级为内部技术异常。",
+                status="technical_error_internal",
             )
             item["_document_type"] = pack.document_type
             metadata = item.setdefault("metadata", {})
@@ -2438,7 +2573,7 @@ async def run_final_fast_screen(
                 metadata["technical_error_internal"] = True
                 metadata["final_decision_source"] = "technical_error_fallback"
             pack_results.append(item)
-        diagnostic["status_count"] = {"uncertain": len(pack_results)}
+        diagnostic["status_count"] = {"technical_error_internal": len(pack_results)}
         return {
             "index": index,
             "results": pack_results,

@@ -26,7 +26,7 @@ export type TaskHistoryRow = {
   progressText: string
   // 非执行中任务的一句话说明：完成时间与用时，或失败、取消的提示。
   detailText: string
-  detailTone: 'muted' | 'warning'
+  detailTone: 'muted' | 'warning' | 'danger'
 }
 
 export type TaskHistoryGroup = { key: string; label: string; rows: TaskHistoryRow[] }
@@ -95,8 +95,13 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
   let detailText = ''
   let detailTone: TaskHistoryRow['detailTone'] = 'muted'
   if (status === 'failed' && !base.isRunning) {
-    detailText = '查看原因及已有结果'
-    detailTone = 'warning'
+    if (partialFailure) {
+      detailText = '查看原因及已有结果'
+      detailTone = 'warning'
+    } else {
+      detailText = '查看失败原因'
+      detailTone = 'danger'
+    }
   } else if (status === 'canceled') {
     detailText = '任务已取消，已返回的结果仍可查看'
   } else if (status === 'completed') {
@@ -116,8 +121,8 @@ export function buildTaskHistoryRow(job: SichuanBatchJob): TaskHistoryRow {
   return {
     id: job.id,
     title: cleanTaskTitle(String(job.rule_name || base.ruleSetText)),
-    statusLabel: status === 'failed' && !base.isRunning ? '未全部完成' : base.statusLabel,
-    statusTone: resolveTone(status, base.isRunning, status === 'failed'),
+    statusLabel: partialFailure ? '未全部完成' : base.statusLabel,
+    statusTone: resolveTone(status, base.isRunning, partialFailure),
     isRunning: base.isRunning || status === 'queued',
     isCompleted: status === 'completed',
     canExport: status === 'completed' || partialFailure,

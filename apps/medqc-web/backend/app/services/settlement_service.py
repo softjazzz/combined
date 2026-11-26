@@ -63,6 +63,7 @@ class SettlementService:
         keyword: Optional[str] = None,
         page: int = 1,
         page_size: int = 20,
+        institute_id: Optional[str] = None,
     ) -> dict:
         """
         查询结算清单列表（分页）。
@@ -73,6 +74,8 @@ class SettlementService:
         with Session(engine) as session:
             q = clinical_query(session, MedicalInsuranceSettlement)
 
+            if institute_id and str(institute_id).strip():
+                q = q.filter(MedicalInsuranceSettlement.institute_id == str(institute_id).strip())
             if dept:
                 q = q.filter(MedicalInsuranceSettlement.discharge_dept_name == dept)
             if keyword:
@@ -165,14 +168,21 @@ class SettlementService:
         - medical_insurance_settlement_cost（费用明细）
         """
         with Session(engine) as session:
-            # 1. 主表
+            # 1. 主表（三坐标隔离；未传 institute_id 时多院重号 fail-closed）
             q = clinical_query(session, MedicalInsuranceSettlement).filter(
                 MedicalInsuranceSettlement.patient_id == patient_id,
                 MedicalInsuranceSettlement.visit_id == visit_id,
             )
-            if institute_id:
-                q = q.filter(MedicalInsuranceSettlement.institute_id == institute_id)
-            settlement = q.first()
+            if institute_id and str(institute_id).strip():
+                q = q.filter(MedicalInsuranceSettlement.institute_id == str(institute_id).strip())
+                settlement = q.first()
+            else:
+                matches = q.limit(2).all()
+                if len(matches) > 1:
+                    raise ValueError(
+                        f"同一 (patient_id={patient_id}, visit_id={visit_id}) 存在多院区重号冲突，请显式提供 institute_id"
+                    )
+                settlement = matches[0] if matches else None
 
             if not settlement:
                 return None
@@ -180,24 +190,76 @@ class SettlementService:
             inst_id = settlement.institute_id
             result = _row_to_dict(settlement)
 
-            # 2. 从病案首页补充患者基本信息
+            # 2. 从病案首页补充患者基本信息（同时对齐 settlement_formal_qc 规范字段与历史兼容字段）
             mr = clinical_query(session, MedicalRecordFrontpage).filter(
                 MedicalRecordFrontpage.institute_id == inst_id,
                 MedicalRecordFrontpage.patient_id == patient_id,
                 MedicalRecordFrontpage.visit_id == visit_id,
             ).first()
             if mr:
+                id_card_val = getattr(mr, "id_card_no", None) or getattr(mr, "id_card", None)
+                birthday_str = _to_str(mr.birthday)
                 result["patient_name"] = mr.name
                 result["patient_sex"] = mr.sex
+                result["sex"] = mr.sex
                 result["patient_age"] = mr.age_year
-                result["patient_id_card"] = getattr(mr, "id_card", None)
-                result["patient_birthday"] = _to_str(mr.birthday)
+                result["age"] = mr.age_year
+                result["patient_id_card"] = id_card_val
+                result["id_number"] = id_card_val
+                result["id_type"] = result.get("id_type") or getattr(mr, "id_card_type", None)
+                result["patient_birthday"] = birthday_str
+                result["birth_date"] = birthday_str
                 result["patient_insurance_type"] = mr.insurance_type
                 result["patient_nationality"] = mr.nationality
+                result["nationality"] = result.get("nationality") or mr.nationality
                 result["patient_ethnicity"] = mr.ethnicity
+                result["ethnicity"] = result.get("ethnicity") or mr.ethnicity
                 result["patient_marital_status"] = mr.marital_status
                 result["attending_physician"] = getattr(mr, "attending_physician_sign", None)
                 result["hospital_duration"] = mr.hospital_duration
+                result["actual_hospital_days"] = mr.hospital_duration
+                if not result.get("occupation_category") and getattr(mr, "occupation_category", None):
+                    result["occupation_category"] = mr.occupation_category
+                if not result.get("currentaddress") and getattr(mr, "currentaddress", None):
+                    result["currentaddress"] = mr.currentaddress
+                if not result.get("contact_name") and getattr(mr, "contact_name", None):
+                    result["contact_name"] = mr.contact_name
+                if not result.get("contact_relationship") and getattr(mr, "contact_relationship", None):
+                    result["contact_relationship"] = mr.contact_relationship
+                if not result.get("contact_telephone") and getattr(mr, "contact_telephone", None):
+                    result["contact_telephone"] = mr.contact_telephone
+                if not result.get("contact_address") and getattr(mr, "contact_address", None):
+                    result["contact_address"] = mr.contact_address
+                if not result.get("admission_route") and getattr(mr, "admission_route", None):
+                    result["admission_route"] = mr.admission_route
+                if not result.get("mr_no") and getattr(mr, "mr_no", None):
+                    result["mr_no"] = mr.mr_no
+                if not result.get("insurance_type") and (mr.insurance_type or getattr(mr, "medical_payment_method", None)):
+                    result["insurance_type"] = mr.insurance_type or getattr(mr, "medical_payment_method", None)
+
+            # 对齐 settlement_formal_qc 规范字段别名（保留原 CDM 字段以兼容前端展示）
+            result.setdefault("medical_record_no", result.get("mr_no"))
+            result.setdefault("admission_dept", result.get("admission_dept_name"))
+            result.setdefault("discharge_dept", result.get("discharge_dept_name"))
+            result.setdefault("admission_way", result.get("admission_route"))
+            result.setdefault("occupation", result.get("occupation_category"))
+            result.setdefault("payment_method", result.get("insurance_type"))
+            result.setdefault("current_address", result.get("currentaddress"))
+            result.setdefault("zipcode", result.get("currentaddress_postcode"))
+            result.setdefault("contact_relation", result.get("contact_relationship"))
+            result.setdefault("contact_phone", result.get("contact_telephone"))
+            result.setdefault("rehospital_plan", result.get("rehospital_with_month"))
+            result.setdefault("rehospital_purpose", result.get("rehospital_with_month_purpose"))
+            result.setdefault("transfer_hospital", result.get("receiving_institution_name"))
+            result.setdefault("medical_type", result.get("inpat_type"))
+            result.setdefault("ventilation_hours", result.get("ventilator_usetime"))
+            result.setdefault("special_care_days", result.get("intensive_care_days"))
+            result.setdefault("first_level_care_days", result.get("primary_care_days"))
+            result.setdefault("newborn_type", result.get("newborn_admission_type"))
+            if not result.get("newborn_birth_weight") and result.get("newborn_birthweight"):
+                result["newborn_birth_weight"] = result.get("newborn_birthweight")
+            if not result.get("newborn_admission_weight") and result.get("newborn_admitweigth"):
+                result["newborn_admission_weight"] = result.get("newborn_admitweigth")
 
             # 3. 诊断列表
             diags = clinical_query(session, Diagnosis).filter(
@@ -215,6 +277,8 @@ class SettlementService:
                 }
                 for d in diags
             ]
+            if not result.get("admission_condition") and result["diagnoses"]:
+                result["admission_condition"] = result["diagnoses"][0].get("condition")
 
             # 4. 手术列表
             surgeries = clinical_query(session, MrSurgery).filter(
@@ -241,7 +305,10 @@ class SettlementService:
                 MrCost.visit_id == visit_id,
             ).first()
             if cost:
-                result["cost_summary"] = _row_to_dict(cost)
+                cost_dict = _row_to_dict(cost)
+                result["cost_summary"] = cost_dict
+                if not result.get("total_cost") and cost_dict.get("total_cost") is not None:
+                    result["total_cost"] = cost_dict.get("total_cost")
 
             # 6. 费用明细
             cost_items = clinical_query(session, MedicalInsuranceSettlementCost).filter(

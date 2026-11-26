@@ -16,6 +16,10 @@ from ..services.luxian_0609.phase_scope import get_luxian_0609_acceptance_only_r
 from ..core.response import get_trace_id, success_response
 from ..core.settings import get_settings
 from ..core.security import get_current_user, require_roles
+from ..services.medical_records.detail_service import (
+    enforce_institute_access,
+    resolve_non_global_institute_scope,
+)
 from ..services.product_activation import require_product_activation
 from ..services.customer_test_storage import CustomerTestStorageError
 from ..services.fast_screen_qc import EXECUTION_STRATEGY_FAST_SCREEN, EXECUTION_STRATEGY_STANDARD, get_fast_screen_full_rule_ids
@@ -84,6 +88,9 @@ router = APIRouter(
 _IMPORT_UPLOAD_DIR = (
     Path(__file__).resolve().parents[2] / "data" / "sample_pool_uploads"
 )
+_IMPORT_UPLOAD_MAX_BYTES = 20 * 1024 * 1024  # 20MB
+_IMPORT_UPLOAD_READ_CHUNK_BYTES = 1024 * 1024  # 1MB
+_ALLOWED_MANUAL_SHEET_EXTENSIONS = frozenset({".xls", ".xlsx"})
 _FAST_SCREEN_FULL_RULE_ID_SET = {str(item).strip().upper() for item in get_fast_screen_full_rule_ids() if str(item).strip()}
 _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON = (
     Path(__file__).resolve().parents[3] / "docs" / "0418" / "QC" / "sheet2_exact_review_acceptance_package.json"
@@ -118,6 +125,152 @@ def _current_user_id(current_user: Dict[str, Any]) -> str:
         .strip()
         or "anonymous"
     )
+
+
+def _allowed_manual_sheet_roots() -> tuple[Path, ...]:
+    return (_IMPORT_UPLOAD_DIR.resolve(),)
+
+
+def _has_symlink_component(path: Path, root: Path) -> bool:
+    current = path
+    while True:
+        if current.is_symlink():
+            return True
+        if current == root or current.parent == current:
+            break
+        current = current.parent
+    return False
+
+
+def _resolve_safe_manual_sheet_path(source_file: str) -> Path:
+    """将 import-manual-sheet 的 source_file 严格限制在允许目录内，防路径穿越和文件存在性探测。"""
+    raw = str(source_file or "").strip()
+    if not raw or "\x00" in raw:
+        raise HTTPException(status_code=422, detail="文件路径无效")
+    allowed_roots = _allowed_manual_sheet_roots()
+    candidate_raw = Path(raw)
+    if not candidate_raw.is_absolute():
+        candidate_raw = allowed_roots[0] / candidate_raw
+    if candidate_raw.suffix.lower() not in _ALLOWED_MANUAL_SHEET_EXTENSIONS:
+        raise HTTPException(status_code=422, detail="仅支持导入 .xls 或 .xlsx 文件")
+    resolved = candidate_raw.resolve()
+    matched_root: Optional[Path] = None
+    for root in allowed_roots:
+        try:
+            resolved.relative_to(root)
+        except ValueError:
+            continue
+        if _has_symlink_component(candidate_raw, root) or _has_symlink_component(resolved, root):
+            raise HTTPException(status_code=403, detail="禁止读取符号链接文件")
+        matched_root = root
+        break
+    if matched_root is None:
+        raise HTTPException(status_code=403, detail="禁止读取允许目录之外的本地文件")
+    if not resolved.is_file():
+        raise HTTPException(status_code=404, detail="指定的样本表格文件不存在")
+    return resolved
+
+
+def _lookup_creator_institute(actor_id: Optional[str]) -> Optional[str]:
+    cleaned = str(actor_id or "").strip()
+    if not cleaned:
+        return None
+    from ..database import connection as db_connection
+    from ..services.defect_rectification_service import RectificationError, _person
+
+    session_factory = getattr(db_connection, "SessionLocal", None)
+    if session_factory is None:
+        return None
+    try:
+        with session_factory() as session:
+            person = _person(session, cleaned)
+        inst = person.get("institute_id")
+        if isinstance(inst, str) and inst.strip() and inst == inst.strip():
+            return inst
+    except (RectificationError, Exception):
+        return None
+    return None
+
+
+def _pool_accessible_for_institute(
+    service: Any,
+    pool: Optional[Dict[str, Any]],
+    current_user: Dict[str, Any],
+    inst_scope: Optional[str],
+    *,
+    check_items: bool = True,
+) -> bool:
+    if inst_scope is None:
+        return True
+    if not isinstance(pool, dict):
+        return False
+    explicit_inst = pool.get("institute_id")
+    if isinstance(explicit_inst, str) and explicit_inst.strip():
+        if explicit_inst != inst_scope:
+            return False
+    has_own_items = False
+    if check_items and callable(getattr(service, "list_pool_items", None)):
+        pool_id = str(pool.get("id") or "").strip()
+        if pool_id:
+            try:
+                items_result = service.list_pool_items(pool_id=pool_id, page=1, page_size=200)
+                items = list(getattr(items_result, "items", []) or [])
+            except Exception:
+                items = []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item_inst = item.get("matched_institute_id") or item.get("institute_id")
+                if isinstance(item_inst, str) and item_inst.strip():
+                    if item_inst != inst_scope:
+                        return False
+                    has_own_items = True
+    creator = str(pool.get("created_by") or "").strip()
+    if creator:
+        creator_inst = _lookup_creator_institute(creator)
+        if creator_inst is not None and creator_inst != inst_scope:
+            return False
+        if creator == _current_user_id(current_user) or creator_inst == inst_scope:
+            return True
+    if isinstance(explicit_inst, str) and explicit_inst == inst_scope:
+        return True
+    return has_own_items
+
+
+def _enforce_sample_pool_institute_access(
+    service: Any,
+    pool: Optional[Dict[str, Any]],
+    current_user: Dict[str, Any],
+    *,
+    check_items: bool = True,
+) -> Optional[str]:
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None and not _pool_accessible_for_institute(
+        service,
+        pool,
+        current_user,
+        inst_scope,
+        check_items=check_items,
+    ):
+        raise HTTPException(status_code=403, detail="无权访问或操作其他机构样本池")
+    return inst_scope
+
+
+async def _read_upload_with_limit(file: UploadFile, max_bytes: int) -> bytes:
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(_IMPORT_UPLOAD_READ_CHUNK_BYTES)
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"上传文件超过大小上限（最大 {max_bytes // (1024 * 1024)}MB）",
+            )
+        chunks.append(chunk)
+    return b"".join(chunks)
 
 
 def _sample_validation_operation_ref() -> str:
@@ -504,11 +657,23 @@ async def list_sample_pools(
     page_size: int = Query(default=20, ge=1, le=100),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    result = _service().list_pools(page=page, page_size=page_size, query=q)
+    service = _service()
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    result = service.list_pools(page=page, page_size=page_size, query=q)
+    if inst_scope is not None:
+        items = [
+            pool
+            for pool in result.items
+            if _pool_accessible_for_institute(service, pool, current_user, inst_scope)
+        ]
+        total = len(items)
+    else:
+        items = result.items
+        total = result.total
     return success_response(
         data={
-            "items": result.items,
-            "total": result.total,
+            "items": items,
+            "total": total,
             "page": result.page,
             "page_size": result.page_size,
         },
@@ -523,6 +688,13 @@ async def create_test_record(
     payload: TestRecordCreateRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None:
+        source_data = payload.source.model_dump(mode="json") if getattr(payload, "source", None) is not None else {}
+        for inst_key in ("institute_id", "source_institute_id"):
+            val = source_data.get(inst_key)
+            if isinstance(val, str) and val.strip():
+                enforce_institute_access(inst_scope, val)
     try:
         result = _service().create_customer_test_record(
             payload=payload.model_dump(mode="json"),
@@ -543,17 +715,16 @@ async def create_test_record(
 async def import_manual_sheet(
     request: Request,
     payload: SamplePoolImportRequest,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles("admin", "super_admin")),
 ):
-    file_path = os.path.abspath(payload.source_file)
-    if not os.path.exists(file_path):
-        raise HTTPException(status_code=404, detail=f"文件不存在: {file_path}")
+    resolved_path = _resolve_safe_manual_sheet_path(payload.source_file)
+    file_path = str(resolved_path)
     rows = load_manual_case_rows_from_excel(file_path=file_path, sheet_name=payload.source_sheet)
     if not rows:
         raise HTTPException(status_code=422, detail="Sheet 中未读取到有效样本行")
     pool = _service().create_pool_with_items(
         name=payload.pool_name,
-        source_file=file_path,
+        source_file=resolved_path.name,
         source_sheet=payload.source_sheet,
         created_by=_current_user_id(current_user),
         rows=rows,
@@ -577,34 +748,37 @@ async def import_manual_sheet_upload(
     file: UploadFile = File(..., description="Excel 模板文件"),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    filename = str(file.filename or "").strip()
+    filename = Path(str(file.filename or "").strip()).name
     suffix = Path(filename).suffix.lower()
-    if suffix not in {".xls", ".xlsx"}:
+    if suffix not in _ALLOWED_MANUAL_SHEET_EXTENSIONS:
         raise HTTPException(status_code=422, detail="仅支持导入 .xls 或 .xlsx 模板文件")
+
+    content = await _read_upload_with_limit(file, _IMPORT_UPLOAD_MAX_BYTES)
+    if not content:
+        raise HTTPException(status_code=422, detail="上传文件为空")
 
     _IMPORT_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     safe_stem = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in Path(filename).stem).strip("_")
     safe_stem = safe_stem or "manual_case_pool"
     saved_path = _IMPORT_UPLOAD_DIR / f"{safe_stem}-{uuid.uuid4().hex[:8]}{suffix}"
 
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=422, detail="上传文件为空")
-    saved_path.write_bytes(content)
+    try:
+        saved_path.write_bytes(content)
+        rows = load_manual_case_rows_from_excel(file_path=str(saved_path), sheet_name=source_sheet)
+        if not rows:
+            raise HTTPException(status_code=422, detail="模板中未读取到有效样本行，请检查 Sheet 与表头格式")
 
-    rows = load_manual_case_rows_from_excel(file_path=str(saved_path), sheet_name=source_sheet)
-    if not rows:
-        raise HTTPException(status_code=422, detail="模板中未读取到有效样本行，请检查 Sheet 与表头格式")
-
-    pool = _service().create_pool_with_items(
-        name=str(pool_name).strip(),
-        source_file=str(saved_path),
-        source_sheet=str(source_sheet).strip() or "自动识别",
-        created_by=_current_user_id(current_user),
-        rows=rows,
-        description=(description or "").strip() or None,
-        scene=str(scene).strip() or "running",
-    )
+        pool = _service().create_pool_with_items(
+            name=str(pool_name).strip(),
+            source_file=filename or saved_path.name,
+            source_sheet=str(source_sheet).strip() or "自动识别",
+            created_by=_current_user_id(current_user),
+            rows=rows,
+            description=(description or "").strip() or None,
+            scene=str(scene).strip() or "running",
+        )
+    finally:
+        saved_path.unlink(missing_ok=True)
     return success_response(
         data={**pool, "imported_rows": len(rows)},
         message="客户样本模板导入成功",
@@ -615,7 +789,9 @@ async def import_manual_sheet_upload(
 @router.get("/sheet2-exact-review/acceptance-package")
 async def get_sheet2_exact_review_acceptance_package(
     request: Request,
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(
+        require_roles("admin", "qc_manager", "super_admin", "sync_admin")
+    ),
 ):
     if not _SHEET2_EXACT_REVIEW_ACCEPTANCE_JSON.exists():
         raise HTTPException(status_code=404, detail="Sheet2 精确复核验收包尚未生成")
@@ -679,9 +855,11 @@ async def get_sample_pool(
     pool_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     return success_response(
         data=pool,
         message="获取客户样本池成功",
@@ -695,8 +873,15 @@ async def delete_sample_pool(
     pool_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    del current_user
-    result = _service().delete_pool(pool_id=pool_id)
+    service = _service()
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None:
+        pool = service.get_pool(pool_id=pool_id)
+        if not pool:
+            raise HTTPException(status_code=404, detail="样本池不存在或已删除")
+        if not _pool_accessible_for_institute(service, pool, current_user, inst_scope):
+            raise HTTPException(status_code=403, detail="无权删除其他机构样本池")
+    result = service.delete_pool(pool_id=pool_id)
     reason = str(result.get("reason") or "")
     if reason == "not_found":
         raise HTTPException(status_code=404, detail="样本池不存在或已删除")
@@ -725,10 +910,12 @@ async def list_sample_pool_items(
     page_size: int = Query(default=20, ge=1, le=200),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
-    result = _service().list_pool_items(
+    inst_scope = _enforce_sample_pool_institute_access(service, pool, current_user)
+    result = service.list_pool_items(
         pool_id=pool_id,
         coverage_type=coverage_type,
         match_status=match_status,
@@ -737,11 +924,21 @@ async def list_sample_pool_items(
         page=page,
         page_size=page_size,
     )
+    items = result.items
+    total = result.total
+    if inst_scope is not None:
+        items = [
+            item
+            for item in items
+            if not (item.get("matched_institute_id") or item.get("institute_id"))
+            or str(item.get("matched_institute_id") or item.get("institute_id")) == inst_scope
+        ]
+        total = len(items) if len(items) != len(result.items) else result.total
     return success_response(
         data={
             "pool": pool,
-            "items": result.items,
-            "total": result.total,
+            "items": items,
+            "total": total,
             "page": result.page,
             "page_size": result.page_size,
         },
@@ -762,10 +959,12 @@ async def list_sample_pool_records(
     page_size: int = Query(default=20, ge=1, le=200),
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
-    result = _service().list_pool_records(
+    inst_scope = _enforce_sample_pool_institute_access(service, pool, current_user)
+    result = service.list_pool_records(
         pool_id=pool_id,
         coverage_type=coverage_type,
         match_status=match_status,
@@ -774,11 +973,21 @@ async def list_sample_pool_records(
         page=page,
         page_size=page_size,
     )
+    items = result.items
+    total = result.total
+    if inst_scope is not None:
+        items = [
+            item
+            for item in items
+            if not (item.get("matched_institute_id") or item.get("institute_id"))
+            or str(item.get("matched_institute_id") or item.get("institute_id")) == inst_scope
+        ]
+        total = len(items) if len(items) != len(result.items) else result.total
     return success_response(
         data={
             "pool": pool,
-            "items": result.items,
-            "total": result.total,
+            "items": items,
+            "total": total,
             "page": result.page,
             "page_size": result.page_size,
         },
@@ -793,11 +1002,13 @@ async def match_sample_pool(
     pool_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     try:
-        result = _service().match_pool_items_from_source(pool_id=pool_id)
+        result = service.match_pool_items_from_source(pool_id=pool_id)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except Exception as exc:
@@ -817,11 +1028,13 @@ async def sync_sample_pool_records(
     background_tasks: BackgroundTasks,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     try:
-        job = _service().create_sync_job(
+        job = service.create_sync_job(
             pool_id=pool_id,
             created_by=_current_user_id(current_user),
             payload=payload.model_dump(exclude_unset=True),
@@ -850,11 +1063,11 @@ async def preview_sample_pool_hospitalization_scope(
     payload: SamplePoolHospitalizationScopeRequest,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    del current_user
     service = _service()
     pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     normalized = _normalize_hospitalization_scope_payload(payload)
     try:
         result = service.preview_hospitalization_scope(
@@ -890,6 +1103,7 @@ async def sync_sample_pool_by_hospitalization(
     pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     normalized = _normalize_hospitalization_scope_payload(payload)
     job_payload = {
         "only_intrinsic": False,
@@ -931,9 +1145,11 @@ async def sync_sample_pool_by_admission(
         raise HTTPException(status_code=422, detail="入院开始日期不能晚于结束日期")
     if (payload.end_date - payload.start_date).days > 30:
         raise HTTPException(status_code=422, detail="入院日期范围最多 31 天")
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    _enforce_sample_pool_institute_access(service, pool, current_user)
     departments = list(dict.fromkeys(item.strip() for item in payload.departments if item.strip()))
     job_payload = {
         "only_intrinsic": False,
@@ -945,7 +1161,7 @@ async def sync_sample_pool_by_admission(
         },
     }
     try:
-        job = _service().create_sync_job(
+        job = service.create_sync_job(
             pool_id=pool_id,
             created_by=_current_user_id(current_user),
             payload=job_payload,
@@ -973,10 +1189,12 @@ async def get_latest_sample_pool_sync_job(
     pool_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    pool = _service().get_pool(pool_id=pool_id)
+    service = _service()
+    pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
-    job = _service().get_latest_sync_job(pool_id=pool_id)
+    _enforce_sample_pool_institute_access(service, pool, current_user)
+    job = service.get_latest_sync_job(pool_id=pool_id)
     return success_response(
         data=job,
         message="获取样本同步任务成功",
@@ -990,9 +1208,16 @@ async def get_sample_pool_sync_job(
     job_id: str,
     current_user: Dict[str, Any] = Depends(get_current_user),
 ):
-    job = _service().get_sync_job(job_id=job_id)
+    service = _service()
+    job = service.get_sync_job(job_id=job_id)
     if not job:
         raise HTTPException(status_code=404, detail="同步任务不存在")
+    inst_scope = resolve_non_global_institute_scope(current_user)
+    if inst_scope is not None:
+        pool_id = str(job.get("pool_id") or "").strip()
+        pool = service.get_pool(pool_id=pool_id) if pool_id else None
+        if not pool or not _pool_accessible_for_institute(service, pool, current_user, inst_scope):
+            raise HTTPException(status_code=403, detail="无权查看其他机构同步任务")
     return success_response(
         data=job,
         message="获取样本同步任务成功",
@@ -1017,6 +1242,7 @@ async def run_sample_pool_intrinsic_validation(
     pool = service.get_pool(pool_id=pool_id)
     if not pool:
         raise HTTPException(status_code=404, detail="样本池不存在")
+    inst_scope = _enforce_sample_pool_institute_access(service, pool, current_user)
 
     requested_rule_set_key = str(payload.rule_set_key or "").strip()
     resolved_rule_set = None
@@ -1049,6 +1275,8 @@ async def run_sample_pool_intrinsic_validation(
     )
     if len(requested_record_refs) != len(requested_record_ref_values):
         raise HTTPException(status_code=422, detail="所选病历三坐标存在重复")
+    for ref in requested_record_refs:
+        enforce_institute_access(inst_scope, ref.institute_id)
     requested_sample_item_ids = [
         str(item_id or "").strip()
         for item_id in list(payload.sample_item_ids or [])
@@ -1138,6 +1366,8 @@ async def run_sample_pool_intrinsic_validation(
     if not candidate_record_refs or not all(all(ref) for ref in candidate_record_refs):
         raise HTTPException(status_code=422, detail="样本病历缺少完整三坐标，无法创建质控任务")
     record_refs = normalize_case_refs(candidate_record_refs)
+    for ref in record_refs:
+        enforce_institute_access(inst_scope, ref.institute_id)
     if requested_record_refs and set(record_refs) != set(requested_record_refs):
         raise HTTPException(status_code=422, detail="所选样本与病历三坐标范围不一致，请刷新后重试")
     record_ids = sorted({record_ref.visit_id for record_ref in record_refs})

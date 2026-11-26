@@ -159,7 +159,8 @@ def _sync_missing_columns():
                 col_type = col.type.compile(dialect=engine.dialect)
                 sql = f'ALTER TABLE "{table.name}" ADD COLUMN "{col_name}" {col_type}'
                 try:
-                    conn.execute(text(sql))
+                    with conn.begin_nested():
+                        conn.execute(text(sql))
                     logger.info("[schema-sync] ADD COLUMN %s.%s (%s)", table.name, col_name, col_type)
                 except Exception as e:
                     logger.warning("[schema-sync] SKIP %s.%s: %s", table.name, col_name, e)

@@ -44,24 +44,53 @@ def test_refresh_accepts_json_body(client):
     assert body.get("refresh_token") == refresh_token
 
 
-def test_password_reset_token_is_one_time(client):
+def test_password_reset_token_is_one_time(client, monkeypatch):
+    from app.core.security import create_password_reset_token, get_password_hash
+    from app.routers import auth as auth_router
+
     email = f"reset-{uuid4().hex[:8]}@medqc.com"
-    register_resp = client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "display_name": "Reset User",
-            "department": "测试科室",
-            "password": "old-password-123",
-        },
+    user_record = {
+        "id": f"u-{uuid4().hex[:8]}",
+        "email": email,
+        "username": email,
+        "display_name": "Reset User",
+        "department": "测试科室",
+        "roles": ["doctor"],
+        "password_hash": get_password_hash("old-password-123"),
+        "avatar": "",
+        "phone": "",
+        "bio": "",
+        "created_at": "2026-01-01T00:00:00Z",
+        "last_login": None,
+        "is_active": True,
+    }
+    monkeypatch.setattr(
+        auth_router,
+        "resolve_auth_store_user_by_subject",
+        lambda sub: user_record if str(sub or "").strip().lower() == email else None,
     )
-    assert register_resp.status_code == 200, register_resp.text
+    monkeypatch.setattr(
+        auth_router,
+        "find_user_by_account",
+        lambda acc: user_record if str(acc or "").strip().lower() == email else None,
+    )
+
+    def _fake_update_password(*, user_id: str, password_hash: str):
+        if user_id != user_record["id"]:
+            return None
+        user_record["password_hash"] = password_hash
+        return dict(user_record)
+
+    monkeypatch.setattr(auth_router, "update_user_password", _fake_update_password)
+    monkeypatch.setattr(auth_router, "touch_last_login", lambda _uid: user_record)
 
     forgot_resp = client.post("/api/v1/auth/forgot-password", json={"email": email})
     assert forgot_resp.status_code == 200, forgot_resp.text
-    reset_token = (forgot_resp.json().get("data") or {}).get("reset_token")
-    assert reset_token, "non-production should return reset_token for controlled testing"
+    assert "reset_token" not in (forgot_resp.json().get("data") or {}), (
+        "forgot-password must never leak reset_token in HTTP response"
+    )
 
+    reset_token = create_password_reset_token(email)
     reset_resp = client.post(
         "/api/v1/auth/reset-password",
         json={"token": reset_token, "new_password": "new-password-123"},
@@ -84,7 +113,7 @@ def test_password_reset_token_is_one_time(client):
 
 
 def test_legacy_system_write_endpoints_retired(client):
-    admin_token, _ = _login(client, "admin@medqc.com", "admin888")
+    admin_token, _ = _login(client, "sync_admin@medqc.com", "sync888")
     headers = _auth_headers(admin_token)
 
     put_resp = client.put(

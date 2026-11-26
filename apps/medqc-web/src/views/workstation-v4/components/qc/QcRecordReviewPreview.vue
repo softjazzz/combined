@@ -5,36 +5,46 @@
     data-testid="qc-review-preview"
   >
     <header class="preview-heading">
-      <ClipboardCheck :size="18" />
-      <h2>复核预览</h2>
-      <div
-        v-if="row && ready && !loading && !loadError"
-        class="preview-heading-actions"
-      >
-        <QcDiagnosticExport
-          v-if="loadedResult"
-          :items="loadedResult.items"
-          :context="diagnosticContext"
-        />
-        <div class="preview-primary-action">
+      <div class="preview-heading-main">
+        <div class="preview-heading-title">
+          <ClipboardCheck
+            :size="17"
+            class="preview-heading-icon"
+            aria-hidden="true"
+          />
+          <h2>复核预览</h2>
+        </div>
+        <div
+          v-if="row && ready && !loading && !loadError"
+          class="preview-primary-action"
+        >
           <button
             type="button"
             class="full-result-button"
-            @click="openFull"
+            @click="openFull()"
           >
             <span class="full-result-label">
               <FileText
-                :size="17"
+                :size="14"
                 aria-hidden="true"
               />
               查看完整质控结果
             </span>
             <ArrowRight
-              :size="16"
+              :size="14"
               aria-hidden="true"
             />
           </button>
         </div>
+      </div>
+      <div
+        v-if="row && ready && !loading && !loadError && loadedResult && !confirmedResultsOnly"
+        class="preview-heading-actions"
+      >
+        <QcDiagnosticExport
+          :items="loadedResult.items"
+          :context="diagnosticContext"
+        />
       </div>
     </header>
     <div
@@ -137,7 +147,7 @@
             v-if="!filteredItems.length"
             class="preview-state"
           >
-            该状态暂无质控项
+            {{ confirmedResultsOnly ? '当前没有可展示的确定问题' : '该状态暂无质控项' }}
           </p>
           <article
             v-for="item in filteredItems.slice(0, 3)"
@@ -220,7 +230,7 @@
               <button
                 type="button"
                 class="text-button"
-                @click="openFull"
+                @click="openFull(item.rule_id)"
               >
                 原文核对<ArrowUpRight :size="14" />
               </button>
@@ -249,6 +259,7 @@
 import { ArrowRight, ArrowUpRight, ClipboardCheck, FileText, RotateCcw } from 'lucide-vue-next'
 import { Select } from 'ant-design-vue'
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import QcDiagnosticExport from '@/components/qc/QcDiagnosticExport.vue'
 import CaseCommunicationPanel from '@/components/qc/CaseCommunicationPanel.vue'
 import { getLatestLuxian0609RecordResult } from '@/services/sichuan-rule-workspace-service'
@@ -278,14 +289,19 @@ const props = withDefaults(
     carePhase: 'inpatient',
   },
 )
-const emit = defineEmits<{ 'open-full': [recordKey: string, previous?: PreviousResultRequest] }>()
+const emit = defineEmits<{
+  'open-full': [recordKey: string, previous?: PreviousResultRequest, ruleId?: string]
+}>()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const items = ref<SingleRecordQcResultItem[]>([])
 const loadedResult = ref<SingleRecordQcResultPayload | null>(null)
 const loading = ref(false)
 const ready = ref(false)
 const loadError = ref('')
 const previousRequest = ref<PreviousResultRequest>()
-const activeTab = ref<SingleRecordQcResultTabKey>('all')
+const activeTab = ref<SingleRecordQcResultTabKey>(
+  confirmedResultsOnly.value ? 'non_compliant' : 'all',
+)
 const expandedItems = ref<string[]>([])
 function toggleExplanation(key: string) {
   expandedItems.value = expandedItems.value.includes(key)
@@ -293,13 +309,38 @@ function toggleExplanation(key: string) {
     : [...expandedItems.value, key]
 }
 let requestSequence = 0
-const viewItems = computed(() => buildSingleRecordQcResultItems(items.value))
-const tabs = computed(() => buildSingleRecordQcStatusTabs(viewItems.value))
-const filteredItems = computed(() =>
-  viewItems.value.filter(
-    (item) => activeTab.value === 'all' || resolveSingleRecordQcResultTab(item) === activeTab.value,
+let activeAbortController: AbortController | null = null
+const allViewItems = computed(() => buildSingleRecordQcResultItems(items.value))
+const viewItems = computed(() =>
+  confirmedResultsOnly.value
+    ? allViewItems.value.filter((item) => item.status === 'non_compliant')
+    : allViewItems.value,
+)
+const tabs = computed(() =>
+  buildSingleRecordQcStatusTabs(viewItems.value).filter(
+    (tab) => !confirmedResultsOnly.value || tab.key === 'non_compliant',
   ),
 )
+const filteredItems = computed(() =>
+  confirmedResultsOnly.value
+    ? viewItems.value
+    : viewItems.value.filter(
+        (item) => activeTab.value === 'all' || resolveSingleRecordQcResultTab(item) === activeTab.value,
+      ),
+)
+function resolveDefaultTab(): SingleRecordQcResultTabKey {
+  if (confirmedResultsOnly.value) return 'non_compliant'
+  return (
+    tabs.value.find((tab) => tab.key === 'non_compliant' && tab.count)?.key ||
+    tabs.value.find((tab) => tab.key === 'pending' && tab.count)?.key ||
+    'all'
+  )
+}
+watch(confirmedResultsOnly, (onlyConfirmed) => {
+  if (onlyConfirmed) {
+    activeTab.value = 'non_compliant'
+  }
+})
 const diagnosticContext = computed(() => {
   const result = loadedResult.value
   const row = props.row
@@ -346,12 +387,20 @@ function displayRuleTitle(item: SingleRecordQcResultItem): string {
   return title
 }
 
-function openFull() {
-  if (ready.value && props.row) emit('open-full', props.row.recordKey)
+function openFull(ruleId?: string) {
+  if (!ready.value || !props.row) return
+  const normalizedRuleId = typeof ruleId === 'string' ? ruleId.trim() : ''
+  if (normalizedRuleId) {
+    emit('open-full', props.row.recordKey, undefined, normalizedRuleId)
+    return
+  }
+  emit('open-full', props.row.recordKey)
 }
 
 async function loadResult() {
   const sequence = ++requestSequence
+  activeAbortController?.abort()
+  activeAbortController = null
   const row = props.row
   items.value = []
   loadedResult.value = null
@@ -360,20 +409,26 @@ async function loadResult() {
   loading.value = false
   loadError.value = ''
   previousRequest.value = undefined
-  activeTab.value = 'all'
+  activeTab.value = confirmedResultsOnly.value ? 'non_compliant' : 'all'
   if (!row || row.resultStatus === 'not-run' || row.resultStatus === 'unknown') return
   if (!row.instituteId || !row.patientId || !row.visitId) {
     loadError.value = '当前病历身份信息不完整，已停止读取'
     return
   }
+  const controller = new AbortController()
+  activeAbortController = controller
   loading.value = true
   try {
-    const result = await getLatestLuxian0609RecordResult({
-      instituteId: row.instituteId,
-      patientId: row.patientId,
-      visitId: row.visitId,
-    })
-    if (sequence !== requestSequence) return
+    const result = await getLatestLuxian0609RecordResult(
+      {
+        instituteId: row.instituteId,
+        patientId: row.patientId,
+        visitId: row.visitId,
+      },
+      undefined,
+      { signal: controller.signal },
+    )
+    if (sequence !== requestSequence || controller.signal.aborted) return
     previousRequest.value = previousResultRequest(result)
     if (!result.success || !result.data) {
       loadError.value = result.message || '质控结果读取失败，请稍后重试'
@@ -392,13 +447,13 @@ async function loadResult() {
     items.value = result.data.items
     loadedResult.value = result.data
     ready.value = true
-    activeTab.value =
-      tabs.value.find((tab) => tab.key === 'non_compliant' && tab.count)?.key ||
-      tabs.value.find((tab) => tab.key === 'pending' && tab.count)?.key ||
-      'all'
+    activeTab.value = resolveDefaultTab()
   } catch {
-    if (sequence === requestSequence) loadError.value = '质控结果读取失败，请稍后重试'
+    if (sequence === requestSequence && !controller.signal.aborted) {
+      loadError.value = '质控结果读取失败，请稍后重试'
+    }
   } finally {
+    if (activeAbortController === controller) activeAbortController = null
     if (sequence === requestSequence) loading.value = false
   }
 }
@@ -417,6 +472,8 @@ watch(
 )
 onBeforeUnmount(() => {
   requestSequence += 1
+  activeAbortController?.abort()
+  activeAbortController = null
 })
 </script>
 
@@ -434,14 +491,40 @@ onBeforeUnmount(() => {
 }
 .preview-heading {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 8px;
-  padding: 18px 20px;
+  padding: 16px 18px 12px;
+}
+.preview-heading-main {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+.preview-heading-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+.preview-heading-icon {
+  flex-shrink: 0;
 }
 .preview-heading h2 {
   margin: 0;
-  font-size: 17px;
+  font-size: 16px;
+  line-height: 1.3;
   font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.preview-primary-action {
+  flex-shrink: 0;
+  margin-left: auto;
 }
 .preview-heading-actions {
   display: flex;
@@ -449,7 +532,7 @@ onBeforeUnmount(() => {
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
-  margin-left: auto;
+  width: 100%;
 }
 .patient-context {
   margin: 0 16px 16px;
@@ -681,19 +764,22 @@ summary {
   font-size: 12px;
 }
 .full-result-button {
-  display: flex;
-  justify-content: space-between;
+  display: inline-flex;
+  justify-content: center;
   align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 0 14px;
+  gap: 5px;
+  min-height: 34px;
+  padding: 5px 12px;
   border: 1px solid transparent;
   border-radius: 8px;
   background: #eaf2fc;
   color: #245788;
-  font-size: 14px;
+  font-size: 12px;
+  line-height: 1.2;
   font-weight: 600;
   text-align: left;
+  white-space: nowrap;
+  flex-shrink: 0;
   cursor: pointer;
   transition: background-color 160ms ease;
 }
@@ -703,10 +789,14 @@ summary {
 .full-result-label {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
+  gap: 5px;
+  white-space: nowrap;
 }
+.full-result-label > svg,
 .full-result-button > svg {
   flex-shrink: 0;
+}
+.full-result-button > svg {
   color: #527da7;
 }
 button:focus-visible,

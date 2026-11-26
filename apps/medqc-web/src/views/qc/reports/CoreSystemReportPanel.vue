@@ -46,8 +46,8 @@
         ><span class="mq-field__label">明细制度</span
         ><select v-model="draft.system_id" class="mq-input">
           <option value="">全部制度</option>
-          <option value="unknown">未知覆盖</option>
-          <option v-for="system in report?.systems || []" :key="system.id" :value="system.id">
+          <option v-if="!confirmedResultsOnly" value="unknown">未知覆盖</option>
+          <option v-for="system in systemOptions" :key="system.id" :value="system.id">
             {{ system.name }}
           </option>
         </select></label
@@ -82,21 +82,21 @@
           <span class="core-metric__label">范围病例</span>
           <strong>{{ report.summary.candidate_records }}</strong>
         </div>
-        <div class="core-metric mq-card">
+        <div v-if="!confirmedResultsOnly" class="core-metric mq-card">
           <span class="core-metric__label">未知分类病例</span>
           <strong>{{ report.summary.unknown_records }}</strong>
         </div>
-        <div class="core-metric mq-card">
+        <div v-if="!confirmedResultsOnly" class="core-metric mq-card">
           <span class="core-metric__label">未知分类质控点</span>
           <strong>{{ report.summary.unknown_points }}</strong>
         </div>
-        <div class="core-metric mq-card">
+        <div v-if="!confirmedResultsOnly" class="core-metric mq-card">
           <span class="core-metric__label">未知分类确认缺陷</span>
           <strong>{{ report.summary.unknown_defects ?? '未知' }}</strong>
         </div>
-        <div class="core-metric core-metric--action mq-card">
+        <div v-if="!confirmedResultsOnly" class="core-metric core-metric--action mq-card">
           <span class="core-metric__label">结果不可用</span>
-          <button class="mq-btn" type="button" @click="drill('unknown')">
+          <button class="mq-btn" type="button" @click="drill('unknown', '', false)">
             结果不可用 {{ report.summary.unavailable_records }} / 未知覆盖
           </button>
         </div>
@@ -184,14 +184,14 @@
                 <th>病例身份</th>
                 <th>科室 / 医师</th>
                 <th>冻结结果</th>
-                <th>覆盖</th>
+                <th v-if="!confirmedResultsOnly">覆盖</th>
                 <th class="num">问题</th>
                 <th>操作</th>
               </tr>
             </thead>
             <tbody>
               <tr
-                v-for="row in report.items"
+                v-for="row in visibleItems"
                 :key="`${row.institute_id}:${row.patient_id}:${row.visit_id}`"
               >
                 <td>
@@ -206,7 +206,7 @@
                     >{{ row.rule_set_key || '未知' }} / {{ row.rule_set_version || '未知' }}</span
                   ><small>{{ formatTime(row.completed_at) }}</small>
                 </td>
-                <td>
+                <td v-if="!confirmedResultsOnly">
                   <span class="mq-status" :class="coverageClass(row.coverage)">{{
                     coverage(row.coverage)
                   }}</span>
@@ -224,7 +224,7 @@
               </tr>
             </tbody>
           </table>
-          <p v-if="!report.items.length" class="core-empty">无匹配病例</p>
+          <p v-if="!visibleItems.length" class="core-empty">无匹配病例</p>
         </div>
         <nav class="core-pager" aria-label="病例分页">
           <button
@@ -302,27 +302,31 @@
             {{ selectedCase.institute_id }} / {{ selectedCase.patient_id }} /
             {{ selectedCase.visit_id }}
           </p>
-          <p>
+          <p v-if="!confirmedResultsOnly">
             运行 {{ selectedCase.root_job_id || '未知' }} · 结果
             {{ selectedCase.envelope_id || '未知' }}
           </p>
-          <p>
+          <p v-if="!confirmedResultsOnly">
             冻结版本 {{ selectedCase.rule_set_key || '未知' }}/{{
               selectedCase.rule_set_version || '未知'
             }}
           </p>
-          <span class="mq-status" :class="coverageClass(selectedCase.coverage)">{{
-            coverage(selectedCase.coverage)
-          }}</span>
+          <span
+            v-if="!confirmedResultsOnly"
+            class="mq-status"
+            :class="coverageClass(selectedCase.coverage)"
+            >{{ coverage(selectedCase.coverage) }}</span
+          >
         </div>
-        <div v-for="point in selectedCase.points" :key="point.rule_id" class="point mq-inset">
+        <div v-for="point in selectedCasePoints" :key="point.rule_id" class="point mq-inset">
           <div>
             <strong>{{ point.rule_name }}</strong>
             <p>
-              <span class="mq-mono">{{ point.rule_id }}</span> · {{ point.status }} ·
+              <span class="mq-mono">{{ point.rule_id }}</span>
+              <template v-if="!confirmedResultsOnly"> · {{ point.status }}</template> ·
               {{ point.is_confirmed_issue ? '确认问题' : '非确认问题' }}
             </p>
-            <p>
+            <p v-if="!confirmedResultsOnly || (point.system_ids && point.system_ids.length)">
               {{
                 point.system_ids === null
                   ? '制度归属未知'
@@ -333,20 +337,46 @@
             </p>
           </div>
         </div>
+        <p v-if="!selectedCasePoints.length" class="core-empty">暂无确认问题</p>
       </template>
     </a-drawer>
   </section>
 </template>
 
 <script setup lang="ts">
+import { isAxiosError } from 'axios'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
+import { extractApiErrorMessageFromError } from '@/utils/api-envelope'
 import { getCoreSystemReport, exportCoreSystemReport } from '@/api/coreSystemReports'
 import type { CoreReportFilters, CoreReportRow, CoreSystemReport } from '@/api/coreSystemReports'
 import type { RecordQualityFilters } from '@/api/qualityReports'
 
+const CORE_SYSTEM_OPTIONS: ReadonlyArray<{ id: string; name: string }> = [
+  { id: 'CORE-01', name: '首诊负责制度' },
+  { id: 'CORE-02', name: '三级查房制度' },
+  { id: 'CORE-03', name: '会诊制度' },
+  { id: 'CORE-04', name: '分级护理制度' },
+  { id: 'CORE-05', name: '值班和交接班制度' },
+  { id: 'CORE-06', name: '疑难病例讨论制度' },
+  { id: 'CORE-07', name: '急危重患者抢救制度' },
+  { id: 'CORE-08', name: '术前讨论制度' },
+  { id: 'CORE-09', name: '死亡病例讨论制度' },
+  { id: 'CORE-10', name: '查对制度' },
+  { id: 'CORE-11', name: '手术安全核查制度' },
+  { id: 'CORE-12', name: '手术分级管理制度' },
+  { id: 'CORE-13', name: '新技术和新项目准入制度' },
+  { id: 'CORE-14', name: '危急值报告制度' },
+  { id: 'CORE-15', name: '病历管理制度' },
+  { id: 'CORE-16', name: '抗菌药物分级管理制度' },
+  { id: 'CORE-17', name: '临床用血审核制度' },
+  { id: 'CORE-18', name: '信息安全管理制度' },
+]
+
 const auth = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const props = withDefaults(
   defineProps<{ initialScene?: 'running' | 'final'; initialFilters?: RecordQualityFilters }>(),
   {
@@ -372,6 +402,24 @@ const error = ref('')
 const exporting = ref(false)
 const selectedSystem = ref('')
 const selectedCase = ref<CoreReportRow | null>(null)
+const systemOptions = computed(() =>
+  CORE_SYSTEM_OPTIONS.map((item) => ({
+    id: item.id,
+    name: report.value?.systems.find((system) => system.id === item.id)?.name || item.name,
+  })),
+)
+const visibleItems = computed(() => {
+  const items = report.value?.items || []
+  return confirmedResultsOnly.value ? items.filter((row) => row.coverage !== 'unavailable') : items
+})
+const selectedCasePoints = computed(() => {
+  const points = selectedCase.value?.points || []
+  if (!confirmedResultsOnly.value) return points
+  return points.filter((p) => {
+    const status = p.status.trim().toLowerCase()
+    return p.is_confirmed_issue && status !== 'data_gap' && status !== 'uncertain'
+  })
+})
 const activeSystem = computed(() =>
   report.value?.systems.find((s) => s.id === selectedSystem.value),
 )
@@ -379,6 +427,35 @@ const activeReference = computed(() =>
   report.value?.reference.systems.find((s) => s.id === selectedSystem.value),
 )
 let nonce = 0
+let loadController: AbortController | null = null
+let exportController: AbortController | null = null
+
+function abortLoad(): void {
+  loadController?.abort()
+  loadController = null
+}
+function abortExport(): void {
+  exportController?.abort()
+  exportController = null
+}
+function resolveErrorMessage(cause: unknown, fallback: string): string {
+  if (isAxiosError(cause)) {
+    if (cause.code === 'ECONNABORTED') return '请求超时，请稍后重试'
+    if (cause.code === 'ERR_NETWORK') return '网络连接失败，请稍后重试'
+    const data = cause.response?.data
+    if (data && typeof data === 'object' && !(data instanceof Blob)) {
+      const record = data as Record<string, unknown>
+      for (const key of ['detail', 'error'] as const) {
+        const nested = record[key]
+        if (nested && typeof nested === 'object') {
+          const msg = (nested as Record<string, unknown>).message
+          if (typeof msg === 'string' && msg.trim()) return msg.trim()
+        }
+      }
+    }
+  }
+  return extractApiErrorMessageFromError(cause, fallback)
+}
 function localDate(value?: string) {
   if (!value) return ''
   const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? value : `${value}+08:00`
@@ -416,16 +493,22 @@ function coverageClass(value: string) {
 }
 async function load(page = 1) {
   const ticket = ++nonce
+  abortLoad()
+  abortExport()
+  const controller = new AbortController()
+  loadController = controller
   exporting.value = false
   loading.value = true
   error.value = ''
   report.value = null
   selectedCase.value = null
   try {
-    const result = await getCoreSystemReport(applied, page)
-    if (ticket === nonce) report.value = result
+    const result = await getCoreSystemReport(applied, page, controller.signal)
+    if (ticket === nonce && !controller.signal.aborted) report.value = result
   } catch (cause) {
-    if (ticket === nonce) error.value = cause instanceof Error ? cause.message : '读取失败，请重试'
+    if (ticket === nonce && !controller.signal.aborted) {
+      error.value = resolveErrorMessage(cause, '读取核心制度报表失败，请重试')
+    }
   } finally {
     if (ticket === nonce) loading.value = false
   }
@@ -452,6 +535,8 @@ function apply() {
 }
 function reset() {
   nonce++
+  abortLoad()
+  abortExport()
   report.value = null
   selectedCase.value = null
   loading.value = false
@@ -463,21 +548,25 @@ function reset() {
 function openSystem(id: string) {
   selectedSystem.value = id
 }
-function drill(id: string, rule = '', problemsOnly = applied.problems_only) {
+function drill(id: string, rule = '', problemsOnly = id === 'unknown' ? false : applied.problems_only) {
+  const nextProblemsOnly = id === 'unknown' ? false : (problemsOnly ?? false)
   draft.value.system_id = id
   draft.value.rule_id = rule
-  draft.value.problems_only = problemsOnly ?? false
+  draft.value.problems_only = nextProblemsOnly
   selectedSystem.value = ''
-  applied = { ...applied, system_id: id, rule_id: rule || undefined, problems_only: problemsOnly }
+  applied = { ...applied, system_id: id, rule_id: rule || undefined, problems_only: nextProblemsOnly }
   void load()
 }
 async function download() {
   if (!report.value || loading.value || exporting.value) return
   const ticket = nonce
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   exporting.value = true
   try {
-    const blob = await exportCoreSystemReport(applied)
-    if (ticket !== nonce) return
+    const blob = await exportCoreSystemReport(applied, controller.signal)
+    if (ticket !== nonce || controller.signal.aborted) return
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -485,7 +574,9 @@ async function download() {
     a.click()
     URL.revokeObjectURL(url)
   } catch (cause) {
-    if (ticket === nonce) error.value = cause instanceof Error ? cause.message : '导出失败'
+    if (ticket === nonce && !controller.signal.aborted) {
+      error.value = resolveErrorMessage(cause, '导出核心制度报表失败')
+    }
   } finally {
     if (ticket === nonce) exporting.value = false
   }
@@ -496,6 +587,8 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   nonce++
+  abortLoad()
+  abortExport()
 })
 </script>
 

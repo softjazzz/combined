@@ -488,4 +488,16 @@ describe('QCRecordResultComparisonDrawer', () => {
     expect(wrapper.text()).toContain('历史结果版本无法确认')
     expect(workbenchProps).toBeNull()
   })
+
+  it('focus 清空为 null 时安全卸载工作台不抛异常', async () => {
+    getLatestLuxian0609RecordResult.mockResolvedValue({ success: true, data: readyResult })
+    const wrapper = mountDrawer('grouped')
+    await flushPromises()
+    expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(true)
+
+    await wrapper.setProps({ focus: null })
+    await flushPromises()
+    expect(wrapper.find('.record-compare-workbench-stub').exists()).toBe(false)
+    wrapper.unmount()
+  })
 })

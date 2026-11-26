@@ -42,17 +42,21 @@ describe('quality reports API', () => {
       page: 2,
       page_size: 20,
     })
-    expect(request).toHaveBeenCalledWith({
-      method: 'GET',
-      url: '/api/v1/quality-reports/record-quality/remediations',
-      params: {
-        scene: 'final',
-        defect_source: 'manual',
-        label: 'urged_rectified',
-        page: 2,
-        page_size: 20,
-      },
-    })
+    expect(request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'GET',
+        url: '/api/v1/quality-reports/record-quality/remediations',
+        params: {
+          scene: 'final',
+          defect_source: 'manual',
+          label: 'urged_rectified',
+          page: 2,
+          page_size: 20,
+        },
+        skipErrorToast: true,
+        timeout: 60_000,
+      }),
+    )
     await exportRecordRemediationAnalysis({
       scene: 'final',
       defect_source: 'manual',
@@ -61,7 +65,7 @@ describe('quality reports API', () => {
     expect(get).toHaveBeenCalledWith(
       '/api/v1/quality-reports/record-quality/remediations/export',
       { scene: 'final', defect_source: 'manual', label: 'urged_rectified' },
-      { responseType: 'blob' },
+      expect.objectContaining({ responseType: 'blob', skipErrorToast: true, timeout: 120_000 }),
     )
   })
 
@@ -127,7 +131,7 @@ describe('quality reports API', () => {
     expect(request).toHaveBeenCalledWith(
       '/api/v1/quality-reports/record-quality/export',
       { scene: 'running', doctor: '张医生', rule_id: 'LX0609-001', sheet: 'records' },
-      { responseType: 'blob' },
+      expect.objectContaining({ responseType: 'blob', skipErrorToast: true, timeout: 120_000 }),
     )
   })
 })

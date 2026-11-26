@@ -12,12 +12,16 @@ afterAll(() => {
 
 const apiGet = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({
-  query: {} as Record<string, string>,
+  query: {} as Record<string, string | string[]>,
   path: '/workstation-v5',
+  activeRoute: null as null | { query: Record<string, string | string[]>; path: string },
 }))
 const routerPush = vi.hoisted(() => vi.fn())
 const routerReplace = vi.hoisted(() => vi.fn())
-const authState = vi.hoisted(() => ({ isDemoAccount: false }))
+const authState = vi.hoisted(() => ({
+  isDemoAccount: false,
+  roles: ['admin'] as string[],
+}))
 
 vi.mock('@/services/apiService', () => ({
   ApiService: { get: apiGet },
@@ -28,15 +32,24 @@ vi.mock('vue-router', async () => {
   return {
     useRoute: () => {
       const route = reactive({
-        ...routeState,
+        query: { ...routeState.query },
+        path: routeState.path,
         get fullPath() {
-          return `${this.path}?${new URLSearchParams(this.query).toString()}`
+          const params = new URLSearchParams()
+          for (const [k, v] of Object.entries(this.query as Record<string, string | string[]>)) {
+            if (Array.isArray(v)) v.forEach((item) => params.append(k, String(item)))
+            else if (v !== undefined) params.set(k, String(v))
+          }
+          return `${this.path}?${params.toString()}`
         },
       })
-      routerReplace.mockImplementation(async ({ query }: { query: Record<string, string> }) => {
-        route.query = query
-        await nextTick()
-      })
+      routeState.activeRoute = route
+      routerReplace.mockImplementation(
+        async ({ query }: { query: Record<string, string | string[]> }) => {
+          route.query = query
+          await nextTick()
+        },
+      )
       return route
     },
     useRouter: () => ({ push: routerPush, replace: routerReplace }),
@@ -45,7 +58,12 @@ vi.mock('vue-router', async () => {
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
-    user: { is_demo_account: authState.isDemoAccount },
+    get user() {
+      return { is_demo_account: authState.isDemoAccount, roles: authState.roles }
+    },
+    get userRoles() {
+      return authState.roles
+    },
   }),
 }))
 
@@ -175,6 +193,7 @@ describe('QCOverviewView', () => {
     routerReplace.mockClear()
     routeState.query = {}
     authState.isDemoAccount = false
+    authState.roles = ['admin']
   })
 
   it('以客户可读范围和真实 KPI 展示概况，不重复病历池', async () => {
@@ -219,6 +238,7 @@ describe('QCOverviewView', () => {
     expect(apiGet).toHaveBeenLastCalledWith(
       '/api/v1/workstation/qc-home',
       expect.objectContaining({ department: option!.attributes('value') }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     const calls = apiGet.mock.calls.length
     await wrapper.get('[aria-label="刷新首页数据"]').trigger('click')
@@ -233,6 +253,7 @@ describe('QCOverviewView', () => {
     expect(apiGet).toHaveBeenLastCalledWith(
       '/api/v1/workstation/qc-home',
       expect.objectContaining({ keyword: '测试关键词', department: '神经外科' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('关键词：测试关键词')
     apiGet.mockClear()
@@ -245,6 +266,7 @@ describe('QCOverviewView', () => {
     expect(apiGet).toHaveBeenLastCalledWith(
       '/api/v1/workstation/qc-home',
       expect.objectContaining({ keyword: undefined, department: '神经外科' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.find('[aria-label="清除关键词"]').exists()).toBe(false)
     wrapper.unmount()
@@ -269,6 +291,7 @@ describe('QCOverviewView', () => {
         keyword: undefined,
         department: department === 'all' ? undefined : department,
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
       department,
@@ -276,7 +299,8 @@ describe('QCOverviewView', () => {
     wrapper.unmount()
   })
 
-  it('三个工作入口进入对应页面，病历池保留筛选条件', async () => {
+  it('三个工作入口进入对应页面，且均保留筛选条件', async () => {
+    routeState.query = { department: '神经外科', keyword: '心衰' }
     const wrapper = mountView()
     await flushHomeLoad()
     const entries = wrapper.findAll('.qc-home-shortcuts button')
@@ -284,12 +308,18 @@ describe('QCOverviewView', () => {
     await entries[0].trigger('click')
     expect(routerPush).toHaveBeenLastCalledWith({
       path: '/workstation-v5/worklist',
-      query: { source: 'dashboard', department: undefined, keyword: undefined },
+      query: { source: 'dashboard', department: '神经外科', keyword: '心衰' },
     })
     await entries[1].trigger('click')
-    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/running')
+    expect(routerPush).toHaveBeenLastCalledWith({
+      path: '/workstation-v5/records/running',
+      query: { department: '神经外科', keyword: '心衰' },
+    })
     await entries[2].trigger('click')
-    expect(routerPush).toHaveBeenLastCalledWith('/workstation-v5/records/final')
+    expect(routerPush).toHaveBeenLastCalledWith({
+      path: '/workstation-v5/records/final',
+      query: { department: '神经外科', keyword: '心衰' },
+    })
   })
 
   it('待质控作为主卡展示，其余三项 KPI 按运营顺序排列', async () => {
@@ -444,6 +474,7 @@ describe('QCOverviewView', () => {
     expect(apiGet).toHaveBeenCalledWith(
       '/api/v1/workstation/qc-home',
       expect.objectContaining({ department: '神经外科' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
   })
 
@@ -603,5 +634,531 @@ describe('QCOverviewView', () => {
 
     expect(wrapper.get('[data-testid="home-loading"]').text()).toContain('正在加载全院质控概览')
     expect(wrapper.find('[data-testid="home-empty"]').exists()).toBe(false)
+  })
+
+  it('真实展示 data_health 同步状态与运行中任务数，不再恒定输出待核实/待接入', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          data_health: {
+            source_sync_status: 'synced',
+            source_error_total: 0,
+            technical_error_total: 0,
+            running_task_total: 3,
+            running_task_state: 'running',
+            last_successful_qc_at: '2026-08-08T01:20:00',
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const healthItems = wrapper.findAll('[data-testid="health-status-item"]')
+    expect(healthItems[0].text()).toContain('已同步')
+    expect(healthItems[0].text()).not.toContain('待核实')
+    expect(healthItems[1].text()).toContain('运行中（3 个）')
+    expect(healthItems[1].text()).not.toContain('待接入')
+    // 无时区后缀的 UTC 时间按 Asia/Shanghai 正确转换为 09:20
+    expect(healthItems[3].text()).toContain('2026-08-08 09:20')
+  })
+
+  it.each([
+    ['healthy', 'idle', 0, '正常', '空闲'],
+    ['degraded', 'idle', null, '部分异常', '空闲'],
+    ['failed', 'running', null, '同步失败', '运行中'],
+  ])(
+    '按真实状态映射 data_health (%s / %s)',
+    async (syncStatus, taskState, taskTotal, expectedSync, expectedTask) => {
+      apiGet.mockResolvedValue({
+        success: true,
+        data: {
+          ...clinicalQcPayload,
+          clinical_qc: {
+            ...clinicalQcPayload.clinical_qc,
+            data_health: {
+              ...clinicalQcPayload.clinical_qc.data_health,
+              source_sync_status: syncStatus,
+              running_task_state: taskState,
+              running_task_total: taskTotal,
+            },
+          },
+        },
+      })
+      const wrapper = mountView()
+      await flushHomeLoad()
+
+      const healthItems = wrapper.findAll('[data-testid="health-status-item"]')
+      expect(healthItems[0].text()).toContain(expectedSync)
+      expect(healthItems[1].text()).toContain(expectedTask)
+    },
+  )
+
+  it('眉标按 hospital_scope、当前科室及 rule_set_key 动态展示，不再写死全院或泸县0609质控点', async () => {
+    routeState.query = { department: '心内科' }
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          scope: {
+            ...clinicalQcPayload.clinical_qc.scope,
+            hospital_scope: 'doctor',
+            department: '心内科',
+            rule_set_key: 'hospital_custom_qc',
+            rule_set_version: 'v2',
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const scopeText = wrapper.get('[data-testid="home-scope"]').text()
+    expect(scopeText).toContain('本人负责病历')
+    expect(scopeText).toContain('心内科')
+    expect(scopeText).toContain('hospital_custom_qc v2')
+    expect(scopeText).not.toContain('全院')
+    expect(scopeText).not.toContain('泸县0609质控点')
+    expect(wrapper.get('[data-testid="home-kpis"]').text()).toContain('本人负责病历 · 心内科')
+
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          scope: {
+            ...clinicalQcPayload.clinical_qc.scope,
+            hospital_scope: 'institute',
+            department: null,
+            rule_set_key: 'luxian_0609_qc_v1',
+            rule_set_version: 'v1',
+          },
+        },
+      },
+    })
+    await wrapper.get('select[aria-label="统计科室"]').setValue('all')
+    await flushHomeLoad()
+    const instScopeText = wrapper.get('[data-testid="home-scope"]').text()
+    expect(instScopeText).toContain('本院区')
+    expect(instScopeText).toContain('泸县0609质控点')
+    expect(instScopeText).not.toContain('全院')
+  })
+
+  it.each([['doctor'], ['super_admin']])(
+    '角色 %s 仅展示选择病历质控，隐藏无权访问的运行/终末病历质控入口',
+    async (role) => {
+      authState.roles = [role]
+      const wrapper = mountView()
+      await flushHomeLoad()
+
+      const buttons = wrapper.findAll('.qc-home-shortcuts button')
+      expect(buttons).toHaveLength(1)
+      expect(buttons[0].text()).toBe('选择病历质控')
+    },
+  )
+
+  it.each([['admin'], ['qc_manager'], ['sync_admin']])(
+    '角色 %s 展示全部三个质控工作入口',
+    async (role) => {
+      authState.roles = [role]
+      const wrapper = mountView()
+      await flushHomeLoad()
+
+      const buttons = wrapper.findAll('.qc-home-shortcuts button')
+      expect(buttons.map((b) => b.text())).toEqual(['选择病历质控', '运行病历质控', '终末病历质控'])
+    },
+  )
+
+  it('演示账号通过 confirmedResultsOnly 统一隐藏技术异常、未全部完成、非确定结论及待核实维度', async () => {
+    authState.isDemoAccount = true
+    authState.roles = ['admin']
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            ...clinicalQcPayload.clinical_qc.kpis,
+            qc_completed_total: 11,
+            qc_partial_failed_total: 2,
+            qc_failed_total: 1,
+          },
+          canonical_status_counts: {
+            non_compliant: 12,
+            compliant: 30,
+            data_gap: 8,
+            uncertain: 4,
+            not_applicable: 15,
+            not_executed: 3,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const health = wrapper.get('[data-testid="data-health"]').text()
+    expect(health).not.toContain('技术异常')
+    expect(health).not.toContain('未全部完成')
+    expect(wrapper.find('[data-testid="qc-execution-failures"]').exists()).toBe(false)
+
+    const conclusion = wrapper.get('[data-testid="qc-conclusion-chart"]').text()
+    expect(conclusion).toContain('确定问题 12')
+    expect(conclusion).toContain('合规 30')
+    expect(conclusion).not.toContain('资料待核实')
+    expect(conclusion).not.toContain('待判断')
+    expect(conclusion).not.toContain('不适用')
+    expect(conclusion).not.toContain('未执行')
+
+    const defects = wrapper.get('[data-testid="defect-analysis-chart"]').text()
+    expect(defects).not.toContain('待核实')
+    const sortOptions = wrapper
+      .findAll('[data-testid="analysis-sort"] option')
+      .map((node) => node.attributes('value'))
+    expect(sortOptions).toEqual(['metric', 'risk'])
+
+    // sync_admin 即使带演示账号标记，仍保留完整诊断视图
+    wrapper.unmount()
+    authState.roles = ['sync_admin']
+    const syncAdminWrapper = mountView()
+    await flushHomeLoad()
+    expect(syncAdminWrapper.get('[data-testid="data-health"]').text()).toContain('技术异常')
+    expect(syncAdminWrapper.find('[data-testid="qc-execution-failures"]').exists()).toBe(true)
+    expect(syncAdminWrapper.get('[data-testid="qc-conclusion-chart"]').text()).toContain('资料待核实 8')
+    expect(syncAdminWrapper.get('[data-testid="defect-analysis-chart"]').text()).toContain('待核实')
+    syncAdminWrapper.unmount()
+  })
+
+  it('保留完整科室选项并在加载失败时维持工具栏可用以支持恢复', async () => {
+    apiGet
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          ...clinicalQcPayload,
+          department_options: ['神经外科', '心内科', '呼吸内科'],
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          ...clinicalQcPayload,
+          department_options: ['心内科'],
+        },
+      })
+      .mockResolvedValueOnce({ success: false, error: '503 unavailable', data: null })
+
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const select = wrapper.get('select[aria-label="统计科室"]')
+    await select.setValue('心内科')
+    await flushHomeLoad()
+    expect(select.findAll('option').map((o) => o.attributes('value'))).toEqual([
+      'all',
+      '神经外科',
+      '心内科',
+      '呼吸内科',
+    ])
+
+    await select.setValue('呼吸内科')
+    await flushHomeLoad()
+    expect(wrapper.find('[data-testid="home-load-error"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-load-error"]').attributes('role')).toBe('alert')
+    expect(wrapper.find('.qc-home-toolbar').exists()).toBe(true)
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      '呼吸内科',
+    )
+  })
+
+  it('不嵌套 main 标签，移除 KPI 水印并对零值 KPI 完全中性化', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            records_total: 18,
+            qc_pending_total: 0,
+            qc_completed_total: 18,
+            high_risk_review_total: 0,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.find('main.mq-page').exists()).toBe(false)
+    expect(wrapper.find('div.mq-page').exists()).toBe(true)
+    expect(wrapper.find('.qc-home-metric__watermark').exists()).toBe(false)
+
+    const riskCard = wrapper.get('.qc-home-metric--risk')
+    expect(riskCard.classes()).toContain('is-zero')
+    expect(riskCard.get('mq-icon-tile-stub').attributes('tone')).toBe('neutral')
+  })
+
+  it('支持再次点击已选中科室取消筛选，并正确设置 aria-pressed、is-physician、title 与 aria-hidden', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const deptBtn = wrapper.get('[data-testid="analysis-object-department"]')
+    const physBtn = wrapper.get('[data-testid="analysis-object-physician"]')
+    expect(deptBtn.attributes('aria-pressed')).toBe('true')
+    expect(physBtn.attributes('aria-pressed')).toBe('false')
+
+    const row = wrapper.get('[data-testid="defect-analysis-row"]')
+    expect(row.attributes('aria-pressed')).toBe('false')
+    expect(row.get('.qc-home-defect-analysis__meta strong').attributes('title')).toBe('神经外科')
+    expect(row.get('.qc-home-defect-analysis__metric').attributes('aria-hidden')).toBeUndefined()
+    expect(row.get('.qc-home-defect-analysis__track').attributes('aria-hidden')).toBe('true')
+
+    await row.trigger('click')
+    await flushHomeLoad()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').attributes('aria-pressed')).toBe('true')
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').classes()).toContain('is-active')
+
+    // 再次点击已选中科室，切换回全部科室
+    apiGet.mockClear()
+    await wrapper.get('[data-testid="defect-analysis-row"]').trigger('click')
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ department: undefined }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').attributes('aria-pressed')).toBe('false')
+
+    await physBtn.trigger('click')
+    await nextTick()
+    expect(physBtn.attributes('aria-pressed')).toBe('true')
+    expect(wrapper.findAll('[data-testid="defect-analysis-row"]')[0].classes()).toContain('is-physician')
+  })
+
+  it('平均缺陷数小于 1 时按实际最大值满幅缩放，且非零进度条标记 is-nonzero', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          department_distribution: [
+            {
+              department: '心内科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 2,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 4,
+              average_defect_count: 0.4,
+            },
+            {
+              department: '呼吸内科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 1,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 1,
+              average_defect_count: 0.1,
+            },
+            {
+              department: '骨科',
+              records_total: 10,
+              completed_record_total: 10,
+              high_risk_review_total: 0,
+              data_gap_record_total: 0,
+              uncertain_record_total: 0,
+              defect_total: 0,
+              average_defect_count: 0,
+            },
+          ],
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    await wrapper.get('[data-testid="analysis-metric"]').setValue('average')
+    await nextTick()
+
+    const bars = wrapper.findAll('.qc-home-defect-analysis__track i')
+    expect(bars[0].attributes('style')).toContain('width: 100%')
+    expect(bars[0].classes()).toContain('is-nonzero')
+    expect(bars[1].attributes('style')).toContain('width: 25%')
+    expect(bars[1].classes()).toContain('is-nonzero')
+    expect(bars[2].attributes('style')).toContain('width: 0%')
+    expect(bars[2].classes()).not.toContain('is-nonzero')
+  })
+
+  it('使用 SVG 圆环展示结论结构，百分比严格归一化至 100%，极小非零切片保留最小可见弧长，并反映部分失败态', async () => {
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            ...clinicalQcPayload.clinical_qc.kpis,
+            qc_partial_failed_total: 2,
+          },
+          canonical_status_counts: {
+            non_compliant: 1,
+            data_gap: 1,
+            compliant: 1000,
+          },
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    const ring = wrapper.get('.qc-home-conclusion__ring')
+    expect(ring.attributes('role')).toBe('img')
+    expect(ring.attributes('aria-label')).toContain('含未全部完成病历')
+    expect(ring.find('svg.qc-home-conclusion__svg').exists()).toBe(true)
+
+    const circles = ring.findAll('svg.qc-home-conclusion__svg circle')
+    // 1 背景轨 + 3 切片弧
+    expect(circles).toHaveLength(4)
+    const firstDash = Number(circles[1].attributes('stroke-dasharray')?.split(' ')[0] || 0)
+    expect(firstDash).toBeGreaterThanOrEqual(6)
+
+    const percents = wrapper
+      .findAll('.qc-home-conclusion__percent')
+      .map((node) => Number(node.text().replace('%', '')))
+    const sumTenths = percents.reduce((acc, pct) => acc + Math.round(pct * 10), 0)
+    expect(sumTenths).toBe(1000)
+  })
+
+  it('当 records_total 为 0 时渲染清晰空态提示，并将关键词与清除按钮包裹为同一不拆行分组', async () => {
+    routeState.query = { keyword: '罕见病历关键字' }
+    apiGet.mockResolvedValueOnce({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          kpis: {
+            records_total: 0,
+            qc_pending_total: 0,
+            qc_completed_total: 0,
+            high_risk_review_total: 0,
+          },
+          canonical_status_counts: {},
+          department_distribution: [],
+          physician_distribution: [],
+        },
+      },
+    })
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(wrapper.find('[data-testid="home-zero-records"]').exists()).toBe(true)
+    expect(wrapper.get('[data-testid="home-zero-records"]').text()).toContain('当前筛选范围内暂无纳入病历')
+    const keywordGroup = wrapper.get('.qc-home-toolbar__keyword-group')
+    expect(keywordGroup.find('.qc-home-toolbar__keyword').attributes('title')).toBe('关键词：罕见病历关键字')
+    expect(keywordGroup.find('[aria-label="清除关键词"]').exists()).toBe(true)
+  })
+
+  it('科室切换同步至 URL（all 时移除 department）且不触发重复请求，并忽略无关查询参数变更', async () => {
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ priority_limit: 0 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+
+    apiGet.mockClear()
+    routerReplace.mockClear()
+    await wrapper.get('select[aria-label="统计科室"]').setValue('神经外科')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenCalledWith({ query: { department: '神经外科' } })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+
+    // 无关 query 变化不触发重新拉取，也不覆盖当前科室选择
+    apiGet.mockClear()
+    routeState.activeRoute!.query = { ...routeState.activeRoute!.query, utm: 'banner' }
+    await flushHomeLoad()
+    expect(apiGet).not.toHaveBeenCalled()
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      '神经外科',
+    )
+
+    // 切回全部科室时从 URL 移除 department，保留其他参数且仅请求一次
+    routerReplace.mockClear()
+    await wrapper.get('select[aria-label="统计科室"]').setValue('all')
+    await flushHomeLoad()
+    expect(routerReplace).toHaveBeenCalledWith({ query: { utm: 'banner' } })
+    expect(apiGet).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('兼容数组型与带空白的 URL 筛选参数', async () => {
+    routeState.query = { department: ['  神经外科  ', '心内科'], keyword: ['  心衰  '] }
+    const wrapper = mountView()
+    await flushHomeLoad()
+
+    expect(apiGet).toHaveBeenLastCalledWith(
+      '/api/v1/workstation/qc-home',
+      expect.objectContaining({ department: '神经外科', keyword: '心衰', priority_limit: 0 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect((wrapper.get('select[aria-label="统计科室"]').element as HTMLSelectElement).value).toBe(
+      '神经外科',
+    )
+    expect(wrapper.get('[data-testid="home-scope"]').text()).toContain('关键词：心衰')
+    wrapper.unmount()
+  })
+
+  it('缺陷分析行向非演示用户透明展示未全部完成份数，对演示用户隐藏', async () => {
+    apiGet.mockResolvedValue({
+      success: true,
+      data: {
+        ...clinicalQcPayload,
+        clinical_qc: {
+          ...clinicalQcPayload.clinical_qc,
+          department_distribution: [
+            {
+              ...clinicalQcPayload.clinical_qc.department_distribution[0],
+              partial_failed_record_total: 2,
+            },
+          ],
+          physician_distribution: [
+            {
+              ...clinicalQcPayload.clinical_qc.physician_distribution[0],
+              partial_failed_record_total: 1,
+            },
+          ],
+        },
+      },
+    })
+
+    const wrapper = mountView()
+    await flushHomeLoad()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').text()).toContain(
+      '纳入 18 份 · 完成 13 份 · 未全部完成 2 份',
+    )
+    await wrapper.get('[data-testid="analysis-object-physician"]').trigger('click')
+    await nextTick()
+    expect(wrapper.get('[data-testid="defect-analysis-row"]').text()).toContain(
+      '纳入 10 份 · 完成 8 份 · 未全部完成 1 份',
+    )
+    wrapper.unmount()
+
+    authState.isDemoAccount = true
+    const demoWrapper = mountView()
+    await flushHomeLoad()
+    expect(demoWrapper.get('[data-testid="defect-analysis-row"]').text()).not.toContain('未全部完成')
+    demoWrapper.unmount()
   })
 })

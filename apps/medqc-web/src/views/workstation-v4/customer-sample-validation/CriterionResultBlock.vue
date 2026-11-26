@@ -177,12 +177,14 @@ function criterionFactText(criterion: SingleRecordQcCriterionResult) {
 }
 
 .criterion-row > .criterion-body > .criterion-analysis {
+  flex-basis: 100%;
   margin-top: 2px;
 }
 
 .medical-analysis summary {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   min-height: 28px;
   color: var(--mq-info-text);
   font-size: 13px;
@@ -193,6 +195,18 @@ function criterionFactText(criterion: SingleRecordQcCriterionResult) {
 
 .medical-analysis summary::-webkit-details-marker {
   display: none;
+}
+
+.medical-analysis summary::before {
+  display: inline-block;
+  font-size: 11px;
+  line-height: 1;
+  content: '▸';
+  transition: transform 160ms ease;
+}
+
+.medical-analysis[open] summary::before {
+  transform: rotate(90deg);
 }
 
 .medical-analysis[open] summary {

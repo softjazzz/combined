@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from ..storage.memory import llm_configs
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, get_trace_id, StatusCode
-from ..core.security import get_optional_user, require_roles
+from ..core.security import is_global_system_admin_principal, require_global_system_admin
 from ..services.llm_config_loader import (
     SUPPORTED_PROVIDER_CODES,
     LLMConfigLoader,
@@ -195,9 +195,18 @@ def _resolve_model(model_code: str, provider_code: str = "") -> Dict[str, Any]:
 
 
 def _extract_provider_and_model_codes(payload: Dict[str, Any]) -> tuple[str, str]:
-    default_provider_code = get_default_provider_code()
-    enabled_provider_codes = set(get_enabled_provider_codes())
-    provider_code = str(payload.get("provider_code") or payload.get("provider_id") or default_provider_code).strip().lower()
+    try:
+        enabled_provider_codes = set(get_enabled_provider_codes())
+    except ProviderConfigurationError as exc:
+        raise HTTPException(status_code=422, detail="llm_provider_not_enabled") from exc
+    explicit_provider = str(payload.get("provider_code") or payload.get("provider_id") or "").strip().lower()
+    if explicit_provider:
+        provider_code = explicit_provider
+    else:
+        try:
+            provider_code = get_default_provider_code()
+        except ProviderConfigurationError as exc:
+            raise HTTPException(status_code=422, detail="llm_provider_not_enabled") from exc
     if provider_code not in SUPPORTED_PROVIDER_CODES or provider_code not in enabled_provider_codes:
         raise HTTPException(status_code=422, detail="llm_provider_not_enabled")
     model_code = str(payload.get("model_code") or payload.get("model_id") or "").strip()
@@ -407,13 +416,29 @@ async def _save_config_internal(payload: Dict[str, Any], request: Request) -> Di
         return _save_in_memory()
 
 
+def _assert_allowed_target_user_id(target_user_id: Optional[str], current_user: dict) -> None:
+    if target_user_id is None or not str(target_user_id).strip():
+        return
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    if str(target_user_id).strip() == actor_id:
+        return
+    if not is_global_system_admin_principal(
+        _extract_roles(current_user),
+        current_user.get("institute_id"),
+    ):
+        raise HTTPException(
+            status_code=StatusCode.FORBIDDEN,
+            detail="禁止非全局管理员访问或修改其他用户的模型配置",
+        )
+
+
 @router.get("/configs")
 async def list_configs(
     request: Request,
     user_id: Optional[str] = Query(default=None),
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
-    del system_config_user
+    _assert_allowed_target_user_id(user_id, system_config_user)
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
@@ -453,9 +478,9 @@ async def get_config_by_name(
     request: Request,
     config_name: str,
     user_id: Optional[str] = Query(default=None),
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
-    del system_config_user
+    _assert_allowed_target_user_id(user_id, system_config_user)
     supabase = get_supabase()
 
     def _fallback() -> Dict[str, Any]:
@@ -490,41 +515,237 @@ async def get_config_by_name(
 async def save_config(
     request: Request,
     payload: Dict[str, Any],
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
-    del admin_user
+    _assert_allowed_target_user_id(payload.get("user_id"), admin_user)
     result = await _save_config_internal(payload, request)
-    return success_response(data=result, trace_id=get_trace_id(request))
+    return success_response(data=_project_config_row(result), trace_id=get_trace_id(request))
+
+
+def _resolve_masked_key_configured(provider_code: str, row_has_key: bool = False) -> bool:
+    """只返回脱敏后的密钥配置状态（布尔值），绝不解密或回显密钥原文。"""
+    if row_has_key:
+        return True
+    code = str(provider_code or "").strip().lower()
+    if not code:
+        return False
+    try:
+        from ..core.settings import get_settings
+        from ..services import llm_endpoint_settings as endpoint_settings
+
+        settings = get_settings()
+        if code in endpoint_settings.PROVIDERS:
+            try:
+                state = endpoint_settings.snapshot()
+                saved = state.get("providers", {}).get(code)
+                if saved is not None:
+                    return bool(saved.get("key_ciphertext"))
+            except Exception:
+                pass
+            _, dep_key = endpoint_settings.deployment_values(code, settings)
+            return bool(dep_key)
+        if code == "strata":
+            return bool(getattr(settings, "STRATA_API_KEY", None))
+    except Exception:
+        return False
+    return False
+
+
+async def _load_fallback_default_row() -> Dict[str, Any]:
+    """当默认推理服务被禁用或配置不可用时，只读提取存储或部署中的原始摘要供后台恢复切换。"""
+    supabase = get_supabase()
+    if supabase is not None:
+        try:
+            q = (
+                supabase.table(_LLM_CONFIG_TABLE)
+                .select("*")
+                .eq("config_name", "default")
+                .eq("is_active", True)
+                .is_("user_id", None)  # type: ignore[attr-defined]
+                .order("updated_at", desc=True)
+                .limit(1)
+            )
+            resp = await async_execute(q)
+            if resp.data:
+                row = dict(resp.data[0])
+                provider_code = str(row.get("provider_code") or row.get("provider_id") or "").strip().lower()
+                model_code = str(row.get("model_code") or row.get("model_id") or "").strip()
+                row_has_key = bool(row.get("api_key_encrypted") or row.get("api_key"))
+                return {
+                    "provider_code": provider_code,
+                    "model_code": model_code,
+                    "custom_parameters": dict(row.get("custom_parameters") or {}),
+                    "api_key_configured": _resolve_masked_key_configured(provider_code, row_has_key),
+                    "source": "database+env",
+                }
+        except Exception:
+            logging.getLogger(__name__).warning("llm_default_fallback_db_read_failed")
+
+    matched: List[Dict[str, Any]] = [
+        item
+        for item in llm_configs.values()
+        if str(item.get("config_name") or "").strip() == "default" and item.get("user_id") is None
+    ]
+    if matched:
+        matched.sort(
+            key=lambda row: str(row.get("updated_at") or row.get("created_at") or ""),
+            reverse=True,
+        )
+        row = matched[0]
+        provider_code = str(
+            row.get("provider_code")
+            or row.get("provider_id")
+            or (
+                row.get("provider", {}).get("provider_code")
+                if isinstance(row.get("provider"), dict)
+                else row.get("provider")
+            )
+            or ""
+        ).strip().lower()
+        model_code = str(
+            row.get("model_code")
+            or row.get("model_id")
+            or (
+                row.get("model", {}).get("model_code")
+                if isinstance(row.get("model"), dict)
+                else row.get("model")
+            )
+            or ""
+        ).strip()
+        row_has_key = bool(row.get("api_key_encrypted") or row.get("api_key"))
+        return {
+            "provider_code": provider_code,
+            "model_code": model_code,
+            "custom_parameters": dict(row.get("custom_parameters") or {}),
+            "api_key_configured": _resolve_masked_key_configured(provider_code, row_has_key),
+            "source": "memory+env",
+        }
+
+    from ..core.settings import get_settings
+
+    settings = get_settings()
+    provider_code = str(getattr(settings, "LLM_DEFAULT_PROVIDER", None) or "").strip().lower()
+    if provider_code == "ollama":
+        model_code = str(getattr(settings, "OLLAMA_MODEL", None) or "qwen2.5:7b-instruct").strip()
+    elif provider_code == "strata":
+        model_code = str(getattr(settings, "STRATA_MODEL", None) or "").strip()
+    elif provider_code == "deepseek":
+        model_code = str(getattr(settings, "LLM_MODEL", None) or "deepseek-v4-flash").strip()
+    elif provider_code == "siliconflow":
+        model_code = str(getattr(settings, "LLM_MODEL", None) or "Qwen/Qwen3.5-27B").strip()
+    else:
+        model_code = str(getattr(settings, "LLM_MODEL", None) or "qwen3.5-35b-a3b").strip()
+
+    custom_params: Dict[str, Any] = {
+        "enable_thinking": bool(getattr(settings, "LLM_ENABLE_THINKING", False)),
+    }
+    if custom_params["enable_thinking"] and getattr(settings, "LLM_THINKING_BUDGET", None) is not None:
+        custom_params["thinking_budget"] = getattr(settings, "LLM_THINKING_BUDGET")
+
+    return {
+        "provider_code": provider_code,
+        "model_code": model_code,
+        "custom_parameters": custom_params,
+        "api_key_configured": _resolve_masked_key_configured(provider_code),
+        "source": "env",
+    }
+
+
+def _build_summary_payload(
+    *,
+    provider_code: str,
+    model_code: str,
+    custom_params: Dict[str, Any],
+    source: str,
+    readonly: bool,
+    api_key_configured: bool = False,
+    provider_unavailable: bool = False,
+    provider_unavailable_reason: Optional[str] = None,
+) -> Dict[str, Any]:
+    try:
+        execution_concurrency = concurrency_from_custom_parameters(custom_params)
+    except Exception:
+        execution_concurrency = default_llm_execution_concurrency()
+    try:
+        task_roles = normalize_task_roles(custom_params.get(TASK_ROLES_KEY))
+    except Exception:
+        task_roles = normalize_task_roles(None)
+    try:
+        temperature = float(custom_params.get("temperature", 0.2))
+    except (TypeError, ValueError):
+        temperature = 0.2
+    try:
+        top_p = float(custom_params.get("top_p", 0.9))
+    except (TypeError, ValueError):
+        top_p = 0.9
+    try:
+        max_tokens = int(custom_params.get("max_tokens", 4000))
+    except (TypeError, ValueError):
+        max_tokens = 4000
+
+    return {
+        "provider_code": provider_code,
+        "model_code": model_code,
+        "api_key_configured": bool(api_key_configured),
+        "custom_parameters": {
+            "temperature": temperature,
+            "top_p": top_p,
+            "max_tokens": max_tokens,
+            "enable_thinking": bool(custom_params.get("enable_thinking", False)),
+            "thinking_budget": custom_params.get("thinking_budget"),
+            "reasoning_effort": str(custom_params.get("reasoning_effort") or ""),
+            TASK_ROLES_KEY: task_roles,
+        },
+        "execution_concurrency": execution_concurrency.as_dict(),
+        "source": source,
+        "readonly": readonly,
+        "provider_unavailable": provider_unavailable,
+        "provider_unavailable_reason": provider_unavailable_reason,
+    }
 
 
 @router.get("/configs/default/summary")
 async def get_default_summary(
     request: Request,
-    current_user: Optional[Dict[str, Any]] = Depends(get_optional_user),
+    current_user: Dict[str, Any] = Depends(require_global_system_admin),
 ):
-    runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
-    runtime = runtime or {}
-    custom_params = runtime.get("custom_parameters") or {}
-    execution_concurrency = concurrency_from_custom_parameters(custom_params)
-    source = str(runtime.get("source") or "env")
-    readonly = not _extract_roles(current_user).intersection(_SYSTEM_CONFIG_ROLES)
+    readonly = not is_global_system_admin_principal(
+        _extract_roles(current_user),
+        current_user.get("institute_id"),
+    )
+    try:
+        runtime = await LLMConfigLoader.load_config(config_name="default", user_id=None)
+        runtime = runtime or {}
+        custom_params = runtime.get("custom_parameters") or {}
+        provider_code = str(runtime.get("provider_code") or get_default_provider_code())
+        model_code = str(runtime.get("model") or "")
+        source = str(runtime.get("source") or "env")
+        data = _build_summary_payload(
+            provider_code=provider_code,
+            model_code=model_code,
+            custom_params=custom_params,
+            source=source,
+            readonly=readonly,
+            api_key_configured=bool(runtime.get("api_key")),
+            provider_unavailable=False,
+            provider_unavailable_reason=None,
+        )
+    except ProviderConfigurationError as exc:
+        logging.getLogger(__name__).warning("llm_default_summary_provider_unavailable")
+        fallback = await _load_fallback_default_row()
+        reason = str(exc).strip() or "provider_unavailable"
+        data = _build_summary_payload(
+            provider_code=fallback["provider_code"],
+            model_code=fallback["model_code"],
+            custom_params=fallback["custom_parameters"],
+            source=fallback["source"],
+            readonly=readonly,
+            api_key_configured=fallback["api_key_configured"],
+            provider_unavailable=True,
+            provider_unavailable_reason=reason,
+        )
     return success_response(
-        data={
-            "provider_code": str(runtime.get("provider_code") or get_default_provider_code()),
-            "model_code": str(runtime.get("model") or ""),
-            "custom_parameters": {
-                "temperature": float(custom_params.get("temperature", 0.2)),
-                "top_p": float(custom_params.get("top_p", 0.9)),
-                "max_tokens": int(custom_params.get("max_tokens", 4000)),
-                "enable_thinking": bool(custom_params.get("enable_thinking", False)),
-                "thinking_budget": custom_params.get("thinking_budget"),
-                "reasoning_effort": str(custom_params.get("reasoning_effort") or ""),
-                TASK_ROLES_KEY: normalize_task_roles(custom_params.get(TASK_ROLES_KEY)),
-            },
-            "execution_concurrency": execution_concurrency.as_dict(),
-            "source": source,
-            "readonly": readonly,
-        },
+        data=data,
         trace_id=get_trace_id(request),
     )
 
@@ -532,11 +753,31 @@ async def get_default_summary(
 @router.post("/configs/default/reset")
 async def reset_default_config(
     request: Request,
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
     del admin_user
-    default_provider = get_default_provider_code()
-    runtime = build_provider_runtime_config(default_provider)
+    try:
+        default_provider = get_default_provider_code()
+        runtime = build_provider_runtime_config(default_provider)
+    except ProviderConfigurationError as exc:
+        logging.getLogger(__name__).warning("llm_default_reset_provider_unavailable")
+        fallback = await _load_fallback_default_row()
+        reason = str(exc).strip() or "provider_unavailable"
+        data = _build_summary_payload(
+            provider_code=fallback["provider_code"],
+            model_code=fallback["model_code"],
+            custom_params=fallback["custom_parameters"],
+            source=fallback["source"],
+            readonly=False,
+            api_key_configured=fallback["api_key_configured"],
+            provider_unavailable=True,
+            provider_unavailable_reason=reason,
+        )
+        return success_response(
+            data=data,
+            message="默认推理服务当前不可用，请先重新启用或切换到其他已启用的推理服务",
+            trace_id=get_trace_id(request),
+        )
     execution_concurrency = default_llm_execution_concurrency()
     payload = {
         "config_name": "default",
@@ -557,6 +798,7 @@ async def reset_default_config(
         data={
             "provider_code": payload["provider_code"],
             "model_code": payload["model_code"],
+            "api_key_configured": bool(runtime.get("api_key")),
             "custom_parameters": {
                 "temperature": 0.2,
                 "top_p": 0.9,
@@ -565,6 +807,8 @@ async def reset_default_config(
             "execution_concurrency": execution_concurrency.as_dict(),
             "source": "database+env",
             "readonly": False,
+            "provider_unavailable": False,
+            "provider_unavailable_reason": None,
         },
         message="已恢复默认配置",
         trace_id=get_trace_id(request),
@@ -575,7 +819,7 @@ async def reset_default_config(
 async def test_config(
     request: Request,
     payload: Dict[str, Any],
-    system_config_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    system_config_user: dict = Depends(require_global_system_admin),
 ):
     del system_config_user
     try:

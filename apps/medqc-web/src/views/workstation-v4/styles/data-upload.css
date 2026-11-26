@@ -1,8 +1,12 @@
 /* v7.1：继承工作台 Token。 */
 .upload-workstation {
-  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--mq-bg-subtle);
   color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
@@ -16,9 +20,10 @@
 .upload-page {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
+  flex: 1 0 auto;
+  min-height: 0;
   padding: 24px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .upload-header {
@@ -121,9 +126,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) 320px;
   gap: 18px;
-  flex: 1;
+  flex: 1 0 auto;
   min-height: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .upload-main-card,
@@ -581,4 +586,24 @@
 .upload-workstation button,
 .upload-workstation :deep(.ant-btn) {
   border-radius: var(--mq-radius-tag);
+}
+
+.upload-dropzone:focus-visible,
+.upload-history-item:focus-visible,
+.upload-refresh-btn:focus-visible,
+.upload-primary-btn:focus-visible,
+.upload-secondary-btn:focus-visible,
+.upload-back-btn:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
+}
+
+@media (max-height: 760px), (max-width: 1280px) {
+  .upload-page {
+    padding: 18px 20px;
+  }
+
+  .upload-dropzone {
+    min-height: 320px;
+  }
 }

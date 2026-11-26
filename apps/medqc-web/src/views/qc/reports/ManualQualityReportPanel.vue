@@ -103,13 +103,16 @@
           <div class="summary-card mq-card mq-card--padded">
             <span class="summary-label"><MqIcon name="doc" :size="18" />人工缺陷录入</span>
             <h3 class="summary-total">录入 {{ report.summary.entered }} 条</h3>
-            <small>统计读取时间 {{ report.as_of }} · 日期口径 {{ report.timezone }}</small>
+            <small
+              >统计读取时间 {{ formatShanghaiTime(report.as_of) }} · 日期口径
+              {{ report.timezone }}</small
+            >
           </div>
           <section class="summary-card mq-card mq-card--padded">
             <h3>当前审核状态</h3>
             <div class="status-list">
               <span
-                v-for="(count, key) in report.summary.review"
+                v-for="[key, count] in visibleReviewSummary"
                 :key="key"
                 class="mq-status"
                 :class="statusClass(reviewTones, key, count)"
@@ -121,7 +124,7 @@
             <h3>当前现代整改状态</h3>
             <div class="status-list">
               <span
-                v-for="(count, key) in report.summary.rectification"
+                v-for="[key, count] in visibleRectificationSummary"
                 :key="key"
                 class="mq-status"
                 :class="statusClass(rectificationTones, key, count)"
@@ -132,11 +135,11 @@
         </div>
         <div class="manual-table mq-card">
           <a-table
-            :data-source="report.items"
+            :data-source="visibleItems"
             :columns="columns"
             row-key="id"
+            table-layout="fixed"
             :pagination="false"
-            :scroll="{ x: 1000 }"
           >
             <template #bodyCell="{ column, record, text }">
               <span
@@ -151,6 +154,9 @@
                 :class="statusClass(rectificationTones, record.rectification_status)"
                 >{{ rectificationLabels[record.rectification_status] || '未知' }}</span
               >
+              <template v-else-if="column.dataIndex === 'created_at'">
+                {{ formatShanghaiTime(record.created_at) }}
+              </template>
               <button
                 v-else-if="column.key === 'detail'"
                 class="link"
@@ -189,7 +195,11 @@
       @close="selected = null"
     >
       <a-descriptions v-if="selected" :column="1" bordered size="small">
-        <a-descriptions-item v-for="field in detailFields" :key="field.key" :label="field.label">
+        <a-descriptions-item
+          v-for="field in visibleDetailFields"
+          :key="field.key"
+          :label="field.label"
+        >
           {{ detailValue(field.key) }}
         </a-descriptions-item>
       </a-descriptions>
@@ -204,12 +214,15 @@
 </template>
 
 <script setup lang="ts">
+import { isAxiosError } from 'axios'
 import { DatePicker as ADatePicker } from 'ant-design-vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
 import { computed, onUnmounted, reactive, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
+import { extractApiErrorMessageFromError } from '@/utils/api-envelope'
 import {
   getManualQualityReport,
   exportManualQualityReport,
@@ -218,6 +231,7 @@ import {
   type ManualReportRow,
 } from '@/api/manualQualityReport'
 const auth = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const today = new Intl.DateTimeFormat('sv-SE', {
   timeZone: 'Asia/Shanghai',
   year: 'numeric',
@@ -279,12 +293,91 @@ const loading = ref(false),
   error = ref(''),
   page = ref(1)
 let token = 0,
-  exportToken = 0
+  exportToken = 0,
+  optionsToken = 0
+let loadController: AbortController | null = null
+let exportController: AbortController | null = null
+let optionsController: AbortController | null = null
+let lastOptionsWindow = ''
+let pendingOptionsWindow = ''
+
+function abortLoad() {
+  loadController?.abort()
+  loadController = null
+}
+function abortExport() {
+  exportController?.abort()
+  exportController = null
+}
+function abortOptions() {
+  optionsController?.abort()
+  optionsController = null
+}
+function formatShanghaiTime(value?: string | null): string {
+  if (!value) return '未知'
+  const trimmed = value.trim()
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+  const normalized = /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed) ? trimmed : `${trimmed}Z`
+  const parsed = new Date(normalized)
+  if (Number.isNaN(parsed.getTime())) return trimmed
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(parsed)
+}
+function resolveErrorMessage(cause: unknown, fallback: string): string {
+  if (isAxiosError(cause)) {
+    if (cause.code === 'ECONNABORTED') return '请求超时，请稍后重试'
+    if (cause.code === 'ERR_NETWORK') return '网络连接失败，请稍后重试'
+    const data = cause.response?.data
+    if (data && typeof data === 'object' && !(data instanceof Blob)) {
+      const record = data as Record<string, unknown>
+      for (const key of ['detail', 'error'] as const) {
+        const nested = record[key]
+        if (nested && typeof nested === 'object') {
+          const msg = (nested as Record<string, unknown>).message
+          if (typeof msg === 'string' && msg.trim()) return msg.trim()
+        }
+      }
+    }
+  }
+  return extractApiErrorMessageFromError(cause, fallback)
+}
+
 const options = ref<ManualReport['filter_options']>({
   institutes: [],
   departments: [],
   creators: [],
   tasks: [],
+})
+const DEMO_HIDDEN_DETAIL_KEYS = new Set<keyof ManualReportRow>([
+  'task_record_id',
+  'run_number',
+  'source_verified',
+  'root_job_id',
+  'envelope_id',
+])
+const visibleReviewSummary = computed(() => {
+  const entries = Object.entries(report.value?.summary.review || {})
+  return confirmedResultsOnly.value ? entries.filter(([key]) => key !== 'unknown') : entries
+})
+const visibleRectificationSummary = computed(() => {
+  const entries = Object.entries(report.value?.summary.rectification || {})
+  return confirmedResultsOnly.value ? entries.filter(([key]) => key !== 'unknown') : entries
+})
+const visibleItems = computed(() => {
+  const items = report.value?.items || []
+  return confirmedResultsOnly.value
+    ? items.filter(
+        (item) => item.review_status !== 'unknown' && item.rectification_status !== 'unknown',
+      )
+    : items
 })
 const reviewLabels: Record<string, string> = {
   pending: '待审核',
@@ -318,15 +411,15 @@ function statusClass(tones: Record<string, Tone>, key: unknown, count?: number) 
   return tone && count !== 0 ? `mq-status--${tone}` : ''
 }
 const columns = [
-  { title: '机构', dataIndex: 'institute_id' },
-  { title: '科室', dataIndex: 'department' },
-  { title: '录入人', dataIndex: 'creator_name' },
-  { title: '任务', dataIndex: 'task_name' },
-  { title: '缺陷', dataIndex: 'rule_name' },
-  { title: '创建日期', dataIndex: 'created_at' },
-  { title: '审核', key: 'review_status' },
-  { title: '整改', key: 'rectification_status' },
-  { title: '操作', key: 'detail' },
+  { title: '机构', dataIndex: 'institute_id', width: 68, ellipsis: true },
+  { title: '科室', dataIndex: 'department', width: 88, ellipsis: true },
+  { title: '录入人', dataIndex: 'creator_name', width: 80, ellipsis: true },
+  { title: '任务', dataIndex: 'task_name', width: 112, ellipsis: true },
+  { title: '缺陷', dataIndex: 'rule_name', ellipsis: true },
+  { title: '创建日期', dataIndex: 'created_at', width: 148, ellipsis: true },
+  { title: '审核', key: 'review_status', width: 88 },
+  { title: '整改', key: 'rectification_status', width: 88 },
+  { title: '操作', key: 'detail', width: 78 },
 ]
 const detailFields: Array<{ key: keyof ManualReportRow; label: string }> = [
   { key: 'id', label: '缺陷 ID' },
@@ -345,6 +438,11 @@ const detailFields: Array<{ key: keyof ManualReportRow; label: string }> = [
   { key: 'root_job_id', label: '冻结结果任务' },
   { key: 'envelope_id', label: '冻结结果信封' },
 ]
+const visibleDetailFields = computed(() =>
+  confirmedResultsOnly.value
+    ? detailFields.filter((field) => !DEMO_HIDDEN_DETAIL_KEYS.has(field.key))
+    : detailFields,
+)
 function selectDetail(id: unknown) {
   selected.value = report.value?.items.find((item) => item.id === id) ?? null
 }
@@ -354,26 +452,65 @@ function detailValue(key: keyof ManualReportRow) {
   if (key === 'review_status') return reviewLabels[String(value)] || '未知'
   if (key === 'rectification_status') return rectificationLabels[String(value)] || '未知'
   if (key === 'source_verified') return value ? '已核验' : '来源不完整或错配'
+  if (key === 'created_at') return formatShanghaiTime(typeof value === 'string' ? value : null)
   return value ?? '未知'
 }
+async function refreshOptionsForDateRange(startDate: string, endDate: string) {
+  if (!auth.user?.id || !startDate || !endDate || startDate > endDate) return
+  const windowKey = `${startDate}~${endDate}`
+  if (windowKey === lastOptionsWindow || windowKey === pendingOptionsWindow) return
+  const request = ++optionsToken
+  abortOptions()
+  const controller = new AbortController()
+  optionsController = controller
+  try {
+    const result = await getManualQualityReport(
+      { start_date: startDate, end_date: endDate, scene: 'all' },
+      1,
+      controller.signal,
+    )
+    if (request !== optionsToken || controller.signal.aborted) return
+    options.value = result.filter_options
+    lastOptionsWindow = windowKey
+  } catch {
+    /* 选项预刷新失败不打断当前页面展示，查询时再统一提示 */
+  }
+}
 async function loadPage(value = 1) {
+  const currentWindow = `${applied.value.start_date}~${applied.value.end_date}`
   const request = ++token
   ++exportToken
+  ++optionsToken
+  abortLoad()
+  abortExport()
+  abortOptions()
+  pendingOptionsWindow = currentWindow
+  const controller = new AbortController()
+  loadController = controller
   loading.value = true
   error.value = ''
   report.value = null
   selected.value = null
   exporting.value = false
   try {
-    const result = await getManualQualityReport(applied.value, value)
-    if (request !== token) return
-    if (!applied.value.institute_id && !applied.value.creator_id && !applied.value.task_id)
+    const result = await getManualQualityReport(applied.value, value, controller.signal)
+    if (request !== token || controller.signal.aborted) return
+    pendingOptionsWindow = ''
+    if (
+      currentWindow !== lastOptionsWindow ||
+      (!applied.value.institute_id && !applied.value.creator_id && !applied.value.task_id) ||
+      !options.value.institutes.length
+    ) {
       options.value = result.filter_options
-    else if (!options.value.institutes.length) options.value = result.filter_options
+      lastOptionsWindow = currentWindow
+    }
     report.value = result
     page.value = value
   } catch (e) {
-    if (request === token) error.value = e instanceof Error ? e.message : '人工质控报表不可用'
+    if (request === token) pendingOptionsWindow = ''
+    if (request === token && !controller.signal.aborted) {
+      error.value = resolveErrorMessage(e, '人工质控报表不可用')
+    }
   } finally {
     if (request === token) loading.value = false
   }
@@ -401,10 +538,13 @@ function reset() {
 async function download() {
   if (!report.value || exporting.value) return
   const request = ++exportToken
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   exporting.value = true
   try {
-    const blob = await exportManualQualityReport(applied.value)
-    if (request !== exportToken) return
+    const blob = await exportManualQualityReport(applied.value, controller.signal)
+    if (request !== exportToken || controller.signal.aborted) return
     const url = URL.createObjectURL(blob),
       link = document.createElement('a')
     link.href = url
@@ -412,29 +552,57 @@ async function download() {
     link.click()
     URL.revokeObjectURL(url)
   } catch (e) {
-    if (request === exportToken) error.value = e instanceof Error ? e.message : '导出失败'
+    if (request === exportToken && !controller.signal.aborted) {
+      error.value = resolveErrorMessage(e, '导出失败')
+    }
   } finally {
     if (request === exportToken) exporting.value = false
   }
 }
 watch(
-  () => [auth.user?.id, auth.user?.roles],
-  () => {
+  () => [draft.start_date, draft.end_date] as const,
+  ([nextStart, nextEnd], prev) => {
+    if (!prev) return
+    if (nextStart === prev[0] && nextEnd === prev[1]) return
+    if (nextStart && nextEnd && nextStart <= nextEnd) {
+      void refreshOptionsForDateRange(nextStart, nextEnd)
+    }
+  },
+)
+const authKey = computed(() => {
+  const id = auth.user?.id?.trim()
+  if (!id) return ''
+  const roles = Array.isArray(auth.user?.roles) ? [...auth.user.roles].sort().join(',') : ''
+  return `${id}|${roles}`
+})
+watch(
+  authKey,
+  (nextAuthKey) => {
     ++token
     ++exportToken
+    ++optionsToken
+    abortLoad()
+    abortExport()
+    abortOptions()
+    lastOptionsWindow = ''
+    pendingOptionsWindow = ''
     report.value = null
     selected.value = null
     workflowOpen.value = false
     loading.value = false
     exporting.value = false
     options.value = { institutes: [], departments: [], creators: [], tasks: [] }
-    if (auth.user?.id) void loadPage()
+    if (nextAuthKey) void loadPage()
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 onUnmounted(() => {
   ++token
   ++exportToken
+  ++optionsToken
+  abortLoad()
+  abortExport()
+  abortOptions()
 })
 </script>
 <style scoped src="./styles/manual-quality-report.css"></style>

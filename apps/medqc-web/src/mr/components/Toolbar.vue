@@ -167,7 +167,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onUnmounted } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   FileTextOutlined,
@@ -274,7 +274,7 @@ const handleSearch = () => {
   emit('search', keyword, results)
 }
 
-// 查找并高亮
+// 查找并高亮（使用纯文本节点与 createElement 安全 DOM 构建，防止 XSS）
 const findAndHighlight = (container: Element, keyword: string): Element[] => {
   const results: Element[] = []
   const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null)
@@ -290,22 +290,44 @@ const findAndHighlight = (container: Element, keyword: string): Element[] => {
 
   textNodes.forEach((textNode) => {
     const text = textNode.textContent || ''
-    if (regex.test(text)) {
-      const parent = textNode.parentElement
-      if (parent && !parent.closest('.toolbar')) {
-        const highlightedHTML = text.replace(
-          regex,
-          (match) => `<mark class="search-highlight" data-search-result>${match}</mark>`,
-        )
-
-        const wrapper = document.createElement('span')
-        wrapper.innerHTML = highlightedHTML
-        parent.replaceChild(wrapper, textNode)
-
-        const marks = wrapper.querySelectorAll('.search-highlight')
-        results.push(...Array.from(marks))
-      }
+    const parent = textNode.parentElement
+    if (!text || !parent || parent.closest('.toolbar')) {
+      return
     }
+
+    regex.lastIndex = 0
+    let match = regex.exec(text)
+    if (!match) {
+      return
+    }
+
+    const fragment = document.createDocumentFragment()
+    let lastIndex = 0
+
+    while (match !== null) {
+      const matchText = match[0]
+      if (!matchText) break
+
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)))
+      }
+
+      const mark = document.createElement('mark')
+      mark.className = 'search-highlight'
+      mark.setAttribute('data-search-result', '')
+      mark.textContent = matchText
+      fragment.appendChild(mark)
+      results.push(mark)
+
+      lastIndex = match.index + matchText.length
+      match = regex.exec(text)
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)))
+    }
+
+    parent.replaceChild(fragment, textNode)
   })
 
   return results
@@ -395,9 +417,10 @@ const toggleFullscreen = () => {
 }
 
 // 监听全屏状态变化
-document.addEventListener('fullscreenchange', () => {
+const handleFullscreenChange = () => {
   isFullscreen.value = !!document.fullscreenElement
-})
+}
+document.addEventListener('fullscreenchange', handleFullscreenChange)
 
 // 打印
 const print = () => {
@@ -438,7 +461,7 @@ const escapeRegExp = (string: string) => {
 }
 
 // 键盘快捷键
-document.addEventListener('keydown', (e) => {
+const handleKeydown = (e: KeyboardEvent) => {
   if (e.ctrlKey || e.metaKey) {
     if (e.key === '=' || e.key === '+') {
       e.preventDefault()
@@ -460,6 +483,12 @@ document.addEventListener('keydown', (e) => {
     e.preventDefault()
     cancelEdit()
   }
+}
+document.addEventListener('keydown', handleKeydown)
+
+onUnmounted(() => {
+  document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  document.removeEventListener('keydown', handleKeydown)
 })
 </script>
 

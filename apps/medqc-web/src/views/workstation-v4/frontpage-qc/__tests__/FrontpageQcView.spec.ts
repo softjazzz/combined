@@ -47,7 +47,10 @@ vi.mock('ant-design-vue', async (importOriginal) => ({
 
 vi.mock('../../customer-sample-validation/batchExport', () => ({ downloadBlob: vi.fn() }))
 
-const testAuth = reactive({ user: { id: 'synthetic-admin', institute_id: 'H-TEST', roles: ['admin'] }, userRoles: ['admin'] })
+const testAuth = reactive({
+  user: { id: 'synthetic-admin', institute_id: '', roles: ['admin'], is_demo_account: false },
+  userRoles: ['admin'],
+})
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => testAuth }))
 
 import FrontpageQcView from '../FrontpageQcView.vue'
@@ -128,6 +131,10 @@ const rows = [record('C01', true), record('C02', false)]
 beforeEach(() => {
     vi.resetAllMocks()
     testAuth.user.id = 'synthetic-admin'
+    testAuth.user.institute_id = ''
+    testAuth.user.roles = ['admin']
+    testAuth.user.is_demo_account = false
+    testAuth.userRoles = ['admin']
     svc.listRecords.mockResolvedValue({ items: rows, total: 2, page: 1, page_size: 15 })
     svc.getRecord.mockImplementation(async (ref: { visit_id: string }) =>
       detailFor(rows.find((row) => row.visit_id === ref.visit_id)!),
@@ -150,7 +157,10 @@ describe('FrontpageQcView', () => {
     const wrapper = mount(FrontpageQcView)
     await flushPromises()
     expect(wrapper.find('[aria-label="数据范围"]').exists()).toBe(false)
-    expect(svc.listRecords).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'home' }))
+    expect(svc.listRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ data_scope: 'home' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
     wrapper.unmount()
   })
@@ -164,7 +174,10 @@ describe('FrontpageQcView', () => {
     pagination.vm.$emit('change', 1, 30)
     await flushPromises()
 
-    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, page_size: 30 }))
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 1, page_size: 30 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.findComponent({ name: 'Pagination' }).exists()).toBe(false)
     wrapper.unmount()
   })
@@ -213,9 +226,15 @@ describe('FrontpageQcView', () => {
     await flushPromises()
     expect(wrapper.get('[data-testid="fpqc-scope-home"]').attributes('aria-pressed')).toBe('true')
     expect(wrapper.get('[data-testid="fpqc-scope-all"]').attributes('aria-pressed')).toBe('false')
-    expect(svc.getFilters).toHaveBeenCalledWith({ data_scope: 'home' })
+    expect(svc.getFilters).toHaveBeenCalledWith(
+      { data_scope: 'home' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(svc.listRecords.mock.calls[0][0]).toMatchObject({ data_scope: 'home', page: 1 })
-    expect(svc.getAnalytics).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'home' }))
+    expect(svc.getAnalytics).toHaveBeenCalledWith(
+      expect.objectContaining({ data_scope: 'home' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     wrapper.unmount()
   })
 
@@ -232,20 +251,38 @@ describe('FrontpageQcView', () => {
     await flushPromises()
     wrapper.findComponent({ name: 'Pagination' }).vm.$emit('change', 2, 15)
     await flushPromises()
-    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ page: 2 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     await wrapper.findAll('[data-testid="fpqc-record-row"] input[type="checkbox"]')[0].setValue(true)
     await wrapper.get('[data-testid="fpqc-scope-all"]').trigger('click')
     await flushPromises()
-    expect(svc.getFilters).toHaveBeenLastCalledWith({ data_scope: 'all' })
-    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'all', department: '', page: 1 }))
+    expect(svc.getFilters).toHaveBeenLastCalledWith(
+      { data_scope: 'all' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data_scope: 'all', department: '', page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.get('[aria-label="科室筛选"]').element).toHaveProperty('value', '')
     expect(wrapper.get('[aria-label="科室筛选"]').text()).toContain('外科')
     expect(wrapper.get('[data-testid="fpqc-run-selected"]').attributes('disabled')).toBeDefined()
-    expect(svc.getAnalytics).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'all', department: '' }))
+    expect(svc.getAnalytics).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data_scope: 'all', department: '' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     await wrapper.findAll('button').find((b) => b.text() === '重置')!.trigger('click')
     await flushPromises()
-    expect(svc.getFilters).toHaveBeenLastCalledWith({ data_scope: 'home' })
-    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ data_scope: 'home', page: 1 }))
+    expect(svc.getFilters).toHaveBeenLastCalledWith(
+      { data_scope: 'home' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ data_scope: 'home', page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.get('[data-testid="fpqc-scope-home"]').attributes('aria-pressed')).toBe('true')
     wrapper.unmount()
   })
@@ -264,12 +301,15 @@ describe('FrontpageQcView', () => {
     svc.getAnalytics.mockClear()
     await wrapper.get('[data-testid="fpqc-scope-all"]').trigger('click')
     await flushPromises()
-    // 顶部指标和已打开的分析面板都重新统计。
-    expect(svc.getAnalytics.mock.calls.length).toBeGreaterThanOrEqual(2)
+    // analysis 视图下合并为单次 analytics 请求，并同步更新顶部指标卡。
+    expect(svc.getAnalytics).toHaveBeenCalledTimes(1)
     expect(svc.getAnalytics.mock.calls.every(([filters]) => filters.data_scope === 'all')).toBe(true)
     await wrapper.get('[data-testid="fpqc-export-filtered"]').trigger('click')
     await flushPromises()
-    expect(svc.exportRecords).toHaveBeenCalledWith(expect.objectContaining({ data_scope: 'all' }))
+    expect(svc.exportRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ data_scope: 'all' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     await wrapper.get('[data-testid="fpqc-run-filtered"]').trigger('click')
     expect(wrapper.get('dl.fpqc-confirm__summary').text()).toContain('数据范围')
     expect(wrapper.get('dl.fpqc-confirm__summary').text()).toContain('含测试数据')
@@ -285,7 +325,10 @@ describe('FrontpageQcView', () => {
     await flushPromises()
 
     expect(wrapper.findAll('[data-testid="fpqc-record-row"]')).toHaveLength(2)
-    expect(svc.getRecord).toHaveBeenCalledWith({ institute_id: 'H-TEST', patient_id: 'P-C01', visit_id: 'C01' })
+    expect(svc.getRecord).toHaveBeenCalledWith(
+      { institute_id: 'H-TEST', patient_id: 'P-C01', visit_id: 'C01' },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.get('[data-testid="fpqc-preview-score"]').text()).toBe('88')
     expect(wrapper.get('[data-testid="fpqc-finding"]').text()).toContain('手术者未填写')
     expect(wrapper.text()).toContain('未质控')
@@ -368,6 +411,7 @@ describe('FrontpageQcView', () => {
     expect(wrapper.get('[data-testid="fpqc-rule-filter"]').text()).toContain('C-H21')
     expect(svc.listRecords).toHaveBeenLastCalledWith(
       expect.objectContaining({ rule_id: 'C-H21', rule_verdict: 'fail', page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
 
     await wrapper.get('[aria-label="清除规则筛选"]').trigger('click')
@@ -379,7 +423,10 @@ describe('FrontpageQcView', () => {
     await flushPromises()
     await wrapper.get('[data-testid="fpqc-drill-department"]').trigger('click')
     await flushPromises()
-    expect(svc.listRecords).toHaveBeenLastCalledWith(expect.objectContaining({ department: '内科', page: 1 }))
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ department: '内科', page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
   })
 
   it('标记误报必须填写原因', async () => {
@@ -450,5 +497,68 @@ describe('首页V2导出复审保护', () => {
     await wrapper.get('[data-testid="fpqc-export-filtered"]').trigger('click');wrapper.unmount()
     after.resolve(new Blob(['after-unmount']));await flushPromises()
     expect(downloadBlob).not.toHaveBeenCalled()
+  })
+})
+
+describe('P1-G3 required_missing 筛选桶与问题列徽标', () => {
+  it('仅存在必填缺项时展示“必填缺项”徽标且不误判为“无”，仅三项均为0时显示“无”', async () => {
+    const requiredOnly = record('C03', true)
+    requiredOnly.result!.fail_count = 0
+    requiredOnly.result!.hint_count = 0
+    requiredOnly.result!.required_missing_count = 2
+
+    const cleanRecord = record('C04', true)
+    cleanRecord.result!.fail_count = 0
+    cleanRecord.result!.hint_count = 0
+    cleanRecord.result!.required_missing_count = 0
+
+    const customRows = [requiredOnly, cleanRecord]
+    svc.listRecords.mockResolvedValue({ items: customRows, total: 2, page: 1, page_size: 15 })
+    svc.getRecord.mockImplementation(async (ref: { visit_id: string }) =>
+      detailFor(customRows.find((row) => row.visit_id === ref.visit_id)!),
+    )
+
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    const tableRows = wrapper.findAll('[data-testid="fpqc-record-row"]')
+    expect(tableRows).toHaveLength(2)
+
+    const reqCells = tableRows[0].findAll('td')
+    expect(reqCells[6].get('[data-testid="fpqc-issue-required-missing"]').text()).toBe('必填缺项 2')
+    expect(reqCells[6].text()).not.toContain('无')
+
+    const cleanCells = tableRows[1].findAll('td')
+    expect(cleanCells[6].find('[data-testid="fpqc-issue-required-missing"]').exists()).toBe(false)
+    expect(cleanCells[6].text().trim()).toBe('无')
+
+    wrapper.unmount()
+  })
+
+  it('问题筛选下拉提供 required_missing 选项并透传查询与导出参数', async () => {
+    const wrapper = mount(FrontpageQcView)
+    await flushPromises()
+
+    const issueSelect = wrapper.get('[aria-label="问题筛选"]')
+    expect(issueSelect.find('option[value="required_missing"]').exists()).toBe(true)
+
+    await issueSelect.setValue('required_missing')
+    await wrapper.get('form').trigger('submit')
+    await flushPromises()
+
+    expect(svc.listRecords).toHaveBeenLastCalledWith(
+      expect.objectContaining({ issue: 'required_missing', page: 1 }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(wrapper.get('[data-testid="fpqc-export-filtered"]').attributes('disabled')).toBeUndefined()
+
+    await wrapper.get('[data-testid="fpqc-export-filtered"]').trigger('click')
+    await flushPromises()
+    expect(svc.exportRecords).toHaveBeenCalledWith(
+      expect.objectContaining({ issue: 'required_missing' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+
+    wrapper.unmount()
   })
 })

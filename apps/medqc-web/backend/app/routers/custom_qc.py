@@ -1,14 +1,21 @@
+import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Annotated, Any, Dict, List, Mapping, Optional, Sequence
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Query, Request
 from fastapi import HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
+from starlette.concurrency import run_in_threadpool
 
 from ..core.response import get_trace_id, success_response
+from ..core.roles import effective_roles
 from ..core.security import get_current_user, require_roles
+from ..database import clinical_connection
+from ..services import clinical_sources
 from ..services.custom_qc_service import (
     create_custom_qc_service,
     ensure_record_medical_text,
@@ -26,7 +33,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(
     prefix="/api/v1/custom-qc",
     tags=["custom-qc"],
-    dependencies=[Depends(require_roles("admin", "qc_manager"))],
+    dependencies=[Depends(require_roles("admin", "qc_manager", "sync_admin", "super_admin"))],
 )
 
 
@@ -116,6 +123,8 @@ class WorkspaceDraftUpdateRequest(BaseModel):
 
 
 class WorkspaceRecordPayload(BaseModel):
+    institute_id: Optional[str] = None
+    patient_id: Optional[str] = None
     record_id: str
     visit_id: Optional[str] = None
     patient_name: Optional[str] = None
@@ -246,9 +255,268 @@ def _wrong_workspace_batch_owner(job: Mapping[str, Any]) -> bool:
     )
 
 
+_DEMO_FULL_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+
+
+def _extract_user_roles(current_user: Optional[Dict[str, Any]]) -> set[str]:
+    if not isinstance(current_user, dict):
+        return set()
+    roles = set(effective_roles(current_user.get("roles")))
+    single = str(current_user.get("role") or "").strip()
+    if single:
+        roles.update(effective_roles([single]))
+    return {r.strip().lower() for r in roles if isinstance(r, str) and r.strip()}
+
+
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    if current_user.get("is_demo_account") is not True:
+        return False
+    return not bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_ROLES))
+
+
+def _reject_restricted_demo_account(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "演示账号禁止执行该操作",
+) -> None:
+    if _is_restricted_demo_account(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    claim_roles = _extract_user_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    actor_id = _current_user_id(current_user)
+
+    if actor_id and actor_id != "anonymous":
+        try:
+            from sqlalchemy import inspect as sa_inspect, text as sa_text
+            from ..database import connection as db_connection
+            from ..services.defect_rectification_service import _effective_persistent_roles
+            from ..services.user_scope_owner import resolve_user_owner_schema
+
+            session_factory = db_connection.SessionLocal
+            if session_factory is not None:
+                with session_factory() as session:
+                    owner_schema = resolve_user_owner_schema(session)
+                    inspector = sa_inspect(session.connection())
+                    if inspector.has_table("sys_users", schema=owner_schema):
+                        cols = {
+                            col["name"]
+                            for col in inspector.get_columns("sys_users", schema=owner_schema)
+                        }
+                        has_inst = "institute_id" in cols
+                        table_ref = (
+                            f'"{owner_schema}"."sys_users"'
+                            if owner_schema
+                            else '"sys_users"'
+                        )
+                        select_cols = (
+                            "id, role, roles_json, is_active"
+                            + (", institute_id" if has_inst else "")
+                        )
+                        row = (
+                            session.execute(
+                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
+                                {"uid": actor_id},
+                            )
+                            .mappings()
+                            .one_or_none()
+                        )
+                        if row is not None:
+                            if not bool(row.get("is_active")):
+                                return False
+                            p_roles = _effective_persistent_roles(
+                                row.get("role"), row.get("roles_json")
+                            )
+                            if not p_roles:
+                                return False
+                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
+                            return ("sync_admin" in p_roles) or (
+                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
+                            )
+        except Exception:
+            pass
+
+    return ("sync_admin" in claim_roles) or (
+        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
+    )
+
+
+def _require_global_admin(
+    current_user: Optional[Dict[str, Any]],
+    detail: str = "仅全局管理员允许发布全局自定义规则",
+) -> None:
+    if not _is_global_admin_sync(current_user):
+        raise HTTPException(status_code=403, detail=detail)
+
+
+def _resolve_workspace_institute_scope_sync(current_user: Dict[str, Any]) -> Optional[str]:
+    from ..services import saved_result_access
+    from ..services.defect_rectification_service import RectificationError
+    from ..services.report_institute_scope import authorized_report_institute
+
+    actor_id = _current_user_id(current_user)
+    roles = _extract_user_roles(current_user)
+    institute_scope = saved_result_access.saved_result_institute_scope(actor_id)
+    if institute_scope is None and "sync_admin" not in roles:
+        raw_inst = current_user.get("institute_id")
+        if isinstance(raw_inst, str) and raw_inst.strip():
+            return raw_inst.strip()
+        if (
+            getattr(saved_result_access.saved_result_institute_scope, "__module__", "")
+            == saved_result_access.__name__
+        ):
+            try:
+                return authorized_report_institute(actor_id)
+            except RectificationError as exc:
+                raise HTTPException(status_code=exc.status, detail=str(exc)) from None
+            except Exception:
+                raise HTTPException(status_code=503, detail="账号机构权限来源暂不可用") from None
+    return institute_scope
+
+
+async def _resolve_workspace_institute_scope(current_user: Dict[str, Any]) -> Optional[str]:
+    return await run_in_threadpool(_resolve_workspace_institute_scope_sync, current_user)
+
+
+def _workspace_job_belongs_to_institute_scope(
+    job: Optional[Mapping[str, Any]],
+    institute_scope: Optional[str],
+) -> bool:
+    if institute_scope is None:
+        return True
+    if not isinstance(job, Mapping):
+        return False
+    filters = job.get("filters") if isinstance(job.get("filters"), Mapping) else {}
+    record_refs = filters.get("record_refs")
+    items = job.get("items")
+    checked = False
+    if isinstance(record_refs, list) and record_refs:
+        for ref in record_refs:
+            if not isinstance(ref, Mapping):
+                return False
+            ref_inst = ref.get("institute_id")
+            if not isinstance(ref_inst, str) or not ref_inst.strip() or ref_inst != institute_scope:
+                return False
+        checked = True
+    if isinstance(items, list) and items:
+        for item in items:
+            if not isinstance(item, Mapping):
+                return False
+            item_inst = item.get("institute_id")
+            if item_inst is not None:
+                if not isinstance(item_inst, str) or not item_inst.strip() or item_inst != institute_scope:
+                    return False
+                checked = True
+            elif not checked:
+                return False
+    if checked:
+        return True
+    filter_inst = filters.get("institute_id")
+    if isinstance(filter_inst, str) and filter_inst.strip() and filter_inst == institute_scope:
+        if int(job.get("total_records") or 0) == 0:
+            return True
+    return False
+
+
+def _hydrate_scoped_workspace_records(
+    workspace: CustomQCWorkspaceService,
+    records_payload: Sequence[Dict[str, Any]],
+    institute_scope: Optional[str],
+) -> List[Dict[str, Any]]:
+    from ..services.saved_result_access import check_saved_result_institute
+
+    prepared: List[Dict[str, Any]] = []
+    for raw in records_payload:
+        item = dict(raw)
+        explicit_inst = item.get("institute_id")
+        if explicit_inst is not None and str(explicit_inst).strip():
+            check_saved_result_institute(institute_scope, str(explicit_inst))
+        has_inline_text = bool(str(item.get("medical_text") or "").strip())
+        if institute_scope is not None and not has_inline_text:
+            visit_id = str(item.get("visit_id") or item.get("record_id") or "").strip()
+            patient_id = str(item.get("patient_id") or "").strip()
+            if not visit_id:
+                raise HTTPException(status_code=403, detail="缺少可信病历机构范围")
+            collect_kwargs: Dict[str, Any] = {
+                "scope": "all",
+                "department": None,
+                "doctor": None,
+                "date_field": "admission",
+                "start_date": None,
+                "end_date": None,
+                "keyword": None,
+                "institute_id": institute_scope,
+            }
+            if patient_id:
+                collect_kwargs["record_refs"] = [
+                    {
+                        "institute_id": institute_scope,
+                        "patient_id": patient_id,
+                        "visit_id": visit_id,
+                    }
+                ]
+            else:
+                collect_kwargs["record_ids"] = [visit_id]
+            matched = workspace.collect_records(**collect_kwargs)
+            matched = [
+                rec for rec in (matched or [])
+                if str(rec.get("institute_id") or "") == institute_scope
+            ]
+            if len(matched) != 1:
+                raise HTTPException(status_code=403, detail="无权读取其他机构或不明确归属的病历")
+            item["institute_id"] = matched[0]["institute_id"]
+            item["patient_id"] = matched[0]["patient_id"]
+            item["visit_id"] = matched[0]["visit_id"]
+        prepared.append(item)
+
+    hydrated = workspace.hydrate_records_with_medical_text(prepared)
+    if institute_scope is not None:
+        for rec in hydrated:
+            rec_inst = rec.get("institute_id")
+            if rec_inst is not None and str(rec_inst).strip():
+                check_saved_result_institute(institute_scope, str(rec_inst))
+    return hydrated
+
+
+_SAFE_PUBLISH_VALUE_ERRORS = frozenset({
+    "草稿不存在或无权限",
+    "请至少完成一次成功测试后再发布",
+})
+
+
+def _build_export_content_disposition(rule_code: Any, timestamp: str, ext: str) -> str:
+    """构造兼容 RFC 5987 的 Content-Disposition 头（ASCII 回退 + UTF-8 编码）。"""
+    raw_stem = re.sub(r"[\r\n\"\\/:*?<>|]+", "_", str(rule_code or "workspace")).strip(" ._") or "workspace"
+    utf8_name = f"{raw_stem}_{timestamp}.{ext}"
+    ascii_stem = re.sub(r"[^A-Za-z0-9._-]+", "_", raw_stem).strip("._-") or "workspace"
+    ascii_name = f"{ascii_stem}_{timestamp}.{ext}"
+    return f'attachment; filename="{ascii_name}"; filename*=UTF-8\'\'{quote(utf8_name, safe="")}'
+
+
+def _sanitize_batch_job_error(exc: Exception) -> str:
+    if isinstance(exc, clinical_connection.ClinicalSourceConfigurationError) or (
+        isinstance(exc, ValueError) and str(exc).strip() == "invalid_saved_clinical_source"
+    ):
+        return "临床数据源快照无效，任务执行失败"
+    return "批量任务执行失败，请稍后重试"
+
+
+def _is_workspace_job_canceled_or_missing(workspace: Any, job_id: str) -> bool:
+    checker = getattr(workspace, "is_batch_job_canceled_or_missing", None)
+    if callable(checker):
+        return bool(checker(job_id=job_id))
+    latest = workspace.get_batch_job_for_processing(job_id=job_id)
+    return not latest or str(latest.get("status") or "").lower() == "canceled"
+
+
 async def _run_workspace_batch_job(job_id: str) -> None:
     workspace = get_workspace_service()
-    job = workspace.get_batch_job_for_processing(job_id=job_id)
+    job = await asyncio.to_thread(workspace.get_batch_job_for_processing, job_id=job_id)
     if not job:
         return
     if _wrong_workspace_batch_owner(job):
@@ -256,10 +524,37 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         return
 
     try:
-        if not workspace.mark_batch_job_running(job_id=job_id):
+        if not await asyncio.to_thread(workspace.mark_batch_job_running, job_id=job_id):
             return
-        current_job = workspace.get_batch_job_for_processing(job_id=job_id) or job
+        current_job = (
+            await asyncio.to_thread(workspace.get_batch_job_for_processing, job_id=job_id)
+            or job
+        )
         filters = current_job.get("filters") or {}
+        source = clinical_sources.saved_snapshot(filters)
+        with clinical_connection.selected(source):
+            await _execute_workspace_batch_job_in_source(
+                job_id=job_id,
+                workspace=workspace,
+                current_job=current_job,
+                filters=filters,
+            )
+    except Exception as exc:
+        logger.exception("workspace batch job failed: %s", exc)
+        await asyncio.to_thread(
+            workspace.fail_batch_job,
+            job_id=job_id,
+            error_message=_sanitize_batch_job_error(exc),
+        )
+
+
+async def _execute_workspace_batch_job_in_source(
+    *,
+    job_id: str,
+    workspace: Any,
+    current_job: Dict[str, Any],
+    filters: Dict[str, Any],
+) -> None:
         draft_ids = [str(item).strip() for item in (current_job.get("draft_ids") or []) if str(item).strip()]
         if not draft_ids:
             current_draft_id = str(current_job.get("draft_id") or "").strip()
@@ -275,7 +570,11 @@ async def _run_workspace_batch_job(job_id: str) -> None:
 
         drafts: List[Dict[str, Any]] = []
         for draft_id in unique_draft_ids:
-            draft = workspace.get_draft(draft_id=draft_id, created_by=current_job["created_by"])
+            draft = await asyncio.to_thread(
+                workspace.get_draft,
+                draft_id=draft_id,
+                created_by=current_job["created_by"],
+            )
             if not draft:
                 raise ValueError(f"规则草稿不存在或无权限: {draft_id}")
             drafts.append(draft)
@@ -288,7 +587,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             # 仅升级前已持久化且明确没有 record_refs 的任务允许 visit_id 兼容读取。
             worker_record_refs = None
             worker_record_ids = current_job.get("record_ids") or None
-        records = workspace.collect_records(
+        collect_kwargs: Dict[str, Any] = dict(
             scope=current_job.get("scope") or "final",
             department=filters.get("department"),
             doctor=filters.get("doctor"),
@@ -299,14 +598,20 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             record_ids=worker_record_ids,
             record_refs=worker_record_refs,
         )
+        if filters.get("institute_id"):
+            collect_kwargs["institute_id"] = filters.get("institute_id")
+        records = await asyncio.to_thread(workspace.collect_records, **collect_kwargs)
         if worker_record_refs is not None and not _record_ref_matches_are_exact(
             record_refs=worker_record_refs,
             records=records,
         ):
             raise ValueError("批量任务 record_refs 未唯一命中完整病历")
-        hydrated_records = workspace.hydrate_records_with_medical_text(records)
+        hydrated_records = await asyncio.to_thread(
+            workspace.hydrate_records_with_medical_text, records
+        )
         total_records = len(hydrated_records)
-        workspace.update_batch_job_progress(
+        await asyncio.to_thread(
+            workspace.update_batch_job_progress,
             job_id=job_id,
             step_key="filter",
             rule_index=0,
@@ -341,8 +646,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
         cache_miss_count = 0
 
         for rule_index, draft in enumerate(drafts, start=1):
-            latest = workspace.get_batch_job_for_processing(job_id=job_id)
-            if not latest or str(latest.get("status") or "").lower() == "canceled":
+            if await asyncio.to_thread(_is_workspace_job_canceled_or_missing, workspace, job_id):
                 logger.info("workspace 批量任务 %s 已取消，停止执行", job_id)
                 return
             rule_payload = _workspace_rule_payload_from_draft(draft)
@@ -357,7 +661,8 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             rule_cache_hit = 0
             rule_cache_miss = 0
 
-            workspace.update_batch_job_progress(
+            await asyncio.to_thread(
+                workspace.update_batch_job_progress,
                 job_id=job_id,
                 step_key="run",
                 rule_index=rule_index,
@@ -389,8 +694,7 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             )
 
             for processed_index, record in enumerate(hydrated_records, start=1):
-                latest = workspace.get_batch_job_for_processing(job_id=job_id)
-                if not latest or str(latest.get("status") or "").lower() == "canceled":
+                if await asyncio.to_thread(_is_workspace_job_canceled_or_missing, workspace, job_id):
                     logger.info("workspace 批量任务 %s 已取消，停止执行", job_id)
                     return
                 record_id = str(record.get("record_id") or record.get("visit_id") or "").strip()
@@ -447,12 +751,13 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                         "visit_id": str(record.get("visit_id") or ""),
                         "patient_name": str(record.get("patient_name") or ""),
                         "department": str(record.get("department") or ""),
-                        "error": str(exc),
+                        "error": "病历质控执行失败，请稍后重试",
                     }
                     failed_records.append(failed_payload)
                     rule_failed.append(failed_payload)
 
-                workspace.update_batch_job_progress(
+                await asyncio.to_thread(
+                    workspace.update_batch_job_progress,
                     job_id=job_id,
                     step_key="run",
                     rule_index=rule_index,
@@ -519,7 +824,8 @@ async def _run_workspace_batch_job(job_id: str) -> None:
                     },
                 }
             )
-            workspace.update_batch_job_progress(
+            await asyncio.to_thread(
+                workspace.update_batch_job_progress,
                 job_id=job_id,
                 step_key="aggregate",
                 rule_index=rule_index,
@@ -582,25 +888,29 @@ async def _run_workspace_batch_job(job_id: str) -> None:
             },
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        workspace.complete_batch_job(
+        await asyncio.to_thread(
+            workspace.complete_batch_job,
             job_id=job_id,
             summary=summary,
             items=items,
             failed_records=failed_records,
         )
         for draft in drafts:
-            workspace.save_last_test_summary(
+            await asyncio.to_thread(
+                workspace.save_last_test_summary,
                 draft_id=str(draft.get("id") or ""),
                 created_by=current_job["created_by"],
                 summary=summary,
             )
-    except Exception as exc:
-        logger.exception("workspace batch job failed: %s", exc)
-        workspace.fail_batch_job(job_id=job_id, error_message=str(exc))
 
 
 @router.post("/prompt/generate")
-async def generate_prompt(request: Request, payload: PromptGenerateRequest):
+async def generate_prompt(
+    request: Request,
+    payload: PromptGenerateRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
+):
+    _reject_restricted_demo_account(current_user, "演示账号禁止生成自定义质控 Prompt")
     trace_id = get_trace_id(request)
     with llm_observation_context(
         business_scene="custom_qc_prompt_generation",
@@ -625,8 +935,10 @@ async def generate_prompt(request: Request, payload: PromptGenerateRequest):
 async def test_custom_qc_single(
     request: Request,
     payload: CustomQCTestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
     qc_service: SichuanQCService = Depends(get_custom_qc_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行自定义质控试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
     ensure_record_medical_text([record.model_dump() for record in payload.records])
@@ -663,8 +975,10 @@ async def test_custom_qc_single(
 async def test_custom_qc_batch(
     request: Request,
     payload: CustomQCTestRequest,
+    current_user: Dict[str, Any] = Depends(get_current_user),
     qc_service: SichuanQCService = Depends(get_custom_qc_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行自定义质控批量试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
     record_dicts = [record.model_dump() for record in payload.records]
@@ -710,7 +1024,7 @@ async def test_custom_qc_batch(
                 "visit_id": str(record.get("visit_id") or ""),
                 "patient_name": str(record.get("patient_name") or ""),
                 "department": str(record.get("department") or ""),
-                "error": str(exc),
+                "error": "病历质控试跑失败，请稍后重试",
             }
             failed_records.append(failed_item)
 
@@ -759,7 +1073,8 @@ async def list_workspace_drafts(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    result = workspace.list_drafts(
+    result = await run_in_threadpool(
+        workspace.list_drafts,
         created_by=_current_user_id(current_user),
         status=status,
         query=q,
@@ -785,7 +1100,9 @@ async def create_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    draft = workspace.create_draft(
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建规则草稿")
+    draft = await run_in_threadpool(
+        workspace.create_draft,
         created_by=_current_user_id(current_user),
         payload=payload.model_dump(),
     )
@@ -804,7 +1121,9 @@ async def update_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    updated = workspace.update_draft(
+    _reject_restricted_demo_account(current_user, "演示账号禁止修改规则草稿")
+    updated = await run_in_threadpool(
+        workspace.update_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
         payload={k: v for k, v in payload.model_dump().items() if v is not None},
@@ -825,7 +1144,9 @@ async def delete_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    ok = workspace.delete_draft(
+    _reject_restricted_demo_account(current_user, "演示账号禁止删除规则草稿")
+    ok = await run_in_threadpool(
+        workspace.delete_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
     )
@@ -845,7 +1166,12 @@ async def generate_workspace_draft_prompt(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    draft = workspace.get_draft(draft_id=draft_id, created_by=_current_user_id(current_user))
+    _reject_restricted_demo_account(current_user, "演示账号禁止生成规则 Prompt")
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
@@ -868,7 +1194,8 @@ async def generate_workspace_draft_prompt(
     check_logic["generation_mode"] = prompt_result.get("generation_mode") or "fallback_template"
     check_logic["last_prompt_summary"] = prompt_result.get("summary") or ""
 
-    updated = workspace.update_draft(
+    updated = await run_in_threadpool(
+        workspace.update_draft,
         draft_id=draft_id,
         created_by=_current_user_id(current_user),
         payload={
@@ -895,13 +1222,23 @@ async def publish_workspace_draft(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止发布全局规则")
+    await run_in_threadpool(_require_global_admin, current_user, "仅全局管理员允许发布全局自定义规则")
     try:
-        result = workspace.publish_draft(
+        result = await run_in_threadpool(
+            workspace.publish_draft,
             draft_id=draft_id,
             created_by=_current_user_id(current_user),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        msg = str(exc).strip()
+        safe_detail = msg if msg in _SAFE_PUBLISH_VALUE_ERRORS else "规则草稿参数无效，无法发布"
+        raise HTTPException(status_code=400, detail=safe_detail) from None
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("发布自定义规则草稿失败 draft_id=%s", draft_id)
+        raise HTTPException(status_code=500, detail="发布规则失败，请稍后重试") from None
     return success_response(
         data=result,
         message="发布规则成功",
@@ -921,25 +1258,83 @@ async def list_workspace_records(
     keyword: Optional[str] = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=200),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    result = workspace.list_records(
-        scope=scope,
-        department=department,
-        doctor=doctor,
-        date_field=date_field,
-        start_date=start_date,
-        end_date=end_date,
-        keyword=keyword,
-        page=page,
-        page_size=page_size,
-    )
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    if institute_scope is None:
+        result = await run_in_threadpool(
+            workspace.list_records,
+            scope=scope,
+            department=department,
+            doctor=doctor,
+            date_field=date_field,
+            start_date=start_date,
+            end_date=end_date,
+            keyword=keyword,
+            page=page,
+            page_size=page_size,
+        )
+        items = result.items
+        total = result.total
+        res_page = result.page
+        res_page_size = result.page_size
+    else:
+        need_fallback = False
+        try:
+            result = await run_in_threadpool(
+                workspace.list_records,
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                page=page,
+                page_size=page_size,
+                institute_id=institute_scope,
+            )
+            items = [
+                item for item in result.items
+                if str(item.get("institute_id") or "") == institute_scope
+            ]
+            if len(items) != len(result.items):
+                need_fallback = True
+            else:
+                total = result.total
+                res_page = result.page
+                res_page_size = result.page_size
+        except TypeError:
+            need_fallback = True
+
+        if need_fallback:
+            all_scoped = await run_in_threadpool(
+                workspace.collect_records,
+                scope=scope,
+                department=department,
+                doctor=doctor,
+                date_field=date_field,
+                start_date=start_date,
+                end_date=end_date,
+                keyword=keyword,
+                institute_id=institute_scope,
+            )
+            filtered = [
+                item for item in (all_scoped or [])
+                if str(item.get("institute_id") or "") == institute_scope
+            ]
+            total = len(filtered)
+            offset = (page - 1) * page_size
+            items = filtered[offset : offset + page_size]
+            res_page = page
+            res_page_size = page_size
     return success_response(
         data={
-            "items": result.items,
-            "total": result.total,
-            "page": result.page,
-            "page_size": result.page_size,
+            "items": items,
+            "total": total,
+            "page": res_page,
+            "page_size": res_page_size,
         },
         message="获取病历列表成功",
         trace_id=get_trace_id(request),
@@ -951,9 +1346,62 @@ async def get_workspace_filters(
     request: Request,
     scope: str = Query("all", description="all|running|final"),
     department: Optional[str] = Query(None),
+    current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    result = workspace.get_record_filters(scope=scope, department=department)
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    if institute_scope is None:
+        result = await run_in_threadpool(
+            workspace.get_record_filters,
+            scope=scope,
+            department=department,
+        )
+    else:
+        try:
+            result = await run_in_threadpool(
+                workspace.get_record_filters,
+                scope=scope,
+                department=department,
+                institute_id=institute_scope,
+            )
+        except TypeError:
+            scoped_records = await run_in_threadpool(
+                workspace.collect_records,
+                scope=scope,
+                department=None,
+                doctor=None,
+                date_field="admission",
+                start_date=None,
+                end_date=None,
+                keyword=None,
+                institute_id=institute_scope,
+            )
+            scoped_records = [
+                item for item in (scoped_records or [])
+                if str(item.get("institute_id") or "") == institute_scope
+            ]
+
+            def _bounds(field: str) -> Dict[str, str]:
+                values = [item[field] for item in scoped_records if item.get(field)]
+                return {"min": min(values) if values else "", "max": max(values) if values else ""}
+
+            result = {
+                "departments": sorted(
+                    {item["department"] for item in scoped_records if item.get("department")}
+                ),
+                "doctors": sorted(
+                    {
+                        item["doctor"]
+                        for item in scoped_records
+                        if item.get("doctor")
+                        and (not department or item.get("department") == department)
+                    }
+                ),
+                "date_bounds": {
+                    "admission": _bounds("admission_date"),
+                    "discharge": _bounds("discharge_date"),
+                },
+            }
     return success_response(
         data=result,
         message="获取筛选项成功",
@@ -992,14 +1440,25 @@ async def test_workspace_single(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行工作台单病历试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
-    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=_current_user_id(current_user))
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=payload.draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    hydrated = workspace.hydrate_records_with_medical_text([record.model_dump() for record in payload.records[:1]])
+    hydrated = await run_in_threadpool(
+        _hydrate_scoped_workspace_records,
+        workspace,
+        [record.model_dump() for record in payload.records[:1]],
+        institute_scope,
+    )
     ensure_record_medical_text(hydrated)
     target_record = hydrated[0]
     rule_payload = _workspace_rule_payload_from_draft(draft)
@@ -1019,7 +1478,8 @@ async def test_workspace_single(
         "compliant_records": 1 if result.get("is_compliant") else 0,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    workspace.save_last_test_summary(
+    await run_in_threadpool(
+        workspace.save_last_test_summary,
         draft_id=payload.draft_id,
         created_by=_current_user_id(current_user),
         summary=summary,
@@ -1054,14 +1514,25 @@ async def test_workspace_batch(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止执行工作台批量试跑")
     if not payload.records:
         raise HTTPException(status_code=422, detail="至少需要提供一条病历")
 
-    draft = workspace.get_draft(draft_id=payload.draft_id, created_by=_current_user_id(current_user))
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    draft = await run_in_threadpool(
+        workspace.get_draft,
+        draft_id=payload.draft_id,
+        created_by=_current_user_id(current_user),
+    )
     if not draft:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    records = workspace.hydrate_records_with_medical_text([record.model_dump() for record in payload.records])
+    records = await run_in_threadpool(
+        _hydrate_scoped_workspace_records,
+        workspace,
+        [record.model_dump() for record in payload.records],
+        institute_scope,
+    )
     rule_payload = _workspace_rule_payload_from_draft(draft)
     items: List[Dict[str, Any]] = []
     failed_records: List[Dict[str, Any]] = []
@@ -1105,7 +1576,7 @@ async def test_workspace_batch(
                     "visit_id": str(record.get("visit_id") or ""),
                     "patient_name": str(record.get("patient_name") or ""),
                     "department": str(record.get("department") or ""),
-                    "error": str(exc),
+                    "error": "病历质控试跑失败，请稍后重试",
                 }
             )
 
@@ -1129,7 +1600,8 @@ async def test_workspace_batch(
         },
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
-    workspace.save_last_test_summary(
+    await run_in_threadpool(
+        workspace.save_last_test_summary,
         draft_id=payload.draft_id,
         created_by=_current_user_id(current_user),
         summary=summary,
@@ -1158,18 +1630,24 @@ async def create_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    _reject_restricted_demo_account(current_user, "演示账号禁止创建批量质控任务")
+    from ..services.saved_result_access import check_saved_result_institute
+
     created_by = _current_user_id(current_user)
     if payload.record_ids:
         raise HTTPException(
             status_code=422,
             detail="新建批量任务不再接受 record_ids，请提交完整三坐标 record_refs",
         )
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
     record_refs = [item.model_dump() for item in payload.record_refs]
     if record_refs and not _record_ref_matches_are_exact(
         record_refs=record_refs,
         records=record_refs,
     ):
         raise HTTPException(status_code=422, detail="record_refs 存在重复或无效三坐标")
+    for ref in record_refs:
+        check_saved_result_institute(institute_scope, ref["institute_id"])
     requested_draft_ids = [str(item).strip() for item in (payload.draft_ids or []) if str(item).strip()]
     if payload.draft_id:
         draft_id = str(payload.draft_id).strip()
@@ -1185,7 +1663,7 @@ async def create_workspace_batch_job(
     drafts: List[Dict[str, Any]] = []
     missing_draft_ids: List[str] = []
     for draft_id in normalized_draft_ids:
-        draft = workspace.get_draft(draft_id=draft_id, created_by=created_by)
+        draft = await run_in_threadpool(workspace.get_draft, draft_id=draft_id, created_by=created_by)
         if draft:
             drafts.append(draft)
         else:
@@ -1195,7 +1673,7 @@ async def create_workspace_batch_job(
     if not drafts:
         raise HTTPException(status_code=404, detail="草稿不存在或无权限")
 
-    records = workspace.collect_records(
+    collect_kwargs: Dict[str, Any] = dict(
         scope=payload.scope,
         department=payload.department,
         doctor=payload.doctor,
@@ -1206,6 +1684,9 @@ async def create_workspace_batch_job(
         record_ids=None,
         record_refs=record_refs or None,
     )
+    if institute_scope is not None:
+        collect_kwargs["institute_id"] = institute_scope
+    records = await run_in_threadpool(workspace.collect_records, **collect_kwargs)
     if record_refs:
         effective_record_refs = record_refs
     else:
@@ -1229,6 +1710,8 @@ async def create_workspace_batch_job(
                 else "筛选结果为空或包含无法唯一识别的三坐标病历"
             ),
         )
+    for ref in effective_record_refs:
+        check_saved_result_institute(institute_scope, ref["institute_id"])
 
     execution_mode = _normalize_execution_mode(payload.execution_mode)
     if len(drafts) > 1:
@@ -1244,14 +1727,19 @@ async def create_workspace_batch_job(
             "scene": drafts[0].get("scene") or "final",
         }
 
+    job_filters = _batch_job_payload_filters(payload)
+    if institute_scope is not None:
+        job_filters["institute_id"] = institute_scope
+
     from ..services.case_material_snapshot import MaterialSnapshotError
     from ..services.material_admission import safe_material_failure
     try:
-        job = workspace.create_batch_job(
+        job = await run_in_threadpool(
+            workspace.create_batch_job,
             draft=primary_draft,
             created_by=created_by,
             scope=payload.scope,
-            filters=_batch_job_payload_filters(payload),
+            filters=job_filters,
             record_ids=[item["visit_id"] for item in effective_record_refs],
             record_refs=effective_record_refs,
             total_records=len(records),
@@ -1263,6 +1751,11 @@ async def create_workspace_batch_job(
     except MaterialSnapshotError as exc:
         failure = safe_material_failure(str(exc))
         raise HTTPException(status_code=409, detail=f"{failure['message']}（{failure['code']}）") from None
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("创建批量质控任务失败")
+        raise HTTPException(status_code=500, detail="创建批量任务失败，请稍后重试") from None
     background_tasks.add_task(_run_workspace_batch_job, job["id"])
     return success_response(
         data={
@@ -1293,6 +1786,7 @@ async def list_workspace_batch_jobs(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
     executor_filter = str(executor_type or "").strip().lower() or None
     cache_hit_filter: Optional[bool] = None
     cache_hit_value = str(cache_hit or "").strip().lower()
@@ -1301,7 +1795,7 @@ async def list_workspace_batch_jobs(
     elif cache_hit_value in {"miss", "false", "0", "no"}:
         cache_hit_filter = False
 
-    result = workspace.list_batch_jobs(
+    base_kwargs: Dict[str, Any] = dict(
         created_by=_current_user_id(current_user),
         draft_id=draft_id,
         status=status,
@@ -1311,15 +1805,91 @@ async def list_workspace_batch_jobs(
         cache_hit=cache_hit_filter,
         created_start_date=created_start_date,
         created_end_date=created_end_date,
-        page=page,
-        page_size=page_size,
     )
+    if institute_scope is None:
+        result = await run_in_threadpool(
+            workspace.list_batch_jobs,
+            **base_kwargs,
+            page=page,
+            page_size=page_size,
+        )
+        items = result.items
+        total = result.total
+        res_page = result.page
+        res_page_size = result.page_size
+    else:
+        need_fallback = False
+        try:
+            result = await run_in_threadpool(
+                workspace.list_batch_jobs,
+                **base_kwargs,
+                institute_id=institute_scope,
+                page=page,
+                page_size=page_size,
+            )
+            scoped_items = [
+                item for item in result.items
+                if _workspace_job_belongs_to_institute_scope(item, institute_scope)
+            ]
+            if len(scoped_items) != len(result.items):
+                need_fallback = True
+            else:
+                items = scoped_items
+                total = result.total
+                res_page = result.page
+                res_page_size = result.page_size
+        except TypeError:
+            need_fallback = True
+
+        if need_fallback:
+            all_items: List[Dict[str, Any]] = []
+            seen_ids: set[str] = set()
+            scan_page = 1
+            scan_page_size = 100
+            max_scan_pages = 50
+            while scan_page <= max_scan_pages:
+                batch_res = await run_in_threadpool(
+                    workspace.list_batch_jobs,
+                    **base_kwargs,
+                    page=scan_page,
+                    page_size=scan_page_size,
+                )
+                batch_items = list(batch_res.items or [])
+                if not batch_items:
+                    break
+                added = 0
+                for item in batch_items:
+                    item_id = str(item.get("id") or "")
+                    if item_id and item_id in seen_ids:
+                        continue
+                    if item_id:
+                        seen_ids.add(item_id)
+                    all_items.append(item)
+                    added += 1
+                if (
+                    added == 0
+                    or len(batch_items) < scan_page_size
+                    or len(all_items) >= int(batch_res.total or 0)
+                ):
+                    break
+                scan_page += 1
+
+            filtered = [
+                item for item in all_items
+                if _workspace_job_belongs_to_institute_scope(item, institute_scope)
+            ]
+            total = len(filtered)
+            offset = (page - 1) * page_size
+            items = filtered[offset : offset + page_size]
+            res_page = page
+            res_page_size = page_size
+
     return success_response(
         data={
-            "items": result.items,
-            "total": result.total,
-            "page": result.page,
-            "page_size": result.page_size,
+            "items": items,
+            "total": total,
+            "page": res_page,
+            "page_size": res_page_size,
         },
         message="获取批量任务成功",
         trace_id=get_trace_id(request),
@@ -1333,9 +1903,16 @@ async def get_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    job = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _workspace_job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权读取其他机构批量任务结果")
     return success_response(
         data=job,
         message="获取批量任务详情成功",
@@ -1350,7 +1927,22 @@ async def cancel_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    job = workspace.cancel_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    _reject_restricted_demo_account(current_user, "演示账号禁止取消批量质控任务")
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    existing = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _workspace_job_belongs_to_institute_scope(existing, institute_scope):
+        raise HTTPException(status_code=403, detail="无权操作其他机构批量任务")
+    job = await run_in_threadpool(
+        workspace.cancel_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     return success_response(
@@ -1368,12 +1960,24 @@ async def retry_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(require_product_activation),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    existing = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    _reject_restricted_demo_account(current_user, "演示账号禁止重试批量质控任务")
+    existing = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not existing:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     if _wrong_workspace_batch_owner(existing):
         raise HTTPException(status_code=409, detail="该任务须从四川规则任务入口重试，或规则集身份缺失")
-    job = workspace.retry_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    if not _workspace_job_belongs_to_institute_scope(existing, institute_scope):
+        raise HTTPException(status_code=403, detail="无权重试其他机构批量任务")
+    job = await run_in_threadpool(
+        workspace.retry_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
     background_tasks.add_task(_run_workspace_batch_job, job_id)
@@ -1392,25 +1996,37 @@ async def export_workspace_batch_job(
     current_user: Dict[str, Any] = Depends(get_current_user),
     workspace: CustomQCWorkspaceService = Depends(get_workspace_service),
 ):
-    job = workspace.get_batch_job(job_id=job_id, created_by=_current_user_id(current_user))
+    institute_scope = await _resolve_workspace_institute_scope(current_user)
+    job = await run_in_threadpool(
+        workspace.get_batch_job,
+        job_id=job_id,
+        created_by=_current_user_id(current_user),
+    )
     if not job:
         raise HTTPException(status_code=404, detail="批量任务不存在或无权限")
+    if not _workspace_job_belongs_to_institute_scope(job, institute_scope):
+        raise HTTPException(status_code=403, detail="无权导出其他机构批量任务结果")
 
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    safe_rule = (job.get("rule_code") or "workspace").replace("/", "_")
-    if format.lower() == "csv":
-        content = workspace.export_batch_job_csv(job=job)
-        filename = f"{safe_rule}_{timestamp}.csv"
-        return StreamingResponse(
-            iter([content.getvalue().encode("utf-8-sig")]),
-            media_type="text/csv; charset=utf-8",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
-        )
+    try:
+        if format.lower() == "csv":
+            content = await run_in_threadpool(workspace.export_batch_job_csv, job=job)
+            disposition = _build_export_content_disposition(job.get("rule_code"), timestamp, "csv")
+            return StreamingResponse(
+                iter([content.getvalue().encode("utf-8-sig")]),
+                media_type="text/csv; charset=utf-8",
+                headers={"Content-Disposition": disposition},
+            )
 
-    workbook = workspace.export_batch_job_workbook(job=job)
-    filename = f"{safe_rule}_{timestamp}.xlsx"
-    return StreamingResponse(
-        workbook,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
-    )
+        workbook = await run_in_threadpool(workspace.export_batch_job_workbook, job=job)
+        disposition = _build_export_content_disposition(job.get("rule_code"), timestamp, "xlsx")
+        return StreamingResponse(
+            workbook,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": disposition},
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("导出批量任务结果失败 job_id=%s", job_id)
+        raise HTTPException(status_code=500, detail="导出批量任务结果失败，请稍后重试") from None

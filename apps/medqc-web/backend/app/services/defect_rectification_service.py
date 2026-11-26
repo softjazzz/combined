@@ -14,7 +14,7 @@ from ..database.models.v36_reports import DefectRectificationEvent as Event
 from ..database.models.v36_reports import SysUser
 from .user_scope_owner import user_owner_options
 
-MANAGERS = {"admin", "qc_manager", "qc_staff"}
+MANAGERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
 STATES = {"pending", "submitted", "approved", "rejected"}
 
 
@@ -71,8 +71,15 @@ def _manager(person):
     return bool(person["roles"] & MANAGERS)
 
 
+def _is_global_scope(person):
+    roles = person["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not person["institute_id"]
+    )
+
+
 def _scope(person, institute_id, department, *, assignee_id=None):
-    if "admin" in person["roles"]:
+    if _is_global_scope(person):
         return
     if not person["institute_id"] or person["institute_id"] != institute_id:
         raise RectificationError("无权访问该机构整改", 403)
@@ -105,9 +112,20 @@ def _visible(target, person):
         raise RectificationError("缺陷未经正式投影或人工审核确认", 409)
 
 
+def _serialize_value(value):
+    if isinstance(value, datetime):
+        aware = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+        return aware.isoformat()
+    return value
+
+
 def _view(row):
     return {
-        c.name: getattr(row, c.name)
+        c.name: _serialize_value(getattr(row, c.name))
         for c in row.__table__.columns
         if c.name not in {"dispatch_document_snapshot", "submission_document_snapshot"}
     }
@@ -149,13 +167,21 @@ class DefectRectificationService:
         self.document_loader = document_loader
         self.notification_writer = notification_writer
 
-    def _snapshot(self, row):
+    def _snapshot_identity(self, identity):
         from .rectification_document_snapshot import capture_documents
 
+        try:
+            return capture_documents(identity, loader=self.document_loader)
+        except RectificationError:
+            raise
+        except ValueError as exc:
+            raise RectificationError(str(exc), 422) from exc
+
+    def _snapshot(self, row):
         identity = {
             key: getattr(row, key) for key in ("institute_id", "patient_id", "visit_id")
         }
-        return capture_documents(identity, loader=self.document_loader)
+        return self._snapshot_identity(identity)
 
     def candidates(self, actor_id, **query):
         from .feedback_result_source import candidates
@@ -272,6 +298,36 @@ class DefectRectificationService:
     def transition(
         self, actor_id, task_id, *, version, action, comment, urge_event_id=None
     ):
+        if action != "withdraw_urge" and urge_event_id is not None:
+            raise RectificationError("仅撤回催办允许指定催办事件")
+        snapshot = None
+        if action == "submit":
+            # 先在无行锁只读会话完成权限与状态预检，再于锁外拉取 CDM 文书，避免持 FOR UPDATE 锁等待外部读 IO。
+            with self.sessions() as read_session:
+                pre_actor = self.person(read_session, actor_id)
+                pre_row = read_session.get(Task, task_id)
+                if pre_row is None:
+                    raise RectificationError("整改记录不存在", 404)
+                _scope(
+                    pre_actor,
+                    pre_row.institute_id,
+                    pre_row.department,
+                    assignee_id=pre_row.assignee_id,
+                )
+                if pre_row.version != version:
+                    raise RectificationError("整改已被更新，请刷新", 409)
+                if (
+                    pre_actor["id"] != pre_row.assignee_id
+                    or "doctor" not in pre_actor["roles"]
+                ):
+                    raise RectificationError("仅受领医生可提交", 403)
+                if pre_row.status not in {"pending", "rejected"}:
+                    raise RectificationError("当前状态不能提交", 409)
+                identity = {
+                    key: getattr(pre_row, key)
+                    for key in ("institute_id", "patient_id", "visit_id")
+                }
+            snapshot = self._snapshot_identity(identity)
         with self.sessions() as session, session.begin():
             actor = self.person(session, actor_id)
             row = session.execute(
@@ -284,8 +340,6 @@ class DefectRectificationService:
                 raise RectificationError("整改已被更新，请刷新", 409)
             old = row.status
             manager = _manager(actor)
-            if action != "withdraw_urge" and urge_event_id is not None:
-                raise RectificationError("仅撤回催办允许指定催办事件")
             if action == "submit":
                 if actor["id"] != row.assignee_id or "doctor" not in actor["roles"]:
                     raise RectificationError("仅受领医生可提交", 403)
@@ -304,15 +358,15 @@ class DefectRectificationService:
                 }
                 recipient = row.assignee_id
             elif action == "urge":
-                if not manager:
-                    raise RectificationError("仅质控人员可催办", 403)
+                if not manager or actor["id"] == row.assignee_id:
+                    raise RectificationError("仅非受领人的质控人员可催办", 403)
                 if old not in {"pending", "rejected"}:
                     raise RectificationError("当前状态无需催办", 409)
                 changes = {}
                 recipient = row.assignee_id
             elif action == "withdraw_urge":
-                if not manager:
-                    raise RectificationError("仅质控人员可撤回催办", 403)
+                if not manager or actor["id"] == row.assignee_id:
+                    raise RectificationError("仅非受领人的质控人员可撤回催办", 403)
                 if old not in {"pending", "rejected"}:
                     raise RectificationError("当前状态没有可撤回催办", 409)
                 events = session.scalars(
@@ -326,7 +380,6 @@ class DefectRectificationService:
                 recipient = row.assignee_id
             else:
                 raise RectificationError("不支持的整改操作")
-            snapshot = self._snapshot(row) if action == "submit" else None
             changed = session.execute(
                 update(Task)
                 .where(Task.id == row.id, Task.version == version)
@@ -371,11 +424,16 @@ class DefectRectificationService:
                 key: getattr(row, key)
                 for key in ("institute_id", "patient_id", "visit_id")
             }
-            return compare_documents(
-                row.dispatch_document_snapshot,
-                event.submission_document_snapshot,
-                identity,
-            )
+            try:
+                return compare_documents(
+                    row.dispatch_document_snapshot,
+                    event.submission_document_snapshot,
+                    identity,
+                )
+            except RectificationError:
+                raise
+            except ValueError as exc:
+                raise RectificationError(str(exc), 422) from exc
 
     def list(self, actor_id, *, state=None, page=1, page_size=20, source=None):
         with self.sessions() as session:
@@ -400,7 +458,7 @@ class DefectRectificationService:
                 ):
                     raise RectificationError("整改来源必须提供完整八维坐标")
                 conditions.extend(getattr(Task, key) == source[key] for key in keys)
-            if "admin" not in actor["roles"]:
+            if not _is_global_scope(actor):
                 if not actor["institute_id"]:
                     raise RectificationError("账号缺少机构范围", 403)
                 conditions.append(Task.institute_id == actor["institute_id"])

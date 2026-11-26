@@ -512,11 +512,11 @@
                     <a-card size="small">
                       <a-statistic
                         title="合规率"
-                        :value="evaluationResult.evaluation_summary.compliance_rate"
-                        suffix="%"
-                        :precision="1"
+                        :value="getComplianceDisplayValue(evaluationResult.evaluation_summary)"
+                        :suffix="getComplianceSuffix(evaluationResult.evaluation_summary)"
+                        :precision="getCompliancePrecision(evaluationResult.evaluation_summary)"
                         :value-style="
-                          getComplianceColor(evaluationResult.evaluation_summary.compliance_rate)
+                          getComplianceColor(evaluationResult.evaluation_summary?.compliance_rate)
                         "
                       />
                     </a-card>
@@ -1194,9 +1194,35 @@ const loadStats = async () => {
 }
 
 // 样式辅助函数
-const getComplianceColor = (rate: number) => {
-  if (rate >= 95) return { color: '#52c41a' }
-  if (rate >= 80) return { color: '#faad14' }
+const parseComplianceRate = (rate: unknown): number | null => {
+  if (rate === null || rate === undefined || rate === '') return null
+  const numeric = Number(rate)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+const getComplianceDisplayValue = (summary: any): number | string => {
+  const rate = parseComplianceRate(summary?.compliance_rate)
+  if (rate !== null) return rate
+  const totalRules = Number(summary?.total_rules ?? 0)
+  if (Number.isFinite(totalRules) && totalRules > 0 && summary?.compliance_rate === null) {
+    return '无适用项'
+  }
+  return '--'
+}
+
+const getComplianceSuffix = (summary: any): string | undefined => {
+  return parseComplianceRate(summary?.compliance_rate) !== null ? '%' : undefined
+}
+
+const getCompliancePrecision = (summary: any): number | undefined => {
+  return parseComplianceRate(summary?.compliance_rate) !== null ? 1 : undefined
+}
+
+const getComplianceColor = (rate: number | string | null | undefined) => {
+  const parsed = parseComplianceRate(rate)
+  if (parsed === null) return { color: '#8c8c8c' }
+  if (parsed >= 95) return { color: '#52c41a' }
+  if (parsed >= 80) return { color: '#faad14' }
   return { color: '#ff4d4f' }
 }
 

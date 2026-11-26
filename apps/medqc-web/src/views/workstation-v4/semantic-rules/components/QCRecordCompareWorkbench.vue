@@ -13,11 +13,13 @@
         <span>{{
           documentOnly
             ? '选择文书查看完整内容'
-            : lazyResultDocuments
-              ? '按本次质控保存的原文核对'
-              : sourceView === 'current'
-                ? '当前病历可能已更新，质控结果仍为执行时结果'
-                : '点击质控结果，核对对应文书与证据片段'
+            : fallbackToCurrentActive
+              ? '历史快照未保留，当前已自动展示病历最新文书用于核对'
+              : lazyResultDocuments
+                ? '按本次质控保存的原文核对'
+                : sourceView === 'current'
+                  ? '当前病历可能已更新，质控结果仍为执行时结果'
+                  : '点击质控结果，核对对应文书与证据片段'
         }}</span>
       </div>
       <div
@@ -28,6 +30,8 @@
       >
         <button
           type="button"
+          role="tab"
+          :aria-selected="mobileTab === 'record'"
           :class="{ 'is-active': mobileTab === 'record' }"
           @click="mobileTab = 'record'"
         >
@@ -35,6 +39,8 @@
         </button>
         <button
           type="button"
+          role="tab"
+          :aria-selected="mobileTab === 'result'"
           :class="{ 'is-active': mobileTab === 'result' }"
           @click="mobileTab = 'result'"
         >
@@ -42,6 +48,15 @@
         </button>
       </div>
     </header>
+
+    <div
+      v-if="fallbackToCurrentActive && fallbackNotice && !documentOnly"
+      class="record-compare-fallback-banner"
+      data-testid="record-compare-fallback-notice"
+      role="status"
+    >
+      {{ fallbackNotice }}
+    </div>
 
     <div class="record-compare-grid">
       <ReadonlyMedicalDocumentDirectory
@@ -57,7 +72,10 @@
         @load-orders="loadOrders"
       />
 
-      <main class="record-content-column">
+      <section
+        class="record-content-column"
+        aria-label="病历原文"
+      >
         <div class="record-content-toolbar">
           <div>
             <strong>
@@ -130,6 +148,23 @@
               </template>
             </select>
           </label>
+          <button
+            v-if="ordersLoadState"
+            type="button"
+            class="record-load-orders-btn"
+            :class="{ 'is-failed': ordersLoadState === 'failed' }"
+            data-testid="record-narrow-load-orders"
+            :disabled="ordersLoadState === 'loading'"
+            @click="loadAndSelectOrders"
+          >
+            {{
+              ordersLoadState === 'loading'
+                ? '读取医嘱中…'
+                : ordersLoadState === 'failed'
+                  ? '重试加载医嘱'
+                  : '查看医嘱'
+            }}
+          </button>
           <span
             v-if="!documentOnly"
             class="record-location-chip"
@@ -184,7 +219,10 @@
               v-for="section in documentSectionViews"
               :key="section.key"
               class="record-content-section"
-              :class="{ 'is-evidence-target': section.isMatchedSection }"
+              :class="{
+                'is-evidence-target': section.isMatchedSection,
+                'has-block-highlight': section.isBlockHighlight,
+              }"
               :data-section-key="section.key"
             >
               <h3 class="record-content-section-title">
@@ -195,13 +233,21 @@
                   v-if="section.parts.match"
                   :ref="setHighlightElement"
                   class="record-evidence-highlight"
-                  tabindex="0"
-                  @click="emitSelectedIssue"
-                  @keydown.enter="emitSelectedIssue"
+                  :class="{
+                    'is-block-highlight': section.isBlockHighlight,
+                    'is-interactive': Boolean(selectedIssueKey),
+                  }"
+                  :tabindex="selectedIssueKey ? 0 : undefined"
+                  @click="selectedIssueKey ? emitSelectedIssue() : undefined"
+                  @keydown.enter="selectedIssueKey ? emitSelectedIssue() : undefined"
                 >{{ section.parts.match }}</mark><span>{{ section.parts.after }}</span>
               </p>
             </section>
           </div>
+          <ReadonlyMedicalDocumentContent
+            v-else-if="hasStructuredReportFallback(selectedDocument)"
+            :document="selectedDocument"
+          />
           <pre
             v-else
             class="record-content-text"
@@ -209,9 +255,13 @@
                 v-if="documentTextParts.match"
                 :ref="setHighlightElement"
                 class="record-evidence-highlight"
-                tabindex="0"
-                @click="emitSelectedIssue"
-                @keydown.enter="emitSelectedIssue"
+                :class="{
+                  'is-block-highlight': documentTextIsBlockHighlight,
+                  'is-interactive': Boolean(selectedIssueKey),
+                }"
+                :tabindex="selectedIssueKey ? 0 : undefined"
+                @click="selectedIssueKey ? emitSelectedIssue() : undefined"
+                @keydown.enter="selectedIssueKey ? emitSelectedIssue() : undefined"
           >{{ documentTextParts.match }}</mark><span>{{ documentTextParts.after }}</span></pre>
         </div>
         <div
@@ -231,7 +281,7 @@
               : '质控结果仍可查看，但当前无法定位到来源文书。'
           }}</span>
         </div>
-      </main>
+      </section>
 
       <aside
         v-if="!documentOnly"
@@ -247,6 +297,7 @@
           :feedback-enabled="feedbackEnabled"
           :feedback-loading="feedbackLoading"
           :feedback-error="feedbackError"
+          :feedback-error-by-rule="feedbackErrorByRule"
           :feedback-saving-rule-id="feedbackSavingRuleId"
           @select="selectSingleRecordResult"
           @locate-evidence="locateSingleRecordEvidence"
@@ -428,6 +479,7 @@ import {
   getEditableMedicalRecordDocuments,
 } from '@/services/manual-case-sample-service'
 import ReadonlyMedicalDocumentDirectory from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentDirectory.vue'
+import ReadonlyMedicalDocumentContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalDocumentContent.vue'
 import ReadonlyFrontpageContent from '@/views/workstation-v4/customer-sample-validation/ReadonlyFrontpageContent.vue'
 import ReadonlyMedicalOrderTable from '@/views/workstation-v4/customer-sample-validation/ReadonlyMedicalOrderTable.vue'
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
@@ -505,6 +557,7 @@ const feedbackByRule = qcFeedback.feedbackByRule
 const feedbackEnabled = qcFeedback.isEnabled
 const feedbackLoading = qcFeedback.loading
 const feedbackError = qcFeedback.error
+const feedbackErrorByRule = qcFeedback.errorByRule
 const feedbackSavingRuleId = qcFeedback.savingRuleId
 
 function handleSubmitFeedback(ruleId: string, input: SaveQcResultFeedbackInput) {
@@ -522,6 +575,8 @@ let orderRequest: Promise<void> | undefined
 let documentSelectionSequence = 0
 const loadError = ref('')
 const contentLoadError = ref('')
+const fallbackToCurrentActive = ref(false)
+const fallbackNotice = ref('')
 const contentLoadingKey = ref('')
 const selectedDocumentKey = ref('')
 const selectedIssueKey = ref('')
@@ -652,6 +707,15 @@ const locationMessage = computed(() => {
   if (locationState.value === 'missing') return '未找到对应文书，请手动核对'
   return selectedDocument.value ? '手动浏览文书' : '等待选择质控结果'
 })
+function isBlockEvidenceMatch(parts: { before: string; match: string; after: string }) {
+  const match = parts.match.trim()
+  if (!match) return false
+  if (!parts.before.trim() && !parts.after.trim()) return true
+  const startsOnNewLine = !parts.before || /\n[ \t]*$/u.test(parts.before)
+  const endsOnNewLine = !parts.after || /^[ \t]*\n/u.test(parts.after)
+  return startsOnNewLine && endsOnNewLine && (match.includes('\n') || match.length >= 60)
+}
+
 const documentTextParts = computed(() => {
   const content = selectedDocument.value?.content || ''
   const range = matchedRange.value
@@ -664,6 +728,7 @@ const documentTextParts = computed(() => {
     after: content.slice(range.end),
   }
 })
+const documentTextIsBlockHighlight = computed(() => isBlockEvidenceMatch(documentTextParts.value))
 
 const documentSectionViews = computed(() => {
   const document = selectedDocument.value
@@ -697,18 +762,20 @@ const documentSectionViews = computed(() => {
         quoteStart = localStart
       }
     }
+    const parts =
+      quoteStart >= 0
+        ? {
+            before: displayedText.slice(0, quoteStart),
+            match: quote,
+            after: displayedText.slice(quoteStart + quote.length),
+          }
+        : { before: displayedText, match: '', after: '' }
     return {
       ...section,
       displayLabel: displaySectionLabel(preliminary?.label || section.label),
       isMatchedSection: matchedSectionKey.value === section.key,
-      parts:
-        quoteStart >= 0
-          ? {
-              before: displayedText.slice(0, quoteStart),
-              match: quote,
-              after: displayedText.slice(quoteStart + quote.length),
-            }
-          : { before: displayedText, match: '', after: '' },
+      isBlockHighlight: isBlockEvidenceMatch(parts),
+      parts,
     }
   })
 })
@@ -906,8 +973,17 @@ function matchDocumentByIdWithOverride(evidence: QCRecordCompareEvidence): Docum
   return sourceDocument ? { document: sourceDocument } : null
 }
 
+function hasStructuredReportFallback(document: EditableMedicalRecordDocument) {
+  return (
+    Boolean(document.report_items?.length) &&
+    !document.content?.trim() &&
+    !deduplicateMedicalDocumentSections(document.sections || []).length
+  )
+}
+
 function isDocumentLoaded(document: EditableMedicalRecordDocument) {
   return (
+    isMedicalOrderDocument(document) ||
     document.content_loaded === true ||
     Boolean(document.content?.trim()) ||
     Boolean(document.sections?.length) ||
@@ -921,12 +997,62 @@ function replaceDocument(document: EditableMedicalRecordDocument) {
   )
 }
 
+const DEFAULT_HISTORICAL_FALLBACK_NOTICE =
+  '该历史质控轮次未保留冻结原文快照，当前已自动展示病历最新文书用于核对。'
+
+function localizeDocumentError(rawMessage: string | undefined, fallback: string): string {
+  const text = String(rawMessage || '').trim()
+  if (!text) return fallback
+  if (text.includes('historical_material_snapshot_not_retained')) {
+    return DEFAULT_HISTORICAL_FALLBACK_NOTICE
+  }
+  if (text.includes('historical_material_snapshot_unavailable')) {
+    return '历史病历原文快照暂不可用，请稍后重试或查看当前最新病历文书。'
+  }
+  if (text.includes('historical_and_current_material_views_conflict')) {
+    return '历史快照与当前病历视图参数冲突，请重新打开病历原文。'
+  }
+  return text
+}
+
+function isHistoricalSnapshotNotRetained(result: {
+  success?: boolean
+  status?: number
+  errorCode?: string
+  message?: string
+}): boolean {
+  if (result.success) return false
+  const code = String(result.errorCode || '').trim()
+  const message = String(result.message || '').trim()
+  if (code === 'historical_material_snapshot_not_retained') return true
+  if (message.includes('historical_material_snapshot_not_retained')) return true
+  if (result.status === 409 && message.includes('冻结原文快照')) return true
+  return false
+}
+
+function applyMaterialFallbackMetadata(data: unknown) {
+  if (!data || typeof data !== 'object') return
+  const candidate = data as {
+    material_source_fallback?: unknown
+    material_source_notice?: unknown
+  }
+  if (candidate.material_source_fallback === true) {
+    fallbackToCurrentActive.value = true
+    const notice =
+      typeof candidate.material_source_notice === 'string' && candidate.material_source_notice.trim()
+        ? candidate.material_source_notice.trim()
+        : DEFAULT_HISTORICAL_FALLBACK_NOTICE
+    fallbackNotice.value = notice
+  }
+}
+
 async function ensureDocumentLoaded(
   documentKey: string,
   renderOverride?: { sourceDocumentId: string; sourceRef?: string },
 ) {
   const summary = documents.value.find((document) => document.key === documentKey)
   if (!summary) return null
+  if (isMedicalOrderDocument(summary)) return summary
   const currentClinicalSurgery = props.sourceView === 'current' && Boolean(summary.clinical_surgery_version)
   if (!currentClinicalSurgery) {
     if (props.providedDocuments !== undefined || props.sourceView === 'current') return summary
@@ -948,47 +1074,86 @@ async function ensureDocumentLoaded(
     ? `${documentKey}::${renderOverride.sourceDocumentId}`
     : documentKey
   let request = documentRequests.get(requestKey)
-  if (!request) {
-    const renderSummary = renderOverride
-      ? {
-          ...summary,
-          source_document_id: renderOverride.sourceDocumentId,
-          ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
+  try {
+    if (!request) {
+      const renderSummary = renderOverride
+        ? {
+            ...summary,
+            source_document_id: renderOverride.sourceDocumentId,
+            ...(renderOverride.sourceRef ? { source_ref: renderOverride.sourceRef } : {}),
+          }
+        : props.lazyResultDocuments
+          ? { ...summary, source_document_id: summary.key }
+          : summary
+      const useHistoricalFallback = Boolean(
+        props.lazyResultDocuments && props.jobId && props.sourceView !== 'current',
+      )
+      request = (async () => {
+        const initialResult = await getEditableMedicalRecordDocument(props.visitId, renderSummary, {
+          ...(props.jobId ? { job_id: props.jobId } : {}),
+          ...(props.sourceView === 'saved' && props.jobId && props.recordRef
+            ? { record_ref: props.recordRef }
+            : {}),
+          ...(useHistoricalFallback ? { fallback_to_current: true } : {}),
+          institute_id: String(props.instituteId || '').trim() || undefined,
+          patient_id: String(props.patientId || '').trim() || undefined,
+          visit_id: String(props.visitId || '').trim(),
+        })
+        if (!initialResult.success && props.jobId && isHistoricalSnapshotNotRetained(initialResult)) {
+          const fallbackResult = await getEditableMedicalRecordDocument(
+            props.visitId,
+            renderSummary,
+            {
+              source_view: 'current',
+              institute_id: String(props.instituteId || '').trim() || undefined,
+              patient_id: String(props.patientId || '').trim() || undefined,
+              visit_id: String(props.visitId || '').trim(),
+            },
+          )
+          if (fallbackResult.success) {
+            fallbackToCurrentActive.value = true
+            fallbackNotice.value = fallbackNotice.value || DEFAULT_HISTORICAL_FALLBACK_NOTICE
+          }
+          return fallbackResult
         }
-      : props.lazyResultDocuments
-        ? { ...summary, source_document_id: summary.key }
-        : summary
-    request = getEditableMedicalRecordDocument(props.visitId, renderSummary, {
-      ...(props.jobId ? { job_id: props.jobId } : {}),
-      ...(props.sourceView === 'saved' && props.jobId && props.recordRef ? { record_ref: props.recordRef } : {}),
-      institute_id: String(props.instituteId || '').trim() || undefined,
-      patient_id: String(props.patientId || '').trim() || undefined,
-      visit_id: String(props.visitId || '').trim(),
-    })
-    documentRequests.set(requestKey, request)
-  }
-  const result = await request
-  if (documentRequests.get(requestKey) === request) documentRequests.delete(requestKey)
-  if (generation !== loadGeneration) return null
-  if (contentLoadingKey.value === documentKey) contentLoadingKey.value = ''
-  if (!result.success || !result.data) {
+        return initialResult
+      })()
+      documentRequests.set(requestKey, request)
+    }
+    const result = await request
+    if (generation !== loadGeneration) return null
+    if (!result.success || !result.data) {
+      if (selectedDocumentKey.value === documentKey) {
+        contentLoadError.value = localizeDocumentError(result.message, '读取当前文书失败')
+      }
+      return null
+    }
+    const loadedDocument = {
+      ...summary,
+      ...result.data,
+      // 仅使用 override 作为渲染请求参数，目录仍保留汇总项身份与安全引用。
+      key: summary.key,
+      source_document_id: summary.source_document_id,
+      source_ref: summary.source_ref,
+      source_document_aliases: summary.source_document_aliases,
+      content_loaded: true,
+    }
+    replaceDocument(loadedDocument)
+    return loadedDocument
+  } catch {
+    if (generation !== loadGeneration) return null
     if (selectedDocumentKey.value === documentKey) {
-      contentLoadError.value = result.message || '读取当前文书失败'
+      contentLoadError.value = '读取当前文书失败'
     }
     return null
+  } finally {
+    if (request && documentRequests.get(requestKey) === request) {
+      documentRequests.delete(requestKey)
+    }
+    if (generation === loadGeneration && contentLoadingKey.value === documentKey) {
+      contentLoadingKey.value = ''
+    }
   }
-  const loadedDocument = {
-    ...summary,
-    ...result.data,
-    // 仅使用 override 作为渲染请求参数，目录仍保留汇总项身份与安全引用。
-    key: summary.key,
-    source_document_id: summary.source_document_id,
-    source_ref: summary.source_ref,
-    source_document_aliases: summary.source_document_aliases,
-    content_loaded: true,
-  }
-  replaceDocument(loadedDocument)
-  return loadedDocument
 }
 
 function scoreDocumentMetadata(
@@ -1036,20 +1201,61 @@ async function applyLocatedDocument(
   document: EditableMedicalRecordDocument,
   range: { start: number; end: number } | null,
   sectionKey = '',
+  sequence?: number,
 ) {
   selectedDocumentKey.value = document.key
-  matchedRange.value = range
-  matchedSectionKey.value = range ? '' : sectionKey
-  locationState.value = range ? 'matched' : sectionKey ? 'section' : 'document'
+  const isOrderDoc = isMedicalOrderDocument(document)
+  const isFrontpageDoc = document.document_type === 'mr' && Boolean(document.frontpage_display)
+  const isStructuredReportDoc = hasStructuredReportFallback(document)
+  const supportsInlineHighlight = !isOrderDoc && !isFrontpageDoc && !isStructuredReportDoc
+
+  matchedRange.value = supportsInlineHighlight ? range : null
+  let hasVisibleQuoteHighlight = false
+  if (matchedRange.value) {
+    if (documentSectionViews.value.length) {
+      hasVisibleQuoteHighlight = documentSectionViews.value.some((section) =>
+        Boolean(section.parts.match),
+      )
+    } else {
+      hasVisibleQuoteHighlight = Boolean(documentTextParts.value.match)
+    }
+  }
+  if (!hasVisibleQuoteHighlight) {
+    matchedRange.value = null
+  }
+
+  const effectiveSectionKey = hasVisibleQuoteHighlight ? '' : sectionKey
+  matchedSectionKey.value = effectiveSectionKey
+  locationState.value = hasVisibleQuoteHighlight
+    ? 'matched'
+    : effectiveSectionKey
+      ? 'section'
+      : 'document'
   mobileTab.value = 'record'
   await nextTick()
-  if (range) highlightElement.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
-  else if (sectionKey) {
+  if (sequence !== undefined && sequence !== documentSelectionSequence) return
+  if (isOrderDoc) {
+    let activeOrderRow = recordScroller.value?.querySelector<HTMLElement>(
+      '.editable-copy-order-table-wrap tbody tr.is-active',
+    )
+    if (!activeOrderRow) {
+      await nextTick()
+      if (sequence !== undefined && sequence !== documentSelectionSequence) return
+      activeOrderRow = recordScroller.value?.querySelector<HTMLElement>(
+        '.editable-copy-order-table-wrap tbody tr.is-active',
+      )
+    }
+    activeOrderRow?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  } else if (hasVisibleQuoteHighlight) {
+    highlightElement.value?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
+  } else if (effectiveSectionKey) {
     const sectionElement = Array.from(
       recordScroller.value?.querySelectorAll<HTMLElement>('[data-section-key]') || [],
-    ).find((element) => element.dataset.sectionKey === sectionKey)
+    ).find((element) => element.dataset.sectionKey === effectiveSectionKey)
     sectionElement?.scrollIntoView?.({ behavior: 'smooth', block: 'center' })
-  } else recordScroller.value?.scrollTo?.({ top: 0, behavior: 'smooth' })
+  } else {
+    recordScroller.value?.scrollTo?.({ top: 0, behavior: 'smooth' })
+  }
 }
 
 async function tryLocateEvidence(
@@ -1061,6 +1267,9 @@ async function tryLocateEvidence(
   if (exactMatch) {
     const exactSummary = exactMatch.document
     selectedDocumentKey.value = exactSummary.key
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
     const exactDocument = await ensureDocumentLoaded(
       exactSummary.key,
       exactMatch.renderSourceDocumentId
@@ -1075,7 +1284,8 @@ async function tryLocateEvidence(
     await applyLocatedDocument(
       exactDocument,
       range,
-      range ? '' : findSectionKey(exactDocument, evidence.section_field_path),
+      findSectionKey(exactDocument, evidence.section_field_path),
+      sequence,
     )
     return true
   }
@@ -1086,19 +1296,28 @@ async function tryLocateEvidence(
     .map((document) => ({ document, range: findQuoteRange(document, evidence.quote) }))
     .find((item) => item.range)
   if (quoteDocument) {
-    await applyLocatedDocument(quoteDocument.document, quoteDocument.range)
+    await applyLocatedDocument(
+      quoteDocument.document,
+      quoteDocument.range,
+      findSectionKey(quoteDocument.document, evidence.section_field_path),
+      sequence,
+    )
     return true
   }
   if (allowMetadataFallback) {
     const metadataSummary = matchDocumentByMetadata(evidence)
     if (metadataSummary) {
       selectedDocumentKey.value = metadataSummary.key
+      matchedRange.value = null
+      matchedSectionKey.value = ''
+      locationState.value = 'idle'
       const metadataDocument = await ensureDocumentLoaded(metadataSummary.key)
       if (!metadataDocument || sequence !== documentSelectionSequence) return false
       await applyLocatedDocument(
         metadataDocument,
         null,
         findSectionKey(metadataDocument, evidence.section_field_path),
+        sequence,
       )
       return true
     }
@@ -1138,19 +1357,46 @@ function toCompareEvidence(evidence: SingleRecordQcEvidence): QCRecordCompareEvi
   }
 }
 
+const EXAM_LAB_COURSE_EVIDENCE_TYPES = new Set([
+  'first_course_record',
+  'daily_course_record',
+  'senior_course_record',
+  'rescue_record',
+])
+
+function displayEvidenceForSingleRecord(item: SingleRecordQcResultItem): SingleRecordQcEvidence[] {
+  const evidence = recommendationEvidenceForSingleRecord(item)
+  if (
+    item.status !== 'non_compliant' ||
+    !['LX0609-06-01-04', 'LX0609-06-01-05', 'LX0609-06-03-03', 'LX0609-06-03-04'].includes(
+      item.rule_id,
+    )
+  ) {
+    return evidence
+  }
+  return evidence.filter((entry) => !EXAM_LAB_COURSE_EVIDENCE_TYPES.has(entry.source_type || ''))
+}
+
 async function locateSingleRecordEvidence(evidence: SingleRecordQcEvidence) {
   await locateEvidence(toCompareEvidence(evidence))
 }
 
 async function selectSingleRecordResult(key: string) {
   const result = singleRecordViewItems.value.find((item) => item.key === key)
-  const evidence = result ? recommendationEvidenceForSingleRecord(result)[0] : undefined
-  if (!evidence) return
+  const evidence = result ? displayEvidenceForSingleRecord(result)[0] : undefined
+  if (!evidence) {
+    ++documentSelectionSequence
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
+    return
+  }
   await locateSingleRecordEvidence(evidence)
 }
 
 async function locateSelectedIssue() {
   if (props.documentOnly) return
+  const sequence = ++documentSelectionSequence
   const issue = selectedIssue.value
   if (!issue) {
     locationState.value = 'idle'
@@ -1175,19 +1421,27 @@ async function locateSelectedIssue() {
       return priority(right) - priority(left)
     })
     for (const evidence of orderedReferencedEvidences) {
-      if (await tryLocateEvidence(evidence, false)) return
+      if (sequence !== documentSelectionSequence) return
+      if (await tryLocateEvidence(evidence, false, sequence)) return
+      if (sequence !== documentSelectionSequence) return
     }
+    if (sequence !== documentSelectionSequence) return
     locationState.value = 'missing'
     matchedRange.value = null
     matchedSectionKey.value = ''
     return
   }
   for (const evidence of issue.evidences) {
-    if (await tryLocateEvidence(evidence, false)) return
+    if (sequence !== documentSelectionSequence) return
+    if (await tryLocateEvidence(evidence, false, sequence)) return
+    if (sequence !== documentSelectionSequence) return
   }
   for (const evidence of issue.evidences) {
-    if (await tryLocateEvidence(evidence, true)) return
+    if (sequence !== documentSelectionSequence) return
+    if (await tryLocateEvidence(evidence, true, sequence)) return
+    if (sequence !== documentSelectionSequence) return
   }
+  if (sequence !== documentSelectionSequence) return
   const document = matchDocumentByMetadata({
     key: `${issue.key}-target-document`,
     source_document_type: issue.target_document_type,
@@ -1195,12 +1449,16 @@ async function locateSelectedIssue() {
   })
   if (document) {
     selectedDocumentKey.value = document.key
+    matchedRange.value = null
+    matchedSectionKey.value = ''
+    locationState.value = 'idle'
     const loadedDocument = await ensureDocumentLoaded(document.key)
+    if (sequence !== documentSelectionSequence) return
     if (!loadedDocument) {
       locationState.value = 'missing'
       return
     }
-    await applyLocatedDocument(loadedDocument, null)
+    await applyLocatedDocument(loadedDocument, null, '', sequence)
     return
   }
   locationState.value = 'missing'
@@ -1223,7 +1481,7 @@ function emitSelectedIssue() {
 }
 
 function setHighlightElement(value: unknown) {
-  if (value instanceof HTMLElement) highlightElement.value = value
+  highlightElement.value = value instanceof HTMLElement ? value : null
 }
 
 async function selectDocument(documentKey: string) {
@@ -1233,6 +1491,8 @@ async function selectDocument(documentKey: string) {
   matchedRange.value = null
   matchedSectionKey.value = ''
   locationState.value = 'idle'
+  const summary = documents.value.find((document) => document.key === documentKey)
+  if (summary && isMedicalOrderDocument(summary)) return
   await ensureDocumentLoaded(documentKey)
 }
 
@@ -1277,26 +1537,73 @@ function loadOrders() {
   const generation = loadGeneration
   const visitId = props.visitId.trim()
   ordersLoadState.value = 'loading'
-  orderRequest = getEditableMedicalRecordDocuments(visitId, {
-    institute_id: props.instituteId,
-    patient_id: props.patientId,
-    visit_id: visitId,
-    job_id: props.jobId,
-    record_ref: props.recordRef || undefined,
-    view: 'summary',
-    document_scope: 'orders',
-  }).then((result) => {
-    if (generation !== loadGeneration) return
-    if (!result.success || !result.data) {
-      ordersLoadState.value = 'failed'
-      return
+  orderRequest = (async () => {
+    try {
+      let result = await getEditableMedicalRecordDocuments(visitId, {
+        institute_id: props.instituteId,
+        patient_id: props.patientId,
+        visit_id: visitId,
+        job_id: props.jobId,
+        record_ref: props.recordRef || undefined,
+        view: 'summary',
+        document_scope: 'orders',
+        ...(props.jobId && props.sourceView !== 'current' ? { fallback_to_current: true } : {}),
+      })
+      if (generation !== loadGeneration) return
+      if (!result.success && props.jobId && isHistoricalSnapshotNotRetained(result)) {
+        const currentResult = await getEditableMedicalRecordDocuments(visitId, {
+          institute_id: props.instituteId,
+          patient_id: props.patientId,
+          visit_id: visitId,
+          view: 'full',
+          source_view: 'current',
+        })
+        if (generation !== loadGeneration) return
+        if (currentResult.success && currentResult.data) {
+          fallbackToCurrentActive.value = true
+          fallbackNotice.value = fallbackNotice.value || DEFAULT_HISTORICAL_FALLBACK_NOTICE
+          result = {
+            ...currentResult,
+            data: {
+              ...currentResult.data,
+              documents: currentResult.data.documents.filter((document) =>
+                isMedicalOrderDocument(document),
+              ),
+            },
+          }
+        } else {
+          result = currentResult
+        }
+      }
+      if (!result.success || !result.data) {
+        ordersLoadState.value = 'failed'
+        return
+      }
+      applyMaterialFallbackMetadata(result.data)
+      documents.value = [
+        ...documents.value,
+        ...result.data.documents.filter((document) => document.enabled !== false),
+      ]
+      ordersLoadState.value = undefined
+    } catch {
+      if (generation === loadGeneration) {
+        ordersLoadState.value = 'failed'
+      }
+    } finally {
+      if (generation === loadGeneration) orderRequest = undefined
     }
-    documents.value = [...documents.value, ...result.data.documents.filter((document) => document.enabled !== false)]
-    ordersLoadState.value = undefined
-  }).finally(() => {
-    if (generation === loadGeneration) orderRequest = undefined
-  })
+  })()
   return orderRequest
+}
+
+async function loadAndSelectOrders() {
+  const generation = loadGeneration
+  await loadOrders()
+  if (generation !== loadGeneration || ordersLoadState.value) return
+  const firstOrder = documents.value.find((document) => isMedicalOrderDocument(document))
+  if (firstOrder) {
+    await selectDocument(firstOrder.key)
+  }
 }
 
 async function loadDocuments() {
@@ -1314,6 +1621,8 @@ async function loadDocuments() {
   locationState.value = 'idle'
   loadError.value = ''
   contentLoadError.value = ''
+  fallbackToCurrentActive.value = false
+  fallbackNotice.value = ''
   contentLoadingKey.value = ''
   documentRequests.clear()
   loading.value = false
@@ -1329,40 +1638,77 @@ async function loadDocuments() {
     return
   }
   loading.value = true
-  const result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
-    // 文书 Bundle 仍以三坐标读取；job/record_ref 仅用于结果归属，不可替代病历身份。
-    institute_id: String(props.instituteId || '').trim() || undefined,
-    patient_id: String(props.patientId || '').trim() || undefined,
-    visit_id: visitId,
-    ...(jobId && props.sourceView !== 'current'
-      ? {
-          job_id: jobId,
-          ...(recordRef ? { record_ref: recordRef } : {}),
-        }
-      : {}),
-    ...(props.sourceView === 'current'
-      ? { view: 'full' as const, source_view: 'current' as const }
-      : {
-          view: 'summary' as const,
-          ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
-        }),
-  })
-  if (generation !== loadGeneration) return
-  loading.value = false
-  if (!result.success || !result.data) {
-    loadError.value = result.message || '读取病历文书失败'
-    return
+  try {
+    const useHistoricalFallback = Boolean(
+      props.lazyResultDocuments && jobId && props.sourceView !== 'current',
+    )
+    let result = await getEditableMedicalRecordDocuments(visitId || recordRef, {
+      // 文书 Bundle 仍以三坐标读取；job/record_ref 仅用于结果归属，不可替代病历身份。
+      institute_id: String(props.instituteId || '').trim() || undefined,
+      patient_id: String(props.patientId || '').trim() || undefined,
+      visit_id: visitId,
+      ...(jobId && props.sourceView !== 'current'
+        ? {
+            job_id: jobId,
+            ...(recordRef ? { record_ref: recordRef } : {}),
+            ...(useHistoricalFallback ? { fallback_to_current: true } : {}),
+          }
+        : {}),
+      ...(props.sourceView === 'current'
+        ? { view: 'full' as const, source_view: 'current' as const }
+        : {
+            view: 'summary' as const,
+            ...(props.lazyResultDocuments ? { document_scope: 'clinical' as const } : {}),
+          }),
+    })
+    if (generation !== loadGeneration) return
+    let clientFullFallbackLoaded = false
+    if (
+      !result.success &&
+      jobId &&
+      props.sourceView !== 'current' &&
+      isHistoricalSnapshotNotRetained(result)
+    ) {
+      const currentFallback = await getEditableMedicalRecordDocuments(visitId || recordRef, {
+        institute_id: String(props.instituteId || '').trim() || undefined,
+        patient_id: String(props.patientId || '').trim() || undefined,
+        visit_id: visitId,
+        view: 'full',
+        source_view: 'current',
+      })
+      if (generation !== loadGeneration) return
+      if (currentFallback.success && currentFallback.data) {
+        fallbackToCurrentActive.value = true
+        fallbackNotice.value = DEFAULT_HISTORICAL_FALLBACK_NOTICE
+        clientFullFallbackLoaded = true
+      }
+      result = currentFallback
+    }
+    loading.value = false
+    if (!result.success || !result.data) {
+      loadError.value = localizeDocumentError(result.message, '读取病历文书失败')
+      return
+    }
+    applyMaterialFallbackMetadata(result.data)
+    documents.value = result.data.documents.filter((document) => document.enabled !== false)
+    if (props.lazyResultDocuments && !clientFullFallbackLoaded) {
+      ordersLoadState.value = 'deferred'
+      const defaultKey = findAdmissionDocument()?.key || resolveDefaultDocumentKey()
+      if (defaultKey) await selectDocument(defaultKey)
+      return
+    }
+    selectedDocumentKey.value = resolveDefaultDocumentKey()
+    if (selectedIssue.value) await locateSelectedIssue()
+    else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
+  } catch {
+    if (generation === loadGeneration) {
+      loadError.value = '读取病历文书失败'
+    }
+  } finally {
+    if (generation === loadGeneration) {
+      loading.value = false
+    }
   }
-  documents.value = result.data.documents.filter((document) => document.enabled !== false)
-  if (props.lazyResultDocuments) {
-    ordersLoadState.value = 'deferred'
-    const admission = findAdmissionDocument()
-    if (admission) await selectDocument(admission.key)
-    return
-  }
-  selectedDocumentKey.value = resolveDefaultDocumentKey()
-  if (selectedIssue.value) await locateSelectedIssue()
-  else if (selectedDocumentKey.value) await ensureDocumentLoaded(selectedDocumentKey.value)
 }
 
 watch(
@@ -1443,6 +1789,14 @@ onBeforeUnmount(() => {
   color: rgba(29, 29, 31, 0.58);
   font-size: 12px;
 }
+.record-compare-fallback-banner {
+  padding: 8px 14px;
+  border-bottom: 1px solid rgba(217, 119, 6, 0.18);
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 12px;
+  line-height: 18px;
+}
 .record-compare-grid {
   /* 抽屉内可用高度不足时允许收缩，避免固定 560px 留出无效空白。 */
   height: clamp(360px, calc(100dvh - 250px), 720px);
@@ -1475,8 +1829,9 @@ onBeforeUnmount(() => {
   padding: 8px 16px;
   border-bottom: 1px solid rgba(0, 0, 0, 0.07);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 8px 12px;
 }
 .record-content-toolbar > div {
   min-width: 0;
@@ -1495,22 +1850,24 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .record-content-time {
-  padding: 4px 8px;
-  border-radius: 7px;
+  padding: 5px 10px;
+  border-radius: 8px;
   background: rgba(10, 108, 255, 0.07);
   color: #174f83;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 .record-content-time span {
-  color: rgba(0, 72, 140, 0.6);
-  font-size: 10px;
+  color: rgba(0, 72, 140, 0.72);
+  font-size: 13px;
   font-weight: 600;
 }
 .record-content-time b {
+  font-size: 14px;
   font-weight: 650;
 }
 .record-content-time.is-missing {
@@ -1519,11 +1876,14 @@ onBeforeUnmount(() => {
 }
 .record-location-chip {
   margin-left: auto;
-  padding: 4px 8px;
+  flex: none;
+  padding: 4px 10px;
   border-radius: 999px;
   background: rgba(0, 0, 0, 0.045);
   color: rgba(29, 29, 31, 0.62) !important;
   font-size: 11px !important;
+  line-height: 16px;
+  white-space: nowrap;
 }
 .record-location-chip.is-matched {
   background: rgba(16, 185, 129, 0.1);
@@ -1573,12 +1933,21 @@ onBeforeUnmount(() => {
   margin: 0 -14px;
   padding-right: 14px;
   padding-left: 14px;
-  border-radius: 8px;
-  background: rgba(245, 158, 11, 0.07);
-  box-shadow: inset 3px 0 0 rgba(245, 158, 11, 0.88);
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  background: #edf4ff;
+  box-shadow: none;
+}
+.record-content-section.is-evidence-target.has-block-highlight {
+  margin: 0;
+  padding-right: 0;
+  padding-left: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .record-content-section.is-evidence-target .record-content-section-title {
-  color: #a65f00;
+  color: #1d4ed8;
 }
 .record-content-section:first-child {
   padding-top: 2px;
@@ -1616,11 +1985,58 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 .record-evidence-highlight {
-  padding: 2px 1px;
-  border-radius: 3px;
-  background: #fff0a8;
-  color: #6b4b00;
-  box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.2);
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: #dbeafe;
+  color: #0f172a;
+  font-weight: 500;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.28);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  transition:
+    background 160ms ease,
+    box-shadow 160ms ease;
+}
+.record-evidence-highlight.is-interactive {
+  cursor: pointer;
+}
+.record-evidence-highlight.is-interactive:hover,
+.record-evidence-highlight.is-interactive:focus-visible {
+  background: #bfdbfe;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.45);
+  outline: none;
+}
+.record-evidence-highlight.is-block-highlight {
+  display: block;
+  margin: 6px 0;
+  padding: 12px 15px;
+  border: 1.5px solid #93c5fd;
+  border-radius: 10px;
+  background: #e2eeff;
+  color: #0f172a;
+  font-weight: 400;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.11);
+}
+.record-evidence-highlight.is-block-highlight::before {
+  content: '定位原文';
+  display: block;
+  width: fit-content;
+  margin-bottom: 7px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  letter-spacing: 0.02em;
+}
+.record-evidence-highlight.is-block-highlight.is-interactive:hover,
+.record-evidence-highlight.is-block-highlight.is-interactive:focus-visible {
+  background: #d8e8ff;
+  border-color: #60a5fa;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.15);
+  outline: none;
 }
 .record-result-column {
   border-left: 1px solid rgba(0, 0, 0, 0.08);
@@ -1743,7 +2159,7 @@ onBeforeUnmount(() => {
   -webkit-line-clamp: 1;
 }
 .record-result-toggle {
-  color: rgba(29, 29, 31, 0.4);
+  color: var(--mq-text-tertiary);
   line-height: 0;
 }
 .record-result-toggle svg {
@@ -1869,7 +2285,7 @@ onBeforeUnmount(() => {
 .record-compare-state,
 .record-content-empty {
   padding: 30px 16px;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   line-height: 20px;
   text-align: center;
@@ -1902,6 +2318,7 @@ onBeforeUnmount(() => {
   font-weight: 650;
 }
 .record-document-select,
+.record-load-orders-btn,
 .record-compare-mobile-tabs {
   display: none;
 }
@@ -1916,12 +2333,21 @@ onBeforeUnmount(() => {
     display: none;
   }
   .record-document-select {
+    position: relative;
     min-width: 180px;
     margin-left: auto;
     display: block;
   }
   .record-document-select > span {
-    display: none;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
   }
   .record-document-select select {
     width: 100%;
@@ -1930,6 +2356,38 @@ onBeforeUnmount(() => {
     border-radius: 8px;
     background: #fff;
     font-size: 12px;
+  }
+  .record-load-orders-btn {
+    display: inline-flex;
+    flex: none;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 10px;
+    border: 1px solid rgba(10, 108, 255, 0.24);
+    border-radius: 8px;
+    background: rgba(10, 108, 255, 0.07);
+    color: #0a6cff;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    transition:
+      background 160ms ease,
+      border-color 160ms ease;
+  }
+  .record-load-orders-btn:hover:not(:disabled) {
+    border-color: rgba(10, 108, 255, 0.42);
+    background: rgba(10, 108, 255, 0.13);
+  }
+  .record-load-orders-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.65;
+  }
+  .record-load-orders-btn.is-failed {
+    border-color: rgba(180, 35, 24, 0.28);
+    background: rgba(239, 68, 68, 0.08);
+    color: #b42318;
   }
   .record-location-chip {
     margin-left: 0;

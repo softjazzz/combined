@@ -1,4 +1,4 @@
-import { computed, ref, watch, type Ref } from 'vue'
+import { computed, getCurrentScope, onScopeDispose, ref, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import ApiService, { apiClient } from '@/services/apiService'
 import type { FrontpageFocusTarget, IcdApplyTarget, PatientRecord } from '../types'
@@ -274,13 +274,51 @@ export function useFrontpageDraft(
     return previews
   }
 
+  interface DraftRecordIdentity {
+    instituteId: string
+    patientId: string
+    visitId: string
+    recordKey: string
+    selectionKey: string
+  }
+
+  const draftOwnerIdentity = ref<DraftRecordIdentity | null>(null)
+  let activeStreamController: AbortController | null = null
+
+  function captureRecordIdentity(record?: PatientRecord): DraftRecordIdentity | null {
+    if (!record) return null
+    const visitId = String(record.visitId || record.id || '').trim()
+    if (!visitId) return null
+    const instituteId = String(record.instituteId || '').trim()
+    const patientId = String(record.patientId || '').trim()
+    const recordKey = serializeCaseRecordKey(instituteId, patientId, visitId)
+    return {
+      instituteId,
+      patientId,
+      visitId,
+      recordKey,
+      selectionKey: JSON.stringify([visitId, record.sourceId, recordKey]),
+    }
+  }
+
+  function abortActiveStream() {
+    if (activeStreamController) {
+      activeStreamController.abort()
+      activeStreamController = null
+    }
+    frontpageGenerating.value = false
+    frontpagePostProcessing.value = false
+    frontpageModule.value = ''
+  }
+
   function setDraftEmpty() {
     frontpageDraft.value = null
+    draftOwnerIdentity.value = null
     frontpageReportResult.value = null
     frontpageModule.value = ''
     frontpageGenerating.value = false
+    frontpagePostProcessing.value = false
     frontpageFocusTarget.value = ''
-    frontpageReportResult.value = null
     completedModules.value = []
   }
 
@@ -330,8 +368,13 @@ export function useFrontpageDraft(
     response: Response,
     options: {
       onModule?: (moduleName: string) => void
+      onFrontpage?: (frontpage: any) => void
+      isCurrent?: () => boolean
     } = {},
-  ) {
+  ): Promise<boolean> {
+    if (options.isCurrent && !options.isCurrent()) {
+      return false
+    }
     if (!response.ok) {
       const errorText = await response.text().catch(() => '')
       throw new Error(errorText || `HTTP ${response.status}`)
@@ -343,7 +386,15 @@ export function useFrontpageDraft(
 
     let buffer = ''
     while (true) {
+      if (options.isCurrent && !options.isCurrent()) {
+        await reader.cancel().catch(() => {})
+        return false
+      }
       const { done, value } = await reader.read()
+      if (options.isCurrent && !options.isCurrent()) {
+        await reader.cancel().catch(() => {})
+        return false
+      }
       if (done) break
 
       buffer += decoder.decode(value, { stream: true })
@@ -351,6 +402,10 @@ export function useFrontpageDraft(
       buffer = lines.pop() || ''
 
       for (const line of lines) {
+        if (options.isCurrent && !options.isCurrent()) {
+          await reader.cancel().catch(() => {})
+          return false
+        }
         if (!line.startsWith('data: ')) continue
         try {
           const payload = JSON.parse(line.slice(6))
@@ -359,6 +414,7 @@ export function useFrontpageDraft(
           }
           if (payload.frontpage) {
             frontpageDraft.value = payload.frontpage
+            options.onFrontpage?.(payload.frontpage)
             onDraftChanged?.()
           }
           if (payload.module) {
@@ -373,6 +429,7 @@ export function useFrontpageDraft(
         }
       }
     }
+    return !options.isCurrent || options.isCurrent()
   }
 
   const draftSelectionKey = computed(() => {
@@ -390,16 +447,25 @@ export function useFrontpageDraft(
   })
   let draftRequestSequence = 0
 
+  if (getCurrentScope()) {
+    onScopeDispose(() => {
+      ++draftRequestSequence
+      abortActiveStream()
+    })
+  }
+
   async function loadSavedFrontpageDraft(visitId: string | null) {
+    abortActiveStream()
     const requestSequence = ++draftRequestSequence
     const selectionKey = draftSelectionKey.value
     const isCurrent = () => requestSequence === draftRequestSequence &&
       selectionKey === draftSelectionKey.value
     const record = selectedRecord.value
+    const ownerIdentity = captureRecordIdentity(record)
     const normalizedVisitId = String(visitId || '').trim()
     // 当前CDM首页/正文由各自读取链加载，不访问旧业务源的AI草稿。
     setDraftEmpty()
-    if (!normalizedVisitId || !record || record.sourceId === 'independent_cdm' ||
+    if (!normalizedVisitId || !record || !ownerIdentity || record.sourceId === 'independent_cdm' ||
       String(record.visitId || record.id).trim() !== normalizedVisitId) {
       return
     }
@@ -414,6 +480,7 @@ export function useFrontpageDraft(
         return
       }
       frontpageDraft.value = draft
+      draftOwnerIdentity.value = ownerIdentity
       frontpageReportResult.value = null
       frontpageModule.value = ''
       frontpageFocusTarget.value = ''
@@ -429,11 +496,27 @@ export function useFrontpageDraft(
   }
 
   async function generateFrontpage() {
-    if (!selectedRecord.value) return
+    const targetIdentity = captureRecordIdentity(selectedRecord.value)
+    const currentSelectedId = String(selectedId.value || '').trim()
+    if (!targetIdentity || (currentSelectedId && currentSelectedId !== targetIdentity.visitId)) {
+      return
+    }
+
+    abortActiveStream()
+    const requestSequence = ++draftRequestSequence
+    const controller = new AbortController()
+    activeStreamController = controller
+    const isCurrent = () =>
+      requestSequence === draftRequestSequence &&
+      draftSelectionKey.value === targetIdentity.selectionKey
 
     // 如果已有草稿，说明是“重新生成”，需强制走 LLM
     const isRegenerate = !!frontpageDraft.value
     const settings = await ensureExtractionSettingsLoaded()
+    if (!isCurrent()) {
+      if (activeStreamController === controller) activeStreamController = null
+      return
+    }
     const allowForceRegenerate = settings?.allow_force_llm_regenerate !== false
     const effectiveForceLlm = isRegenerate && allowForceRegenerate
 
@@ -444,6 +527,7 @@ export function useFrontpageDraft(
     frontpageGenerating.value = true
     frontpagePostProcessing.value = true
     frontpageDraft.value = null
+    draftOwnerIdentity.value = null
     frontpageReportResult.value = null
     frontpageModule.value = ''
     completedModules.value = []
@@ -452,7 +536,7 @@ export function useFrontpageDraft(
     const seenModules = new Set<string>()
 
     const tryReleaseForPreview = () => {
-      if (releasedForPreview || !frontpageDraft.value) return
+      if (!isCurrent() || releasedForPreview || !frontpageDraft.value) return
       const hasDiagnoses = seenModules.has('diagnoses')
       const hasProcedures = seenModules.has('procedures')
       if (hasDiagnoses && hasProcedures) {
@@ -467,19 +551,27 @@ export function useFrontpageDraft(
       const response = await fetchWithAuthRetry('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
-          visit_id: selectedId.value,
+          institute_id: targetIdentity.instituteId || undefined,
+          patient_id: targetIdentity.patientId || undefined,
+          visit_id: targetIdentity.visitId,
           medical_text: '',
           force_llm: effectiveForceLlm,
         }),
       })
 
-      await readFrontpageStream(response, {
+      const finishedCurrent = await readFrontpageStream(response, {
+        isCurrent,
+        onFrontpage: () => {
+          draftOwnerIdentity.value = targetIdentity
+        },
         onModule: (moduleName) => {
           seenModules.add(moduleName)
           tryReleaseForPreview()
         },
       })
+      if (!finishedCurrent) return
 
       if (frontpageDraft.value) {
         message.success('首页生成完成')
@@ -487,12 +579,18 @@ export function useFrontpageDraft(
         message.warning('未能生成首页数据')
       }
     } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError' || !isCurrent()) {
+        return
+      }
       console.error('首页生成失败:', err)
       message.error('首页生成失败: ' + (err.message || '未知错误'))
     } finally {
-      frontpageGenerating.value = false
-      frontpagePostProcessing.value = false
-      frontpageModule.value = ''
+      if (activeStreamController === controller) {
+        activeStreamController = null
+        frontpageGenerating.value = false
+        frontpagePostProcessing.value = false
+        frontpageModule.value = ''
+      }
     }
   }
 
@@ -509,9 +607,20 @@ export function useFrontpageDraft(
       return false
     }
 
+    const targetIdentity = captureRecordIdentity(selectedRecord.value)
+    const selectionKeyAtStart = draftSelectionKey.value
+    abortActiveStream()
+    const requestSequence = ++draftRequestSequence
+    const controller = new AbortController()
+    activeStreamController = controller
+    const isCurrent = () =>
+      requestSequence === draftRequestSequence &&
+      draftSelectionKey.value === selectionKeyAtStart
+
     frontpageGenerating.value = true
     frontpagePostProcessing.value = true
     frontpageDraft.value = null
+    draftOwnerIdentity.value = null
     frontpageReportResult.value = null
     frontpageModule.value = ''
     frontpageFocusTarget.value = ''
@@ -521,7 +630,7 @@ export function useFrontpageDraft(
     const seenModules = new Set<string>()
 
     const tryReleaseForPreview = () => {
-      if (releasedForPreview || !frontpageDraft.value) return
+      if (!isCurrent() || releasedForPreview || !frontpageDraft.value) return
       const hasDiagnoses = seenModules.has('diagnoses')
       const hasProcedures = seenModules.has('procedures')
       if (hasDiagnoses && hasProcedures) {
@@ -536,6 +645,7 @@ export function useFrontpageDraft(
       const response = await fetchWithAuthRetry('/api/v1/frontpage/auto-generate-draft-stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           medical_text: normalizedText,
           visit_id: '',
@@ -545,12 +655,17 @@ export function useFrontpageDraft(
         }),
       })
 
-      await readFrontpageStream(response, {
+      const finishedCurrent = await readFrontpageStream(response, {
+        isCurrent,
+        onFrontpage: () => {
+          draftOwnerIdentity.value = targetIdentity
+        },
         onModule: (moduleName) => {
           seenModules.add(moduleName)
           tryReleaseForPreview()
         },
       })
+      if (!finishedCurrent) return false
 
       if (!frontpageDraft.value) {
         throw new Error('未能生成首页数据')
@@ -573,6 +688,9 @@ export function useFrontpageDraft(
       }
       return true
     } catch (err: any) {
+      if (controller.signal.aborted || err?.name === 'AbortError' || !isCurrent()) {
+        return false
+      }
       console.error('粘贴病历生成首页失败:', err)
       const detail =
         err?.response?.data?.error?.message ||
@@ -582,9 +700,12 @@ export function useFrontpageDraft(
       message.error(`首页生成失败: ${detail}`)
       return false
     } finally {
-      frontpageGenerating.value = false
-      frontpagePostProcessing.value = false
-      frontpageModule.value = ''
+      if (activeStreamController === controller) {
+        activeStreamController = null
+        frontpageGenerating.value = false
+        frontpagePostProcessing.value = false
+        frontpageModule.value = ''
+      }
     }
   }
 
@@ -638,21 +759,33 @@ export function useFrontpageDraft(
   async function handleSaveFrontpage() {
     const draft = frontpageDraft.value
     const record = selectedRecord.value
-    if (!draft || !record) {
+    const currentIdentity = captureRecordIdentity(record)
+    if (!draft || !record || !currentIdentity) {
       message.warning('请先生成首页后再保存')
       return
     }
-    if (!record.patientId || !record.id) {
+    if (!currentIdentity.patientId || !currentIdentity.visitId) {
       message.error('缺少保存主键（患者号/就诊号），请刷新后重试')
+      return
+    }
+    const owner = draftOwnerIdentity.value
+    if (
+      !owner ||
+      owner.instituteId !== currentIdentity.instituteId ||
+      owner.patientId !== currentIdentity.patientId ||
+      owner.visitId !== currentIdentity.visitId ||
+      owner.recordKey !== currentIdentity.recordKey
+    ) {
+      message.error('当前首页草稿与选中病历三键不一致，已拒绝保存，请重新生成')
       return
     }
 
     try {
       // 注意：AI 草稿保存到独立副表 ai_frontpage_draft，不覆盖原始 HIS 首页数据（mr 表）
       await apiClient.post('/api/medical-records/ai-frontpage-draft', {
-        institute_id: record.instituteId || null,
-        patient_id: record.patientId,
-        visit_id: record.id,
+        institute_id: owner.instituteId || null,
+        patient_id: owner.patientId,
+        visit_id: owner.visitId,
         draft_json: JSON.stringify(draft),
       })
       message.success('AI 首页草稿已保存')
@@ -804,7 +937,6 @@ export function useFrontpageDraft(
   watch(
     draftSelectionKey,
     () => {
-      if (frontpageGenerating.value) return
       void loadSavedFrontpageDraft(selectedId.value)
     },
     { immediate: true },

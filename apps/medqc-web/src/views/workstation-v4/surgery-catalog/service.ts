@@ -1,4 +1,4 @@
-import { ApiService } from '@/services/apiService'
+import { ApiService, type ApiRequestConfig } from '@/services/apiService'
 
 export interface SurgeryProcedureCatalogItem {
   code: string
@@ -53,14 +53,19 @@ function unwrapCatalogData(payload: unknown): SurgeryProcedureCatalogData {
 
 export async function fetchSurgeryProcedureCatalog(
   query: SurgeryProcedureCatalogQuery,
+  config?: ApiRequestConfig,
 ): Promise<SurgeryProcedureCatalogData> {
-  const response = await ApiService.getRaw('/api/v1/qc/sichuan/surgery-procedure-catalog', {
-    keyword: query.keyword?.trim() || undefined,
-    category: query.category || undefined,
-    effective_level: query.effectiveLevel || undefined,
-    source: query.source || undefined,
-    page: query.page,
-    page_size: query.pageSize,
-  })
+  const response = await ApiService.getRaw(
+    '/api/v1/qc/sichuan/surgery-procedure-catalog',
+    {
+      keyword: query.keyword?.trim() || undefined,
+      category: query.category || undefined,
+      effective_level: query.effectiveLevel || undefined,
+      source: query.source || undefined,
+      page: query.page,
+      page_size: query.pageSize,
+    },
+    config,
+  )
   return unwrapCatalogData(response.data)
 }

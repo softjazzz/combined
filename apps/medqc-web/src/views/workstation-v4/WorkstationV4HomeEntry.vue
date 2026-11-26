@@ -14,11 +14,25 @@ import { readAnalyticsDrilldown } from './utils/analyticsDrilldown'
 
 const route = useRoute()
 
-const hasLaunchQuery = computed(() => {
-  return ['record_id', 'action', 'from_stage', 'taskId', 'stage'].some((key) => {
-    return typeof route.query[key] === 'string' && String(route.query[key] || '').trim() !== ''
-  })
-})
+const HOME_LAUNCH_QUERY_KEYS = [
+  'record_id',
+  'action',
+  'from_stage',
+  'taskId',
+  'task_id',
+  'stage',
+] as const
+
+function hasNonEmptyQueryValue(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some((item) => typeof item === 'string' && item.trim() !== '')
+  }
+  return typeof value === 'string' && value.trim() !== ''
+}
+
+const hasLaunchQuery = computed(() =>
+  HOME_LAUNCH_QUERY_KEYS.some((key) => hasNonEmptyQueryValue(route.query[key])),
+)
 
 // 兼容旧的统计下钻链接（指向工作台根路径）：带统计参数时直接展示病历列表。
 const hasAnalyticsDrilldown = computed(() => readAnalyticsDrilldown(route.query) !== null)
@@ -31,7 +45,6 @@ const showHome = computed(() => !hasLaunchQuery.value && !hasAnalyticsDrilldown.
 <style scoped>
 .wv4-home-entry {
   position: relative;
-  min-height: 100vh;
   color: var(--mq-text-primary);
   font-family: var(--mq-font-family);
 }

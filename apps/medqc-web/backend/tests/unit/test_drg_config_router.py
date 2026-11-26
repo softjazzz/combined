@@ -231,3 +231,96 @@ class TestDRGConfigRouter:
         body = resp.json()
         message = body.get("detail") or body.get("error") or body.get("message")
         assert message == "版本不存在"
+
+    @pytest.mark.parametrize("denied_role", ["doctor", "reviewer"])
+    def test_non_manager_cannot_write_drg_config(self, monkeypatch, denied_role):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import drg as drg_router
+
+        fake_store = _FakeDRGConfigStore()
+        fake_store.publish(operator="seed", change_summary="seed")
+        monkeypatch.setattr("app.routers.drg.get_drg_config_store", lambda: fake_store)
+
+        test_app = FastAPI()
+        test_app.include_router(drg_router.router)
+        test_app.dependency_overrides[get_current_user] = lambda: {
+            "id": f"u-{denied_role}",
+            "roles": [denied_role],
+        }
+
+        with TestClient(test_app) as test_client:
+            # 读接口仍允许 doctor/reviewer
+            assert test_client.get("/api/v1/drg/config/current").status_code == 200
+            # 写接口全部 403
+            save_resp = test_client.put(
+                "/api/v1/drg/config",
+                json={
+                    "operator": "doc-user",
+                    "change_summary": "unauthorized edit",
+                    "config": fake_store.current["draft"],
+                },
+            )
+            assert save_resp.status_code == 403
+            pub_resp = test_client.post(
+                "/api/v1/drg/config/publish",
+                json={"operator": "doc-user", "change_summary": "unauthorized publish"},
+            )
+            assert pub_resp.status_code == 403
+            rb_resp = test_client.post(
+                "/api/v1/drg/config/rollback",
+                json={
+                    "version_id": "drgcfg-001",
+                    "operator": "doc-user",
+                    "change_summary": "unauthorized rollback",
+                },
+            )
+            assert rb_resp.status_code == 403
+
+    @pytest.mark.parametrize("allowed_role", ["admin", "qc_manager", "super_admin", "sync_admin"])
+    def test_privileged_roles_can_write_drg_config(self, monkeypatch, allowed_role):
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+        from app.core.security import get_current_user
+        from app.routers import drg as drg_router
+
+        fake_store = _FakeDRGConfigStore()
+        monkeypatch.setattr("app.routers.drg.get_drg_config_store", lambda: fake_store)
+
+        test_app = FastAPI()
+        test_app.include_router(drg_router.router)
+        test_app.dependency_overrides[get_current_user] = lambda: {
+            "id": f"u-{allowed_role}",
+            "roles": [allowed_role],
+        }
+
+        with TestClient(test_app) as test_client:
+            assert (
+                test_client.put(
+                    "/api/v1/drg/config",
+                    json={
+                        "operator": allowed_role,
+                        "change_summary": "edit",
+                        "config": fake_store.current["draft"],
+                    },
+                ).status_code
+                == 200
+            )
+            pub_resp = test_client.post(
+                "/api/v1/drg/config/publish",
+                json={"operator": allowed_role, "change_summary": "publish"},
+            )
+            assert pub_resp.status_code == 200
+            version_id = pub_resp.json()["data"]["version_id"]
+            assert (
+                test_client.post(
+                    "/api/v1/drg/config/rollback",
+                    json={
+                        "version_id": version_id,
+                        "operator": allowed_role,
+                        "change_summary": "rollback",
+                    },
+                ).status_code
+                == 200
+            )

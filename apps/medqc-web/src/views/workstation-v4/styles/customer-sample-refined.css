@@ -12,7 +12,7 @@
 }
 
 .customer-sample-page .customer-sample-scroll {
-  padding: 8px 28px 32px 22px;
+  padding: 8px 28px 24px 22px;
 }
 
 .customer-sample-page .customer-sample-main-column {
@@ -39,6 +39,7 @@
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-13);
   font-weight: 600;
+  line-height: 18px;
 }
 
 .customer-sample-page .customer-sample-page-title .mq-page-title {
@@ -68,10 +69,21 @@
   transform: none;
 }
 
-.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:not(:disabled)),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn:not(.ant-btn-primary):hover),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn:not(.ant-btn-primary):focus) {
+  border-color: rgba(10, 108, 255, 0.28);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 4px 12px rgba(10, 55, 115, 0.12);
+  color: var(--mq-brand-700);
+  transform: none;
+}
+
+.customer-sample-page
+  .customer-sample-toolbar-actions
+  :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled)),
 .customer-sample-page
   .customer-sample-selection-run-actions
-  :deep(.ant-btn-primary:not(:disabled)) {
+  :deep(.ant-btn-primary:not(:disabled):not(.ant-btn-disabled)) {
   border-color: transparent;
   background: var(--mq-brand-gradient);
   box-shadow: var(--mq-brand-shadow);
@@ -79,10 +91,24 @@
   font-weight: 600;
 }
 
-.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled) {
-  border-color: transparent;
-  background: rgba(10, 108, 255, 0.35);
-  color: #ffffff;
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary.ant-btn-disabled),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled:hover),
+.customer-sample-page .customer-sample-toolbar-actions :deep(.ant-btn-primary:disabled:focus),
+.customer-sample-page .customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled),
+.customer-sample-page
+  .customer-sample-selection-run-actions
+  :deep(.ant-btn-primary.ant-btn-disabled),
+.customer-sample-page .customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled:hover),
+.customer-sample-page .customer-sample-selection-run-actions :deep(.ant-btn-primary:disabled:focus) {
+  border-color: rgba(15, 23, 42, 0.1);
+  background: rgba(148, 163, 184, 0.18);
+  background-image: none;
+  box-shadow: none;
+  color: rgba(15, 23, 42, 0.42);
+  font-weight: 500;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .customer-sample-page .customer-sample-task-history-icon {
@@ -178,6 +204,7 @@
   background: transparent;
   font-size: var(--mq-font-13);
   font-weight: 400;
+  vertical-align: middle;
 }
 
 .customer-sample-page :deep(.ant-table-tbody > tr:hover > td) {
@@ -264,13 +291,13 @@
   border-radius: 999px;
 }
 
-/* 覆盖上方滚动区padding时保留操作坞的安全空间。 */
+/* 底部工作栏已改为非遮挡 flex 页脚，滚动区只需保留适度底部留白。 */
 .customer-sample-page .customer-sample-scroll.has-work-dock {
-  padding-bottom: 220px;
+  padding-bottom: 24px;
 }
 
 @media (max-width: 768px) {
   .customer-sample-page .customer-sample-scroll.has-work-dock {
-    padding-bottom: 306px;
+    padding-bottom: 20px;
   }
 }

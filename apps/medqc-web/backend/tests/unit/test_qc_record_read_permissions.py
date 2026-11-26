@@ -20,8 +20,9 @@ def persistent_accounts(monkeypatch):
     sessions = sessionmaker(bind=engine)
     with sessions.begin() as session:
         for role in ("admin", "qc_manager", "sync_admin", "super_admin", "doctor", "reviewer", "qc_staff"):
+            inst_id = None if role in {"admin", "super_admin"} else "H1"
             session.add(SysUser(id=f"u-{role}", username=role, display_name="合成账号",
-                                role=role, institute_id="H1", is_active=True))
+                                role=role, institute_id=inst_id, is_active=True))
     monkeypatch.setattr(connection, "SessionLocal", sessions)
     yield sessions
     engine.dispose()

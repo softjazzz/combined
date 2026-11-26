@@ -22,6 +22,26 @@ vi.mock('@/views/workstation/MessageCenter.vue', () => ({ default: { template: '
 vi.mock('@/views/workstation-v4/QcRecordResultListView.vue', () => ({
   default: { template: '<div />' },
 }))
+vi.mock('@/views/workstation-v4/frontpage-qc/FrontpageQcView.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/workstation-v4/LuxianQcAnalyticsView.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/views/qc/reports/RecordQualityReportView.vue', () => ({
+  default: { template: '<div />' },
+}))
+vi.mock('@/components/layout/MainLayout.vue', () => ({ default: { template: '<router-view />' } }))
+vi.mock('@/views/auth/LoginView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/error/NotFoundView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/drg/CodingAssistant.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/components/BatchRuleTest.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/ApiTestView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/TestThreeColumn.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/ThreeColumnValidation.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/test/LLMConfigTest.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/debug/ApiTestView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/workstation-v4/DataSyncConfigPage.vue', () => ({ default: { template: '<div />' } }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -184,6 +204,7 @@ describe('反馈与整改入口保护', () => {
     await router.push('/workstation-v5/feedback')
     expect(legacy.components!.default).toBe(modern.components!.default)
     expect(legacy.meta.permission).toContain('doctor')
+    expect(legacy.meta.permission).toContain('qc_staff')
   })
 })
 
@@ -241,8 +262,16 @@ describe('历史页面下线重定向', () => {
     }
   })
 
-  it('无工作台首页权限的账号进入个人资料，避免在旧首页间循环', async () => {
+  it('编码员进入无权旧入口落到首页质控（新），无任何工作台入口权限的账号进入个人资料', async () => {
     auth.roles.splice(0, auth.roles.length, 'coder')
+    try {
+      await router.push('/demo/lx33/feedbacks')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/frontpage-qc')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+
+    auth.roles.splice(0, auth.roles.length, 'nurse')
     try {
       await router.push('/demo/lx33/feedbacks')
       expect(router.currentRoute.value.path).toBe('/auth/profile')
@@ -250,6 +279,22 @@ describe('历史页面下线重定向', () => {
       auth.roles.splice(0, auth.roles.length, 'admin')
     }
   })
+
+  it('super_admin 可直接访问 /stats 与 /reports/record-quality', async () => {
+    expect(router.resolve('/workstation-v5/stats').meta.permission).toContain('super_admin')
+    expect(router.resolve('/workstation-v5/reports/record-quality').meta.permission).toContain(
+      'super_admin',
+    )
+    auth.roles.splice(0, auth.roles.length, 'super_admin')
+    try {
+      await router.push('/workstation-v5/stats')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/stats')
+      await router.push('/workstation-v5/reports/record-quality')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/reports/record-quality')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15_000)
 
   it.each([
     ['/workstation-v4', 'WorkstationV4Index'],
@@ -266,5 +311,155 @@ describe('历史页面下线重定向', () => {
     expect(matched?.name).toBe(name)
     expect(matched?.components?.default).toBeTypeOf('function')
     expect(matched?.redirect).toBeUndefined()
+  })
+
+  it('V5 管理、统计与数据页面均显式声明角色权限，拒绝 doctor 与 qc_staff 直达', async () => {
+    const restrictedPaths = [
+      '/workstation-v5/data',
+      '/workstation-v5/rules',
+      '/workstation-v5/stats',
+      '/workstation-v5/upload',
+      '/workstation-v5/drg/pre',
+      '/workstation-v5/grouper',
+    ]
+    for (const path of restrictedPaths) {
+      const permission = router.resolve(path).meta.permission as string[] | undefined
+      expect(permission).toEqual(expect.arrayContaining(['admin', 'qc_manager', 'sync_admin']))
+      expect(permission).not.toContain('doctor')
+      expect(permission).not.toContain('qc_staff')
+    }
+    auth.roles.splice(0, auth.roles.length, 'doctor')
+    try {
+      await router.push('/workstation-v5/data')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/data')
+      await router.push('/workstation-v5/rules')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/rules')
+      await router.push('/workstation-v5/stats')
+      expect(router.currentRoute.value.path).not.toBe('/workstation-v5/stats')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  }, 15_000)
+})
+
+describe('生产构建关闭匿名 demo 旁路与 /dashboard/test/* 路由', () => {
+  it('PROD 下未开启演示开关时，?demo=true 不能绕过 allowDemo 路由认证', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', '')
+    vi.stubEnv('VITE_ENABLE_DEMO_MODE', '')
+    auth.authenticated = false
+    try {
+      await router.push('/dashboard/drg/coding?demo=true')
+      expect(router.currentRoute.value.path).toBe('/auth/login')
+      expect(router.currentRoute.value.query.redirect).toBe('/dashboard/drg/coding?demo=true')
+
+      await router.push('/dashboard/custom-rules/batch-test?demo=true')
+      expect(router.currentRoute.value.path).toBe('/auth/login')
+      expect(router.currentRoute.value.query.redirect).toBe(
+        '/dashboard/custom-rules/batch-test?demo=true',
+      )
+    } finally {
+      auth.authenticated = true
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('PROD 下未开启演示开关时，关闭匿名 /dashboard/test/* 路由（未登录跳登录，已登录落 404）', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', '')
+    vi.stubEnv('VITE_ENABLE_DEMO_MODE', '')
+    try {
+      auth.authenticated = false
+      for (const path of [
+        '/dashboard/test/three-column',
+        '/dashboard/test/basic',
+        '/dashboard/test/validation',
+      ]) {
+        await router.push(path)
+        expect(router.currentRoute.value.path).toBe('/auth/login')
+        expect(router.currentRoute.value.query.redirect).toBe(path)
+      }
+
+      auth.authenticated = true
+      auth.roles.splice(0, auth.roles.length, 'admin')
+      await router.push('/dashboard/test/basic')
+      expect(router.currentRoute.value.name).toBe('NotFound')
+
+      await router.push('/dashboard/test/llm-config')
+      expect(router.currentRoute.value.name).toBe('NotFound')
+    } finally {
+      auth.authenticated = true
+      auth.roles.splice(0, auth.roles.length, 'admin')
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('PROD 下显式开启 VITE_ALLOW_DEMO_MODE=true 时仍允许演示路由与测试页访问', async () => {
+    vi.stubEnv('PROD', true as any)
+    vi.stubEnv('VITE_ALLOW_DEMO_MODE', 'true')
+    auth.authenticated = false
+    try {
+      await router.push('/dashboard/drg/coding?demo=true')
+      expect(router.currentRoute.value.path).toBe('/dashboard/drg/coding')
+
+      await router.push('/dashboard/test/basic')
+      expect(router.currentRoute.value.path).toBe('/dashboard/test/basic')
+    } finally {
+      auth.authenticated = true
+      vi.unstubAllEnvs()
+    }
+  })
+})
+
+describe('旧设置页下线、调试路由收敛与 V5 super_admin/sync_admin 权限一致性', () => {
+  it('/dashboard/settings 不再挂载旧 mock 设置页，统一重定向到 /workstation-v5/system-config', async () => {
+    const settingsRoute = router.getRoutes().find((item) => item.name === 'Settings')
+    expect(settingsRoute?.redirect).toBe('/workstation-v5/system-config')
+    expect(settingsRoute?.components).toBeUndefined()
+
+    auth.roles.splice(0, auth.roles.length, 'super_admin')
+    try {
+      await router.push('/dashboard/settings')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/system-config')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  })
+
+  it('/dashboard/debug/api-test 仅允许 admin / super_admin / sync_admin 访问', async () => {
+    expect(router.resolve('/dashboard/debug/api-test').meta.permission).toEqual([
+      'admin',
+      'super_admin',
+      'sync_admin',
+    ])
+
+    for (const deniedRole of ['doctor', 'qc_staff', 'qc_manager']) {
+      auth.roles.splice(0, auth.roles.length, deniedRole)
+      await router.push('/dashboard/debug/api-test')
+      expect(router.currentRoute.value.path).not.toBe('/dashboard/debug/api-test')
+    }
+
+    for (const allowedRole of ['admin', 'super_admin', 'sync_admin']) {
+      auth.roles.splice(0, auth.roles.length, allowedRole)
+      await router.push('/dashboard/debug/api-test')
+      expect(router.currentRoute.value.path).toBe('/dashboard/debug/api-test')
+    }
+
+    auth.roles.splice(0, auth.roles.length, 'admin')
+  })
+
+  it('/workstation-v5 下所有声明 admin 或 sync_admin 的路由均一致声明 super_admin 与 sync_admin', () => {
+    const v5Routes = router
+      .getRoutes()
+      .filter((item) => item.path.startsWith('/workstation-v5') && Array.isArray(item.meta.permission))
+
+    expect(v5Routes.length).toBeGreaterThan(20)
+    for (const item of v5Routes) {
+      const permission = item.meta.permission as string[]
+      if (permission.includes('admin') || permission.includes('sync_admin')) {
+        expect(permission, `route ${item.path} should include sync_admin`).toContain('sync_admin')
+        expect(permission, `route ${item.path} should include super_admin`).toContain('super_admin')
+      }
+    }
   })
 })

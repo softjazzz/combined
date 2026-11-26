@@ -112,6 +112,8 @@ export interface CustomRuleWorkspaceRecordQuery {
 }
 
 export interface CustomRuleWorkspaceTestRecord {
+  institute_id?: string
+  patient_id?: string
   record_id: string
   visit_id?: string
   patient_name?: string

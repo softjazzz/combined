@@ -29,7 +29,15 @@
         <ul>
           <li v-for="check in checks" :key="check.key">
             <span>{{ check.label }}</span>
-            <span :class="{ 'runtime-error': !config.readiness.checks[check.key] }">
+            <span
+              :class="{
+                'runtime-error':
+                  !(check.key === 'gateway' && !config.readiness.gateway_checked) &&
+                  !config.readiness.checks[check.key],
+                'runtime-muted':
+                  check.key === 'gateway' && !config.readiness.gateway_checked,
+              }"
+            >
               {{ check.key === 'gateway' && !config.readiness.gateway_checked ? '未检查' : config.readiness.checks[check.key] ? '通过' : '未就绪' }}
             </span>
           </li>
@@ -48,6 +56,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { isAxiosError } from 'axios'
 import { useAuthStore } from '@/stores/auth'
 import {
   checkQcRuntimeSettings, getQcRuntimeSettings, saveQcRuntimeSettings,
@@ -73,6 +82,19 @@ const canManage = computed(() => auth.userRoles.some((role: string) => ['admin',
   (auth.user?.is_demo_account !== true || auth.userRoles.some((role: string) => ['sync_admin', 'super_admin'].includes(role))))
 const identity = computed(() => JSON.stringify([auth.user?.id, auth.userRoles, auth.user?.is_demo_account]))
 
+function extractConflictReadiness(cause: unknown): QcRuntimeSettings['readiness'] | null {
+  if (!isAxiosError(cause) || cause.response?.status !== 409) return null
+  const detail = (cause.response?.data as { detail?: unknown } | undefined)?.detail
+  if (!detail || typeof detail !== 'object') return null
+  const readiness = (detail as { readiness?: unknown }).readiness
+  if (!readiness || typeof readiness !== 'object') return null
+  const candidate = readiness as Partial<QcRuntimeSettings['readiness']>
+  if (typeof candidate.ready !== 'boolean' || !candidate.checks || typeof candidate.checks !== 'object') {
+    return null
+  }
+  return candidate as QcRuntimeSettings['readiness']
+}
+
 async function run(action: 'load' | 'check' | 'save') {
   if (!canManage.value || busy.value) return
   const request = ++generation
@@ -88,16 +110,33 @@ async function run(action: 'load' | 'check' | 'save') {
         : await getQcRuntimeSettings(controller.signal)
     if (request !== generation || !canManage.value) return
     config.value = result
-    enabled.value = result.rabbitmq_enabled
+    if (action !== 'check') {
+      enabled.value = result.rabbitmq_enabled
+    }
     if (action === 'save') notice.value = '已保存，仅影响新建任务。'
     if (action === 'check') notice.value = result.readiness.ready ? '配套服务检查通过。' : '配套服务尚未全部就绪，请检查部署。'
-  } catch {
+  } catch (cause) {
     if (request !== generation) return
-    // 不回显服务端原始错误、地址或凭据；保存失败时保留当前生效值。
+    // 不回显服务端原始错误、地址或凭据；保存失败时保留当前生效值并刷新冲突时的就绪状态。
+    if (action === 'save' && isAxiosError(cause) && cause.response?.status === 409) {
+      const conflictReadiness = extractConflictReadiness(cause)
+      if (conflictReadiness && config.value) {
+        config.value = { ...config.value, readiness: conflictReadiness }
+      } else if (controller) {
+        try {
+          const latest = await getQcRuntimeSettings(controller.signal)
+          if (request === generation && canManage.value) {
+            config.value = latest
+          }
+        } catch {
+          // 刷新失败时保留原错误提示
+        }
+      }
+    }
     error.value = action === 'save'
       ? '未保存：可能是配套服务未就绪、配置已被更新或无写入权限。请检查服务并刷新配置后重试。'
       : '无法读取运行配置或服务状态，请检查权限和后端连接后重试。'
-    if (config.value) enabled.value = config.value.rabbitmq_enabled
+    if (action === 'save' && config.value) enabled.value = config.value.rabbitmq_enabled
   } finally {
     if (request === generation) busy.value = false
   }
@@ -130,6 +169,7 @@ onBeforeUnmount(() => { generation++; controller?.abort() })
 .runtime-readiness ul { padding: 0; list-style: none; }
 .runtime-readiness li { display: flex; justify-content: space-between; gap: 20px; margin: 10px 0; }
 .runtime-error { color: var(--mq-danger-text); }
+.runtime-muted { color: var(--mq-text-secondary); }
 .runtime-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 12px; margin-top: 20px; }
 @media (max-width: 600px) { .qc-runtime-settings { padding: 16px; } .runtime-mode { flex-direction: column; align-items: flex-start; } }
 </style>

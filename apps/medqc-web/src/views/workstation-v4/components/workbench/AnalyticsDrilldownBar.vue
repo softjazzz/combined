@@ -24,6 +24,12 @@
           class="analytics-drilldown__chip"
         >{{ drilldown.department }}</span>
         <span
+          v-if="resultStatusLabel"
+          class="analytics-drilldown__chip"
+          data-testid="analytics-drilldown-result-status"
+          :title="resultStatusTitle"
+        >结论状态 {{ resultStatusLabel }}</span>
+        <span
           v-if="periodText"
           class="analytics-drilldown__chip"
         >完成时间 {{ periodText }}</span>
@@ -49,7 +55,12 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { analyticsScopeLabel, type AnalyticsDrilldown } from '../../utils/analyticsDrilldown'
+import {
+  analyticsResultStatusLabel,
+  analyticsScopeLabel,
+  parseAnalyticsResultStatuses,
+  type AnalyticsDrilldown,
+} from '../../utils/analyticsDrilldown'
 
 const props = withDefaults(defineProps<{ drilldown: AnalyticsDrilldown; total?: number | null }>(), {
   total: null,
@@ -57,6 +68,12 @@ const props = withDefaults(defineProps<{ drilldown: AnalyticsDrilldown; total?: 
 const emit = defineEmits<{ back: []; clear: [] }>()
 
 const scopeLabel = computed(() => analyticsScopeLabel(props.drilldown.scope))
+const resultStatusLabel = computed(() => analyticsResultStatusLabel(props.drilldown.resultStatus))
+const resultStatusTitle = computed(() => {
+  const statuses = parseAnalyticsResultStatuses(props.drilldown.resultStatus)
+  if (statuses.length <= 1) return undefined
+  return statuses.map((item) => analyticsResultStatusLabel(item)).join('、')
+})
 const periodText = computed(() => {
   const { completedFrom, completedTo } = props.drilldown
   if (!completedFrom && !completedTo) return ''

@@ -336,4 +336,67 @@ describe('useSichuanBatchJobs', () => {
     expect(clearIntervalSpy).not.toHaveBeenCalledWith(fakeTimer)
     expect(notificationErrorMock).not.toHaveBeenCalled()
   })
+
+  it('loadBatchJobs 合并 compact=True 列表项时不得将已加载的 items/failed_records/rule_results 覆写为空数组', async () => {
+    const detailedJob: SichuanBatchJob = {
+      ...baseJob,
+      status: 'running',
+      items: [
+        {
+          rule_id: 'LX0609-01-01-01',
+          rule_code: 'LX0609-01-01-01',
+          rule_name: '入院记录时限检查',
+          record_ref: 'rec_aaaaaaaaaaaaaaaaaaaaaaaa',
+          status: 'non_compliant',
+          is_compliant: false,
+          findings: '超期',
+          evidence: '',
+          suggestion: '补充记录',
+          confidence: 0.9,
+        },
+      ],
+      failed_records: [
+        {
+          rule_id: 'LX0609-02-01-01',
+          record_ref: 'rec_bbbbbbbbbbbbbbbbbbbbbbbb',
+          error: 'timeout',
+        },
+      ],
+      rule_results: [
+        {
+          id: 'rr-1',
+          rule_code: 'SC-001',
+          rule_name: '入院记录检查',
+          status: 'completed',
+          items: [],
+        },
+      ],
+    }
+    const compactListJob: SichuanBatchJob = {
+      ...baseJob,
+      status: 'completed',
+      items: [],
+      failed_records: [],
+      rule_results: [],
+    }
+    listSichuanWorkspaceBatchJobsMock.mockResolvedValue({
+      success: true,
+      data: {
+        items: [compactListJob],
+        total: 1,
+        page: 1,
+        page_size: 5,
+      },
+    })
+
+    const { batchJobDetail, loadBatchJobs } = useSichuanBatchJobs()
+    batchJobDetail.value = detailedJob
+
+    await loadBatchJobs()
+
+    expect(batchJobDetail.value?.status).toBe('completed')
+    expect(batchJobDetail.value?.items).toEqual(detailedJob.items)
+    expect(batchJobDetail.value?.failed_records).toEqual(detailedJob.failed_records)
+    expect(batchJobDetail.value?.rule_results).toEqual(detailedJob.rule_results)
+  })
 })

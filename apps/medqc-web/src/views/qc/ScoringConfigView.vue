@@ -11,6 +11,15 @@
       </p>
     </div>
 
+    <a-alert
+      v-if="isReadonly"
+      type="info"
+      show-icon
+      message="当前为只读模式"
+      description="当前账号仅可查看评分阈值配置，需全局系统管理员（admin / sync_admin / super_admin）角色方可修改。"
+      class="mb-6"
+    />
+
     <a-spin :spinning="loading">
       <!-- 等级阈值卡片 -->
       <div class="mb-6">
@@ -48,7 +57,7 @@
                 :min="0"
                 :max="100"
                 class="flex-1"
-                :disabled="grade === '丙'"
+                :disabled="isReadonly || grade === '丙'"
               />
             </div>
             <div
@@ -93,6 +102,7 @@
                   "
                   :min="0"
                   :max="100"
+                  :disabled="isReadonly"
                   size="small"
                   style="width: 100px"
                 />
@@ -121,6 +131,7 @@
                 v-model:value="formData.base_score"
                 :min="0"
                 :max="200"
+                :disabled="isReadonly"
                 class="w-full"
               />
               <p class="text-xs text-slate-400 mt-1">
@@ -133,6 +144,7 @@
                 v-model:value="formData.pass_score"
                 :min="0"
                 :max="100"
+                :disabled="isReadonly"
                 class="w-full"
               />
               <p class="text-xs text-slate-400 mt-1">
@@ -181,7 +193,11 @@
 
       <!-- 操作栏 -->
       <div class="flex justify-end gap-3">
-        <a-button @click="resetForm">
+        <a-button
+          data-testid="scoring-config-reset"
+          :disabled="isReadonly || loading || saving"
+          @click="resetForm"
+        >
           <template #icon>
             <UndoOutlined />
           </template>
@@ -189,7 +205,9 @@
         </a-button>
         <a-button
           type="primary"
+          data-testid="scoring-config-save"
           :loading="saving"
+          :disabled="isReadonly || loading || saving"
           size="large"
           @click="saveConfig"
         >
@@ -215,10 +233,27 @@ import {
   UndoOutlined,
   SaveOutlined,
 } from '@ant-design/icons-vue'
-import { getAccessToken } from '@/utils/auth-token'
+import { apiClient } from '@/services/apiService'
+import { useAuthStore } from '@/stores/auth'
 
+const authStore = useAuthStore()
 const loading = ref(false)
 const saving = ref(false)
+
+const canEditScoringConfig = computed(() => {
+  const roles = authStore.userRoles || []
+  if (roles.some((role) => ['sync_admin', 'super_admin'].includes(role))) {
+    return true
+  }
+  if (roles.includes('admin')) {
+    const instituteId = String(
+      (authStore.user as { institute_id?: string | null } | null)?.institute_id ?? '',
+    ).trim()
+    return !instituteId
+  }
+  return false
+})
+const isReadonly = computed(() => !canEditScoringConfig.value)
 
 const formData = reactive({
   grade_thresholds: {
@@ -272,53 +307,55 @@ const deductionTableData = computed(() => [
   { key: 'minor', label: '一般缺陷', color: 'blue', ...formData.deduction_rules.minor },
 ])
 
-// 加载配置
-function getToken() {
-  return getAccessToken()
+// 提取后端真实错误信息
+function resolveApiErrorMessage(error: any, fallback: string): string {
+  const detail = error?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail.trim()
+  const errMsg = error?.response?.data?.error || error?.response?.data?.message
+  if (typeof errMsg === 'string' && errMsg.trim()) return errMsg.trim()
+  if (typeof error?.message === 'string' && error.message.trim()) return error.message.trim()
+  return fallback
 }
 
+// 加载配置
 async function loadConfig() {
   loading.value = true
   try {
-    const resp = await fetch('/api/v1/scoring-config', {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    })
-    const result = await resp.json()
+    const { data: result } = await apiClient.get('/api/v1/scoring-config')
+    if (result?.success === false) {
+      message.error(result?.error || result?.detail || '加载评分配置失败')
+      return
+    }
     if (result?.data) {
       Object.assign(formData, result.data)
     }
-  } catch (e) {
+  } catch (e: any) {
     console.error('加载评分配置失败', e)
+    message.error(resolveApiErrorMessage(e, '加载评分配置失败'))
   } finally {
     loading.value = false
   }
 }
 
 async function saveConfig() {
+  if (isReadonly.value || saving.value) return
   saving.value = true
   try {
-    const resp = await fetch('/api/v1/scoring-config', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${getToken()}`,
-      },
-      body: JSON.stringify(formData),
-    })
-    const result = await resp.json()
-    if (result?.success !== false) {
-      message.success('评分配置保存成功')
-    } else {
-      message.error(result?.error || '保存失败')
+    const { data: result } = await apiClient.put('/api/v1/scoring-config', formData)
+    if (result?.success === false) {
+      message.error(result?.error || result?.detail || '保存失败')
+      return
     }
-  } catch (e) {
-    message.error('保存失败')
+    message.success('评分配置保存成功')
+  } catch (e: any) {
+    message.error(resolveApiErrorMessage(e, '保存失败'))
   } finally {
     saving.value = false
   }
 }
 
 function resetForm() {
+  if (isReadonly.value || loading.value || saving.value) return
   loadConfig()
   previewScore.value = null
   previewGrade.value = ''

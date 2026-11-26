@@ -65,25 +65,26 @@ class ScheduleStore:
         self.sessions = session_factory
         _, self.plans, self.runs = tables(schema)
 
-    def list(self, owner_id):
+    def list(self, owner_id, *, all_owners: bool = False):
         with self.sessions() as session:
+            stmt = sa.select(self.plans)
+            if not all_owners:
+                stmt = stmt.where(self.plans.c.owner_id == owner_id)
             return [
                 dict(row)
                 for row in session.execute(
-                    sa.select(self.plans)
-                    .where(self.plans.c.owner_id == owner_id)
-                    .order_by(self.plans.c.created_at.desc())
-                    .limit(100)
+                    stmt.order_by(self.plans.c.created_at.desc()).limit(100)
                 ).mappings()
             ]
 
-    def history(self, plan_id, owner_id):
+    def history(self, plan_id, owner_id, *, all_owners: bool = False):
         with self.sessions() as session:
+            conds = [self.plans.c.id == plan_id]
+            if not all_owners:
+                conds.append(self.plans.c.owner_id == owner_id)
             if (
                 session.execute(
-                    sa.select(self.plans.c.id).where(
-                        self.plans.c.id == plan_id, self.plans.c.owner_id == owner_id
-                    )
+                    sa.select(self.plans.c.id).where(*conds)
                 ).first()
                 is None
             ):
@@ -98,7 +99,16 @@ class ScheduleStore:
                 ).mappings()
             ]
 
-    def save(self, owner_id, definition, now, plan_id=None, revision=None):
+    def save(
+        self,
+        owner_id,
+        definition,
+        now,
+        plan_id=None,
+        revision=None,
+        *,
+        all_owners: bool = False,
+    ):
         current = utc_naive(now)
         with self.sessions() as session, session.begin():
             values = dict(
@@ -128,18 +138,38 @@ class ScheduleStore:
                     )
                 )
             else:
+                conds = [
+                    self.plans.c.id == plan_id,
+                    self.plans.c.revision == revision,
+                ]
+                if not all_owners:
+                    conds.append(self.plans.c.owner_id == owner_id)
                 updated = session.execute(
                     self.plans.update()
-                    .where(
-                        self.plans.c.id == plan_id,
-                        self.plans.c.owner_id == owner_id,
-                        self.plans.c.revision == revision,
-                    )
+                    .where(*conds)
                     .values(revision=self.plans.c.revision + 1, **values)
                 )
                 if updated.rowcount != 1:
                     raise PlanConflict("plan_changed_or_unavailable")
             return plan_id
+
+    def delete(self, plan_id, owner_id, *, all_owners: bool = False):
+        with self.sessions() as session, session.begin():
+            conds = [self.plans.c.id == plan_id]
+            if not all_owners:
+                conds.append(self.plans.c.owner_id == owner_id)
+            existing = session.execute(
+                sa.select(self.plans.c.id).where(*conds).with_for_update()
+            ).first()
+            if existing is None:
+                raise KeyError("plan_not_found")
+            session.execute(
+                self.runs.delete().where(self.runs.c.plan_id == plan_id)
+            )
+            deleted = session.execute(self.plans.delete().where(*conds))
+            if deleted.rowcount != 1:
+                raise KeyError("plan_not_found")
+            return True
 
     def claim(self, now):
         current = utc_naive(now)
@@ -233,7 +263,7 @@ class ScheduleStore:
                 else "missed"
                 if current - due > timedelta(hours=1)
                 else "skipped_overlap"
-                if previous_job_status not in {None, "completed", "failed", "canceled"}
+                if previous_job_status not in {None, "completed", "failed", "canceled", "missing"}
                 else "submitting"
             )
             if state == "missed":

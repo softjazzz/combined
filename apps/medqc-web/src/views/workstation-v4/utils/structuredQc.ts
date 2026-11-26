@@ -384,13 +384,20 @@ function buildOverview(
       (counter.ai_suggested_non_compliant || 0) +
       (counter.uncertain || 0),
   )
+  const hasExplicitComplianceRate = Object.prototype.hasOwnProperty.call(
+    summary,
+    'compliance_rate',
+  )
   const complianceRateRaw = summary.compliance_rate
-  const complianceRate =
-    complianceRateRaw !== undefined && complianceRateRaw !== null
-      ? toNumber(complianceRateRaw)
-      : totalRules > 0
-        ? Math.round(((compliantCount + notApplicableCount) / totalRules) * 10000) / 100
-        : 0
+  const evaluableCount = Math.max(0, totalRules - notApplicableCount)
+  const complianceRate: number | null =
+    hasExplicitComplianceRate && complianceRateRaw === null
+      ? null
+      : complianceRateRaw !== undefined && complianceRateRaw !== null
+        ? toNumber(complianceRateRaw)
+        : evaluableCount > 0
+          ? Math.round((compliantCount / evaluableCount) * 10000) / 100
+          : null
 
   return {
     totalRules,

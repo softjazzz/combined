@@ -57,6 +57,15 @@
       description="仅系统配置管理员可修改并保存模型配置。"
     />
 
+    <a-alert
+      v-if="providerUnavailable"
+      data-testid="provider-unavailable-alert"
+      type="warning"
+      show-icon
+      message="当前默认推理服务不可用"
+      :description="providerUnavailableDescription"
+    />
+
     <LLMEndpointSettings @saved="reloadAll" />
 
     <ol
@@ -244,6 +253,7 @@
             :local-providers="localProviders"
             :default-provider="draft.provider_code"
             :disabled="isReadonly || loading || saving"
+            :catalog-refresh="roleCatalogRefresh"
           />
           <a-alert
             v-if="rolesIncomplete"
@@ -285,7 +295,7 @@
                 </div>
                 <div class="slider-wrap">
                   <div class="slider-value">
-                    {{ draft.temperature.toFixed(1) }}
+                    {{ Number(draft.temperature ?? 0.2).toFixed(1) }}
                   </div>
                   <a-slider
                     v-model:value="draft.temperature"
@@ -309,7 +319,7 @@
                 </div>
                 <div class="slider-wrap">
                   <div class="slider-value">
-                    {{ draft.top_p.toFixed(1) }}
+                    {{ Number(draft.top_p ?? 0.9).toFixed(1) }}
                   </div>
                   <a-slider
                     v-model:value="draft.top_p"
@@ -338,6 +348,7 @@
                   :min="1000"
                   :max="32768"
                   :step="1000"
+                  @blur="normalizeNumericDraftField('max_tokens')"
                 />
               </div>
             </div>
@@ -362,6 +373,7 @@
                   :min="1"
                   :max="32"
                   :step="1"
+                  @blur="normalizeNumericDraftField('max_parallel_records')"
                 />
               </div>
 
@@ -381,6 +393,7 @@
                   :min="1"
                   :max="4"
                   :step="1"
+                  @blur="normalizeNumericDraftField('family_max_concurrency')"
                 />
               </div>
 
@@ -400,6 +413,7 @@
                   :min="1"
                   :max="64"
                   :step="1"
+                  @blur="normalizeNumericDraftField('http_max_concurrency')"
                 />
               </div>
             </div>
@@ -427,14 +441,16 @@
       <div class="llm-actions__buttons">
         <a-button
           class="mq-btn"
-          :disabled="loading"
+          :disabled="loading || saving || resetting"
           @click="reloadAll"
         >
           刷新
         </a-button>
         <a-button
           class="mq-btn"
-          :disabled="isReadonly || loading"
+          data-testid="llm-reset-default"
+          :loading="resetting"
+          :disabled="isReadonly || loading || saving || resetting || testing"
           @click="resetDefault"
         >
           恢复默认
@@ -442,7 +458,7 @@
         <a-button
           class="mq-btn"
           :loading="testing"
-          :disabled="!canTest"
+          :disabled="!canTest || resetting"
           @click="testConnection"
         >
           测试连接
@@ -451,7 +467,7 @@
           class="mq-btn mq-btn--primary"
           type="primary"
           :loading="saving"
-          :disabled="isReadonly || loading || !canTest || !dirty"
+          :disabled="isReadonly || loading || resetting || !canTest || !dirty"
           @click="saveDraft"
         >
           保存配置
@@ -462,9 +478,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, getCurrentInstance, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import * as vueRouter from 'vue-router'
 import { message } from 'ant-design-vue'
 
+import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
 import { useAuthStore } from '@/stores/auth'
 import { canManageSystemConfig } from '@/utils/systemConfigAccess'
 import {
@@ -485,18 +503,40 @@ const emit = defineEmits<{
   'config-updated': [configData: unknown]
   'close-drawer': []
   'close-modal': []
+  'dirty-change': [dirty: boolean]
 }>()
 
 const authStore = useAuthStore()
+const workstationConfirmation = useWorkstationConfirmation()
 const loading = ref(false)
 const loadingModels = ref(false)
 const saving = ref(false)
+const resetting = ref(false)
+const confirmPending = ref(false)
 const testing = ref(false)
 const addingModel = ref(false)
 const deletingModelCode = ref('')
 const newModelCode = ref('')
 const source = ref('unknown')
+let disposed = false
 let modelRequestVersion = 0
+let reloadRequestVersion = 0
+let reloadController: AbortController | null = null
+let modelController: AbortController | null = null
+let mutationController: AbortController | null = null
+let roleCatalogRefreshSeq = 0
+const roleCatalogRefresh = ref<{ provider: string; version: number } | null>(null)
+
+function notifyRoleCatalogChanged(providerCode: string) {
+  if (!providerCode || isLocalProvider(providerCode)) return
+  roleCatalogRefresh.value = { provider: providerCode, version: ++roleCatalogRefreshSeq }
+}
+
+type LLMConfigSummaryWithStatus = LLMConfigSummary & {
+  provider_unavailable?: boolean
+  provider_unavailable_reason?: string | null
+  api_key_configured?: boolean
+}
 
 const providers = ref<Array<Pick<LLMProvider, 'provider_code' | 'provider_name'>>>([])
 const localProviders = ref<LLMLocalProvider[]>([])
@@ -508,9 +548,17 @@ const inferenceModeOptions = [
 ]
 const isLocalProvider = (code: string) => code === 'strata' || code === 'ollama'
 const models = ref<LLMModel[]>([])
-const serverSnapshot = ref<LLMConfigSummary | null>(null)
+const serverSnapshot = ref<LLMConfigSummaryWithStatus | null>(null)
 const backendReadonly = ref(false)
 const testResult = ref<{ success: boolean; message: string; description: string } | null>(null)
+
+const providerUnavailable = computed(() => Boolean(serverSnapshot.value?.provider_unavailable))
+const providerUnavailableDescription = computed(() => {
+  const providerCode = serverSnapshot.value?.provider_code || '默认服务'
+  const reason = String(serverSnapshot.value?.provider_unavailable_reason || '').trim()
+  const reasonNote = reason ? `（原因：${reason}）` : ''
+  return `当前已保存或默认的推理服务「${providerCode}」已被禁用或配置不可用${reasonNote}。您可以在上方「推理服务连接」中重新启用该服务，或在下方切换至其他已启用的推理服务与模型并保存配置。`
+})
 
 const inheritedRoles = (): LLMTaskRoleModels => ({ fact_extraction: null, judgment_analysis: null, specialty_verification: null })
 const cloneRoles = (value: LLMTaskRoleModels = inheritedRoles()): LLMTaskRoleModels => ({
@@ -532,11 +580,66 @@ const draft = reactive({
   model_code: '',
   temperature: 0.2,
   top_p: 0.9,
-  max_tokens: 4000,
-  max_parallel_records: 16,
-  family_max_concurrency: 4,
-  http_max_concurrency: 40,
+  max_tokens: 4000 as number | null,
+  max_parallel_records: 16 as number | null,
+  family_max_concurrency: 4 as number | null,
+  http_max_concurrency: 40 as number | null,
 })
+
+function resolveBoundedInt(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === null || value === undefined || value === '') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, Math.trunc(parsed)))
+}
+
+function resolveBoundedFloat(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === null || value === undefined || value === '') return fallback
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return fallback
+  return Math.min(max, Math.max(min, parsed))
+}
+
+function snapshotNumericDefaults() {
+  const snap = serverSnapshot.value
+  return {
+    temperature: resolveBoundedFloat(snap?.custom_parameters?.temperature, 0.2, 0, 2),
+    top_p: resolveBoundedFloat(snap?.custom_parameters?.top_p, 0.9, 0, 1),
+    max_tokens: resolveBoundedInt(snap?.custom_parameters?.max_tokens, 4000, 1000, 32768),
+    max_parallel_records: resolveBoundedInt(
+      snap?.execution_concurrency?.max_parallel_records,
+      16,
+      1,
+      32,
+    ),
+    family_max_concurrency: resolveBoundedInt(
+      snap?.execution_concurrency?.family_max_concurrency,
+      4,
+      1,
+      4,
+    ),
+    http_max_concurrency: resolveBoundedInt(
+      snap?.execution_concurrency?.http_max_concurrency,
+      40,
+      1,
+      64,
+    ),
+  }
+}
+
+function normalizeNumericDraftField(
+  field: 'max_tokens' | 'max_parallel_records' | 'family_max_concurrency' | 'http_max_concurrency',
+) {
+  const defaults = snapshotNumericDefaults()
+  const bounds: Record<typeof field, [number, number]> = {
+    max_tokens: [1000, 32768],
+    max_parallel_records: [1, 32],
+    family_max_concurrency: [1, 4],
+    http_max_concurrency: [1, 64],
+  }
+  const [min, max] = bounds[field]
+  draft[field] = resolveBoundedInt(draft[field], defaults[field], min, max)
+}
 
 const isAdmin = computed(() => canManageSystemConfig(authStore.userRoles))
 const isReadonly = computed(() => backendReadonly.value || !isAdmin.value)
@@ -562,62 +665,98 @@ const canTest = computed(() => !isReadonly.value && !loading.value && !saving.va
 const dirty = computed(() => {
   const snap = serverSnapshot.value
   if (!snap) return false
+  const defaults = snapshotNumericDefaults()
   return (
     JSON.stringify(taskRoles.value) !== JSON.stringify(snap.custom_parameters?.task_role_models || inheritedRoles()) ||
     draft.provider_code !== snap.provider_code ||
     draft.model_code !== snap.model_code ||
-    Number(draft.temperature) !== Number(snap.custom_parameters?.temperature ?? 0.2) ||
-    Number(draft.top_p) !== Number(snap.custom_parameters?.top_p ?? 0.9) ||
-    Number(draft.max_tokens) !== Number(snap.custom_parameters?.max_tokens ?? 4000) ||
-    Number(draft.max_parallel_records) !==
-      Number(snap.execution_concurrency?.max_parallel_records ?? 16) ||
-    Number(draft.family_max_concurrency) !==
-      Number(snap.execution_concurrency?.family_max_concurrency ?? 4) ||
-    Number(draft.http_max_concurrency) !==
-      Number(snap.execution_concurrency?.http_max_concurrency ?? 40)
+    resolveBoundedFloat(draft.temperature, defaults.temperature, 0, 2) !== defaults.temperature ||
+    resolveBoundedFloat(draft.top_p, defaults.top_p, 0, 1) !== defaults.top_p ||
+    resolveBoundedInt(draft.max_tokens, defaults.max_tokens, 1000, 32768) !== defaults.max_tokens ||
+    resolveBoundedInt(draft.max_parallel_records, defaults.max_parallel_records, 1, 32) !==
+      defaults.max_parallel_records ||
+    resolveBoundedInt(draft.family_max_concurrency, defaults.family_max_concurrency, 1, 4) !==
+      defaults.family_max_concurrency ||
+    resolveBoundedInt(draft.http_max_concurrency, defaults.http_max_concurrency, 1, 64) !==
+      defaults.http_max_concurrency
   )
 })
 
-function patchDraftFromSummary(summary: LLMConfigSummary) {
+function patchDraftFromSummary(summary: LLMConfigSummaryWithStatus) {
   taskRoles.value = cloneRoles(summary.custom_parameters?.task_role_models)
   draft.provider_code = summary.provider_code
   inferenceMode.value = isLocalProvider(summary.provider_code) ? 'local' : 'cloud'
   draft.model_code = summary.model_code
-  draft.temperature = Number(summary.custom_parameters?.temperature ?? 0.2)
-  draft.top_p = Number(summary.custom_parameters?.top_p ?? 0.9)
-  draft.max_tokens = Number(summary.custom_parameters?.max_tokens ?? 4000)
-  draft.max_parallel_records = Number(summary.execution_concurrency?.max_parallel_records ?? 16)
-  draft.family_max_concurrency = Number(summary.execution_concurrency?.family_max_concurrency ?? 4)
-  draft.http_max_concurrency = Number(summary.execution_concurrency?.http_max_concurrency ?? 40)
+  draft.temperature = resolveBoundedFloat(summary.custom_parameters?.temperature, 0.2, 0, 2)
+  draft.top_p = resolveBoundedFloat(summary.custom_parameters?.top_p, 0.9, 0, 1)
+  draft.max_tokens = resolveBoundedInt(summary.custom_parameters?.max_tokens, 4000, 1000, 32768)
+  draft.max_parallel_records = resolveBoundedInt(
+    summary.execution_concurrency?.max_parallel_records,
+    16,
+    1,
+    32,
+  )
+  draft.family_max_concurrency = resolveBoundedInt(
+    summary.execution_concurrency?.family_max_concurrency,
+    4,
+    1,
+    4,
+  )
+  draft.http_max_concurrency = resolveBoundedInt(
+    summary.execution_concurrency?.http_max_concurrency,
+    40,
+    1,
+    64,
+  )
 }
 
 function buildCustomParameters() {
+  const defaults = snapshotNumericDefaults()
   return {
     ...(serverSnapshot.value?.custom_parameters || {}),
     task_role_models: cloneRoles(taskRoles.value),
-    temperature: Number(draft.temperature),
-    top_p: Number(draft.top_p),
-    max_tokens: Number(draft.max_tokens),
+    temperature: resolveBoundedFloat(draft.temperature, defaults.temperature, 0, 2),
+    top_p: resolveBoundedFloat(draft.top_p, defaults.top_p, 0, 1),
+    max_tokens: resolveBoundedInt(draft.max_tokens, defaults.max_tokens, 1000, 32768),
   }
 }
 
 function buildExecutionConcurrency(): LLMExecutionConcurrency {
+  const defaults = snapshotNumericDefaults()
   return {
-    max_parallel_records: Number(draft.max_parallel_records),
-    family_max_concurrency: Number(draft.family_max_concurrency),
-    http_max_concurrency: Number(draft.http_max_concurrency),
+    max_parallel_records: resolveBoundedInt(
+      draft.max_parallel_records,
+      defaults.max_parallel_records,
+      1,
+      32,
+    ),
+    family_max_concurrency: resolveBoundedInt(
+      draft.family_max_concurrency,
+      defaults.family_max_concurrency,
+      1,
+      4,
+    ),
+    http_max_concurrency: resolveBoundedInt(
+      draft.http_max_concurrency,
+      defaults.http_max_concurrency,
+      1,
+      64,
+    ),
   }
 }
 
-async function loadProviders() {
-  providers.value = await llmConfigService.getProviders()
+async function loadProviders(signal?: AbortSignal) {
+  providers.value = await llmConfigService.getProviders(signal ? { signal } : undefined)
+  if (disposed || signal?.aborted) return
   // 本地目录包含未启用的服务，但不改变服务端的运行准入。
   try {
-    await refreshLocalProviders()
-  } catch {
+    await refreshLocalProviders(signal)
+  } catch (error) {
+    if (disposed || signal?.aborted) throw error
     localProviders.value = []
     localOptionsError.value = '本地模型选项读取失败，请刷新重试。云端配置仍可使用。'
   }
+  if (disposed || signal?.aborted) return
   for (const item of localProviders.value) {
     if (!providers.value.some((provider) => provider.provider_code === item.provider_code)) {
       providers.value.push({ provider_code: item.provider_code, provider_name: item.provider_name })
@@ -625,13 +764,28 @@ async function loadProviders() {
   }
 }
 
-async function refreshLocalProviders() {
-  localProviders.value = await llmConfigService.getLocalModelOptions()
+async function refreshLocalProviders(signal?: AbortSignal) {
+  localProviders.value = await llmConfigService.getLocalModelOptions(signal ? { signal } : undefined)
   localOptionsError.value = ''
 }
 
-async function loadModelsByProvider(providerCode: string, preferredModelCode?: string) {
+async function loadModelsByProvider(
+  providerCode: string,
+  preferredModelCode?: string,
+  signal?: AbortSignal,
+) {
   const requestVersion = ++modelRequestVersion
+  modelController?.abort()
+  const controller = new AbortController()
+  modelController = controller
+  const onOuterAbort = () => controller.abort(signal?.reason)
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+    } else {
+      signal.addEventListener('abort', onOuterAbort, { once: true })
+    }
+  }
   const requestedModel = preferredModelCode || draft.model_code
   loadingModels.value = true
   models.value = []
@@ -639,8 +793,15 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
   try {
     const loaded = isLocalProvider(providerCode)
       ? localProviders.value.find((item) => item.provider_code === providerCode)?.models || []
-      : await llmConfigService.getModelsByProvider(providerCode)
-    if (requestVersion !== modelRequestVersion || draft.provider_code !== providerCode) return
+      : await llmConfigService.getModelsByProvider(providerCode, { signal: controller.signal })
+    if (
+      disposed ||
+      requestVersion !== modelRequestVersion ||
+      controller.signal.aborted ||
+      draft.provider_code !== providerCode
+    ) {
+      return
+    }
     models.value = loaded
     if (!models.value.length) {
       draft.model_code = ''
@@ -651,31 +812,52 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
       models.value[0].model_code
     draft.model_code = String(next || '')
   } catch (error) {
-    if (requestVersion === modelRequestVersion && draft.provider_code === providerCode) throw error
+    if (
+      !disposed &&
+      !controller.signal.aborted &&
+      requestVersion === modelRequestVersion &&
+      draft.provider_code === providerCode
+    ) {
+      throw error
+    }
   } finally {
-    if (requestVersion === modelRequestVersion) loadingModels.value = false
+    signal?.removeEventListener('abort', onOuterAbort)
+    if (modelController === controller) {
+      modelController = null
+    }
+    if (!disposed && requestVersion === modelRequestVersion) loadingModels.value = false
   }
 }
 
 async function reloadAll() {
+  const version = ++reloadRequestVersion
+  reloadController?.abort()
+  const controller = new AbortController()
+  reloadController = controller
   loading.value = true
   try {
-    const summary = await llmConfigService.getDefaultSummary()
+    const summary = await llmConfigService.getDefaultSummary({ signal: controller.signal })
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     source.value = summary.source || 'unknown'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
 
-    await loadProviders()
+    await loadProviders(controller.signal)
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     if (!draft.provider_code && providers.value.length) {
       draft.provider_code = providers.value[0].provider_code
     }
-    await loadModelsByProvider(draft.provider_code, draft.model_code)
+    await loadModelsByProvider(draft.provider_code, draft.model_code, controller.signal)
   } catch (error) {
+    if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`加载模型配置失败：${text}`)
   } finally {
-    loading.value = false
+    if (!disposed && version === reloadRequestVersion && reloadController === controller) {
+      loading.value = false
+      reloadController = null
+    }
   }
 }
 
@@ -708,7 +890,11 @@ async function addCustomModel() {
   addingModel.value = true
   try {
     await llmConfigService.addCustomModel(providerCode, modelCode, modelCode)
-    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (isLocalProvider(providerCode)) {
+      await refreshLocalProviders()
+    } else {
+      notifyRoleCatalogChanged(providerCode)
+    }
     if (draft.provider_code === providerCode) {
       await loadModelsByProvider(providerCode, modelCode)
       newModelCode.value = ''
@@ -729,7 +915,23 @@ async function removeCustomModel(model: LLMModel) {
   deletingModelCode.value = modelCode
   try {
     await llmConfigService.deleteCustomModel(providerCode, modelCode)
-    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (isLocalProvider(providerCode)) {
+      await refreshLocalProviders()
+    } else {
+      notifyRoleCatalogChanged(providerCode)
+    }
+    const nextRoles = cloneRoles(taskRoles.value)
+    let roleCleared = false
+    for (const key of Object.keys(nextRoles) as Array<keyof LLMTaskRoleModels>) {
+      const spec = nextRoles[key]
+      if (spec && spec.provider_code === providerCode && spec.model_code === modelCode) {
+        nextRoles[key] = { ...spec, model_code: '' }
+        roleCleared = true
+      }
+    }
+    if (roleCleared) {
+      taskRoles.value = nextRoles
+    }
     if (draft.provider_code === providerCode) {
       const preferred = draft.model_code === modelCode ? '' : draft.model_code
       await loadModelsByProvider(providerCode, preferred)
@@ -772,7 +974,12 @@ async function testConnection() {
 }
 
 async function saveDraft() {
-  if (isReadonly.value || loadingModels.value || !canTest.value || !dirty.value) return
+  if (isReadonly.value || loadingModels.value || saving.value || resetting.value || !canTest.value || !dirty.value) return
+  reloadController?.abort()
+  reloadController = null
+  mutationController?.abort()
+  const saveController = new AbortController()
+  mutationController = saveController
   saving.value = true
   try {
     const payload: LLMConfigInput = {
@@ -783,17 +990,21 @@ async function saveDraft() {
       execution_concurrency: buildExecutionConcurrency(),
       is_active: true,
     }
-    const saved = await llmConfigService.saveConfig(payload)
+    const saved = await llmConfigService.saveConfig(payload, { signal: saveController.signal })
+    if (disposed || saveController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: saveController.signal,
     })
+    if (disposed || saveController.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
 
     await reloadAll()
+    if (disposed || saveController.signal.aborted) return
     const eventPayload = {
       selectedProviderCode: draft.provider_code,
       selectedModelCode: draft.model_code,
@@ -804,43 +1015,176 @@ async function saveDraft() {
     emit('config-updated', saved || eventPayload)
     message.success('LLM 配置保存成功')
   } catch (error) {
+    if (disposed || saveController.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`保存配置失败：${text}`)
   } finally {
-    saving.value = false
+    if (mutationController === saveController) mutationController = null
+    if (!disposed) saving.value = false
   }
 }
 
 async function resetDefault() {
-  saving.value = true
+  if (
+    isReadonly.value ||
+    loading.value ||
+    saving.value ||
+    resetting.value ||
+    testing.value ||
+    confirmPending.value
+  ) {
+    return
+  }
+
+  confirmPending.value = true
+  let confirmed = false
   try {
-    const summary = await llmConfigService.resetDefaultSummary()
+    confirmed = await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '确认恢复默认模型配置？',
+        content: '将把默认推理服务、模型、任务角色分工与执行并发参数恢复为系统默认，未保存草稿将被覆盖。',
+        okText: '确认恢复',
+        cancelText: '取消',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+  if (!confirmed || disposed || isReadonly.value || saving.value || resetting.value) return
+
+  reloadController?.abort()
+  reloadController = null
+  mutationController?.abort()
+  const resetController = new AbortController()
+  mutationController = resetController
+  resetting.value = true
+  try {
+    const summary = (await llmConfigService.resetDefaultSummary({
+      signal: resetController.signal,
+    })) as LLMConfigSummaryWithStatus
+    if (disposed || resetController.signal.aborted) return
     source.value = summary.source || 'database+env'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
-    await loadModelsByProvider(draft.provider_code, draft.model_code)
+    if (summary.provider_unavailable) {
+      await loadProviders(resetController.signal)
+      if (disposed || resetController.signal.aborted) return
+      await loadModelsByProvider(draft.provider_code, draft.model_code, resetController.signal)
+      if (disposed || resetController.signal.aborted) return
+      const warnText = '默认推理服务当前不可用，请先重新启用或切换到其他已启用的推理服务'
+      if (typeof message.warning === 'function') {
+        message.warning(warnText)
+      } else {
+        message.error(warnText)
+      }
+      return
+    }
+    await loadModelsByProvider(draft.provider_code, draft.model_code, resetController.signal)
+    if (disposed || resetController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: resetController.signal,
     })
+    if (disposed || resetController.signal.aborted) return
     if (!reloadResponse.ok) {
       throw new Error(`后端配置重载失败: ${reloadResponse.status}`)
     }
     message.success('已恢复默认配置')
   } catch (error) {
+    if (disposed || resetController.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
     message.error(`恢复默认失败：${text}`)
   } finally {
-    saving.value = false
+    if (mutationController === resetController) mutationController = null
+    if (!disposed) resetting.value = false
   }
 }
 
+async function confirmDiscardChanges(): Promise<boolean> {
+  if (!dirty.value) return true
+  if (confirmPending.value) return false
+  confirmPending.value = true
+  try {
+    return await new Promise<boolean>((resolve) => {
+      workstationConfirmation.confirm({
+        title: '有未保存的模型配置草稿',
+        content: '当前模型配置草稿尚未保存，离开后修改将丢失。确定要离开吗？',
+        okText: '放弃修改并离开',
+        cancelText: '继续编辑',
+        okType: 'danger',
+        onOk: () => resolve(true),
+        onCancel: () => resolve(false),
+      })
+    })
+  } finally {
+    confirmPending.value = false
+  }
+}
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!dirty.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+watch(
+  dirty,
+  (value) => {
+    emit('dirty-change', value)
+  },
+  { immediate: true },
+)
+
+try {
+  const hasRouterInstance = Boolean(
+    getCurrentInstance()?.appContext?.config?.globalProperties?.$router,
+  )
+  const beforeLeaveFn = vueRouter.onBeforeRouteLeave as
+    | ((guard: () => Promise<boolean> | boolean) => void)
+    | undefined
+  const isMockedGuard = Boolean(beforeLeaveFn && 'mock' in beforeLeaveFn)
+  if ((hasRouterInstance || isMockedGuard) && typeof beforeLeaveFn === 'function') {
+    beforeLeaveFn(async () => {
+      if (!dirty.value) return true
+      return await confirmDiscardChanges()
+    })
+  }
+} catch {
+  // 无路由实例的单测环境下忽略导航守卫注册
+}
+
+defineExpose({
+  dirty,
+  hasUnsavedChanges: dirty,
+  confirmDiscardChanges,
+})
+
 onMounted(() => {
+  if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', handleBeforeUnload)
+  }
   void reloadAll()
 })
-onBeforeUnmount(() => { ++modelRequestVersion })
+onBeforeUnmount(() => {
+  disposed = true
+  ++modelRequestVersion
+  ++reloadRequestVersion
+  reloadController?.abort()
+  reloadController = null
+  modelController?.abort()
+  modelController = null
+  mutationController?.abort()
+  mutationController = null
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('beforeunload', handleBeforeUnload)
+  }
+})
 </script>
 
 <style scoped>

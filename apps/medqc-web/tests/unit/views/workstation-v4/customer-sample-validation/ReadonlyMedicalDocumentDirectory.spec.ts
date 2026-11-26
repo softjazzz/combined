@@ -250,7 +250,101 @@ describe('ReadonlyMedicalDocumentDirectory', () => {
       wrapper
         .get('[data-testid="record-document-group-toggle-admission"]')
         .attributes('aria-expanded'),
+    ).toBe('true')
+  })
+
+  it('切换病历时清空搜索词，点击医嘱筛选自动展开医嘱组，切换选中文书保留已展开分组', async () => {
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents, selectedKey: 'admission-1', loading: false },
+    })
+
+    // 点击医嘱筛选标签立即展开医嘱分组
+    await wrapper.get('[data-testid="record-document-filter-order"]').trigger('click')
+    expect(
+      wrapper.get('[data-testid="record-document-group-toggle-order"]').attributes('aria-expanded'),
+    ).toBe('true')
+    expect(wrapper.find('[data-testid="record-document-order-group"]').exists()).toBe(true)
+
+    // 切回全部后，切换 selectedKey 会叠加展开目标分组而不是收起用户已展开的分组
+    await wrapper.get('[data-testid="record-document-filter-all"]').trigger('click')
+    await wrapper.setProps({ selectedKey: 'order-exam-1' })
+    expect(
+      wrapper.get('[data-testid="record-document-group-toggle-admission"]').attributes('aria-expanded'),
+    ).toBe('true')
+    expect(
+      wrapper.get('[data-testid="record-document-group-toggle-order"]').attributes('aria-expanded'),
+    ).toBe('true')
+
+    // 输入搜索词后，loading 变为 true 时自动清空搜索词
+    await wrapper.get('[data-testid="record-document-search"]').setValue('入院')
+    expect((wrapper.get('[data-testid="record-document-search"]').element as HTMLInputElement).value).toBe('入院')
+    await wrapper.setProps({ loading: true })
+    await wrapper.setProps({ loading: false })
+    expect((wrapper.get('[data-testid="record-document-search"]').element as HTMLInputElement).value).toBe('')
+
+    // 文书集合整体切换为另一份病历时也清空搜索词
+    await wrapper.get('[data-testid="record-document-search"]').setValue('首次')
+    await wrapper.setProps({
+      documents: [
+        {
+          key: 'record-2-admission',
+          document_type: 'admission_record',
+          title: '入院记录',
+          content: '第二份病历正文',
+        },
+      ],
+      selectedKey: 'record-2-admission',
+    })
+    expect((wrapper.get('[data-testid="record-document-search"]').element as HTMLInputElement).value).toBe('')
+    wrapper.unmount()
+  })
+
+  it('PDF版本连续页码合并为区间且切换父文书时重置展开态', async () => {
+    const docA: EditableMedicalRecordDocument = {
+      key: 'doc-a',
+      document_type: 'consultation_record',
+      title: '会诊记录',
+      content: '正文A',
+    }
+    const pdfA: EditableMedicalRecordDocument = {
+      key: 'pdf-a',
+      document_type: 'pdf_candidate',
+      title: 'PDF版本A',
+      content: 'PDF正文A',
+      pdf_review_parent_key: 'doc-a',
+      pdf_review_relation: 'version_difference',
+      pdf_source_pages: [1, 2, 3, 4],
+    }
+    const pdfB: EditableMedicalRecordDocument = {
+      key: 'pdf-b',
+      document_type: 'pdf_candidate',
+      title: 'PDF版本B',
+      content: 'PDF正文B',
+      pdf_review_parent_key: 'doc-a',
+      pdf_review_relation: 'same_content',
+      pdf_source_pages: [1, 2, 3, 5, 6],
+    }
+    const wrapper = mount(ReadonlyMedicalDocumentDirectory, {
+      props: { documents: [docA, pdfA, pdfB], selectedKey: 'doc-a' },
+    })
+
+    await wrapper.get('[data-testid="pdf-versions-toggle-doc-a"]').trigger('click')
+    expect(wrapper.get('[data-testid="pdf-version-pdf-a"]').text()).toContain('第1–4页')
+    expect(wrapper.get('[data-testid="pdf-version-pdf-a"]').text()).not.toContain('1–2–3–4')
+    expect(wrapper.get('[data-testid="pdf-version-pdf-b"]').text()).toContain('第1–3、5–6页')
+
+    // 切换父文书 key 后应重置 PDF 版本折叠状态
+    await wrapper.setProps({
+      documents: [
+        { ...docA, key: 'doc-b' },
+        { ...pdfA, key: 'pdf-c', pdf_review_parent_key: 'doc-b' },
+      ],
+      selectedKey: 'doc-b',
+    })
+    expect(
+      wrapper.get('[data-testid="pdf-versions-toggle-doc-b"]').attributes('aria-expanded'),
     ).toBe('false')
+    wrapper.unmount()
   })
 
   it('摘要文书标记有正文时允许点击并按需读取', async () => {

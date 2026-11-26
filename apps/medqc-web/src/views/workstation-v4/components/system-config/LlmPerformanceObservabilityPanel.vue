@@ -98,7 +98,7 @@
     </section>
 
     <a-spin
-      v-else
+      v-if="overview || !errorMessage"
       :spinning="loading"
     >
       <section
@@ -255,7 +255,7 @@
             >
               <div
                 v-for="item in overview.safe_errors"
-                :key="item.safe_error_kind"
+                :key="safeErrorKey(item)"
                 class="llm-observability__error-row"
               >
                 <div>
@@ -293,71 +293,81 @@
             <span>{{ formatInteger(overview.records.total) }} 份</span>
           </div>
 
-          <div class="llm-observability__table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>病历标识</th>
-                  <th>逻辑调用</th>
-                  <th>HTTP 尝试</th>
-                  <th>
-                    {{
-                      aggregateTokenLabel(
-                        overview.kpis.unknown_usage_attempts,
-                        overview.kpis.total_tokens,
-                      )
-                    }}
-                  </th>
-                  <th>P95 响应</th>
-                  <th>估算费用</th>
-                  <th>最近调用</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="record in overview.records.items"
-                  :key="record.record_key_hash"
-                >
-                  <td>
-                    <strong>{{ shortRecordRef(record.record_key_hash) }}</strong>
-                  </td>
-                  <td>{{ formatInteger(record.logical_calls) }}</td>
-                  <td>{{ formatInteger(record.http_attempts) }}</td>
-                  <td>{{ formatNullableInteger(record.total_tokens) }}</td>
-                  <td>{{ formatNullableDuration(record.p95_latency_ms) }}</td>
-                  <td>
-                    {{
-                      recordCostLabel(
-                        record.input_tokens,
-                        record.cached_input_tokens,
-                        record.output_tokens,
-                        record.unknown_usage_attempts,
-                        record.unknown_cache_usage_attempts,
-                      )
-                    }}
-                  </td>
-                  <td>{{ formatDateTime(record.last_called_at) }}</td>
-                  <td>
-                    <span :class="['llm-observability__status', statusTone(record.status)]">
-                      {{ recordStatusLabel(record.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      class="llm-observability__link"
-                      data-testid="view-record-calls"
-                      @click="openRecordCalls(record.record_key_hash)"
-                    >
-                      查看明细
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <p
+            v-if="recordsError"
+            class="llm-observability__inline-empty"
+            role="alert"
+          >
+            {{ recordsError }}
+          </p>
+
+          <a-spin :spinning="recordsLoading">
+            <div class="llm-observability__table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>病历标识</th>
+                    <th>逻辑调用</th>
+                    <th>HTTP 尝试</th>
+                    <th>
+                      {{
+                        aggregateTokenLabel(
+                          overview.kpis.unknown_usage_attempts,
+                          overview.kpis.total_tokens,
+                        )
+                      }}
+                    </th>
+                    <th>P95 响应</th>
+                    <th>估算费用</th>
+                    <th>最近调用</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="record in overview.records.items"
+                    :key="record.record_key_hash"
+                  >
+                    <td>
+                      <strong>{{ shortRecordRef(record.record_key_hash) }}</strong>
+                    </td>
+                    <td>{{ formatInteger(record.logical_calls) }}</td>
+                    <td>{{ formatInteger(record.http_attempts) }}</td>
+                    <td>{{ formatNullableInteger(record.total_tokens) }}</td>
+                    <td>{{ formatNullableDuration(record.p95_latency_ms) }}</td>
+                    <td>
+                      {{
+                        recordCostLabel(
+                          record.input_tokens,
+                          record.cached_input_tokens,
+                          record.output_tokens,
+                          record.unknown_usage_attempts,
+                          record.unknown_cache_usage_attempts,
+                        )
+                      }}
+                    </td>
+                    <td>{{ formatDateTime(record.last_called_at) }}</td>
+                    <td>
+                      <span :class="['llm-observability__status', statusTone(record.status)]">
+                        {{ recordStatusLabel(record.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="llm-observability__link"
+                        data-testid="view-record-calls"
+                        @click="openRecordCalls(record.record_key_hash)"
+                      >
+                        查看明细
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </a-spin>
 
           <a-pagination
             v-if="overview.records.total > overview.records.page_size"
@@ -384,7 +394,7 @@
 
     <a-drawer
       :open="drawerOpen"
-      :width="860"
+      width="min(860px, 100vw)"
       placement="right"
       :title="drawerTitle"
       @close="closeRecordCalls"
@@ -504,18 +514,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 import { Activity, CircleAlert, CircleCheck, Clock3, RefreshCw, ShieldCheck } from 'lucide-vue-next'
-import { getLlmObservabilityOverview, getLlmRecordCallAttempts } from '@/services/llmObservability'
+import {
+  getLlmObservabilityOverview,
+  getLlmObservabilityRecords,
+  getLlmRecordCallAttempts,
+} from '@/services/llmObservability'
 import type {
   LlmObservabilityModelSummary,
   LlmObservabilityOverview,
   LlmObservabilityQuery,
+  LlmObservabilitySafeError,
   LlmRecordCallAttempts,
 } from '@/types/llmObservability'
 
@@ -536,14 +551,20 @@ const overview = ref<LlmObservabilityOverview | null>(null)
 const activeOverviewQuery = ref<LlmObservabilityQuery | null>(null)
 const knownModelOptions = ref<Array<{ provider_code: string; model: string }>>([])
 const loading = ref(false)
+const recordsLoading = ref(false)
 const errorMessage = ref('')
+const recordsError = ref('')
 const drawerOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref(false)
 const selectedRecordHash = ref('')
 const recordCalls = ref<LlmRecordCallAttempts | null>(null)
 let overviewRequestSequence = 0
+let recordsRequestSequence = 0
 let detailRequestSequence = 0
+let overviewController: AbortController | null = null
+let recordsController: AbortController | null = null
+let detailController: AbortController | null = null
 
 const rangeOptions = [
   { label: '近 24 小时', value: '24h' },
@@ -700,7 +721,7 @@ const chartBase = {
   legend: {
     top: 0,
     right: 0,
-    textStyle: { color: 'rgba(29,29,31,.6)', fontSize: 11 },
+    textStyle: { color: '#515154', fontSize: 11 },
   },
   grid: { left: 18, right: 18, top: 38, bottom: 8, containLabel: true },
 }
@@ -713,18 +734,18 @@ const callTokenChartOption = computed(() => ({
     boundaryGap: false,
     axisLine: { lineStyle: { color: 'rgba(0,0,0,.08)' } },
     axisTick: { show: false },
-    axisLabel: { color: 'rgba(29,29,31,.45)', fontSize: 11 },
+    axisLabel: { color: '#59595e', fontSize: 11 },
   },
   yAxis: [
     {
       type: 'value',
       splitLine: { lineStyle: { color: 'rgba(0,0,0,.055)' } },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
     {
       type: 'value',
       splitLine: { show: false },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
   ],
   series: [
@@ -769,19 +790,19 @@ const latencyConcurrencyChartOption = computed(() => ({
     boundaryGap: false,
     axisLine: { lineStyle: { color: 'rgba(0,0,0,.08)' } },
     axisTick: { show: false },
-    axisLabel: { color: 'rgba(29,29,31,.45)', fontSize: 11 },
+    axisLabel: { color: '#59595e', fontSize: 11 },
   },
   yAxis: [
     {
       type: 'value',
-      axisLabel: { color: 'rgba(29,29,31,.45)', formatter: '{value} ms' },
+      axisLabel: { color: '#59595e', formatter: '{value} ms' },
       splitLine: { lineStyle: { color: 'rgba(0,0,0,.055)' } },
     },
     {
       type: 'value',
       minInterval: 1,
       splitLine: { show: false },
-      axisLabel: { color: 'rgba(29,29,31,.45)' },
+      axisLabel: { color: '#59595e' },
     },
   ],
   series: [
@@ -830,22 +851,75 @@ function buildOverviewQuery(page = 1): LlmObservabilityQuery {
 
 async function loadOverview(page = 1) {
   const requestSequence = ++overviewRequestSequence
+  overviewController?.abort()
+  const controller = new AbortController()
+  overviewController = controller
+  recordsRequestSequence += 1
+  recordsController?.abort()
+  recordsController = null
+  recordsLoading.value = false
+  recordsError.value = ''
   const query = buildOverviewQuery(page)
   loading.value = true
   errorMessage.value = ''
   try {
-    const nextOverview = await getLlmObservabilityOverview(query)
-    if (requestSequence !== overviewRequestSequence) return
+    const nextOverview = await getLlmObservabilityOverview(query, { signal: controller.signal })
+    if (requestSequence !== overviewRequestSequence || controller.signal.aborted) return
     rememberModelOptions(nextOverview.models)
     activeOverviewQuery.value = query
     overview.value = nextOverview
   } catch {
-    if (requestSequence !== overviewRequestSequence) return
-    overview.value = null
+    if (requestSequence !== overviewRequestSequence || controller.signal.aborted) return
     errorMessage.value = '模型性能数据暂不可用'
   } finally {
-    if (requestSequence === overviewRequestSequence) {
+    if (requestSequence === overviewRequestSequence && overviewController === controller) {
       loading.value = false
+      overviewController = null
+    }
+  }
+}
+
+async function loadRecordsPage(page: number) {
+  const sourceQuery = activeOverviewQuery.value
+  if (!sourceQuery || !overview.value) {
+    await loadOverview(page)
+    return
+  }
+  const requestSequence = ++recordsRequestSequence
+  recordsController?.abort()
+  const controller = new AbortController()
+  recordsController = controller
+  const frozenQuery: LlmObservabilityQuery = {
+    start_at: sourceQuery.start_at,
+    end_at: sourceQuery.end_at,
+    provider_code: sourceQuery.provider_code,
+    model: sourceQuery.model,
+    business_scene: sourceQuery.business_scene,
+    page,
+    page_size: sourceQuery.page_size ?? 20,
+  }
+  recordsLoading.value = true
+  recordsError.value = ''
+  try {
+    const nextPage = await getLlmObservabilityRecords(frozenQuery, { signal: controller.signal })
+    if (requestSequence !== recordsRequestSequence || controller.signal.aborted || !overview.value) return
+    activeOverviewQuery.value = frozenQuery
+    overview.value = {
+      ...overview.value,
+      records: {
+        items: nextPage.items,
+        total: nextPage.total,
+        page: nextPage.page,
+        page_size: nextPage.page_size,
+      },
+    }
+  } catch {
+    if (requestSequence !== recordsRequestSequence || controller.signal.aborted) return
+    recordsError.value = '单病历列表翻页失败，当前展示仍为上一页数据，请稍后重试。'
+  } finally {
+    if (requestSequence === recordsRequestSequence && recordsController === controller) {
+      recordsLoading.value = false
+      recordsController = null
     }
   }
 }
@@ -874,7 +948,7 @@ function handleProviderChange() {
 }
 
 function handleRecordPageChange(page: number) {
-  void loadOverview(page)
+  void loadRecordsPage(page)
 }
 
 async function openRecordCalls(recordKeyHash: string) {
@@ -885,35 +959,51 @@ async function openRecordCalls(recordKeyHash: string) {
 
 async function loadRecordCalls(page: number) {
   const requestSequence = ++detailRequestSequence
+  detailController?.abort()
+  const controller = new AbortController()
+  detailController = controller
   const recordHash = selectedRecordHash.value
   detailLoading.value = true
   detailError.value = false
   recordCalls.value = null
   try {
     const sourceQuery = activeOverviewQuery.value || buildOverviewQuery(1)
-    const nextRecordCalls = await getLlmRecordCallAttempts(recordHash, {
-      start_at: sourceQuery.start_at,
-      end_at: sourceQuery.end_at,
-      provider_code: sourceQuery.provider_code,
-      model: sourceQuery.model,
-      business_scene: sourceQuery.business_scene,
-      page,
-      page_size: 20,
-    })
-    if (requestSequence !== detailRequestSequence || recordHash !== selectedRecordHash.value) return
+    const nextRecordCalls = await getLlmRecordCallAttempts(
+      recordHash,
+      {
+        start_at: sourceQuery.start_at,
+        end_at: sourceQuery.end_at,
+        provider_code: sourceQuery.provider_code,
+        model: sourceQuery.model,
+        business_scene: sourceQuery.business_scene,
+        page,
+        page_size: 20,
+      },
+      { signal: controller.signal },
+    )
+    if (
+      requestSequence !== detailRequestSequence ||
+      controller.signal.aborted ||
+      recordHash !== selectedRecordHash.value
+    ) {
+      return
+    }
     recordCalls.value = nextRecordCalls
   } catch {
-    if (requestSequence !== detailRequestSequence) return
+    if (requestSequence !== detailRequestSequence || controller.signal.aborted) return
     detailError.value = true
   } finally {
-    if (requestSequence === detailRequestSequence) {
+    if (requestSequence === detailRequestSequence && detailController === controller) {
       detailLoading.value = false
+      detailController = null
     }
   }
 }
 
 function closeRecordCalls() {
   detailRequestSequence += 1
+  detailController?.abort()
+  detailController = null
   drawerOpen.value = false
   detailLoading.value = false
 }
@@ -1050,6 +1140,10 @@ function modelKey(item: LlmObservabilityModelSummary): string {
   return `${item.provider_code}:${item.model}:${item.model_role}`
 }
 
+function safeErrorKey(item: LlmObservabilitySafeError & { status?: string }): string {
+  return `${item.status ?? ''}:${item.safe_error_kind}`
+}
+
 function modelRoleLabel(value: string): string {
   const labels: Record<string, string> = {
     first_pass: '初审模型',
@@ -1118,6 +1212,7 @@ function attemptStatusLabel(value: string): string {
     transport_error: '连接失败',
     upstream_429: '上游限流',
     upstream_5xx: '上游异常',
+    upstream_4xx: '上游请求被拒绝',
     configuration_error: '配置异常',
     cancelled: '已取消',
     abandoned: '未正常结束',
@@ -1128,6 +1223,18 @@ function attemptStatusLabel(value: string): string {
 
 onMounted(() => {
   void loadOverview()
+})
+
+onBeforeUnmount(() => {
+  overviewRequestSequence += 1
+  recordsRequestSequence += 1
+  detailRequestSequence += 1
+  overviewController?.abort()
+  overviewController = null
+  recordsController?.abort()
+  recordsController = null
+  detailController?.abort()
+  detailController = null
 })
 </script>
 
@@ -1176,7 +1283,7 @@ onMounted(() => {
 .llm-observability__state p,
 .llm-observability__drawer-state p {
   margin: 4px 0 0;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 13px;
   line-height: 20px;
 }
@@ -1206,7 +1313,7 @@ onMounted(() => {
   grid-template-columns: auto minmax(128px, 164px);
   align-items: center;
   gap: 8px;
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1223,7 +1330,7 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   margin-left: auto;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1261,7 +1368,7 @@ onMounted(() => {
 .llm-observability__kpi span,
 .llm-observability__kpi em {
   display: block;
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-style: normal;
 }
@@ -1277,14 +1384,18 @@ onMounted(() => {
 
 .llm-observability__billing {
   display: grid;
-  grid-template-columns: minmax(210px, 1.1fr) minmax(260px, 1fr) minmax(280px, 1.25fr);
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   align-items: center;
-  gap: 18px;
+  gap: 16px 18px;
   padding: 15px 18px;
   margin-bottom: 8px;
   border: 1px solid rgba(10, 108, 255, 0.14);
   border-radius: 14px;
   background: linear-gradient(90deg, rgba(10, 108, 255, 0.075), rgba(255, 255, 255, 0.92));
+}
+
+.llm-observability__billing > * {
+  min-width: 0;
 }
 
 .llm-observability__billing-total span,
@@ -1293,7 +1404,7 @@ onMounted(() => {
 .llm-observability__billing-rates span,
 .llm-observability__billing-rates em {
   display: block;
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-style: normal;
 }
@@ -1313,7 +1424,7 @@ onMounted(() => {
 }
 
 .llm-observability__billing-breakdown strong {
-  color: rgba(29, 29, 31, 0.82);
+  color: var(--mq-text-primary);
 }
 
 .llm-observability__billing-rates {
@@ -1322,7 +1433,7 @@ onMounted(() => {
 }
 
 .llm-observability__billing-rates em {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
 }
 
 .llm-observability__health-strip {
@@ -1331,14 +1442,14 @@ onMounted(() => {
   gap: 8px 20px;
   padding: 8px 14px;
   margin-bottom: 14px;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
 .llm-observability__chart-grid,
 .llm-observability__distribution-grid {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(320px, 2fr);
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -1364,7 +1475,7 @@ onMounted(() => {
 }
 
 .llm-observability__section-head > span {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1409,7 +1520,7 @@ onMounted(() => {
 }
 
 .llm-observability__model-row span {
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
 }
 
@@ -1452,7 +1563,7 @@ onMounted(() => {
   gap: 8px;
   min-height: 110px;
   margin: 0;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 13px;
 }
 
@@ -1483,13 +1594,13 @@ onMounted(() => {
 }
 
 .llm-observability th {
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   font-weight: 650;
 }
 
 .llm-observability td {
-  color: rgba(29, 29, 31, 0.72);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 
@@ -1500,7 +1611,7 @@ onMounted(() => {
   padding: 0 8px;
   border-radius: 999px;
   background: rgba(29, 29, 31, 0.06);
-  color: rgba(29, 29, 31, 0.62);
+  color: var(--mq-text-secondary);
   font-size: 11px;
   font-weight: 650;
 }
@@ -1526,13 +1637,19 @@ onMounted(() => {
 }
 
 .llm-observability__link {
-  padding: 0;
+  padding: 2px 4px;
   border: 0;
+  border-radius: 4px;
   background: none;
   color: #0a6cff;
   font: inherit;
   font-weight: 650;
   cursor: pointer;
+}
+
+.llm-observability__link:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .llm-observability__state {
@@ -1583,7 +1700,7 @@ onMounted(() => {
   margin-bottom: 12px;
   border-radius: 10px;
   background: rgba(10, 108, 255, 0.06);
-  color: rgba(29, 29, 31, 0.64);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
@@ -1611,7 +1728,7 @@ onMounted(() => {
 
 .llm-observability__attempt-head > div > span {
   margin-top: 3px;
-  color: rgba(29, 29, 31, 0.48);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -1627,14 +1744,14 @@ onMounted(() => {
 }
 
 .llm-observability__attempt dt {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
 }
 
 .llm-observability__attempt dd {
   overflow: hidden;
   margin: 3px 0 0;
-  color: rgba(29, 29, 31, 0.8);
+  color: var(--mq-text-primary);
   font-size: 13px;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -1643,10 +1760,10 @@ onMounted(() => {
 
 .llm-observability__drawer-state {
   padding: 28px 4px;
-  color: rgba(29, 29, 31, 0.65);
+  color: var(--mq-text-secondary);
 }
 
-@media (max-width: 1280px) {
+@media (max-width: 1440px) {
   .llm-observability__kpis {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -1659,6 +1776,15 @@ onMounted(() => {
   .llm-observability__kpi:nth-child(5),
   .llm-observability__kpi:nth-child(6) {
     border-top: 1px solid rgba(0, 0, 0, 0.07);
+  }
+}
+
+@media (max-width: 1200px) {
+  .llm-observability__billing-rates {
+    padding-top: 10px;
+    padding-left: 0;
+    border-top: 1px solid rgba(10, 108, 255, 0.12);
+    border-left: 0;
   }
 }
 

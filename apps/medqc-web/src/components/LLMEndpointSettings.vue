@@ -22,18 +22,24 @@
     <a-drawer
       v-model:open="visible"
       title="推理服务连接"
-      :width="560"
+      width="min(560px, 100vw)"
       :destroy-on-close="true"
       @after-open-change="onVisibleChange"
     >
       <a-alert
-        v-if="error"
+        v-if="loadError"
         type="error"
         show-icon
-        :message="error"
+        :message="loadError"
+      />
+      <a-alert
+        v-else-if="submitError"
+        type="error"
+        show-icon
+        :message="submitError"
       />
       <a-button
-        v-if="error"
+        v-if="loadError || conflictBlocked"
         :loading="busy"
         @click="reload"
       >
@@ -59,6 +65,13 @@
             />
           </a-form-item>
           <p>当前来源：{{ selected?.source === 'saved' ? '超级管理员配置' : '部署配置' }} · 版本 {{ view.version }}</p>
+          <a-alert
+            v-if="selected && selected.host_allowed === false"
+            data-testid="endpoint-host-warning"
+            type="warning"
+            show-icon
+            message="当前部署地址的主机未在允许范围内，如需编辑保存或发起调用，请将其加入部署白名单 OUTBOUND_ALLOWLIST 或更换为允许的服务地址。"
+          />
           <a-form-item label="沿用部署配置">
             <a-switch
               v-model:checked="draft.use_deployment"
@@ -100,12 +113,16 @@
             </a-checkbox>
           </a-form-item>
           <p class="mq-field__hint">
-            地址从业务服务器访问；127.0.0.1 指业务服务器本机。启用不会启动或安装模型服务。
+            {{
+              provider === 'ollama'
+                ? '地址从业务服务器访问；127.0.0.1 指业务服务器本机。本地 Ollama 支持本机回环及院内私网（10.x / 172.16-31.x / 192.168.x），实际出站调用需确保主机已加入部署白名单 OUTBOUND_ALLOWLIST。启用不会启动或安装模型服务。'
+                : '地址从业务服务器访问；云端服务仅允许公网地址或已加入部署白名单 OUTBOUND_ALLOWLIST 的主机。更换主机或端口时需重新输入 API 密钥或勾选清除密钥。启用不会启动或安装模型服务。'
+            }}
           </p>
           <a-button
             data-testid="endpoint-save"
             type="primary"
-            :disabled="!view.editable || !!error"
+            :disabled="!view.editable || !!loadError || conflictBlocked"
             :loading="busy"
             @click="save"
           >
@@ -121,7 +138,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { llmEndpointService, type EndpointView } from '@/services/llmEndpointService'
@@ -131,7 +148,9 @@ const auth = useAuthStore()
 const canManage = computed(() => auth.userRoles.some(role => ['sync_admin', 'super_admin'].includes(role)))
 const visible = ref(false)
 const busy = ref(false)
-const error = ref('')
+const loadError = ref('')
+const submitError = ref('')
+const conflictBlocked = ref(false)
 const view = ref<EndpointView>()
 const provider = ref('ollama')
 const secret = ref('')
@@ -140,32 +159,107 @@ const providerOptions = computed(() => view.value?.providers.map(row => ({ value
 const selected = computed(() => view.value?.providers.find(row => row.provider_code === provider.value))
 const locked = computed(() => busy.value || !view.value?.editable || draft.use_deployment)
 
+let disposed = false
+let requestSeq = 0
+let activeController: AbortController | null = null
+
+function clearSubmitError() {
+  if (!conflictBlocked.value && submitError.value) {
+    submitError.value = ''
+  }
+}
+
+watch(
+  [() => draft.use_deployment, () => draft.enabled, () => draft.endpoint, () => draft.clear_key, secret],
+  () => {
+    clearSubmitError()
+  },
+)
+
 function select() {
   const row = selected.value
   secret.value = ''
+  if (!conflictBlocked.value) {
+    submitError.value = ''
+  }
   Object.assign(draft, { use_deployment: row?.source !== 'saved', enabled: row?.enabled ?? false, endpoint: row?.endpoint ?? '', clear_key: false })
 }
 async function reload() {
+  const seq = ++requestSeq
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   busy.value = true
-  error.value = ''
+  loadError.value = ''
+  submitError.value = ''
+  conflictBlocked.value = false
   secret.value = ''
-  try { view.value = await llmEndpointService.load(); select() }
-  catch (err) { error.value = err instanceof Error ? err.message : '配置读取失败'; view.value = undefined }
-  finally { busy.value = false }
+  try {
+    const loaded = await llmEndpointService.load()
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    view.value = loaded
+    select()
+  } catch (err) {
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    loadError.value = err instanceof Error ? err.message : '配置读取失败'
+    view.value = undefined
+  } finally {
+    if (!disposed && seq === requestSeq && activeController === controller) {
+      busy.value = false
+      activeController = null
+    }
+  }
 }
 async function open() { visible.value = true; await reload() }
-function onVisibleChange(opened: boolean) { if (!opened) { secret.value = ''; view.value = undefined } }
+function onVisibleChange(opened: boolean) {
+  if (!opened) {
+    requestSeq += 1
+    activeController?.abort()
+    activeController = null
+    busy.value = false
+    secret.value = ''
+    submitError.value = ''
+    conflictBlocked.value = false
+    view.value = undefined
+  }
+}
 async function save() {
-  if (!view.value || !view.value.editable || busy.value || error.value) return
+  if (!view.value || !view.value.editable || busy.value || loadError.value || conflictBlocked.value) return
+  const seq = ++requestSeq
+  activeController?.abort()
+  const controller = new AbortController()
+  activeController = controller
   busy.value = true
+  submitError.value = ''
   try {
-    view.value = await llmEndpointService.save(provider.value, { version: view.value.version, ...draft, ...(secret.value ? { api_key: secret.value } : {}) })
+    const saved = await llmEndpointService.save(provider.value, { version: view.value.version, ...draft, ...(secret.value ? { api_key: secret.value } : {}) })
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    view.value = saved
+    conflictBlocked.value = false
     select()
     message.success('连接配置已保存，未调用模型')
     emit('saved')
-  } catch (err) { error.value = err instanceof Error ? err.message : '保存失败' }
-  finally { secret.value = ''; busy.value = false }
+  } catch (err) {
+    if (disposed || seq !== requestSeq || controller.signal.aborted) return
+    const errMsg = err instanceof Error ? err.message : '保存失败'
+    submitError.value = errMsg
+    conflictBlocked.value =
+      errMsg.includes('配置已变化') || errMsg.includes('受控 Gateway') || errMsg.includes('409')
+  } finally {
+    secret.value = ''
+    if (!disposed && seq === requestSeq && activeController === controller) {
+      busy.value = false
+      activeController = null
+    }
+  }
 }
+
+onBeforeUnmount(() => {
+  disposed = true
+  requestSeq += 1
+  activeController?.abort()
+  activeController = null
+})
 </script>
 
 <style scoped src="./LLMEndpointSettings.css"></style>

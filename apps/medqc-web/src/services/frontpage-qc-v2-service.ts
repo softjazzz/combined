@@ -2,11 +2,19 @@
  * 首页质控 V2 接口（/api/v1/frontpage-qc）。
  * 确定性规则，不调用模型；后端口径见 docs/frontpage-qc-v2/。
  */
-import { ApiService } from '@/services/apiService'
+import { LONG_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
+import { ApiService, type ApiRequestConfig } from '@/services/apiService'
 
 export type FrontpageQcDataScope = 'home' | 'all'
 export type FrontpageQcGrade = 'excellent' | 'qualified' | 'unqualified'
-export type FrontpageQcIssueFilter = '' | 'fail' | 'hint' | 'data_gap' | 'clean' | 'unchecked'
+export type FrontpageQcIssueFilter =
+  | ''
+  | 'fail'
+  | 'hint'
+  | 'required_missing'
+  | 'data_gap'
+  | 'clean'
+  | 'unchecked'
 export type FrontpageQcRunStatus =
   | 'queued'
   | 'running'
@@ -149,6 +157,7 @@ export interface FrontpageQcAnalytics {
     grades: Record<FrontpageQcGrade, number>
     issue_records: number
     hint_records: number
+    required_missing_records?: number
     data_gap_records: number
   }
   indicators: Array<{ key: string; label: string; numerator: number; denominator: number; rate: number | null }>
@@ -185,7 +194,26 @@ export interface FrontpageQcListQuery extends FrontpageQcScopeFilters, Frontpage
   page_size?: number
 }
 
+export interface FrontpageQcRequestOptions {
+  signal?: AbortSignal
+}
+
 const BASE = '/api/v1/frontpage-qc'
+const PAGE_OWNED_ERROR_CONFIG: ApiRequestConfig = { skipErrorToast: true }
+
+export function isFrontpageQcAbortError(error: unknown): boolean {
+  if (!isObject(error)) return false
+  return error.code === 'ERR_CANCELED' || error.name === 'CanceledError' || error.name === 'AbortError'
+}
+
+function withRequestConfig(
+  base?: ApiRequestConfig,
+  options?: FrontpageQcRequestOptions,
+): ApiRequestConfig | undefined {
+  const signal = options?.signal
+  if (!base && !signal) return undefined
+  return signal ? { ...(base ?? {}), signal } : { ...base }
+}
 
 export class FrontpageQcRequestError extends Error {
   constructor(
@@ -210,7 +238,7 @@ function toRequestError(error: unknown, fallback: string): FrontpageQcRequestErr
   const detail = body ? (body.error ?? body.detail ?? body.message) : null
   let message = fallback
   if (typeof detail === 'string' && detail.trim()) message = detail
-  else if (isObject(detail) && typeof detail.message === 'string') message = detail.message
+  else if (isObject(detail) && typeof detail.message === 'string' && detail.message.trim()) message = detail.message
   else if (status === 0 && isObject(error) && typeof error.message === 'string') message = fallback
   return new FrontpageQcRequestError(message, status, detail)
 }
@@ -218,11 +246,14 @@ function toRequestError(error: unknown, fallback: string): FrontpageQcRequestErr
 function unwrap<T>(value: unknown, fallback: string): T {
   if (isObject(value) && 'success' in value) {
     if (value.success === false) {
-      throw new FrontpageQcRequestError(
-        typeof value.error === 'string' ? value.error : fallback,
-        200,
-        value,
-      )
+      const err = value.error
+      const msg =
+        typeof err === 'string' && err.trim()
+          ? err
+          : isObject(err) && typeof err.message === 'string' && err.message.trim()
+            ? err.message
+            : fallback
+      throw new FrontpageQcRequestError(msg, 200, value)
     }
     return value.data as T
   }
@@ -235,9 +266,35 @@ function cleanParams(params: Record<string, unknown>): Record<string, unknown> {
   )
 }
 
-async function get<T>(url: string, params: Record<string, unknown>, fallback: string): Promise<T> {
+async function get<T>(
+  url: string,
+  params: Record<string, unknown>,
+  fallback: string,
+  config?: ApiRequestConfig,
+): Promise<T> {
   try {
-    const response = await ApiService.getRaw(url, cleanParams(params))
+    const cleaned = cleanParams(params)
+    const response = config
+      ? await ApiService.getRaw(url, cleaned, config)
+      : await ApiService.getRaw(url, cleaned)
+    return unwrap<T>(response.data, fallback)
+  } catch (error) {
+    if (isFrontpageQcAbortError(error) || config?.signal?.aborted) throw error
+    if (error instanceof FrontpageQcRequestError) throw error
+    throw toRequestError(error, fallback)
+  }
+}
+
+async function post<T>(
+  url: string,
+  body: unknown,
+  fallback: string,
+  config?: ApiRequestConfig,
+): Promise<T> {
+  try {
+    const response = config
+      ? await ApiService.postRaw(url, body, config)
+      : await ApiService.postRaw(url, body)
     return unwrap<T>(response.data, fallback)
   } catch (error) {
     if (error instanceof FrontpageQcRequestError) throw error
@@ -245,50 +302,78 @@ async function get<T>(url: string, params: Record<string, unknown>, fallback: st
   }
 }
 
-async function post<T>(url: string, body: unknown, fallback: string): Promise<T> {
-  try {
-    const response = await ApiService.postRaw(url, body)
-    return unwrap<T>(response.data, fallback)
-  } catch (error) {
-    if (error instanceof FrontpageQcRequestError) throw error
-    throw toRequestError(error, fallback)
-  }
-}
-
-export function getFrontpageQcFilters(params: { data_scope?: FrontpageQcDataScope } = {}) {
+export function getFrontpageQcFilters(
+  params: { data_scope?: FrontpageQcDataScope } = {},
+  options?: FrontpageQcRequestOptions,
+) {
   return get<{ departments: string[]; date_bounds: Record<string, unknown>; home_institute: string }>(
-    `${BASE}/filters`, { ...params }, '读取筛选项失败',
+    `${BASE}/filters`,
+    { ...params },
+    '读取筛选项失败',
+    options?.signal ? { skipErrorToast: true, signal: options.signal } : undefined,
   )
 }
 
-export function listFrontpageQcRecords(query: FrontpageQcListQuery) {
+export function listFrontpageQcRecords(
+  query: FrontpageQcListQuery,
+  options?: FrontpageQcRequestOptions,
+) {
   return get<{ items: FrontpageQcRecordItem[]; total: number; page: number; page_size: number }>(
     `${BASE}/records`,
     { ...query },
     '读取首页质控结果失败',
+    withRequestConfig(undefined, options),
   )
 }
 
-export function getFrontpageQcRecord(ref: FrontpageQcRef) {
-  return get<FrontpageQcRecordDetail>(`${BASE}/record`, { ...ref }, '读取首页质控详情失败')
+export function getFrontpageQcRecord(
+  ref: FrontpageQcRef,
+  options?: FrontpageQcRequestOptions,
+) {
+  return get<FrontpageQcRecordDetail>(
+    `${BASE}/record`,
+    { ...ref },
+    '读取首页质控详情失败',
+    withRequestConfig(PAGE_OWNED_ERROR_CONFIG, options),
+  )
 }
 
 export function createFrontpageQcRun(
   body: { record_refs: FrontpageQcRef[] } | FrontpageQcScopeFilters,
 ) {
-  return post<FrontpageQcRun>(`${BASE}/runs`, body, '创建首页质控任务失败')
+  return post<FrontpageQcRun>(
+    `${BASE}/runs`,
+    body,
+    '创建首页质控任务失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
-export function getFrontpageQcRun(runId: string) {
-  return get<FrontpageQcRun>(`${BASE}/runs/${encodeURIComponent(runId)}`, {}, '读取任务进度失败')
+export function getFrontpageQcRun(runId: string, options?: FrontpageQcRequestOptions) {
+  return get<FrontpageQcRun>(
+    `${BASE}/runs/${encodeURIComponent(runId)}`,
+    {},
+    '读取任务进度失败',
+    withRequestConfig(PAGE_OWNED_ERROR_CONFIG, options),
+  )
 }
 
-export function listActiveFrontpageQcRuns() {
-  return get<{ items: FrontpageQcRun[] }>(`${BASE}/runs`, { active: true }, '读取进行中的任务失败')
+export function listActiveFrontpageQcRuns(options?: FrontpageQcRequestOptions) {
+  return get<{ items: FrontpageQcRun[] }>(
+    `${BASE}/runs`,
+    { active: true },
+    '读取进行中的任务失败',
+    withRequestConfig(PAGE_OWNED_ERROR_CONFIG, options),
+  )
 }
 
 export function cancelFrontpageQcRun(runId: string) {
-  return post<FrontpageQcRun>(`${BASE}/runs/${encodeURIComponent(runId)}/cancel`, {}, '取消任务失败')
+  return post<FrontpageQcRun>(
+    `${BASE}/runs/${encodeURIComponent(runId)}/cancel`,
+    {},
+    '取消任务失败',
+    PAGE_OWNED_ERROR_CONFIG,
+  )
 }
 
 export function reviewFrontpageQcFinding(
@@ -299,11 +384,20 @@ export function reviewFrontpageQcFinding(
     `${BASE}/findings/${encodeURIComponent(findingId)}/review`,
     body,
     '保存复核失败',
+    PAGE_OWNED_ERROR_CONFIG,
   )
 }
 
-export function getFrontpageQcAnalytics(filters: FrontpageQcScopeFilters) {
-  return get<FrontpageQcAnalytics>(`${BASE}/analytics`, { ...filters }, '读取首页质控统计失败')
+export function getFrontpageQcAnalytics(
+  filters: FrontpageQcScopeFilters,
+  options?: FrontpageQcRequestOptions,
+) {
+  return get<FrontpageQcAnalytics>(
+    `${BASE}/analytics`,
+    { ...filters },
+    '读取首页质控统计失败',
+    withRequestConfig(undefined, options),
+  )
 }
 
 /** 用 FileReader 读取 Blob：Blob.text() 在较旧浏览器上不可用 */
@@ -320,13 +414,19 @@ export async function exportFrontpageQcRecords(
   body:
     | { record_refs: FrontpageQcRef[] }
     | (FrontpageQcScopeFilters & FrontpageQcRuleFilter & { grade?: string; issue?: string }),
+  options?: FrontpageQcRequestOptions,
 ): Promise<Blob> {
+  const config: ApiRequestConfig = {
+    responseType: 'blob',
+    skipErrorToast: true,
+    timeout: LONG_REQUEST_TIMEOUT_MS,
+    ...(options?.signal ? { signal: options.signal } : {}),
+  }
   try {
-    const response = await ApiService.postRaw<Blob>(`${BASE}/records/export`, body, {
-      responseType: 'blob',
-    })
+    const response = await ApiService.postRaw<Blob>(`${BASE}/records/export`, body, config)
     return response.data
   } catch (error) {
+    if (isFrontpageQcAbortError(error) || options?.signal?.aborted) throw error
     // 导出失败时响应体是 Blob，需要转回 JSON 才能读到原因
     const response = isObject(error) && isObject(error.response) ? error.response : null
     if (response && response.data instanceof Blob) {

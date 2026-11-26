@@ -12,6 +12,8 @@ import json
 from io import BytesIO, StringIO
 from typing import Any, Dict, List, Sequence
 
+from ...core.export_safety import sanitize_spreadsheet_cell, sanitize_spreadsheet_row
+
 
 CUSTOMER_EXPORT_HEADERS = [
     "病历引用",
@@ -80,8 +82,10 @@ def append_complete_workbook_row(worksheet: Any, values: Sequence[Any]) -> None:
     """
     # 旧规则可保存列表结论或结构化证据；仅转换单元格表示，保留完整结构。
     row = [
-        json.dumps(value, ensure_ascii=False, default=str)
-        if isinstance(value, (list, tuple, dict)) else value
+        sanitize_spreadsheet_cell(
+            json.dumps(value, ensure_ascii=False, default=str)
+            if isinstance(value, (list, tuple, dict)) else value
+        )
         for value in values
     ]
     for column, value in enumerate(row, 1):
@@ -115,11 +119,11 @@ def render_customer_safe_workbook(
     ws_summary = workbook.active
     ws_summary.title = "管理摘要"
     ws_summary.append(["报告项", "内容"])
-    ws_summary.append(["任务引用", summary["operation_ref"]])
-    ws_summary.append(["结果总数", summary["result_count"]])
-    ws_summary.append(["确定问题病历数", summary["issue_records"]])
+    ws_summary.append(sanitize_spreadsheet_row(["任务引用", summary["operation_ref"]]))
+    ws_summary.append(sanitize_spreadsheet_row(["结果总数", summary["result_count"]]))
+    ws_summary.append(sanitize_spreadsheet_row(["确定问题病历数", summary["issue_records"]]))
     for status, count in summary["status_counts"].items():
-        ws_summary.append([f"状态-{status}", count])
+        ws_summary.append(sanitize_spreadsheet_row([f"状态-{status}", count]))
 
     ws_issues = workbook.create_sheet("问题明细")
     ws_issues.append(CUSTOMER_EXPORT_HEADERS)
@@ -146,13 +150,14 @@ def render_customer_safe_csv(
     output = StringIO()
     writer = csv.writer(output)
     writer.writerow(["管理摘要"])
-    writer.writerow(["任务引用", summary["operation_ref"]])
-    writer.writerow(["结果总数", summary["result_count"]])
-    writer.writerow(["确定问题病历数", summary["issue_records"]])
+    writer.writerow(sanitize_spreadsheet_row(["任务引用", summary["operation_ref"]]))
+    writer.writerow(sanitize_spreadsheet_row(["结果总数", summary["result_count"]]))
+    writer.writerow(sanitize_spreadsheet_row(["确定问题病历数", summary["issue_records"]]))
     writer.writerow([])
     writer.writerow(["全部明细"])
     writer.writerow(CUSTOMER_EXPORT_HEADERS)
-    writer.writerows(rows)
+    for row in rows:
+        writer.writerow(sanitize_spreadsheet_row(row))
     output.seek(0)
     return output
 

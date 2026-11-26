@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request, status
 
 from ..core.response import get_trace_id, success_response
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 from ..services.llm_observability_read import (
     LLMObservabilityFilters,
     LLMObservabilityReadService,
@@ -63,7 +63,7 @@ def _build_filters(
 
 
 async def require_llm_observability_user(
-    current_user: dict = Depends(require_roles(*_SYSTEM_OBSERVABILITY_ROLES)),
+    current_user: dict = Depends(require_global_system_admin),
 ) -> dict:
     normalized_email = str(current_user.get("email") or "").strip().lower()
     role_names = {

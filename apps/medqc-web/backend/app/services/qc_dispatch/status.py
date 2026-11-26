@@ -25,6 +25,13 @@ class Heartbeat(BaseModel):
     observed_at: datetime
 
 
+def _safe_mtime(path) -> float:
+    try:
+        return path.stat().st_mtime
+    except OSError:
+        return 0.0
+
+
 def service_status(settings, *, now: datetime | None = None) -> dict[str, bool]:
     """只接受同部署、有限时效的就绪状态；不存在或无法读取均不表示就绪。"""
     result = {'publisher': False, 'worker': False}
@@ -32,8 +39,9 @@ def service_status(settings, *, now: datetime | None = None) -> dict[str, bool]:
     identity = deployment_identity(settings)
     directory = state_directory(settings) / 'services'
     try:
-        for index, path in enumerate(directory.glob('*.json')):
-            if index >= 128:
+        candidates = sorted(directory.glob('*.json'), key=_safe_mtime, reverse=True)
+        for path in candidates:
+            if result['publisher'] and result['worker']:
                 break
             try:
                 item = Heartbeat.model_validate_json(path.read_text(encoding='utf-8'))

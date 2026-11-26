@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError, OperationalError, ProgrammingError
 
 from ..case_identity import CaseRef
 
@@ -57,8 +58,11 @@ class RawFrontpage:
 
 
 def default_cdm_schema() -> Optional[str]:
+    from app.database import clinical_connection
     from app.database.connection import DB_SCHEMA_MODE
 
+    if clinical_connection.configured():
+        return "cdm"
     return "cdm" if str(DB_SCHEMA_MODE or "").strip().lower() == "split" else None
 
 
@@ -71,6 +75,47 @@ _WHERE = "institute_id = :institute_id AND patient_id = :patient_id AND visit_id
 
 def _rows(session: Any, sql: str, params: Dict[str, str]) -> List[Dict[str, Any]]:
     return [dict(row) for row in session.execute(text(sql), params).mappings().all()]
+
+
+def _is_missing_or_unreadable_table(exc: Exception) -> bool:
+    orig = getattr(exc, "orig", None)
+    pgcode = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+    if pgcode is not None:
+        return str(pgcode) in {"42P01", "42501"}
+    if orig is not None and type(orig).__name__ in {"UndefinedTable", "InsufficientPrivilege"}:
+        return True
+    msg = str(orig or exc).lower()
+    if "no such table" in msg:
+        return True
+    if "relation " in msg and "does not exist" in msg:
+        return True
+    if "permission denied for " in msg:
+        return True
+    return False
+
+
+def _optional_rows(
+    session: Any,
+    table_name: str,
+    schema: Optional[str],
+    params: Dict[str, str],
+) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    """使用 SAVEPOINT 查询可选表，捕获缺表/无权限并仅回滚子事务，绝不污染外层事务。"""
+    sql = f"SELECT * FROM {_table(table_name, schema)} WHERE {_WHERE}"
+    begin_nested = getattr(session, "begin_nested", None)
+    try:
+        if callable(begin_nested):
+            with begin_nested():
+                return _rows(session, sql, params), None
+        return _rows(session, sql, params), None
+    except (ProgrammingError, OperationalError, DBAPIError) as exc:
+        if _is_missing_or_unreadable_table(exc):
+            orig = getattr(exc, "orig", None)
+            pgcode = getattr(orig, "pgcode", None) or getattr(orig, "sqlstate", None)
+            if str(pgcode or "") == "42501" or "permission denied" in str(orig or exc).lower():
+                return [], "permission_denied"
+            return [], "missing_table"
+        raise
 
 
 def _not_deleted(row: Dict[str, Any]) -> bool:
@@ -89,7 +134,7 @@ _DEFAULT = object()
 
 
 def load_frontpage_raw(session: Any, ref: FrontpageRef, schema: Any = _DEFAULT) -> Optional[RawFrontpage]:
-    """schema 不传时按 DB_SCHEMA_MODE 推断；传 None 表示不带 schema（SQLite 测试）。"""
+    """schema 不传时按 clinical_connection / DB_SCHEMA_MODE 推断；传 None 表示不带 schema（SQLite 测试）。"""
     schema = default_cdm_schema() if schema is _DEFAULT else schema
     params = {"institute_id": ref.institute_id, "patient_id": ref.patient_id, "visit_id": ref.visit_id}
     mr_rows = _rows(session, f"SELECT * FROM {_table('mr', schema)} WHERE {_WHERE}", params)
@@ -99,20 +144,37 @@ def load_frontpage_raw(session: Any, ref: FrontpageRef, schema: Any = _DEFAULT) 
     if len(mr_rows) > 1:
         notes.append(f"同一就诊存在 {len(mr_rows)} 份首页，取第一份")
 
-    diagnosis_rows = [row for row in _rows(session, f"SELECT * FROM {_table('mr_diagnosis', schema)} WHERE {_WHERE}", params) if _not_deleted(row)]
+    mr_diag_raw, mr_diag_unavailable = _optional_rows(session, "mr_diagnosis", schema, params)
+    diagnosis_rows = [row for row in mr_diag_raw if _not_deleted(row)]
     diagnosis_source = "mr_diagnosis"
-    if not any(is_discharge_diagnosis_type(row.get("diagnosis_type")) for row in diagnosis_rows):
-        fallback = [row for row in _rows(session, f"SELECT * FROM {_table('diagnosis', schema)} WHERE {_WHERE}", params) if _not_deleted(row)]
-        if any(is_discharge_diagnosis_type(row.get("diagnosis_type")) for row in fallback):
-            # 门诊、病理诊断仍以 mr_diagnosis 为准，只替换出院诊断
-            diagnosis_rows = [
-                row for row in diagnosis_rows if not is_discharge_diagnosis_type(row.get("diagnosis_type"))
-            ] + [row for row in fallback if is_discharge_diagnosis_type(row.get("diagnosis_type"))]
-            diagnosis_source = "diagnosis"
-            notes.append("出院诊断取自诊断表（病案首页诊断表无出院诊断）")
+    if mr_diag_unavailable:
+        fallback_raw, diag_unavailable = _optional_rows(session, "diagnosis", schema, params)
+        diagnosis_rows = [row for row in fallback_raw if _not_deleted(row)]
+        diagnosis_source = "diagnosis"
+        if diag_unavailable:
+            notes.append("病案首页诊断表（mr_diagnosis）与诊断表（diagnosis）均不可用，已跳过诊断读取")
+        else:
+            notes.append("病案首页诊断表（mr_diagnosis）不可用，已回退诊断表（diagnosis）")
+    elif not any(is_discharge_diagnosis_type(row.get("diagnosis_type")) for row in diagnosis_rows):
+        fallback_raw, diag_unavailable = _optional_rows(session, "diagnosis", schema, params)
+        if diag_unavailable:
+            notes.append("诊断表（diagnosis）不可用，无法补充出院诊断")
+        else:
+            fallback = [row for row in fallback_raw if _not_deleted(row)]
+            if any(is_discharge_diagnosis_type(row.get("diagnosis_type")) for row in fallback):
+                # 门诊、病理诊断仍以 mr_diagnosis 为准，只替换出院诊断
+                diagnosis_rows = [
+                    row for row in diagnosis_rows if not is_discharge_diagnosis_type(row.get("diagnosis_type"))
+                ] + [row for row in fallback if is_discharge_diagnosis_type(row.get("diagnosis_type"))]
+                diagnosis_source = "diagnosis"
+                notes.append("出院诊断取自诊断表（病案首页诊断表无出院诊断）")
 
-    surgery_rows = _rows(session, f"SELECT * FROM {_table('mr_surgery', schema)} WHERE {_WHERE}", params)
-    cost_rows = _rows(session, f"SELECT * FROM {_table('mr_cost', schema)} WHERE {_WHERE}", params)
+    surgery_rows, surgery_unavailable = _optional_rows(session, "mr_surgery", schema, params)
+    if surgery_unavailable:
+        notes.append("病案首页手术表（mr_surgery）不可用，已跳过手术明细读取")
+    cost_rows, cost_unavailable = _optional_rows(session, "mr_cost", schema, params)
+    if cost_unavailable:
+        notes.append("病案首页费用表（mr_cost）不可用，已跳过费用明细读取")
     return RawFrontpage(
         ref=ref,
         mr=mr_rows[0],

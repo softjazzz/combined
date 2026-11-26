@@ -8,6 +8,23 @@
   gap: 12px;
 }
 
+/* 统一页头按钮与分段控件高度，消除 34px 与 38px 错位 */
+.fpqc-page .mq-page-head__actions .mq-segmented {
+  height: var(--mq-control-height, 36px);
+  box-sizing: border-box;
+  align-items: center;
+}
+
+.fpqc-page .mq-page-head__actions .mq-segmented .mq-segmented__item,
+.fpqc-page .mq-page-head__actions .mq-segmented--sm .mq-segmented__item {
+  height: 30px;
+}
+
+.fpqc-page .mq-page-head__actions .mq-btn {
+  height: var(--mq-control-height, 36px);
+  box-sizing: border-box;
+}
+
 .fpqc-page__scope {
   display: inline-flex;
   align-items: center;
@@ -83,13 +100,18 @@
   gap: 10px;
 }
 
+.fpqc-toolbar__filters {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 /* 导出与刷新换行时靠右，与筛选项区分 */
 .fpqc-toolbar__tools {
   margin-left: auto;
 }
 
 .fpqc-toolbar__control {
-  height: 36px;
+  height: var(--mq-control-height, 36px);
   box-sizing: border-box;
   padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.9);
@@ -103,6 +125,13 @@
 
 select.fpqc-toolbar__control {
   width: 128px;
+}
+
+select.fpqc-toolbar__dept {
+  width: auto;
+  min-width: 136px;
+  max-width: 180px;
+  text-overflow: ellipsis;
 }
 
 .fpqc-toolbar__search {
@@ -120,14 +149,17 @@ select.fpqc-toolbar__control {
 .fpqc-toolbar__dates {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 0 10px;
+  gap: 6px;
+  height: var(--mq-control-height, 36px);
+  padding: 0 12px;
   color: var(--mq-text-tertiary);
 }
 
 .fpqc-toolbar__date-picker {
-  width: 124px;
-  height: 30px;
+  width: 136px;
+  height: 34px;
+  padding: 0 4px;
+  box-sizing: border-box;
   border: 0;
   outline: none;
   background: transparent;
@@ -136,13 +168,21 @@ select.fpqc-toolbar__control {
   font-size: var(--mq-font-13);
 }
 
+.fpqc-toolbar__date-picker :deep(.ant-picker-input > input) {
+  height: 34px;
+  padding: 0;
+  font-size: var(--mq-font-13);
+  line-height: 34px;
+}
+
 /* 结果分析下钻带来的规则筛选 */
 .fpqc-toolbar__rule {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 360px;
-  height: 32px;
+  height: var(--mq-control-height, 36px);
+  box-sizing: border-box;
   padding: 0 6px 0 12px;
   border-radius: 999px;
   background: var(--mq-info-bg);
@@ -181,7 +221,8 @@ select.fpqc-toolbar__control {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  height: 36px;
+  height: var(--mq-control-height, 36px);
+  box-sizing: border-box;
   padding: 0 16px;
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-radius: 999px;
@@ -222,6 +263,25 @@ select.fpqc-toolbar__control {
   margin: -8px 4px 0;
   color: var(--mq-text-tertiary);
   font-size: var(--mq-font-12);
+}
+
+.fpqc-page__notice--status {
+  color: var(--mq-success-text);
+  font-weight: 500;
+}
+
+.fpqc-page__notice--error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 0;
+  padding: 10px 14px;
+  border: 1px solid var(--mq-danger-border);
+  border-radius: var(--mq-radius-control);
+  background: var(--mq-danger-bg);
+  color: var(--mq-danger-text);
+  font-size: var(--mq-font-13);
+  font-weight: 600;
 }
 
 /* 左列表 + 右预览 */
@@ -279,8 +339,17 @@ select.fpqc-toolbar__control {
 
 .fpqc-list__pager {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
+  gap: 8px;
   padding: 12px 10px 6px;
+}
+
+.fpqc-list__pager :deep(.ant-pagination) {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 6px;
 }
 
 /* 执行前确认弹窗（结构同系统配置的执行前确认） */
@@ -349,6 +418,29 @@ select.fpqc-toolbar__control {
   height: 44px;
 }
 
+@media (max-width: 1440px) {
+  .fpqc-toolbar {
+    gap: 8px;
+  }
+
+  .fpqc-toolbar__filters,
+  .fpqc-toolbar__tools {
+    gap: 8px;
+  }
+
+  .fpqc-toolbar__search {
+    width: 180px;
+  }
+
+  .fpqc-toolbar__btn {
+    padding: 0 14px;
+  }
+
+  .fpqc-split {
+    grid-template-columns: minmax(0, 1fr) 340px;
+  }
+}
+
 @media (max-width: 1280px) {
   .fpqc-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -360,10 +452,6 @@ select.fpqc-toolbar__control {
 
   .fpqc-metrics__item:nth-child(n + 3) {
     border-top: 0.5px solid var(--mq-border);
-  }
-
-  .fpqc-split {
-    grid-template-columns: minmax(0, 1fr) 340px;
   }
 }
 

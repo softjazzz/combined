@@ -126,7 +126,7 @@
               class="synthetic-case-template"
               :class="{ 'is-active': form.selectedRuleFamilyKey === family.key }"
               type="button"
-              @click="selectRuleFamily(family.key)"
+              @click="selectRuleFamily(family.key, true)"
             >
               <strong>{{ family.name }}</strong>
               <span>{{ family.rules.length }} 条规则</span>
@@ -144,7 +144,7 @@
             v-for="(document, index) in form.documents"
             :key="document.key"
             type="button"
-            @click="scrollToDocument(document.key)"
+            @click="openDocumentEditor(document.key)"
           >
             <span>{{ String(index + 1).padStart(2, '0') }}</span>
             <div>
@@ -661,8 +661,9 @@ import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import type { CSSProperties } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import { DatePicker as ADatePicker, message } from 'ant-design-vue'
+import { confirmAction } from '../utils/confirmDialog'
 
 import {
   createManualTestMedicalRecord,
@@ -675,6 +676,7 @@ import type {
   SyntheticCaseBuilderMode,
   SyntheticCaseRuleFamily,
   TestRecordDocumentForm,
+  TestRecordForm,
 } from './types'
 import {
   buildSyntheticCaseRunPayload,
@@ -687,6 +689,7 @@ import {
   hasSameRuleScope,
   normalizeSyntheticCasePayload,
   normalizeRuleIds,
+  resolveSyntheticCaseRuleFamilyKey,
   sexOptions,
   testRecordDocumentTypeOptions,
 } from './syntheticCaseBuilder'
@@ -694,6 +697,7 @@ import {
 const router = useRouter()
 const route = useRoute()
 const form = ref(createDefaultSyntheticCaseForm())
+const initialFormSnapshot = ref('')
 const newDocumentType = ref('daily_course_record')
 const saving = ref(false)
 const savingAndRunning = ref(false)
@@ -706,6 +710,41 @@ const syntheticCaseGuideOpen = ref(false)
 const syntheticCaseGuideStepIndex = ref(0)
 const syntheticCaseTourCardStyle = ref<CSSProperties>({})
 let syntheticCaseGuidePositionTimer: ReturnType<typeof setTimeout> | null = null
+let hasUserInteractedWithRuleFamily = false
+let skipLeaveGuard = false
+
+function buildFormDirtySnapshot(value: TestRecordForm): string {
+  return JSON.stringify({
+    caseTitle: value.caseTitle,
+    patientName: value.patientName,
+    sex: value.sex,
+    age: value.age,
+    mrNo: value.mrNo,
+    department: value.department,
+    admissionTime: value.admissionTime,
+    dischargeTime: value.dischargeTime,
+    evaluationAsOfDate: value.evaluationAsOfDate || '',
+    mainDiagnosis: value.mainDiagnosis,
+    otherDiagnosesText: value.otherDiagnosesText,
+    manualIssueText: value.manualIssueText,
+    selectedRuleIds: value.selectedRuleIds,
+    documents: value.documents.map((doc) => ({
+      document_type: doc.document_type,
+      title: doc.title,
+      record_time: doc.record_time || '',
+      submit_time: doc.submit_time || '',
+      content: doc.content || '',
+      doctor_name: doc.doctor_name || '',
+      enabled: doc.enabled,
+    })),
+  })
+}
+
+const hasUnsavedChanges = computed(
+  () =>
+    Boolean(initialFormSnapshot.value) &&
+    buildFormDirtySnapshot(form.value) !== initialFormSnapshot.value,
+)
 
 type SyntheticCaseGuideTarget =
   | 'wizard'
@@ -818,7 +857,7 @@ const enabledDocumentCount = computed(
 const configuredRuleCount = computed(
   () =>
     new Set(
-      syntheticCaseRuleFamilies.flatMap((family) =>
+      availableRuleFamilies.value.flatMap((family) =>
         family.rules.map((rule) =>
           String(rule.ruleId || '')
             .trim()
@@ -971,11 +1010,12 @@ function resolveInitialRuleFamilyKey(ruleIds: string[], routeFamilyKey: unknown)
   const requestedFamilyKey = String(
     Array.isArray(routeFamilyKey) ? routeFamilyKey[0] || '' : routeFamilyKey || '',
   ).trim()
-  if (
-    requestedFamilyKey &&
-    availableRuleFamilies.value.some((family) => family.key === requestedFamilyKey)
-  ) {
-    return requestedFamilyKey
+  const matchedRequestedKey = resolveSyntheticCaseRuleFamilyKey(
+    requestedFamilyKey,
+    availableRuleFamilies.value,
+  )
+  if (matchedRequestedKey) {
+    return matchedRequestedKey
   }
   const selectedRuleSet = new Set(ruleIds)
   const exactFamily = availableRuleFamilies.value.find(
@@ -1001,20 +1041,60 @@ function initializeRuleSelectionFromRoute() {
     selectRuleFamily(resolveInitialRuleFamilyKey(routeRuleIds, route.query.ruleFamily))
     return
   }
-  selectRuleFamily(syntheticCaseRuleFamilies[0].key)
+  const routeFamilyKey = resolveSyntheticCaseRuleFamilyKey(
+    String(
+      Array.isArray(route.query.ruleFamily)
+        ? route.query.ruleFamily[0] || ''
+        : route.query.ruleFamily || '',
+    ),
+    availableRuleFamilies.value,
+  )
+  selectRuleFamily(routeFamilyKey || syntheticCaseRuleFamilies[0].key)
 }
 
 async function loadLuxian0609RuleCatalog() {
-  const result = await listLuxian0609CustomerRules()
-  if (!result.success || !result.data?.rules?.length) {
-    luxianRuleCatalogFamilies.value = []
-    return
-  }
-  luxianRuleCatalogFamilies.value = buildSyntheticCaseRuleFamiliesFromCatalog(result.data.rules)
-  if (selectedRuleSelection.value.length) {
-    selectRuleFamily(
-      resolveInitialRuleFamilyKey(selectedRuleSelection.value, route.query.ruleFamily),
+  try {
+    const result = await listLuxian0609CustomerRules()
+    if (!result.success || !result.data?.rules?.length) {
+      luxianRuleCatalogFamilies.value = []
+      return
+    }
+    luxianRuleCatalogFamilies.value = buildSyntheticCaseRuleFamiliesFromCatalog(result.data.rules)
+    const preservedCurrentKey = resolveSyntheticCaseRuleFamilyKey(
+      form.value.selectedRuleFamilyKey || '',
+      availableRuleFamilies.value,
     )
+    if (hasUserInteractedWithRuleFamily) {
+      if (preservedCurrentKey) {
+        selectRuleFamily(preservedCurrentKey)
+      } else if (availableRuleFamilies.value[0]) {
+        selectRuleFamily(availableRuleFamilies.value[0].key)
+      }
+      return
+    }
+    if (selectedRuleSelection.value.length) {
+      selectRuleFamily(
+        resolveInitialRuleFamilyKey(selectedRuleSelection.value, route.query.ruleFamily),
+      )
+      return
+    }
+    const routeFamilyKey = resolveSyntheticCaseRuleFamilyKey(
+      String(
+        Array.isArray(route.query.ruleFamily)
+          ? route.query.ruleFamily[0] || ''
+          : route.query.ruleFamily || '',
+      ),
+      availableRuleFamilies.value,
+    )
+    if (routeFamilyKey) {
+      selectRuleFamily(routeFamilyKey)
+    } else if (preservedCurrentKey) {
+      selectRuleFamily(preservedCurrentKey)
+    } else if (availableRuleFamilies.value[0]) {
+      selectRuleFamily(availableRuleFamilies.value[0].key)
+    }
+  } catch {
+    luxianRuleCatalogFamilies.value = []
   }
 }
 
@@ -1131,11 +1211,15 @@ function createRuleDrivenForm() {
   return nextForm
 }
 
-function selectRuleFamily(key: string) {
+function selectRuleFamily(key: string, userInitiated = false) {
+  if (userInitiated) {
+    hasUserInteractedWithRuleFamily = true
+  }
   form.value.selectedRuleFamilyKey = key
 }
 
 function toggleRuleSelection(ruleId: string, checked: boolean) {
+  hasUserInteractedWithRuleFamily = true
   if (checked) {
     if (!selectedRuleSelection.value.includes(ruleId)) {
       selectedRuleSelection.value = [...selectedRuleSelection.value, ruleId]
@@ -1146,6 +1230,7 @@ function toggleRuleSelection(ruleId: string, checked: boolean) {
 }
 
 function toggleSelectedRuleFamily() {
+  hasUserInteractedWithRuleFamily = true
   const familyRuleIds = selectedFamilyRuleIds.value
   if (!familyRuleIds.length) return
   if (isSelectedRuleFamilyFullySelected.value) {
@@ -1312,8 +1397,10 @@ function scrollToDocument(key: string) {
   })
 }
 
-function openDocumentEditor(key: string) {
+async function openDocumentEditor(key: string) {
+  wizardStep.value = 2
   editorTab.value = 'documents'
+  await nextTick()
   scrollToDocument(key)
 }
 
@@ -1403,6 +1490,22 @@ function validateForm(): boolean {
     message.warning('请填写入院时间')
     return false
   }
+  const admissionMs = Date.parse(form.value.admissionTime)
+  if (!Number.isFinite(admissionMs)) {
+    message.warning('入院时间格式无效')
+    return false
+  }
+  if (form.value.dischargeTime) {
+    const dischargeMs = Date.parse(form.value.dischargeTime)
+    if (!Number.isFinite(dischargeMs)) {
+      message.warning('出院时间格式无效')
+      return false
+    }
+    if (dischargeMs < admissionMs) {
+      message.warning('出院时间不能早于入院时间')
+      return false
+    }
+  }
   if (enabledDocumentCount.value === 0) {
     message.warning('至少需要填写一份病历文书')
     return false
@@ -1416,6 +1519,7 @@ function validateForm(): boolean {
 }
 
 async function handleSave(runAfterSave: boolean) {
+  if (saving.value || savingAndRunning.value) return
   if (!validateForm()) return
   if (runAfterSave) {
     savingAndRunning.value = true
@@ -1441,26 +1545,31 @@ async function handleSave(runAfterSave: boolean) {
       if (!poolId || !sampleItemId || !instituteId || !patientId || !matchedVisitId) {
         message.warning('测试病历已保存，但病例三坐标尚未完整生成，未发起验证任务')
       } else {
-        const runResult = await runManualSamplePool(
-          poolId,
-          buildSyntheticCaseRunPayload(form.value, {
-            sampleItemId,
-            instituteId,
-            patientId,
-            visitId: matchedVisitId,
-          }),
-          { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS },
-        )
-        if (!runResult.success || !runResult.data) {
-          message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
-        } else {
-          createdJobId = runResult.data.job_id
-          message.success('测试病历已保存，验证任务已创建')
+        try {
+          const runResult = await runManualSamplePool(
+            poolId,
+            buildSyntheticCaseRunPayload(form.value, {
+              sampleItemId,
+              instituteId,
+              patientId,
+              visitId: matchedVisitId,
+            }),
+            { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS },
+          )
+          if (!runResult.success || !runResult.data) {
+            message.warning(runResult.message || '测试病历已保存，但验证任务创建失败')
+          } else {
+            createdJobId = runResult.data.job_id
+            message.success('测试病历已保存，验证任务已创建')
+          }
+        } catch (runError: any) {
+          message.warning(runError?.message || '测试病历已保存，但验证任务创建失败')
         }
       }
     } else {
       message.success(`测试病历已创建：${result.data.mr_no || visitId}`)
     }
+    skipLeaveGuard = true
     await router.push({
       name: 'WorkstationV4CustomerSampleValidation',
       query: poolId
@@ -1471,6 +1580,9 @@ async function handleSave(runAfterSave: boolean) {
           }
         : undefined,
     })
+  } catch (error: any) {
+    skipLeaveGuard = false
+    message.error(error?.message || '保存测试病历失败')
   } finally {
     saving.value = false
     savingAndRunning.value = false
@@ -1478,6 +1590,20 @@ async function handleSave(runAfterSave: boolean) {
 }
 
 initializeRuleSelectionFromRoute()
+initialFormSnapshot.value = buildFormDirtySnapshot(form.value)
+
+if (typeof onBeforeRouteLeave === 'function') {
+  onBeforeRouteLeave(async () => {
+    if (skipLeaveGuard || !hasUnsavedChanges.value) return true
+    return confirmAction({
+      title: '离开当前页面？',
+      content: '当前测试病历尚未保存，离开后已编辑的内容将会丢失。',
+      okText: '放弃并离开',
+      cancelText: '继续编辑',
+      danger: true,
+    })
+  })
+}
 
 onMounted(() => {
   window.addEventListener('resize', updateSyntheticCaseTourCardPosition)

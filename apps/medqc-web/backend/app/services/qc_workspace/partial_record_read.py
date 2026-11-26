@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 import json
 from typing import Any
 
@@ -54,21 +55,12 @@ def saved_record_rule_scope(filters: Mapping[str, Any], ref: CaseRef) -> list[st
 
 
 def _record_material_preparation_failure(
-    items: list[Any], failures: list[Any], ref: CaseRef,
+    items: list[dict[str, Any]], failures: list[Mapping[str, Any]], ref: CaseRef,
 ) -> dict[str, str]:
     """只认 Worker 保存的同病例、无规则身份且零项的资料准备失败。"""
-    for entry in [*items, *failures]:
-        if not isinstance(entry, Mapping) or not all(
-            isinstance(entry.get(key), str) and entry[key] and entry[key] == entry[key].strip()
-            for key in ref._fields
-        ) or entry.get("record_id", entry["visit_id"]) != entry["visit_id"]:
-            return {}
-    if any(CaseRef.from_mapping(item) == ref for item in items):
+    if items or len(failures) != 1:
         return {}
-    matching = [row for row in failures if CaseRef.from_mapping(row) == ref]
-    if len(matching) != 1:
-        return {}
-    failure = matching[0]
+    failure = failures[0]
     reason = failure.get("reason_code", failure.get("error"))
     stage = failure.get("material_failure_stage")
     if (
@@ -87,24 +79,72 @@ def _record_material_preparation_failure(
     return {"reason_code": reason, "failure_stage": failure_stage}
 
 
+def _has_exact_preparation_identity(entry: Mapping[str, Any]) -> bool:
+    return all(
+        isinstance(entry.get(key), str) and entry[key] and entry[key] == entry[key].strip()
+        for key in CaseRef._fields
+    ) and entry.get("record_id", entry["visit_id"]) == entry["visit_id"]
+
+
+@dataclass
+class SavedPartialRecordBatch:
+    """一次摘要请求内按任务解析并索引，按原始病例三键读回。"""
+
+    has_rule_results: bool
+    items: dict[CaseRef, list[dict[str, Any]]]
+    failures: dict[CaseRef, list[Mapping[str, Any]]]
+    preparation_identities_valid: bool
+
+    @classmethod
+    def from_row(cls, row: Mapping[str, Any]) -> SavedPartialRecordBatch:
+        try:
+            summary = json.loads(row["summary_json"])
+            items = json.loads(row["items_json"])
+            failures = json.loads(row["failed_records_json"])
+        except (TypeError, ValueError):
+            raise ValueError("saved_partial_result_invalid") from None
+        if not (isinstance(summary, dict) and isinstance(items, list) and isinstance(failures, list)):
+            raise ValueError("saved_partial_result_invalid")
+        items_by_ref: dict[CaseRef, list[dict[str, Any]]] = {}
+        failures_by_ref: dict[CaseRef, list[Mapping[str, Any]]] = {}
+        exact_identities = True
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError("saved_partial_result_invalid")
+            items_by_ref.setdefault(CaseRef.from_mapping(item), []).append(item)
+            exact_identities = exact_identities and _has_exact_preparation_identity(item)
+        for failure in failures:
+            if not isinstance(failure, Mapping) or not all(ref := CaseRef.from_mapping(failure)):
+                raise ValueError("saved_partial_failure_invalid")
+            failures_by_ref.setdefault(ref, []).append(failure)
+            exact_identities = exact_identities and _has_exact_preparation_identity(failure)
+        return cls(isinstance(summary.get("rule_results"), list), items_by_ref, failures_by_ref, exact_identities)
+
+    def read(
+        self, *, ref: CaseRef, expected_rules: list[str], projection_key: str,
+        projector: Callable[[dict[str, Any]], dict[str, Any]],
+    ) -> dict[str, Any]:
+        items = self.items.get(ref, [])
+        failures = self.failures.get(ref, [])
+        if self.preparation_identities_valid:
+            preparation_failure = _record_material_preparation_failure(items, failures, ref)
+            if preparation_failure:
+                return {**preparation_failure, "items": []}
+        if not self.has_rule_results:
+            raise ValueError("saved_partial_result_invalid")
+        return _project_saved_partial_record(
+            items=items, failures=failures, ref=ref, expected_rules=expected_rules,
+            projection_key=projection_key, projector=projector,
+        )
+
+
 def read_saved_partial_record_row(
     row: Mapping[str, Any], *, ref: CaseRef, expected_rules: list[str],
     projection_key: str, projector: Callable[[dict[str, Any]], dict[str, Any]],
 ) -> dict[str, Any]:
     """单例详情和批量摘要共用持久失败任务的读取边界。"""
-    try:
-        summary = json.loads(row["summary_json"])
-        items = json.loads(row["items_json"])
-        failures = json.loads(row["failed_records_json"])
-    except (TypeError, ValueError):
-        raise ValueError("saved_partial_result_invalid") from None
-    if not (isinstance(summary, dict) and isinstance(items, list) and isinstance(failures, list)):
-        raise ValueError("saved_partial_result_invalid")
-    preparation_failure = _record_material_preparation_failure(items, failures, ref)
-    if preparation_failure:
-        return {**preparation_failure, "items": []}
-    return read_saved_partial_record(
-        summary=summary, items=items, failures=failures, ref=ref, expected_rules=expected_rules,
+    return SavedPartialRecordBatch.from_row(row).read(
+        ref=ref, expected_rules=expected_rules,
         projection_key=projection_key, projector=projector,
     )
 
@@ -126,46 +166,59 @@ def read_saved_partial_record(
     for item in items:
         if not isinstance(item, dict):
             raise ValueError("saved_partial_result_invalid")
-        item_ref = CaseRef.from_mapping(item)
-        if item_ref == ref:
-            rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
-            if not all(item_ref) or not rule_id or rule_id not in expected_rules:
-                raise ValueError("saved_partial_result_invalid")
-            if item.get("schema_version") not in {"lx0609-customer-result-v2", "customer-qc-result-v1"}:
-                raise ValueError("saved_partial_result_invalid")
+        if CaseRef.from_mapping(item) == ref:
             rows.append(item)
-    if not canonical_envelope_items_are_consistent(rows):
+    matching_failures = []
+    for failure in failures:
+        if not isinstance(failure, Mapping) or not all(CaseRef.from_mapping(failure)):
+            raise ValueError("saved_partial_failure_invalid")
+        if CaseRef.from_mapping(failure) == ref:
+            matching_failures.append(failure)
+    return _project_saved_partial_record(
+        items=rows, failures=matching_failures, ref=ref, expected_rules=expected_rules,
+        projection_key=projection_key, projector=projector,
+    )
+
+
+def _project_saved_partial_record(
+    *, items: list[dict[str, Any]], failures: list[Mapping[str, Any]], ref: CaseRef,
+    expected_rules: list[str], projection_key: str,
+    projector: Callable[[dict[str, Any]], dict[str, Any]],
+) -> dict[str, Any]:
+    for item in items:
+        rule_id = str(item.get("rule_id") or item.get("rule_code") or "").strip().upper()
+        if not all(ref) or not rule_id or rule_id not in expected_rules:
+            raise ValueError("saved_partial_result_invalid")
+        if item.get("schema_version") not in {"lx0609-customer-result-v2", "customer-qc-result-v1"}:
+            raise ValueError("saved_partial_result_invalid")
+    if not canonical_envelope_items_are_consistent(items):
         raise ValueError("saved_partial_result_invalid")
     failed_rules: list[str] = []
     safe_failures: list[dict[str, str]] = []
     for failure in failures:
-        if not isinstance(failure, Mapping) or not all(CaseRef.from_mapping(failure)):
-            raise ValueError("saved_partial_failure_invalid")
-        if CaseRef.from_mapping(failure) != ref:
-            continue
         rule_id = str(failure.get("rule_id") or failure.get("rule_code") or "").strip().upper()
         if rule_id not in expected_rules or rule_id in failed_rules:
             raise ValueError("saved_partial_failure_invalid")
         failed_rules.append(rule_id)
         # 失败详情只暴露规则身份，不输出原始异常或患者坐标。
         safe_failures.append({"rule_id": rule_id})
-    delivered = {str(item.get("rule_id") or item.get("rule_code")) for item in rows}
+    delivered = {str(item.get("rule_id") or item.get("rule_code")) for item in items}
     if (not failed_rules or delivered & set(failed_rules)
             or delivered | set(failed_rules) != set(expected_rules)):
         raise ValueError("saved_partial_scope_invalid")
     record_ref = keyed_ref("rec", ref.as_key(), hmac_key=projection_key)
     projected = []
-    for item in rows:
+    for item in items:
         try:
             validated_customer_explanation(item, rule_id=item["rule_id"], status=item["status"])
             public = projector(item)
-        except ValueError:
+        except (KeyError, ValueError):
             raise ValueError("saved_partial_result_invalid") from None
         public["record_ref"] = record_ref
         projected.append(public)
     return {
         "record_ref": record_ref, "items": projected,
-        "execution_status": "partial_failed" if rows else "failed",
+        "execution_status": "partial_failed" if items else "failed",
         "failed_rule_ids": failed_rules, "failed_rule_count": len(failed_rules),
-        "failed_rules": safe_failures, "completed_rule_count": len(rows),
+        "failed_rules": safe_failures, "completed_rule_count": len(items),
     }

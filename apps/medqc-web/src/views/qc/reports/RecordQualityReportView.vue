@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page report-page">
+  <section class="mq-page report-page" aria-label="病历质量分析">
     <header class="page-head mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -15,23 +15,33 @@
       <div class="head-actions mq-page-head__actions">
         <div class="mq-segmented" role="tablist" aria-label="报表专题">
           <button
+            id="record-report-tab-quality"
+            ref="qualityTabRef"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === 'quality' }"
             role="tab"
             :aria-selected="reportTab === 'quality'"
-            @click="reportTab = 'quality'"
+            aria-controls="record-report-panel-quality"
+            :tabindex="reportTab === 'quality' ? 0 : -1"
+            @click="setReportTab('quality')"
+            @keydown="onReportTabKeydown($event, 'quality')"
           >
             病历质量分析
           </button>
           <button
+            id="record-report-tab-core"
+            ref="coreTabRef"
             type="button"
             class="mq-segmented__item"
             :class="{ 'is-active': reportTab === 'core' }"
             role="tab"
             :aria-selected="reportTab === 'core'"
+            aria-controls="record-report-panel-core"
+            :tabindex="reportTab === 'core' ? 0 : -1"
             data-testid="core-tab"
-            @click="reportTab = 'core'"
+            @click="setReportTab('core')"
+            @keydown="onReportTabKeydown($event, 'core')"
           >
             18项核心制度
           </button>
@@ -65,12 +75,29 @@
         </button>
       </div>
     </header>
-    <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
-    <div v-show="reportTab === 'quality'">
+    <div
+      id="record-report-panel-core"
+      role="tabpanel"
+      aria-labelledby="record-report-tab-core"
+      :hidden="reportTab !== 'core'"
+    >
+      <CoreSystemReportPanel v-if="reportTab === 'core'" :initial-filters="filters" />
+    </div>
+    <div
+      id="record-report-panel-quality"
+      v-show="reportTab === 'quality'"
+      role="tabpanel"
+      aria-labelledby="record-report-tab-quality"
+      :hidden="reportTab !== 'quality'"
+    >
       <section class="filters mq-card mq-card--padded" aria-label="报表筛选">
         <div class="field mq-field scene-field">
-          <label>场景</label>
-          <div class="segmented mq-segmented" role="group" aria-label="质控场景">
+          <span id="report-scene-label" class="field-label mq-field__label">场景</span>
+          <div
+            class="segmented mq-segmented"
+            role="group"
+            aria-labelledby="report-scene-label"
+          >
             <button
               type="button"
               class="mq-segmented__item"
@@ -108,7 +135,7 @@
             placeholder="全部医生"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--datetime mq-field">
           <label for="report-from">完成时间起</label
           ><input
             id="report-from"
@@ -117,7 +144,7 @@
             type="datetime-local"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--datetime mq-field">
           <label for="report-to">完成时间止</label
           ><input
             id="report-to"
@@ -126,7 +153,7 @@
             type="datetime-local"
           />
         </div>
-        <div class="field mq-field">
+        <div class="field field--select mq-field">
           <label for="report-source">质控类型</label
           ><select id="report-source" v-model="draft.defect_source" class="mq-input">
             <option value="all">全部</option>
@@ -134,10 +161,12 @@
             <option value="manual">人工缺陷</option>
           </select>
         </div>
-        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
-          <MqIcon name="search" :size="16" />查询
-        </button>
-        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+        <div class="filter-actions">
+          <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+            <MqIcon name="search" :size="16" />查询
+          </button>
+          <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+        </div>
       </section>
 
       <div v-if="loading" class="status" role="status">正在读取病历质量报表…</div>
@@ -157,6 +186,49 @@
           />终末口径：已出院且有已完成质控结果的病历。医院归档标记尚未接入，
           统计范围未按“已归档”核验，可能包含尚未归档的病历。
         </div>
+        <section
+          v-if="isZeroCaseReport"
+          class="empty-guide mq-card"
+          role="status"
+          data-testid="report-empty-guide"
+        >
+          <div class="empty-guide__copy">
+            <MqIcon name="issue" :size="18" />
+            <div>
+              <p class="empty-guide__title">
+                {{
+                  hasActiveFilters
+                    ? `当前筛选条件下暂无符合口径的${scene === 'running' ? '运行病历' : '终末病历'}（0 份）`
+                    : `当前${scene === 'running' ? '运行病历' : '终末病历'}范围内暂无已完成质控结果的病例（0 份）`
+                }}
+              </p>
+              <p class="empty-guide__desc">
+                {{
+                  hasActiveFilters
+                    ? '可清空科室、主治医师或放宽完成时间范围后重新查询，也可切换至另一质控场景查看统计。'
+                    : `请先在质控工作台完成病历质控，或切换至「${scene === 'running' ? '终末病历' : '运行病历'}」查看其他场景数据。`
+                }}
+              </p>
+            </div>
+          </div>
+          <div class="empty-guide__actions">
+            <button
+              v-if="hasActiveFilters"
+              class="mq-btn mq-btn--primary"
+              type="button"
+              @click="resetFilters"
+            >
+              重置筛选条件
+            </button>
+            <button
+              class="mq-btn"
+              type="button"
+              @click="setScene(scene === 'running' ? 'final' : 'running')"
+            >
+              切换到{{ scene === 'running' ? '终末病历' : '运行病历' }}
+            </button>
+          </div>
+        </section>
         <section class="overview" aria-label="总览">
           <h2>总览</h2>
           <div class="metrics">
@@ -171,13 +243,14 @@
               ><small>{{ item.note }}</small>
             </div>
           </div>
-          <div v-if="report.kpis.qc_unavailable_total" class="notice">
+          <div v-if="!confirmedResultsOnly && report.kpis.qc_unavailable_total" class="notice">
             {{ report.kpis.qc_unavailable_total }} 份病历的质控结果无法读取，未纳入已完成结果统计。
           </div>
           <div
             v-if="
-              report.source_status?.manual_defect === 'unavailable' ||
-              report.source_status?.review === 'unavailable'
+              !confirmedResultsOnly &&
+              (report.source_status?.manual_defect === 'unavailable' ||
+                report.source_status?.review === 'unavailable')
             "
             class="notice"
           >
@@ -214,24 +287,24 @@
             </div>
             <div class="data-panel mq-card">
               <h3>缺陷等级</h3>
-              <template v-if="report.defect_level_distribution">
+              <template v-if="defectLevelDistribution">
                 <div
-                  v-for="item in report.defect_level_distribution"
+                  v-for="item in defectLevelDistribution"
                   :key="item.name"
                   class="data-row"
                 >
                   <span>{{ item.name }}</span
                   ><strong>{{ item.defect_total }}</strong>
                 </div>
-                <p v-if="!report.defect_level_distribution.length" class="empty">暂无数据</p>
+                <p v-if="!defectLevelDistribution.length" class="empty">暂无数据</p>
               </template>
               <p v-else class="empty">不可用</p>
             </div>
             <div class="data-panel mq-card">
               <h3>缺陷类型分布</h3>
-              <template v-if="report.defect_type_distribution">
+              <template v-if="defectTypeDistribution">
                 <button
-                  v-for="item in report.defect_type_distribution"
+                  v-for="item in defectTypeDistribution"
                   :key="item.name"
                   class="data-row row-button"
                   type="button"
@@ -240,15 +313,15 @@
                   <span>{{ item.name }}</span
                   ><strong>{{ item.defect_total }}</strong>
                 </button>
-                <p v-if="!report.defect_type_distribution.length" class="empty">暂无已分类缺陷</p>
+                <p v-if="!defectTypeDistribution.length" class="empty">暂无已分类缺陷</p>
               </template>
               <p v-else class="empty">不可用</p>
             </div>
             <div class="data-panel mq-card">
               <h3>文书分布</h3>
-              <template v-if="report.document_distribution">
+              <template v-if="documentDistribution">
                 <button
-                  v-for="item in report.document_distribution"
+                  v-for="item in documentDistribution"
                   :key="item.name"
                   class="data-row row-button"
                   type="button"
@@ -257,7 +330,7 @@
                   <span>{{ item.name }}</span
                   ><strong>{{ item.defect_total }}</strong>
                 </button>
-                <p v-if="!report.document_distribution.length" class="empty">暂无数据</p>
+                <p v-if="!documentDistribution.length" class="empty">暂无数据</p>
               </template>
               <p v-else class="empty">不可用</p>
             </div>
@@ -265,13 +338,14 @@
           <div class="top-panel mq-card">
             <div class="top-head">
               <h3>缺陷 Top 20</h3>
-              <div class="segmented mq-segmented">
+              <div class="segmented mq-segmented" role="group" aria-label="缺陷 Top 20 维度">
                 <button
                   v-for="tab in topTabs"
                   :key="tab.key"
                   type="button"
                   class="mq-segmented__item"
                   :class="{ active: activeTop === tab.key, 'is-active': activeTop === tab.key }"
+                  :aria-pressed="activeTop === tab.key"
                   @click="activeTop = tab.key"
                 >
                   {{ tab.label }}
@@ -293,10 +367,10 @@
                 ><strong>{{ item.defect_total }}</strong>
               </button>
             </div>
-            <p v-if="activeTop === 'veto'" class="notice">
+            <p v-if="!confirmedResultsOnly && activeTop === 'veto'" class="notice">
               单否按评分标准的自动缺陷计分结果统计；人工缺陷单否归属未知。
             </p>
-            <div v-if="report.classification_unknown" class="notice">
+            <div v-if="!confirmedResultsOnly && report.classification_unknown" class="notice">
               <button
                 v-for="dimension in classificationDimensions"
                 :key="dimension.key"
@@ -352,11 +426,11 @@
               <span>{{ report.department_rows.length }} 个科室</span>
             </div>
             <div class="table-scroll">
-              <table class="mq-table">
+              <table class="mq-table mq-table--sticky-first">
                 <thead>
                   <tr>
-                    <th>科室</th>
-                    <th v-for="column in shownColumns" :key="column.key">
+                    <th scope="col">科室</th>
+                    <th v-for="column in shownColumns" :key="column.key" scope="col" class="col-compact">
                       {{ column.label }}
                     </th>
                   </tr>
@@ -389,11 +463,11 @@
               <span>{{ report.doctor_rows.length }} 位医生</span>
             </div>
             <div class="table-scroll">
-              <table class="mq-table">
+              <table class="mq-table mq-table--sticky-first">
                 <thead>
                   <tr>
-                    <th>主治医师</th>
-                    <th v-for="column in shownColumns" :key="column.key">
+                    <th scope="col">主治医师</th>
+                    <th v-for="column in shownColumns" :key="column.key" scope="col" class="col-compact">
                       {{ column.label }}
                     </th>
                   </tr>
@@ -422,12 +496,12 @@
           </div>
         </section>
         <RecordRemediationAnalysisPanel :filters="filters" />
-        <section class="unavailable mq-card">
+        <section v-if="!confirmedResultsOnly" class="unavailable mq-card">
           <h2>暂未接入的维度</h2>
           <p v-for="item in report.unavailable_dimensions" :key="item.key">
             {{ item.label }}：{{ unavailableReason(item.reason_code) }}
           </p>
-          <button class="link" type="button" @click="reportTab = 'core'">
+          <button class="link" type="button" @click="setReportTab('core')">
             核心制度自动缺陷分析
           </button>
         </section>
@@ -438,7 +512,9 @@
         :title="drilldownTitle"
         width="min(900px, 100vw)"
         :root-style="{ zIndex: 1100 }"
+        :keyboard="true"
         destroy-on-close
+        @close="drawerOpen = false"
       >
         <div class="drawer-actions">
           <span>{{ recordsPage ? `共 ${recordsPage.total} 份病历` : '病例明细' }}</span
@@ -517,7 +593,7 @@
         </div>
       </a-drawer>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -525,10 +601,10 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 import CoreSystemReportPanel from './CoreSystemReportPanel.vue'
 import RecordRemediationAnalysisPanel from './RecordRemediationAnalysisPanel.vue'
-const reportTab = ref('quality')
 import {
   exportRecordQualityReport,
   getRecordQualityRecords,
@@ -581,6 +657,46 @@ const baseColumns: Array<{ key: ColumnKey; label: string }> = [
 const route = useRoute()
 const router = useRouter()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
+const NON_CONFIRMED_DISTRIBUTION_NAMES = new Set(['data_gap', 'uncertain'])
+
+function queryString(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function toShanghaiDateTime(value?: string): string | undefined {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return undefined
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) return `${trimmed}:00+08:00`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(trimmed)) return `${trimmed}+08:00`
+  return trimmed
+}
+
+function toLocalDateTimeInput(value?: string): string {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(trimmed)) {
+    return trimmed.slice(0, 16)
+  }
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const shanghai = new Date(parsed.getTime() + 8 * 60 * 60 * 1000)
+  return shanghai.toISOString().slice(0, 16)
+}
+
+function readDefectSource(value: unknown): DefectSource {
+  const raw = queryString(value)
+  return raw === 'auto' || raw === 'manual' ? raw : 'all'
+}
+
+const reportTab = ref<'quality' | 'core'>(
+  queryString(route?.query?.tab) === 'core' ? 'core' : 'quality',
+)
+const qualityTabRef = ref<HTMLButtonElement | null>(null)
+const coreTabRef = ref<HTMLButtonElement | null>(null)
+const localScene = ref<ReportScene>(queryString(route?.query?.scene) === 'running' ? 'running' : 'final')
 const authKey = computed(() =>
   JSON.stringify([
     authStore.user?.id,
@@ -589,16 +705,61 @@ const authKey = computed(() =>
     authStore.user?.roles || authStore.user?.role,
   ]),
 )
-const scene = computed<ReportScene>(() => (route.query.scene === 'final' ? 'final' : 'running'))
-const draft = ref({
-  department: '',
-  doctor: '',
-  completed_from: '',
-  completed_to: '',
-  defect_source: 'all' as DefectSource,
+const scene = computed<ReportScene>(() => {
+  const qScene = queryString(route?.query?.scene)
+  if (qScene === 'final' || qScene === 'running') return qScene
+  return localScene.value
 })
-const filters = ref<RecordQualityFilters>({ scene: scene.value, defect_source: 'all' })
+function draftFromRoute() {
+  return {
+    department: queryString(route?.query?.department).trim(),
+    doctor: queryString(route?.query?.doctor).trim(),
+    completed_from: toLocalDateTimeInput(queryString(route?.query?.completed_from)),
+    completed_to: toLocalDateTimeInput(queryString(route?.query?.completed_to)),
+    defect_source: readDefectSource(route?.query?.defect_source),
+  }
+}
+function buildFiltersFromDraft(
+  currentScene: ReportScene,
+  sourceDraft: {
+    department: string
+    doctor: string
+    completed_from: string
+    completed_to: string
+    defect_source: DefectSource
+  },
+): RecordQualityFilters {
+  const next: RecordQualityFilters = {
+    scene: currentScene,
+    defect_source: sourceDraft.defect_source,
+  }
+  if (sourceDraft.department) next.department = sourceDraft.department
+  if (sourceDraft.doctor) next.doctor = sourceDraft.doctor
+  const from = toShanghaiDateTime(sourceDraft.completed_from)
+  const to = toShanghaiDateTime(sourceDraft.completed_to)
+  if (from) next.completed_from = from
+  if (to) next.completed_to = to
+  return next
+}
+const draft = ref(draftFromRoute())
+const filters = ref<RecordQualityFilters>(buildFiltersFromDraft(scene.value, draft.value))
 const report = ref<RecordQualityReport | null>(null)
+function filterDistribution(
+  items: ReportDistributionItem[] | null | undefined,
+): ReportDistributionItem[] | null {
+  if (items == null) return null
+  if (!confirmedResultsOnly.value) return items
+  return items.filter(
+    (item) => !NON_CONFIRMED_DISTRIBUTION_NAMES.has(item.name.trim().toLowerCase()),
+  )
+}
+const defectLevelDistribution = computed(() =>
+  filterDistribution(report.value?.defect_level_distribution),
+)
+const defectTypeDistribution = computed(() =>
+  filterDistribution(report.value?.defect_type_distribution),
+)
+const documentDistribution = computed(() => filterDistribution(report.value?.document_distribution))
 const optionalColumns = computed<Array<{ key: ColumnKey; label: string }>>(() => [
   ...baseColumns.map((column) => ({
     ...column,
@@ -646,23 +807,50 @@ const recordsError = ref('')
 let reportRequest = 0
 let recordsRequest = 0
 let exportRequest = 0
+let reportController: AbortController | null = null
+let recordsController: AbortController | null = null
+let exportController: AbortController | null = null
+
+function abortReport(): void {
+  reportController?.abort()
+  reportController = null
+}
+function abortRecords(): void {
+  recordsController?.abort()
+  recordsController = null
+}
+function abortExport(): void {
+  exportController?.abort()
+  exportController = null
+}
+
 const exportScope = computed(() =>
   JSON.stringify([scene.value, filters.value, draft.value, drilldown.value, shownColumns.value]),
 )
 function invalidateExport(): void {
   ++exportRequest
+  abortExport()
   exporting.value = null
 }
 watch([authKey, exportScope], invalidateExport, { flush: 'sync' })
 watch(authKey, () => {
   ++reportRequest
   ++recordsRequest
+  abortReport()
+  abortRecords()
   report.value = null
   recordsPage.value = null
   drawerOpen.value = false
   loading.value = false
   recordsLoading.value = false
   if (authStore.user?.id) void loadReport()
+})
+watch(drawerOpen, (open) => {
+  if (!open) {
+    ++recordsRequest
+    abortRecords()
+    recordsLoading.value = false
+  }
 })
 
 const topLists = computed(() => ({
@@ -766,11 +954,84 @@ function unavailableReason(code: string): string {
   )
 }
 
+function syncUrlQuery(overrides?: { scene?: ReportScene; tab?: 'quality' | 'core' }): void {
+  if (!route || !router) return
+  const nextScene = overrides?.scene ?? scene.value
+  const nextTab = overrides?.tab ?? reportTab.value
+  const nextQuery: Record<string, string> = {}
+  for (const [key, value] of Object.entries(route.query || {})) {
+    if (
+      ['tab', 'scene', 'department', 'doctor', 'completed_from', 'completed_to', 'defect_source'].includes(
+        key,
+      )
+    )
+      continue
+    const str = queryString(value)
+    if (str) nextQuery[key] = str
+  }
+  nextQuery.scene = nextScene
+  if (nextTab !== 'quality') nextQuery.tab = nextTab
+  if (filters.value.department) nextQuery.department = filters.value.department
+  if (filters.value.doctor) nextQuery.doctor = filters.value.doctor
+  if (filters.value.completed_from) nextQuery.completed_from = filters.value.completed_from
+  if (filters.value.completed_to) nextQuery.completed_to = filters.value.completed_to
+  if (filters.value.defect_source && filters.value.defect_source !== 'all') {
+    nextQuery.defect_source = filters.value.defect_source
+  }
+  const currentEntries = Object.entries(route.query || {})
+    .map(([k, v]) => [k, queryString(v)] as const)
+    .filter(([, v]) => Boolean(v))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const nextEntries = Object.entries(nextQuery).sort(([a], [b]) => a.localeCompare(b))
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return
+  if (typeof router.replace === 'function') {
+    void router.replace({ path: route.path, query: nextQuery })
+  } else if (typeof router.push === 'function') {
+    void router.push({ query: nextQuery })
+  }
+}
+
+const isZeroCaseReport = computed(
+  () => report.value !== null && report.value.kpis.record_total === 0,
+)
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.value.department ||
+      filters.value.doctor ||
+      filters.value.completed_from ||
+      filters.value.completed_to ||
+      (filters.value.defect_source && filters.value.defect_source !== 'all'),
+  ),
+)
+
+function setReportTab(tab: 'quality' | 'core'): void {
+  reportTab.value = tab
+  syncUrlQuery({ tab })
+}
+
+function onReportTabKeydown(event: KeyboardEvent, current: 'quality' | 'core'): void {
+  const order: Array<'quality' | 'core'> = ['quality', 'core']
+  const index = order.indexOf(current)
+  let next: 'quality' | 'core' | null = null
+  if (event.key === 'ArrowRight') next = order[(index + 1) % order.length]!
+  else if (event.key === 'ArrowLeft') next = order[(index - 1 + order.length) % order.length]!
+  else if (event.key === 'Home') next = order[0]!
+  else if (event.key === 'End') next = order[order.length - 1]!
+  if (!next) return
+  event.preventDefault()
+  setReportTab(next)
+  ;(next === 'quality' ? qualityTabRef.value : coreTabRef.value)?.focus()
+}
+
 async function loadReport(): Promise<void> {
   invalidateExport()
   const request = ++reportRequest
   const identity = authKey.value
   ++recordsRequest
+  abortReport()
+  abortRecords()
+  const controller = new AbortController()
+  reportController = controller
   drawerOpen.value = false
   drilldown.value = {}
   recordsPage.value = null
@@ -778,8 +1039,8 @@ async function loadReport(): Promise<void> {
   loading.value = true
   loadError.value = ''
   report.value = null
-  const result = await getRecordQualityReport(filters.value)
-  if (request !== reportRequest || identity !== authKey.value) return
+  const result = await getRecordQualityReport(filters.value, controller.signal)
+  if (request !== reportRequest || identity !== authKey.value || controller.signal.aborted) return
   loading.value = false
   if (result.success && result.data) {
     report.value = result.data
@@ -795,7 +1056,8 @@ function applyFilters(): void {
     message.error('完成时间起不能晚于完成时间止')
     return
   }
-  filters.value = { scene: scene.value, ...draft.value }
+  filters.value = buildFiltersFromDraft(scene.value, draft.value)
+  syncUrlQuery()
   void loadReport()
 }
 function resetFilters(): void {
@@ -809,13 +1071,39 @@ function resetFilters(): void {
   applyFilters()
 }
 function setScene(next: ReportScene): void {
-  if (scene.value !== next) void router.push({ query: { ...route.query, scene: next } })
+  if (scene.value !== next) {
+    localScene.value = next
+    filters.value = { ...filters.value, scene: next }
+    drawerOpen.value = false
+    syncUrlQuery({ scene: next })
+    void loadReport()
+  }
 }
 watch(scene, (next) => {
-  filters.value = { ...filters.value, scene: next }
-  drawerOpen.value = false
-  void loadReport()
+  localScene.value = next
+  if (filters.value.scene !== next) {
+    filters.value = { ...filters.value, scene: next }
+    drawerOpen.value = false
+    void loadReport()
+  }
 })
+watch(
+  () => route?.query,
+  (query) => {
+    if (!query) return
+    const nextTab: 'quality' | 'core' = queryString(query.tab) === 'core' ? 'core' : 'quality'
+    if (reportTab.value !== nextTab) reportTab.value = nextTab
+    const nextDraft = draftFromRoute()
+    const nextFilters = buildFiltersFromDraft(scene.value, nextDraft)
+    if (JSON.stringify(nextFilters) !== JSON.stringify(filters.value)) {
+      draft.value = nextDraft
+      filters.value = nextFilters
+      drawerOpen.value = false
+      void loadReport()
+    }
+  },
+  { deep: true },
+)
 watch(storageKey, restoreColumns)
 function restoreColumns(): void {
   visibleColumns.value = optionalColumns.value.map((column) => column.key)
@@ -864,16 +1152,22 @@ function applyColumnPreset(): void {
 async function loadRecords(page = 1): Promise<void> {
   const request = ++recordsRequest
   const identity = authKey.value
+  abortRecords()
+  const controller = new AbortController()
+  recordsController = controller
   recordsLoading.value = true
   recordsError.value = ''
   recordsPage.value = null
-  const result = await getRecordQualityRecords({
-    ...filters.value,
-    ...drilldown.value,
-    page,
-    page_size: 20,
-  })
-  if (request !== recordsRequest || identity !== authKey.value) return
+  const result = await getRecordQualityRecords(
+    {
+      ...filters.value,
+      ...drilldown.value,
+      page,
+      page_size: 20,
+    },
+    controller.signal,
+  )
+  if (request !== recordsRequest || identity !== authKey.value || controller.signal.aborted) return
   recordsLoading.value = false
   if (result.success && result.data) recordsPage.value = result.data
   else recordsError.value = result.message || '病例明细暂不可用'
@@ -906,14 +1200,20 @@ async function download(sheet: ReportSheet): Promise<void> {
   const request = ++exportRequest
   const identity = authKey.value
   const scope = exportScope.value
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   const query = { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) }
   const columns = sheet === 'records' ? undefined : shownColumns.value.map((column) => column.key)
   const filename = `病历质量分析-${query.scene}-${sheet}.csv`
   const current = () =>
-    request === exportRequest && identity === authKey.value && scope === exportScope.value
+    request === exportRequest &&
+    identity === authKey.value &&
+    scope === exportScope.value &&
+    !controller.signal.aborted
   exporting.value = sheet
   try {
-    const result = await exportRecordQualityReport(query, sheet, columns)
+    const result = await exportRecordQualityReport(query, sheet, columns, controller.signal)
     if (!current()) return
     if (!result.success || !result.data) {
       message.error(result.message || '导出失败')
@@ -933,12 +1233,22 @@ async function download(sheet: ReportSheet): Promise<void> {
     if (request === exportRequest) exporting.value = null
   }
 }
+function handleDrawerEscape(event: KeyboardEvent): void {
+  if (event.key === 'Escape' && drawerOpen.value) {
+    event.preventDefault()
+    drawerOpen.value = false
+  }
+}
 onBeforeUnmount(() => {
+  window.removeEventListener('keydown', handleDrawerEscape)
   ++reportRequest
   ++recordsRequest
+  abortReport()
+  abortRecords()
   invalidateExport()
 })
 onMounted(() => {
+  window.addEventListener('keydown', handleDrawerEscape)
   restoreColumns()
   void loadReport()
 })

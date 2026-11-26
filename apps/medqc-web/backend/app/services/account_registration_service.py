@@ -8,7 +8,10 @@ import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
 from ..core.security import get_password_hash, verify_password
-from ..database.models.account_registration import registration_tables
+from ..database.models.account_registration import (
+    registration_is_approved,
+    registration_tables,
+)
 from .account_management_service import AccountManagementService, ROLES, _iso
 from .defect_rectification_service import RectificationError, _persistent_roles, _effective_persistent_roles
 from .doctor_notification_service import Notification
@@ -140,8 +143,14 @@ class AccountRegistrationService(AccountManagementService):
             row["id"]
             for row in rows
             if "admin" in _effective_persistent_roles(row["role"], row["roles_json"])
-            and (row["institute_id"] in (institute, None, "")
-                 or "sync_admin" in _persistent_roles(row["role"], row["roles_json"]))
+            and (
+                row["institute_id"] in (institute, None, "")
+                or bool(
+                    _persistent_roles(row["role"], row["roles_json"])
+                    & {"sync_admin", "super_admin"}
+                )
+            )
+            and registration_is_approved(session, users, row["id"])
         ]
         if not result:
             raise RectificationError(

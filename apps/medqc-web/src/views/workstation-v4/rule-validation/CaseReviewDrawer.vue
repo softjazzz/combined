@@ -162,25 +162,30 @@
           </ul>
         </section>
 
-        <label class="mq-field">
-          <span class="mq-field__label">核对意见</span>
-          <a-textarea
-            v-model:value="note"
-            aria-label="核对意见"
-            :rows="3"
-            :maxlength="4000"
-            placeholder="写明证据是否指向正确原文、建议是否可用；状态不一致时说明原因"
+        <template v-if="!confirmedResultsOnly">
+          <label class="mq-field">
+            <span class="mq-field__label">核对意见</span>
+            <a-textarea
+              v-model:value="note"
+              aria-label="核对意见"
+              :rows="3"
+              :maxlength="4000"
+              placeholder="写明证据是否指向正确原文、建议是否可用；状态不一致时说明原因"
+            />
+          </label>
+          <a-alert
+            v-if="error"
+            type="error"
+            :message="error"
+            show-icon
           />
-        </label>
-        <a-alert
-          v-if="error"
-          type="error"
-          :message="error"
-          show-icon
-        />
+        </template>
       </div>
 
-      <footer class="rv-review__foot">
+      <footer
+        v-if="!confirmedResultsOnly"
+        class="rv-review__foot"
+      >
         <span class="rv-muted">状态与预期不一致时只能记录问题；确认通过要求状态一致且证据、建议均正确。</span>
         <div class="rv-review__actions">
           <button
@@ -208,6 +213,7 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import CriterionResultBlock from '../customer-sample-validation/CriterionResultBlock.vue'
 import { customerFactValueLabel } from '../customer-sample-validation/customerFactValuePresentation'
 import { reviewCase } from '@/services/rule-validation-service'
@@ -231,6 +237,7 @@ const props = defineProps<{
   reviews: ValidationEvent[]
 }>()
 const emit = defineEmits<{ close: []; navigate: [index: number]; reviewed: [] }>()
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const note = ref('')
 const busy = ref(false)
@@ -308,7 +315,7 @@ watch(
 )
 
 async function submit(decision: 'confirmed' | 'problem') {
-  if (!row.value) return
+  if (!row.value || confirmedResultsOnly.value) return
   busy.value = true
   error.value = ''
   const response = await reviewCase(props.runId, row.value.item_id, decision, note.value.trim())

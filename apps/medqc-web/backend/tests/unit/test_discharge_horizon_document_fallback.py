@@ -369,3 +369,30 @@ def test_existing_six_materials_endpoint_and_canonical_roundtrip(monkeypatch, tm
     output = Path(os.environ.get("DISCHARGE_SIX_OUTPUT", str(tmp_path / "six-private.json")))
     output.write_text(json.dumps({"fixture_sha256": before, "cases": outcomes, "model_calls": 0,
                                  "business_database_connections": 0}, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def test_death_record_time_reaches_the_unified_horizon_when_discharge_absent(monkeypatch):
+    connection = Sources({
+        "inpat_registration": [{"discharge_datetime": None}],
+        "discharge_record": [],
+        "death_record": [{"death_datetime": "2026-07-29T06:34:00Z"}],
+    })
+    monkeypatch.setattr(reader.bundle_assembly, "engine", _Engine(connection))
+    monkeypatch.setattr(reader, "_case_source_schema", lambda **_: "cdm")
+    monkeypatch.setattr(
+        reader.bundle_assembly,
+        "_get_table_columns",
+        lambda schema, table: ["institute_id", "patient_id", "visit_id"] + (
+            ["discharge_time", "discharge_date", "document_id"] if table == "discharge_record"
+            else ["death_datetime", "document_id"] if table == "death_record"
+            else ["discharge_datetime"]
+        ),
+    )
+    monkeypatch.setattr(reader, "_material_document_filter", lambda **_: (" AND reviewed = 1 ", {}))
+    result = reader.read_luxian_0609_discharge_horizon_rows(
+        institute_id="I", patient_id="P", visit_id="V", source_schema=None
+    )
+    assert result.rows[0]["discharge_datetime"] == "2026-07-29 14:34:00"
+    assert result.rows[0]["time_source"] == "death_record.death_datetime"
+    assert not result.truncated
+    assert not any('"mr"' in sql for sql, _ in connection.calls)

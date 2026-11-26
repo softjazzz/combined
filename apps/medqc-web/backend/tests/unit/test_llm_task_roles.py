@@ -61,7 +61,7 @@ def test_role_plan_readback_and_permissions(client, setup):
     assert summary['custom_parameters'][TASK_ROLES_KEY] == payload['custom_parameters'][TASK_ROLES_KEY]
     assert 'task-only-key' not in json.dumps(summary)
     user['roles'] = ['doctor']
-    assert client.get('/api/v1/llm/configs/default/summary').json()['data']['readonly']
+    assert client.get('/api/v1/llm/configs/default/summary').status_code == 403
     assert client.post('/api/v1/llm/configs', json=selection()).status_code == 403
 
 

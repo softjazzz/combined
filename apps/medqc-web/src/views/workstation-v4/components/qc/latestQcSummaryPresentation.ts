@@ -20,22 +20,83 @@ export function formatQcCompletedAt(value?: string | null): string {
   return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
+export interface ResolveResultPresentationOptions {
+  confirmedOnly?: boolean
+}
+
 export function resolveResultPresentation(
   summary?: RecordLatestQcSummary,
   summaryState?: QcSummaryLoadState,
+  options?: ResolveResultPresentationOptions,
 ): Pick<QcRecordResultRow, 'resultStatus' | 'resultLabel' | 'issueSummary' | 'latestQcTime'> {
-  if (!summary && summaryState) {
-    const label = summaryState === 'pending' ? '质控摘要加载中' : '质控摘要暂不可用'
-    return { resultStatus: 'unknown', resultLabel: label, issueSummary: label, latestQcTime: '—' }
+  const confirmedOnly = options?.confirmedOnly === true
+  if (!summary) {
+    if (summaryState === 'pending') {
+      return {
+        resultStatus: 'unknown',
+        resultLabel: '质控摘要加载中',
+        issueSummary: '质控摘要加载中',
+        latestQcTime: '—',
+      }
+    }
+    if (summaryState === 'unavailable') {
+      return {
+        resultStatus: 'unknown',
+        resultLabel: '质控摘要暂不可用',
+        issueSummary: '质控摘要暂不可用',
+        latestQcTime: '—',
+      }
+    }
+    return {
+      resultStatus: 'not-run',
+      resultLabel: '未质控',
+      issueSummary: '暂无结果',
+      latestQcTime: '—',
+    }
   }
-  if (summary?.status === 'failed' || summary?.executionStatus === 'failed') {
+
+  if (confirmedOnly) {
+    if (summary.status === 'not_run' || !summary.status) {
+      return {
+        resultStatus: 'not-run',
+        resultLabel: '未质控',
+        issueSummary: '暂无结果',
+        latestQcTime: '—',
+      }
+    }
+    const confirmedIssues = statusCount(summary.statusCounts || {}, 'non_compliant')
+    if (confirmedIssues > 0) {
+      return {
+        resultStatus: 'priority',
+        resultLabel: '需优先复核',
+        issueSummary: `有 ${confirmedIssues} 项确定问题`,
+        latestQcTime: formatQcCompletedAt(summary.completedAt),
+      }
+    }
+    if (summary.status === 'ready') {
+      return {
+        resultStatus: 'completed',
+        resultLabel: '已完成',
+        issueSummary: '未发现确定问题',
+        latestQcTime: formatQcCompletedAt(summary.completedAt),
+      }
+    }
+    return {
+      resultStatus: 'not-run',
+      resultLabel: '未质控',
+      issueSummary: '暂无结果',
+      latestQcTime: '—',
+    }
+  }
+
+  if (summary.status === 'failed' || summary.executionStatus === 'failed') {
     return {
       resultStatus: 'technical-error', resultLabel: '执行失败',
       issueSummary: `执行失败 · ${summary.failedRuleCount || 0} 项失败，尚无有效结果`,
       latestQcTime: formatQcCompletedAt(summary.completedAt),
     }
   }
-  if (summary?.status === 'technical_error') {
+  if (summary.status === 'technical_error') {
     if (summary.failureStage) {
       return {
         resultStatus: 'technical-error',
@@ -51,7 +112,7 @@ export function resolveResultPresentation(
       latestQcTime: '—',
     }
   }
-  if (summary?.status !== 'ready') {
+  if (summary.status !== 'ready') {
     return {
       resultStatus: 'not-run',
       resultLabel: '未质控',

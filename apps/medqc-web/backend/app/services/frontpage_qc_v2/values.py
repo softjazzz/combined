@@ -5,9 +5,14 @@
 """
 from __future__ import annotations
 
+import math
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from typing import Mapping, Optional
+from zoneinfo import ZoneInfo
+
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+_TZ_SUFFIX_RE = re.compile(r"(Z|[+-]\d{2}(?::?\d{2})?)$", re.IGNORECASE)
 
 # 填写说明：栏目中没有可填写内容的，填写“—”。这些值视为“已填写、无内容”。
 NONE_MARKERS = frozenset({"-", "—", "－", "--", "——", "/", "无"})
@@ -215,21 +220,26 @@ def is_valid_phone(value: object) -> bool:
 
 
 def parse_number(value: object) -> Optional[float]:
+    if isinstance(value, bool):
+        return None
     text = text_of(value).replace(",", "")
     if not text:
         return None
     try:
-        return float(text)
+        num = float(text)
     except ValueError:
         return None
+    return num if math.isfinite(num) else None
 
 
 _DT_FORMATS = (
     "%Y-%m-%d %H:%M:%S.%f",
+    "%Y-%m-%dT%H:%M:%S.%f",
     "%Y-%m-%d %H:%M:%S",
     "%Y-%m-%d %H:%M",
     "%Y-%m-%dT%H:%M:%S",
     "%Y-%m-%dT%H:%M",
+    "%Y/%m/%d %H:%M:%S.%f",
     "%Y/%m/%d %H:%M:%S",
     "%Y/%m/%d %H:%M",
     "%Y-%m-%d",
@@ -238,18 +248,46 @@ _DT_FORMATS = (
 )
 
 
+def _parse_tz_suffix(suffix: str) -> Optional[timezone]:
+    if suffix.upper() == "Z":
+        return timezone.utc
+    sign = 1 if suffix[0] == "+" else -1
+    digits = suffix[1:].replace(":", "")
+    if len(digits) == 2:
+        hours, minutes = int(digits), 0
+    elif len(digits) == 4:
+        hours, minutes = int(digits[:2]), int(digits[2:])
+    else:
+        return None
+    if hours > 23 or minutes > 59:
+        return None
+    return timezone(timedelta(hours=sign * hours, minutes=sign * minutes))
+
+
 def parse_datetime(value: object) -> Optional[datetime]:
     if isinstance(value, datetime):
-        return value.replace(tzinfo=None)
+        if value.tzinfo is not None:
+            return value.astimezone(_SHANGHAI_TZ).replace(tzinfo=None)
+        return value
     if isinstance(value, date):
         return datetime(value.year, value.month, value.day)
     text = text_of(value)
     if not text:
         return None
-    text = re.sub(r"([+-]\d{2}(:?\d{2})?|Z)$", "", text) if re.search(r"\d{2}:\d{2}", text) else text
+    parsed_tz: Optional[timezone] = None
+    if re.search(r"\d{2}:\d{2}", text):
+        match = _TZ_SUFFIX_RE.search(text)
+        if match:
+            parsed_tz = _parse_tz_suffix(match.group(1))
+            if parsed_tz is None:
+                return None
+            text = text[: match.start()].strip()
     for fmt in _DT_FORMATS:
         try:
-            return datetime.strptime(text, fmt)
+            dt = datetime.strptime(text, fmt)
+            if parsed_tz is not None:
+                return dt.replace(tzinfo=parsed_tz).astimezone(_SHANGHAI_TZ).replace(tzinfo=None)
+            return dt
         except ValueError:
             continue
     return None

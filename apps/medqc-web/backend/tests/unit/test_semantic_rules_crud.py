@@ -11,9 +11,39 @@ from unittest.mock import Mock, patch, MagicMock
 import uuid
 from datetime import datetime
 
+from app.core import security as security_module
+from app.core.security import create_access_token
+
 
 class TestSemanticRulesCRUD:
     """语义质控规则 CRUD 操作测试类"""
+
+    @pytest.fixture(autouse=True)
+    def _global_admin_auth(self, client: TestClient, monkeypatch):
+        """为语义规则 CRUD 单元测试注入无绑定院区的全局管理员鉴权夹具。"""
+        admin_user = {
+            "id": "semantic-rules-global-admin",
+            "email": "semantic-global-admin@medqc.com",
+            "username": "semantic-global-admin@medqc.com",
+            "display_name": "Global Admin",
+            "name": "Global Admin",
+            "role": "admin",
+            "roles": ["admin"],
+            "institute_id": None,
+            "is_demo_account": False,
+            "is_active": True,
+        }
+        monkeypatch.setattr(
+            security_module,
+            "resolve_user_by_subject",
+            lambda sub: dict(admin_user) if sub == admin_user["email"] else None,
+        )
+        token = create_access_token({"sub": admin_user["email"]})
+        client.headers.update({"Authorization": f"Bearer {token}"})
+        try:
+            yield
+        finally:
+            client.headers.pop("Authorization", None)
 
     def test_get_all_rules_empty(self, client: TestClient):
         """测试获取所有规则 - 空列表"""

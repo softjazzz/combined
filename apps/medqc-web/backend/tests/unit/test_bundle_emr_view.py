@@ -100,6 +100,87 @@ def test_exam_evidence_routes_to_grouped_report_in_current_and_saved_directories
         assert aliases(emr_render._load_document_summaries_from_bundle(**kwargs)) == set()
 
 
+def test_lab_evidence_routes_to_grouped_report_in_current_and_saved_directories(monkeypatch):
+    key = "synthetic-lab-evidence-key"
+    monkeypatch.setattr(emr_render, "customer_safe_projection_key", lambda: key)
+    tables = {
+        "labtest_master": [{"test_id": "0003940880", "document_id": "lab-master-1", "labtest_subject": "微生物室"}],
+        "labtest_item_report": [
+            {
+                "test_id": "0003940880",
+                "item_no": "1",
+                "document_id": "169933204",
+                "item_name": "*细菌培养及鉴定MS法2：",
+                "result": "大肠埃希菌",
+            },
+            {
+                "test_id": "0003940880",
+                "item_no": "2",
+                "document_id": "169933205",
+                "item_name": "药敏结果",
+                "result": "敏感",
+            },
+            {
+                "test_id": "0003940879",
+                "item_no": "1",
+                "document_id": "169933164",
+                "item_name": "*细菌培养及鉴定MS法3：",
+                "result": "无细菌生长",
+            },
+        ],
+    }
+    reports, _ = assembly._build_grouped_lab_reports(tables["labtest_master"], tables["labtest_item_report"])
+
+    def documents():
+        return build_documents_from_domain_bundles(
+            {"course": {"source_documents": reports}}, include_exam_evidence_coordinates=True,
+        )
+
+    def aliases(payload):
+        report = next(doc for doc in payload["documents"] if doc["document_id"] == "0003940880")
+        assert "exam_evidence_coordinates" not in report
+        return {
+            (alias["source_document_type"], alias["source_ref"], alias["source_document_id"])
+            for alias in report.get("source_document_aliases", [])
+        }
+
+    expected = {
+        (source, keyed_ref("src", source_id, hmac_key=key), "0003940880")
+        for source, source_id in (
+            ("labtest_master", "lab-master-1"),
+            ("labtest_master", "0003940880"),
+            ("labtest_item_report", "169933204"),
+            ("labtest_item_report", "169933205"),
+        )
+    }
+    assert aliases(_project_customer_safe_source_refs({"documents": documents()})) == expected
+    assert all(
+        "exam_evidence_coordinates" not in doc
+        for doc in build_documents_from_domain_bundles({"course": {"source_documents": reports}})
+    )
+
+    old_documents = documents()
+    for document in old_documents:
+        document.pop("exam_evidence_coordinates", None)
+    identity = ("org", "patient", "visit")
+    monkeypatch.setattr(material, "source_binding", lambda _: "synthetic-task-binding")
+    frozen = {
+        "identity": list(identity),
+        "binding": "synthetic-task-binding",
+        "tables": tables,
+        "documents": {"documents": old_documents},
+    }
+    kwargs = dict(record_id="visit", institute_id="org", patient_id="patient", visit_id="visit")
+    with material.activate(frozen):
+        clinical = emr_render._load_document_summaries_from_bundle(**kwargs, document_scope="clinical")
+        assert aliases(clinical) == expected
+        assert {doc["document_id"] for doc in clinical["documents"]} == {"0003940880", "0003940879"}
+    old_report = next(doc for doc in old_documents if doc["document_id"] == "0003940880")
+    old_report["content"] = "与原始表行不一致的正文"
+    with material.activate(frozen):
+        assert aliases(emr_render._load_document_summaries_from_bundle(**kwargs)) == set()
+
+
 def test_old_course_bundle_without_exam_lab_coverage_requires_refresh():
     assert _course_bundle_needs_exam_lab_refresh({"structured_context": {}}) is True
 

@@ -27,8 +27,8 @@ def store_dependency():
 
 def authorized(current_user=Depends(get_current_user), store=Depends(store_dependency)):
     actor_id = str(current_user.get("id") or "")
-    service.require_manager(store, actor_id)
-    return store, actor_id
+    person = service.require_manager(store, actor_id)
+    return store, actor_id, service.can_manage_all_owners(person)
 
 
 @router.get("/options")
@@ -37,7 +37,7 @@ def options(
     scope: str = Query("final", pattern="^(running|final)$"),
     context=Depends(authorized),
 ):
-    store, actor = context
+    store, actor, _ = context
     try:
         return success_response(
             service.options(store, actor, institute_id=institute_id, scope=scope)
@@ -48,9 +48,12 @@ def options(
 
 @router.get("")
 def list_plans(request: Request, context=Depends(authorized)):
-    store, actor = context
+    store, actor, all_owners = context
     try:
-        rows = [service.project_plan(row) for row in store.list(actor)]
+        rows = [
+            service.project_plan(row)
+            for row in store.list(actor, all_owners=all_owners)
+        ]
     except SQLAlchemyError as exc:
         raise HTTPException(503, "定时质控存储未就绪，请先执行064迁移") from exc
     return success_response(
@@ -67,7 +70,8 @@ def list_plans(request: Request, context=Depends(authorized)):
 
 @router.post("")
 def create_plan(payload: PlanInput, context=Depends(authorized)):
-    store, actor = context
+    store, actor, _ = context
+    service.assert_plan_institute_scope(store, actor, payload.institute_id)
     definition = service.validate_definition(store, actor, payload)
     try:
         plan_id = store.save(actor, definition, datetime.now(timezone.utc))
@@ -85,7 +89,8 @@ class PlanUpdate(BaseModel):
 
 @router.put("/{plan_id}")
 def update_plan(plan_id: UUID, payload: PlanUpdate, context=Depends(authorized)):
-    store, actor = context
+    store, actor, all_owners = context
+    service.assert_plan_institute_scope(store, actor, payload.definition.institute_id)
     definition = service.validate_definition(store, actor, payload.definition)
     try:
         store.save(
@@ -94,6 +99,7 @@ def update_plan(plan_id: UUID, payload: PlanUpdate, context=Depends(authorized))
             datetime.now(timezone.utc),
             str(plan_id),
             payload.revision,
+            all_owners=all_owners,
         )
         return success_response(service.project_plan(store.current(str(plan_id))))
     except PlanConflict as exc:
@@ -102,15 +108,27 @@ def update_plan(plan_id: UUID, payload: PlanUpdate, context=Depends(authorized))
         raise HTTPException(503, "计划保存失败") from exc
 
 
+@router.delete("/{plan_id}")
+def delete_plan(plan_id: UUID, context=Depends(authorized)):
+    store, actor, all_owners = context
+    try:
+        store.delete(str(plan_id), actor, all_owners=all_owners)
+        return success_response({"id": str(plan_id), "deleted": True})
+    except KeyError as exc:
+        raise HTTPException(404, "计划不存在或无权删除") from exc
+    except SQLAlchemyError as exc:
+        raise HTTPException(503, "计划删除失败") from exc
+
+
 @router.get("/{plan_id}/runs")
 def history(plan_id: UUID, context=Depends(authorized)):
-    store, actor = context
+    store, actor, all_owners = context
     try:
         return success_response(
             {
                 "items": [
                     service.project_run(row)
-                    for row in store.history(str(plan_id), actor)
+                    for row in store.history(str(plan_id), actor, all_owners=all_owners)
                 ]
             }
         )

@@ -7,8 +7,25 @@
   min-width: 0;
 }
 .system-config-page > .mq-page-head > .mq-segmented {
+  flex-shrink: 1;
+  min-width: 0;
   max-width: 100%;
   flex-wrap: wrap;
+  row-gap: 4px;
+}
+.system-config-tabpanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  min-width: 0;
+}
+@media (max-width: 1360px) {
+  .system-config-page > .mq-page-head {
+    align-items: flex-start;
+  }
+  .system-config-page > .mq-page-head > .mq-segmented .mq-segmented__item {
+    padding: 0 12px;
+  }
 }
 @media (max-width: 600px) {
   .system-config-page .account-config-panel {

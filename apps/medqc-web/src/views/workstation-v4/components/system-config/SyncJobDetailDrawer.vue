@@ -2,7 +2,7 @@
   <a-drawer
     :open="Boolean(jobId)"
     title="同步任务详情"
-    :width="720"
+    width="min(720px, 100vw)"
     @close="emit('close')"
   >
     <a-alert
@@ -37,7 +37,7 @@
         >
           <strong>{{ unit.source_date || '日期未返回' }} · {{ unit.interface_name || '来源未返回' }}</strong>
           <p>{{ phaseLabel(unit.phase) }} · {{ statusLabel(unit.status) }} · 尝试 {{ unit.execution_attempts ?? '未返回' }} 次</p>
-          <p v-if="unit.error.code">
+          <p v-if="unit.error?.code">
             失败原因 {{ unit.error.code }} · {{ unit.error.location || '位置未返回' }}
           </p>
           <p v-if="unit.result?.counts">

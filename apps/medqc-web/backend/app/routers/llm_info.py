@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -8,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from ..core.response import get_trace_id, success_response
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 from ..services.llm_config_loader import (
     get_enabled_provider_codes, SUPPORTED_PROVIDER_CODES, build_local_model_runtime_config,
 )
@@ -18,6 +21,7 @@ from ..core.settings import get_settings
 router = APIRouter(prefix="/api/v1/llm", tags=["llm-info"])
 
 _SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
+_CUSTOM_MODELS_LOCK = threading.RLock()
 SUPPORTED_PROVIDERS = SUPPORTED_PROVIDER_CODES
 LOCAL_CATALOG_PROVIDERS = {"strata": "本地 Strata", "ollama": "本地 Ollama"}
 CUSTOM_MODELS_FILE = Path(__file__).resolve().parents[2] / "data" / "llm_custom_models.json"
@@ -66,51 +70,76 @@ def _base_models() -> list[dict[str, Any]]:
 
 
 def _load_custom_models() -> dict[str, list[dict[str, Any]]]:
-    if not CUSTOM_MODELS_FILE.exists():
-        return {}
-    try:
-        raw = json.loads(CUSTOM_MODELS_FILE.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
+    with _CUSTOM_MODELS_LOCK:
+        if not CUSTOM_MODELS_FILE.exists():
             return {}
-        result: dict[str, list[dict[str, Any]]] = {}
-        for provider_code, items in raw.items():
-            p = _normalize_provider_code(provider_code)
-            if p not in SUPPORTED_PROVIDERS or not isinstance(items, list):
-                continue
-            normalized: list[dict[str, Any]] = []
-            for item in items:
-                if not isinstance(item, dict):
+        try:
+            raw = json.loads(CUSTOM_MODELS_FILE.read_text(encoding="utf-8"))
+            if not isinstance(raw, dict):
+                return {}
+            result: dict[str, list[dict[str, Any]]] = {}
+            for provider_code, items in raw.items():
+                p = _normalize_provider_code(provider_code)
+                if p not in SUPPORTED_PROVIDERS or not isinstance(items, list):
                     continue
-                model_code = str(item.get("model_code") or "").strip()
-                if not model_code:
-                    continue
-                normalized.append(
-                    {
-                        "provider": p,
-                        "id": model_code,
-                        "model_code": model_code,
-                        "model_name": str(item.get("model_name") or model_code).strip() or model_code,
-                        "is_custom": True,
-                    }
-                )
-            if normalized:
-                result[p] = normalized
-        return result
-    except Exception:
-        return {}
+                normalized: list[dict[str, Any]] = []
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+                    model_code = str(item.get("model_code") or "").strip()
+                    if not model_code:
+                        continue
+                    normalized.append(
+                        {
+                            "provider": p,
+                            "id": model_code,
+                            "model_code": model_code,
+                            "model_name": str(item.get("model_name") or model_code).strip() or model_code,
+                            "is_custom": True,
+                        }
+                    )
+                if normalized:
+                    result[p] = normalized
+            return result
+        except Exception:
+            return {}
 
 
 def _save_custom_models(data: dict[str, list[dict[str, Any]]]) -> None:
     CUSTOM_MODELS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CUSTOM_MODELS_FILE.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    payload = json.dumps(data, ensure_ascii=False, indent=2)
+    tmp_path: str | None = None
+    with _CUSTOM_MODELS_LOCK:
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(CUSTOM_MODELS_FILE.parent),
+                prefix=f".{CUSTOM_MODELS_FILE.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(payload)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_path, CUSTOM_MODELS_FILE)
+            tmp_path = None
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
 
 
 @router.get("/providers")
-async def providers(request: Request):
+async def providers(
+    request: Request,
+    admin_user: dict = Depends(require_global_system_admin),
+):
     """获取 LLM 提供商列表"""
+    del admin_user
     enabled_provider_codes = set(get_enabled_provider_codes())
     provider_items = [
         {"id": "alibaba", "provider_name": "阿里云百炼", "provider_code": "alibaba"},
@@ -132,8 +161,13 @@ async def providers(request: Request):
 
 
 @router.get("/models")
-async def models(request: Request, provider_id: str | None = Query(default=None)):
+async def models(
+    request: Request,
+    provider_id: str | None = Query(default=None),
+    admin_user: dict = Depends(require_global_system_admin),
+):
     """获取 LLM 模型列表"""
+    del admin_user
     enabled_provider_codes = set(get_enabled_provider_codes())
     model_items = [
         item
@@ -176,7 +210,7 @@ async def models(request: Request, provider_id: str | None = Query(default=None)
 @router.get("/local-options")
 async def local_model_options(
     request: Request,
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
     """管理端本地目录含未配置服务；目录维护不等于启用推理。"""
     del admin_user
@@ -211,7 +245,7 @@ async def local_model_options(
 async def add_custom_model(
     request: Request,
     payload: CustomModelPayload,
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
     del admin_user
     provider_code = _normalize_provider_code(payload.provider_code)
@@ -234,22 +268,23 @@ async def add_custom_model(
     if any(str(item.get("model_code") or "").strip() == model_code for item in builtin):
         raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
 
-    raw = _load_custom_models()
-    provider_items = list(raw.get(provider_code) or [])
-    if any(str(item.get("model_code") or "").strip() == model_code for item in provider_items):
-        raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
+    with _CUSTOM_MODELS_LOCK:
+        raw = _load_custom_models()
+        provider_items = list(raw.get(provider_code) or [])
+        if any(str(item.get("model_code") or "").strip() == model_code for item in provider_items):
+            raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
 
-    provider_items.append(
-        {
-            "provider": provider_code,
-            "id": model_code,
-            "model_code": model_code,
-            "model_name": model_name,
-            "is_custom": True,
-        }
-    )
-    raw[provider_code] = provider_items
-    _save_custom_models(raw)
+        provider_items.append(
+            {
+                "provider": provider_code,
+                "id": model_code,
+                "model_code": model_code,
+                "model_name": model_name,
+                "is_custom": True,
+            }
+        )
+        raw[provider_code] = provider_items
+        _save_custom_models(raw)
 
     return success_response(
         data={"provider_code": provider_code, "model_code": model_code, "model_name": model_name},
@@ -263,7 +298,7 @@ async def delete_custom_model(
     request: Request,
     provider_code: str = Query(...),
     model_code: str = Query(...),
-    admin_user: dict = Depends(require_roles(*_SYSTEM_CONFIG_ROLES)),
+    admin_user: dict = Depends(require_global_system_admin),
 ):
     del admin_user
     p = _normalize_provider_code(provider_code)
@@ -273,22 +308,23 @@ async def delete_custom_model(
     if not m:
         raise HTTPException(status_code=400, detail="model_code 不能为空")
 
-    raw = _load_custom_models()
-    provider_items = list(raw.get(p) or [])
-    original_size = len(provider_items)
-    provider_items = [
-        item
-        for item in provider_items
-        if str(item.get("model_code") or "").strip() != m
-    ]
-    if len(provider_items) == original_size:
-        raise HTTPException(status_code=404, detail=f"未找到自定义模型: {m}")
+    with _CUSTOM_MODELS_LOCK:
+        raw = _load_custom_models()
+        provider_items = list(raw.get(p) or [])
+        original_size = len(provider_items)
+        provider_items = [
+            item
+            for item in provider_items
+            if str(item.get("model_code") or "").strip() != m
+        ]
+        if len(provider_items) == original_size:
+            raise HTTPException(status_code=404, detail=f"未找到自定义模型: {m}")
 
-    if provider_items:
-        raw[p] = provider_items
-    else:
-        raw.pop(p, None)
-    _save_custom_models(raw)
+        if provider_items:
+            raw[p] = provider_items
+        else:
+            raw.pop(p, None)
+        _save_custom_models(raw)
 
     return success_response(
         data={"provider_code": p, "model_code": m},

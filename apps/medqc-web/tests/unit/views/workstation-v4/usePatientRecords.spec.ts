@@ -62,22 +62,100 @@ describe('usePatientRecords workstation filters', () => {
     mockWorkstationResponse()
   })
 
-  it('uses the analytics drill-down department from the URL for the server query', async () => {
-    window.history.replaceState({}, '', '/workstation-v5?department=ICU&analytics_scope=final')
+  it('uses the analytics drill-down department from the URL for the server query when source=analytics', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/workstation-v5?source=analytics&department=ICU&analytics_scope=final',
+    )
     const records = usePatientRecords()
 
     await records.fetchData()
 
     expect(records.activeDept.value).toBe('ICU')
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      dept: 'ICU',
-      analytics_scope: 'final',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        dept: 'ICU',
+        analytics_scope: 'final',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  it('does not forward analytics_* params when source=analytics is absent', async () => {
+    window.history.replaceState(
+      {},
+      '',
+      '/workstation-v5?department=ICU&analytics_scope=final&analytics_rule_id=R-1',
+    )
+    const records = usePatientRecords()
+
+    await records.fetchData()
+
+    expect(records.activeDept.value).toBe('ICU')
+    const [, params] = mocks.getRaw.mock.calls[0]
+    expect(params).toMatchObject({ dept: 'ICU' })
+    expect(params).not.toHaveProperty('analytics_scope')
+    expect(params).not.toHaveProperty('analytics_rule_id')
+  })
+
+  it('auto-falls back to the last valid page when current page becomes empty while total > 0', async () => {
+    mocks.getRaw.mockReset()
+    mocks.getRaw
+      .mockResolvedValueOnce({
+        data: {
+          records: [],
+          total: 20,
+          page: 3,
+          pageSize: 15,
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          records: [
+            {
+              id: 'V-page2',
+              visit_id: 'V-page2',
+              record_key: '["H","P","V-page2"]',
+              name: '第二页患者',
+              department: '内科',
+            },
+          ],
+          total: 20,
+          page: 2,
+          pageSize: 15,
+        },
+      })
+
+    const records = usePatientRecords()
+    records.currentPage.value = 3
+    await records.refreshData()
+    await flushPromises()
+
+    expect(mocks.getRaw).toHaveBeenCalledTimes(2)
+    expect(mocks.getRaw).toHaveBeenNthCalledWith(
+      1,
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 3, page_size: 15 }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(mocks.getRaw).toHaveBeenNthCalledWith(
+      2,
+      '/api/medical-records/workstation',
+      expect.objectContaining({ page: 2, page_size: 15 }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(records.currentPage.value).toBe(2)
+    expect(records.serverTotalPages.value).toBe(2)
+    expect(records.allRecords.value.map((r) => r.visitId)).toEqual(['V-page2'])
+    expect(records.loading.value).toBe(false)
+    expect(mocks.postRaw).toHaveBeenCalledTimes(1)
   })
 
   it('fetchData sends department, attending physician, keyword and date filters to backend', async () => {
@@ -91,45 +169,57 @@ describe('usePatientRecords workstation filters', () => {
 
     await records.fetchData(2, 10)
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 2,
-      page_size: 10,
-      source_id: 'independent_cdm',
-      date_field: 'admission',
-      dept: '中医科',
-      doctor: '陈医师',
-      keyword: '张三',
-      start_date: '2026-05-01',
-      end_date: '2026-05-31',
-      hospital_status: 'inpatient',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 2,
+        page_size: 10,
+        source_id: 'independent_cdm',
+        date_field: 'admission',
+        dept: '中医科',
+        doctor: '陈医师',
+        keyword: '张三',
+        start_date: '2026-05-01',
+        end_date: '2026-05-31',
+        hospital_status: 'inpatient',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('允许运行和终末页面以显式初始住院状态固定服务端范围', async () => {
     const runningRecords = usePatientRecords('inpatient')
     await runningRecords.fetchData()
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      hospital_status: 'inpatient',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        hospital_status: 'inpatient',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
 
     const finalRecords = usePatientRecords('discharged')
     await finalRecords.fetchData()
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      hospital_status: 'discharged',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        hospital_status: 'discharged',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('switches hospital status through the backend from the first page without local filtering', async () => {
@@ -140,14 +230,18 @@ describe('usePatientRecords workstation filters', () => {
     await flushPromises()
 
     expect(records.currentPage.value).toBe(1)
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      hospital_status: 'discharged',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        hospital_status: 'discharged',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('sends the explicit today-synced inpatient scope to the backend', async () => {
@@ -156,14 +250,18 @@ describe('usePatientRecords workstation filters', () => {
 
     await records.fetchData()
 
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      sync_scope: 'today_inpatient',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        sync_scope: 'today_inpatient',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('requests inpatient length-of-stay sorting from the first page', async () => {
@@ -175,15 +273,19 @@ describe('usePatientRecords workstation filters', () => {
     await flushPromises()
 
     expect(records.currentPage.value).toBe(1)
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      hospital_status: 'inpatient',
-      inpatient_sort: 'longest',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        hospital_status: 'inpatient',
+        inpatient_sort: 'longest',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('keeps backend sort time metadata for displaying newest synced records first', async () => {
@@ -234,14 +336,18 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(records.activeDoctor.value).toBe('全部主管医师')
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      dept: '普通外科',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        dept: '普通外科',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
   })
 
   it('selectDoctor resets page and applies the server-side attending physician filter', async () => {
@@ -253,14 +359,18 @@ describe('usePatientRecords workstation filters', () => {
 
     expect(records.currentPage.value).toBe(1)
     expect(records.activeDoctor.value).toBe('陈医师')
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', {
-      qc_summary_mode: 'deferred',
-      page: 1,
-      page_size: 15,
-      source_id: 'independent_cdm',
-      date_field: 'visit',
-      doctor: '陈医师',
-    })
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      {
+        qc_summary_mode: 'deferred',
+        page: 1,
+        page_size: 15,
+        source_id: 'independent_cdm',
+        date_field: 'visit',
+        doctor: '陈医师',
+      },
+      { signal: expect.any(AbortSignal) },
+    )
     expect(records.doctors.value).toEqual([
       { name: '全部主管医师', total: 1 },
       { name: '陈医师', total: 1 },
@@ -382,12 +492,115 @@ describe('独立CDM状态筛选', () => {
     expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')
     records.selectHospFilter('unknown')
     await flushPromises()
-    expect(mocks.getRaw).toHaveBeenCalledWith('/api/medical-records/workstation', expect.objectContaining({
-      source_id: 'independent_cdm', hospital_status: 'unknown', qc_summary_mode: 'deferred',
-    }))
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({
+        source_id: 'independent_cdm',
+        hospital_status: 'unknown',
+        qc_summary_mode: 'deferred',
+      }),
+      { signal: expect.any(AbortSignal) },
+    )
     expect(() => records.selectSource('legacy_pg')).toThrow('普通病历固定读取东华CDM')
     expect(records.sourceId.value).toBe('independent_cdm')
     expect(records.hospOptions.value.map((option) => option.value)).toContain('unknown')
     expect(records.hospFilter.value).toBe('unknown')
+  })
+})
+
+describe('Batch 2 P0-1..P0-4 regressions', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    window.history.replaceState({}, '', '/')
+    mockWorkstationResponse()
+  })
+
+  it('P0-1: tracks committedSearchText and committedDateRange independently from draft inputs', async () => {
+    const records = usePatientRecords()
+    records.searchText.value = '已提交关键词'
+    records.dateRange.value = ['2026-05-01', '2026-05-10']
+    await records.fetchData(1)
+
+    expect(records.committedSearchText.value).toBe('已提交关键词')
+    expect(records.committedDateRange.value).toEqual(['2026-05-01', '2026-05-10'])
+
+    // Editing draft inputs without submitting must not alter committed snapshot
+    records.searchText.value = '未提交草稿'
+    records.dateRange.value = ['2026-06-01', '2026-06-30']
+    expect(records.committedSearchText.value).toBe('已提交关键词')
+    expect(records.committedDateRange.value).toEqual(['2026-05-01', '2026-05-10'])
+
+    // Committing updates the snapshot
+    await records.fetchData(1)
+    expect(records.committedSearchText.value).toBe('未提交草稿')
+    expect(records.committedDateRange.value).toEqual(['2026-06-01', '2026-06-30'])
+  })
+
+  it('P0-2: resets inpatientSort when switching hospFilter away from inpatient and prevents leak', async () => {
+    const records = usePatientRecords('inpatient')
+    records.selectInpatientSort('longest')
+    await flushPromises()
+    expect(records.inpatientSort.value).toBe('longest')
+
+    mocks.getRaw.mockClear()
+    records.selectHospFilter('discharged')
+    await flushPromises()
+
+    expect(records.inpatientSort.value).toBe('default')
+    const [, params] = mocks.getRaw.mock.calls[0]
+    expect(params).toMatchObject({ hospital_status: 'discharged' })
+    expect(params).not.toHaveProperty('inpatient_sort')
+  })
+
+  it('P0-4: reads initial keyword from URL, hydrates snake_case/camelCase qc summaries, and falls back to window.scrollTo', async () => {
+    window.history.replaceState({}, '', '/workstation-v5?keyword=张三')
+    const key1 = '["H","P1","V1"]'
+    const key2 = '["H","P2","V2"]'
+    mocks.getRaw.mockResolvedValueOnce({
+      data: {
+        records: [
+          { id: 'V1', record_key: key1, name: '张三' },
+          { id: 'V2', record_key: key2, name: '李四' },
+        ],
+        total: 2,
+        page: 1,
+      },
+    })
+    mocks.postRaw.mockResolvedValueOnce({
+      data: {
+        qc_summary: { total_records: 2, ready_records: 2, status_counts: { non_compliant: 1 } },
+        records: [
+          {
+            record_key: key1,
+            latestQcSummary: { status: 'ready', status_counts: { non_compliant: 1 } },
+          },
+          {
+            recordKey: key2,
+            latest_qc_summary: { status: 'ready', status_counts: { data_gap: 2 } },
+          },
+        ],
+      },
+    })
+
+    const records = usePatientRecords()
+    expect(records.searchText.value).toBe('张三')
+    expect(records.committedSearchText.value).toBe('张三')
+
+    await records.fetchData()
+    await flushPromises()
+
+    expect(mocks.getRaw).toHaveBeenCalledWith(
+      '/api/medical-records/workstation',
+      expect.objectContaining({ keyword: '张三' }),
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(records.allRecords.value[0].latestQcSummary?.statusCounts).toEqual({ non_compliant: 1 })
+    expect(records.allRecords.value[1].latestQcSummary?.statusCounts).toEqual({ data_gap: 2 })
+
+    const scrollSpy = vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined)
+    records.handlePageChange(2)
+    await flushPromises()
+    expect(scrollSpy).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' })
+    scrollSpy.mockRestore()
   })
 })

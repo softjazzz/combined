@@ -351,7 +351,14 @@ export function useSemanticRulesBatchResultDrawerController(
 
   const issueColumns = computed(() => {
     const columns: Array<Record<string, any>> = [
-      { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 96 },
+      {
+        title: '规则编码',
+        dataIndex: 'rule_code',
+        key: 'rule_code',
+        width: 96,
+        customRender: ({ record }: { record: SichuanBatchIssueItem }) =>
+          record.rule_code || record.rule_id || '-',
+      },
       {
         title: isLuxian0609BatchJob.value ? '病历引用' : '病历号',
         dataIndex: isLuxian0609BatchJob.value ? 'record_ref' : 'record_id',
@@ -383,12 +390,16 @@ export function useSemanticRulesBatchResultDrawerController(
         dataIndex: 'evidence',
         key: 'evidence',
         width: 280,
-        customRender: ({ text }: { text?: string }) =>
-          h(
-            'span',
-            { title: resolveCustomerEvidenceText(text) },
-            truncateText(resolveCustomerEvidenceText(text), 72),
-          ),
+        customRender: ({
+          text,
+          record,
+        }: {
+          text?: SichuanBatchIssueItem['evidence']
+          record?: SichuanBatchIssueItem
+        }) => {
+          const summary = resolveAdvancedEvidenceSummary(record, text)
+          return h('span', { title: summary }, truncateText(summary, 72))
+        },
       },
       {
         title: '整改建议',
@@ -451,6 +462,14 @@ export function useSemanticRulesBatchResultDrawerController(
             text === null || text === undefined ? '-' : text ? 'true' : 'false',
         },
       )
+      if (!confirmedResultsOnly.value) {
+        columns.push({
+          title: '操作',
+          key: 'actions',
+          width: 152,
+          fixed: 'right',
+        })
+      }
     }
     return columns
   })
@@ -554,9 +573,10 @@ export function useSemanticRulesBatchResultDrawerController(
   const resultTraceLoading = ref(false)
   const resultTraceError = ref('')
   const resultTraceData = ref<SichuanBatchJobResultTrace | null>(null)
+  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
 
   const batchJobDebugSnapshot = computed(() => props.batchJobDebugSnapshot || null)
-  const canShowResultTrace = computed(() => !confirmedResultsOnly.value && issueViewMode.value === 'advanced')
+  const canShowResultTrace = computed(() => !confirmedResultsOnly.value)
 
   type ResultTraceRow = {
     key: string
@@ -948,8 +968,65 @@ export function useSemanticRulesBatchResultDrawerController(
     ]
   })
 
+  const cachedDebugRuleOptionsState = ref<{
+    jobId: string
+    options: Array<{ label: string; value: string }>
+  }>({
+    jobId: '',
+    options: [],
+  })
+
+  watch(
+    () => batchJobDebugSnapshot.value,
+    (snapshot) => {
+      const jobId = String(snapshot?.job_id || '').trim()
+      if (!snapshot || !jobId) {
+        cachedDebugRuleOptionsState.value = { jobId: '', options: [] }
+        return
+      }
+      const incoming = (snapshot.rules || [])
+        .filter((rule) => Boolean(String(rule.rule_job_id || '').trim()))
+        .map((rule) => ({
+          label: `${rule.rule_code} · ${rule.rule_name}`,
+          value: rule.rule_job_id,
+        }))
+      const isFiltered =
+        Boolean(selectedDebugRuleJobId.value) ||
+        (typeof snapshot.rule_count === 'number' &&
+          typeof snapshot.filtered_rule_count === 'number' &&
+          snapshot.filtered_rule_count < snapshot.rule_count)
+      if (cachedDebugRuleOptionsState.value.jobId !== jobId || !isFiltered) {
+        cachedDebugRuleOptionsState.value = { jobId, options: incoming }
+        return
+      }
+      if (!incoming.length) return
+      const merged = [...cachedDebugRuleOptionsState.value.options]
+      const indexByValue = new Map(merged.map((item, idx) => [item.value, idx]))
+      for (const option of incoming) {
+        const existingIndex = indexByValue.get(option.value)
+        if (existingIndex === undefined) {
+          indexByValue.set(option.value, merged.length)
+          merged.push(option)
+        } else {
+          merged[existingIndex] = option
+        }
+      }
+      cachedDebugRuleOptionsState.value = { jobId, options: merged }
+    },
+    { immediate: true },
+  )
+
   const debugRuleOptions = computed(() => {
-    return (batchJobDebugSnapshot.value?.rules || []).map((rule) => ({
+    const snapshot = batchJobDebugSnapshot.value
+    const snapshotJobId = String(snapshot?.job_id || '').trim()
+    if (
+      snapshotJobId &&
+      cachedDebugRuleOptionsState.value.jobId === snapshotJobId &&
+      cachedDebugRuleOptionsState.value.options.length
+    ) {
+      return cachedDebugRuleOptionsState.value.options
+    }
+    return (snapshot?.rules || []).map((rule) => ({
       label: `${rule.rule_code} · ${rule.rule_name}`,
       value: rule.rule_job_id,
     }))
@@ -993,8 +1070,11 @@ export function useSemanticRulesBatchResultDrawerController(
     const matched = (batchJobDebugSnapshot.value?.rules || []).find(
       (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
     )
-    if (!matched) return ''
-    return `${matched.rule_code} · ${matched.rule_name}`
+    if (matched) return `${matched.rule_code} · ${matched.rule_name}`
+    return (
+      debugRuleOptions.value.find((option) => option.value === selectedDebugRuleJobId.value)
+        ?.label || ''
+    )
   })
 
   const selectedCluster = computed(() => {
@@ -1299,23 +1379,32 @@ export function useSemanticRulesBatchResultDrawerController(
   const allBusinessIssueCards = computed(() => displayIssueItems.value.map(enrichBusinessIssueCard))
 
   const recordCompareCoordinates = computed(() => {
-    const candidates = [
-      allBusinessIssueCards.value.find(
-        (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
-      ),
-      ...allBusinessIssueCards.value,
-    ].filter(Boolean)
+    const selectedCard = allBusinessIssueCards.value.find(
+      (item) => resolveIssueStableKey(item) === selectedBusinessIssueKey.value,
+    )
+    const candidates = [selectedCard, ...allBusinessIssueCards.value].filter(Boolean)
+    const matchedRecordRef =
+      normalizedFocusRecordRef.value ||
+      String(selectedCard?.record_ref || '').trim() ||
+      candidates.map((item) => String(item?.record_ref || '').trim()).find(Boolean) ||
+      ''
+    const matchedIdentity = matchedRecordRef
+      ? recordIdentities.value.get(matchedRecordRef)
+      : undefined
     const visitId =
       normalizedFocusVisitId.value ||
       candidates.map((item) => String(item?.visit_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.visit_id || '').trim() ||
       ''
     const instituteId =
       String(props.focusInstituteId || '').trim() ||
       candidates.map((item) => String(item?.institute_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.institute_id || '').trim() ||
       ''
     const patientId =
       String(props.focusPatientId || '').trim() ||
       candidates.map((item) => String(item?.patient_id || '').trim()).find(Boolean) ||
+      String(matchedIdentity?.patient_id || '').trim() ||
       ''
     return { visitId, instituteId, patientId }
   })
@@ -1984,7 +2073,6 @@ export function useSemanticRulesBatchResultDrawerController(
   })
 
   // ---- 客户视图（2026-10-23 改版）：病历标识回查 + 按病历、按章节的结果模型 ----
-  const recordIdentities = ref<Map<string, BatchJobRecordIdentity>>(new Map())
   let recordIdentityJobId = ''
   watch(
     () => [props.open, props.batchJobDetail?.id, isLuxian0609BatchJob.value] as const,
@@ -2737,9 +2825,11 @@ export function useSemanticRulesBatchResultDrawerController(
         return
       }
       if (!selectedDebugRuleJobId.value) return
-      const hasSelected = (batchJobDebugSnapshot.value.rules || []).some(
-        (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
-      )
+      const hasSelected =
+        (batchJobDebugSnapshot.value.rules || []).some(
+          (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
+        ) ||
+        debugRuleOptions.value.some((option) => option.value === selectedDebugRuleJobId.value)
       if (!hasSelected) {
         selectedDebugRuleJobId.value = ''
       }
@@ -2886,6 +2976,7 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   async function openIssueTrace(item: SichuanBatchIssueItem) {
+    if (confirmedResultsOnly.value) return
     const jobId = props.batchJobDetail?.id
     if (!jobId) {
       message.warning('当前任务缺少任务 ID，无法查看诊断追踪。')
@@ -2896,6 +2987,7 @@ export function useSemanticRulesBatchResultDrawerController(
     resultTraceError.value = ''
     resultTraceData.value = null
     const response = await getSichuanWorkspaceBatchJobResultTrace(jobId, {
+      record_ref: String(item.record_ref || '').trim() || undefined,
       record_id: String(item.record_id || '').trim() || undefined,
       visit_id: String(item.visit_id || '').trim() || undefined,
       rule_id: String(item.qc_point_id || item.rule_id || item.rule_code || '').trim() || undefined,
@@ -2917,15 +3009,31 @@ export function useSemanticRulesBatchResultDrawerController(
   }
 
   async function openIssueDeepReview(item: SichuanBatchIssueItem) {
+    if (confirmedResultsOnly.value) return
     selectedDeepReviewIssue.value = item
     deepReviewModalOpen.value = true
     deepReviewLoading.value = true
     deepReviewError.value = ''
     deepReviewResult.value = null
     const ruleId = String(item.rule_id || item.rule_code || '').trim()
-    const instituteId = String(item.institute_id || '').trim()
-    const patientId = String(item.patient_id || '').trim()
-    const visitId = String(item.visit_id || '').trim()
+    const itemRecordRef = String(item.record_ref || '').trim()
+    const matchedIdentity = itemRecordRef ? recordIdentities.value.get(itemRecordRef) : undefined
+    const canFallbackToCompareCoords =
+      !itemRecordRef ||
+      !isMultiRecordIssueMode.value ||
+      itemRecordRef === normalizedFocusRecordRef.value
+    const instituteId =
+      String(item.institute_id || '').trim() ||
+      String(matchedIdentity?.institute_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.instituteId : '')
+    const patientId =
+      String(item.patient_id || '').trim() ||
+      String(matchedIdentity?.patient_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.patientId : '')
+    const visitId =
+      String(item.visit_id || '').trim() ||
+      String(matchedIdentity?.visit_id || '').trim() ||
+      (canFallbackToCompareCoords ? recordCompareCoordinates.value.visitId : '')
     if (!ruleId || !instituteId || !patientId || !visitId) {
       deepReviewLoading.value = false
       deepReviewError.value = '当前结果缺少单条复核所需病历主键，无法发起深度复核。'
@@ -2990,11 +3098,30 @@ export function useSemanticRulesBatchResultDrawerController(
     return value.length > limit ? `${value.slice(0, limit)}...` : value
   }
 
+  function resolveAdvancedEvidenceSummary(
+    record?: Partial<SichuanBatchIssueItem> | null,
+    fallbackText?: SichuanBatchIssueItem['evidence'],
+  ) {
+    if (record) {
+      const structured =
+        resolveIssueEvidenceSummary(record as SichuanBatchIssueItem) ||
+        resolveLuxianSafeEvidenceText(record as SichuanBatchIssueItem) ||
+        resolveCustomerEvidenceText(resolveLegacyEvidenceText(record.evidence))
+      if (structured) return structured
+    }
+    return resolveCustomerEvidenceText(resolveLegacyEvidenceText(fallbackText))
+  }
+
   function resolveDeepReviewText(field: 'findings' | 'evidence' | 'suggestion') {
+    if (field === 'evidence') {
+      const source = resolvedDeepReviewResult.value || selectedDeepReviewIssue.value
+      const raw = (resolvedDeepReviewResult.value?.evidence ??
+        selectedDeepReviewIssue.value?.evidence) as SichuanBatchIssueItem['evidence']
+      return resolveAdvancedEvidenceSummary(source as Partial<SichuanBatchIssueItem> | null, raw)
+    }
     const text = String(
       resolvedDeepReviewResult.value?.[field] || selectedDeepReviewIssue.value?.[field] || '',
     )
-    if (field === 'evidence') return resolveCustomerEvidenceText(text)
     if (field === 'findings') return sanitizeCustomerVisibleText(text)
     return sanitizeCustomerVisibleText(text)
   }

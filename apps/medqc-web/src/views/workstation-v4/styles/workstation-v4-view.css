@@ -78,15 +78,6 @@
   margin-bottom: 14px;
 }
 
-.wv4-record-pool-filter__summary {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
 .wv4-record-pool-hero {
   border: 1px solid var(--mq-border);
   border-radius: 20px;
@@ -120,8 +111,8 @@
 }
 
 .wv4-record-pool-hero .workbench-filter-toolbar {
-  gap: 12px;
-  flex-wrap: nowrap;
+  gap: 10px 12px;
+  flex-wrap: wrap;
 }
 
 .wv4-record-pool-hero .workbench-controls__search-input {
@@ -137,10 +128,11 @@
 
 .wv4-record-pool-hero .workbench-hosp-filter {
   display: flex;
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  min-height: 42px;
+  min-height: 36px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.9);
@@ -163,7 +155,7 @@
 .wv4-record-pool-hero .ant-input-affix-wrapper,
 .wv4-record-pool-hero .ant-select-selector,
 .wv4-record-pool-hero .ant-picker {
-  min-height: 42px !important;
+  min-height: 36px !important;
   border-radius: 10px !important;
   border-color: rgba(0, 0, 0, 0.1) !important;
   background: rgba(255, 255, 255, 0.9) !important;
@@ -185,8 +177,8 @@
 }
 
 .wv4-record-pool-hero .wv4-filter-actions__button {
-  height: 42px !important;
-  min-width: 72px;
+  height: 36px !important;
+  min-width: 68px;
   border-radius: 10px !important;
 }
 
@@ -324,10 +316,10 @@
 }
 
 .wv4-filter-actions__button {
-  height: 40px !important;
+  height: 36px !important;
   border-radius: 10px !important;
   min-width: 62px;
-  font-weight: 700 !important;
+  font-weight: 600 !important;
 }
 
 .wv4-record-pool-main {
@@ -500,15 +492,6 @@
   color: var(--mq-text-primary);
 }
 
-.wv4-analysis-tabs :deep(.ant-tabs-nav) {
-  margin-bottom: 12px !important;
-}
-
-.wv4-analysis-tabs :deep(.ant-tabs-tab) {
-  font-size: 12px !important;
-  font-weight: 600;
-}
-
 .wv4-analysis-list-panel {
   border-radius: 20px;
   border: 1px solid var(--mq-border);
@@ -538,60 +521,6 @@
   margin: 4px 0 0;
   font-size: 12px;
   color: var(--mq-text-secondary);
-}
-
-.workstation-shell :deep(.ant-card),
-.rules-shell :deep(.ant-card) {
-  border-radius: 20px !important;
-  border-color: var(--mq-border) !important;
-  background: rgba(255, 255, 255, 0.86) !important;
-  box-shadow: var(--mq-workbench-shadow) !important;
-}
-
-.workstation-shell :deep(.ant-drawer-content),
-.workstation-shell :deep(.ant-modal-content) {
-  border-radius: 20px !important;
-  background: rgba(255, 255, 255, 0.94) !important;
-  -webkit-backdrop-filter: blur(18px);
-  backdrop-filter: blur(18px);
-  box-shadow:
-    0 2px 12px rgba(0, 0, 0, 0.1),
-    0 6px 22px rgba(0, 0, 0, 0.075) !important;
-}
-
-.workstation-shell :deep(.ant-drawer-header),
-.workstation-shell :deep(.ant-modal-header) {
-  border-bottom-color: rgba(0, 0, 0, 0.08) !important;
-  background: transparent !important;
-}
-
-.workstation-shell :deep(.ant-table-thead > tr > th),
-.rules-shell :deep(.ant-table-thead > tr > th) {
-  background: var(--mq-table-header-bg) !important;
-  color: var(--mq-text-tertiary) !important;
-  font-size: 12px !important;
-  font-weight: 600 !important;
-  border-bottom: 1px solid var(--mq-border) !important;
-}
-
-.workstation-shell :deep(.ant-table-tbody > tr > td),
-.rules-shell :deep(.ant-table-tbody > tr > td) {
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
-}
-
-.workstation-shell :deep(.ant-table-tbody > tr:hover > td),
-.rules-shell :deep(.ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 0, 0, 0.025) !important;
-}
-
-.workstation-shell :deep(.ant-btn),
-.rules-shell :deep(.ant-btn) {
-  border-radius: 12px;
-}
-
-.workstation-shell :deep(.ant-tabs-nav),
-.rules-shell :deep(.ant-tabs-nav) {
-  margin-bottom: 12px !important;
 }
 
 .wv4-stage-notice {
@@ -663,21 +592,17 @@
   width: min(34%, 420px);
 }
 
-.workbench-dept-select {
-  min-width: 190px;
-}
-
 .workbench-dept-filter {
   position: relative;
   display: flex;
-  min-width: 220px;
-  flex: 0 1 240px;
+  min-width: 0;
+  flex: 0 1 210px;
   align-items: center;
 }
 
 .workbench-doctor-filter {
   display: flex;
-  min-width: 168px;
+  min-width: 0;
   flex: 0 1 190px;
   align-items: center;
 }
@@ -688,10 +613,6 @@
 
 .workbench-dept-filter .workbench-dept-select {
   width: 100%;
-}
-
-.workbench-dept-filter .ant-select-selector {
-  padding-right: 54px !important;
 }
 
 .workbench-dept-filter .ant-select-selection-item .workbench-dept-select__count {
@@ -935,6 +856,7 @@
   }
 
   .workbench-controls__search-input {
+    flex: none;
     width: 100%;
     max-width: none;
   }
@@ -954,14 +876,19 @@
   }
 
   .wv4-record-pool-hero .workbench-hosp-filter {
+    flex: none;
+    flex-wrap: wrap;
     width: 100%;
+    height: auto !important;
   }
 
   .wv4-record-pool-hero .workbench-hosp-segmented {
     flex: 1 1 auto;
+    max-width: 100%;
   }
 
   .wv4-record-pool-hero .wv4-filter-actions {
+    flex: none;
     width: 100%;
     margin-left: 0;
   }
@@ -977,44 +904,9 @@
   .workbench-status-select,
   .workbench-date-row__field,
   .workbench-date-row__range {
+    flex: none;
     width: 100%;
   }
-}
-
-.workstation-shell :deep(.ant-input-affix-wrapper),
-.workstation-shell :deep(.ant-input-search .ant-input),
-.workstation-shell :deep(.ant-select-selector),
-.workstation-shell :deep(.ant-picker) {
-  border-radius: var(--mq-workbench-radius-input) !important;
-}
-
-.workstation-shell :deep(.ant-input-affix-wrapper),
-.workstation-shell :deep(.ant-select-selector),
-.workstation-shell :deep(.ant-picker) {
-  min-height: 46px !important;
-  border-color: var(--mq-workbench-glass-border) !important;
-  background: var(--mq-workbench-glass-bg-strong) !important;
-  box-shadow: var(--mq-workbench-control-shadow);
-}
-
-.workstation-shell :deep(.ant-input),
-.workstation-shell :deep(.ant-input-affix-wrapper input),
-.workstation-shell :deep(.ant-select-selection-item),
-.workstation-shell :deep(.ant-select-selection-placeholder),
-.workstation-shell :deep(.ant-picker-input > input) {
-  font-size: 14px !important;
-  font-weight: 500;
-}
-
-.workstation-shell :deep(.ant-input-affix-wrapper:hover),
-.workstation-shell :deep(.ant-select-focused .ant-select-selector),
-.workstation-shell :deep(.ant-select-selector:hover),
-.workstation-shell :deep(.ant-picker:hover),
-.workstation-shell :deep(.ant-picker-focused) {
-  border-color: var(--mq-info-border) !important;
-  box-shadow:
-    0 0 0 3px var(--mq-info-bg),
-    var(--mq-workbench-control-shadow) !important;
 }
 
 /* 病历池筛选条统一规格；放在工作台通用控件规则之后，避免 Ant large 尺寸重新覆盖。 */
@@ -1027,11 +919,16 @@
 .workstation-shell .wv4-record-pool-hero .ant-input-affix-wrapper,
 .workstation-shell .wv4-record-pool-hero .ant-select-selector,
 .workstation-shell .wv4-record-pool-hero .ant-picker,
-.workstation-shell .wv4-record-pool-hero .workbench-hosp-filter,
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
-  height: 42px !important;
-  min-height: 42px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  border-radius: 10px !important;
+}
+
+.workstation-shell .wv4-record-pool-hero .workbench-hosp-filter {
+  min-height: 36px !important;
+  height: auto !important;
 }
 
 .workstation-shell .wv4-record-pool-hero .ant-input,
@@ -1043,7 +940,7 @@
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__sync-shortcut,
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
   font-family: inherit !important;
-  font-size: 14px !important;
+  font-size: 13px !important;
   font-weight: 400 !important;
   letter-spacing: 0 !important;
 }
@@ -1064,7 +961,7 @@
 
 .workstation-shell .wv4-record-pool-hero .workbench-hosp-segmented {
   font-family: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   letter-spacing: 0;
 }
@@ -1073,12 +970,12 @@
   flex: 0 0 auto;
   border-color: rgba(10, 108, 255, 0.24);
   color: var(--mq-brand-600);
-  padding-inline: 13px;
+  padding-inline: 12px;
 }
 
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter__inpatient-sort {
-  flex: 0 0 150px;
-  width: 150px;
+  flex: 0 1 140px;
+  width: 140px;
 }
 
 .workstation-shell .wv4-record-pool-hero .workbench-dept-select__name {
@@ -1087,48 +984,7 @@
 }
 
 .workstation-shell .wv4-record-pool-hero .wv4-filter-actions__button {
-  padding-inline: 18px !important;
-}
-
-.workstation-shell :deep(.ant-pagination) {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--mq-text-secondary);
-}
-
-.workstation-shell :deep(.ant-pagination .ant-pagination-item),
-.workstation-shell :deep(.ant-pagination .ant-pagination-prev),
-.workstation-shell :deep(.ant-pagination .ant-pagination-next),
-.workstation-shell :deep(.ant-pagination .ant-pagination-jump-prev),
-.workstation-shell :deep(.ant-pagination .ant-pagination-jump-next) {
-  border-radius: var(--mq-radius-tag);
-  border-color: transparent;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.95);
-}
-
-.workstation-shell :deep(.ant-pagination .ant-pagination-item a),
-.workstation-shell :deep(.ant-pagination .ant-pagination-prev .ant-pagination-item-link),
-.workstation-shell :deep(.ant-pagination .ant-pagination-next .ant-pagination-item-link) {
-  color: var(--mq-text-secondary);
-}
-
-.workstation-shell :deep(.ant-pagination .ant-pagination-item-active) {
-  border-color: var(--mq-info-border);
-  background: var(--mq-info-bg);
-  box-shadow: 0 0 0 3px var(--mq-info-bg);
-}
-
-.workstation-shell :deep(.ant-pagination .ant-pagination-item-active a) {
-  color: var(--mq-brand-700);
-  font-weight: 700;
-}
-
-.workstation-shell :deep(.ant-pagination .ant-pagination-options-quick-jumper input) {
-  border-radius: var(--mq-radius-tag);
-  border-color: var(--mq-workbench-glass-border);
-  background: rgba(255, 255, 255, 0.82);
+  padding-inline: 16px !important;
 }
 
 .workstation-surface-enter {
@@ -1151,7 +1007,7 @@
 
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: none;
   }
 }
 
@@ -1319,6 +1175,11 @@
     'Microsoft YaHei UI', 'Microsoft YaHei', system-ui, sans-serif;
 }
 
+.workstation-shell--list {
+  overflow-x: clip;
+  overflow-y: visible;
+}
+
 .workstation-shell .wv4-analysis-overview,
 .workstation-shell .wv4-analysis-kpi-card,
 .workstation-shell .wv4-workbench-card,
@@ -1394,6 +1255,8 @@
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter {
   grid-area: hosp;
   justify-self: end;
+  flex-wrap: wrap;
+  max-width: 100%;
 }
 
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field {
@@ -1425,7 +1288,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0;
-  height: 42px;
+  min-width: 0;
+  height: 36px;
   padding: 0 2px 0 12px;
   box-sizing: border-box;
   border: 1px solid rgba(20, 40, 80, 0.12);
@@ -1464,8 +1328,8 @@
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field .ant-picker,
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter .ant-select-selector,
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selector {
-  height: 40px !important;
-  min-height: 40px !important;
+  height: 34px !important;
+  min-height: 34px !important;
   padding-left: 8px !important;
   border: 0 !important;
   background: transparent !important;
@@ -1474,10 +1338,13 @@
 
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-date-row__range {
   flex: none;
-  width: 216px;
+  width: 212px;
 }
 
-.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-select,
+.workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-select {
+  width: 144px;
+}
+
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-select {
   width: 132px;
 }
@@ -1490,23 +1357,42 @@
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-placeholder,
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter .ant-select-selection-search-input,
 .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort .ant-select-selection-item {
-  height: 40px !important;
-  line-height: 40px !important;
+  height: 34px !important;
+  line-height: 34px !important;
 }
 
-/* 内容区较窄时退回自动换行，避免第二行溢出 */
-@media (max-width: 1180px) {
+/* 1280px / 1024px 宽度自动换行，避免固定列网溢出 */
+@media (max-width: 1360px) {
   .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
     display: flex;
+    flex-direction: row;
     flex-wrap: wrap;
+    align-items: center;
   }
 
   .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input {
-    flex: 1 1 260px;
+    flex: 1 1 240px;
+    min-width: 200px;
+    width: auto;
+    max-width: 100%;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter {
+    flex: 0 1 auto;
+    width: auto;
+    justify-self: auto;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter {
+    flex: 0 1 auto;
     width: auto;
   }
 
   .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+    flex: 0 0 auto;
+    width: auto;
     margin-left: auto;
   }
 
@@ -1520,9 +1406,55 @@
   .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions { order: 7; }
 }
 
+/* 移动端堆叠：显式 flex: none，避免 column 方向把 flex-basis 变成垂直高度 */
+@media (max-width: 768px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-controls__search-input,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .record-pool-date-field,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-filter,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-filter,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-record-pool-filter__inpatient-sort,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions {
+    flex: none;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-date-row__range,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-dept-select,
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-doctor-select {
+    flex: 1 1 auto;
+    width: auto;
+    min-width: 0;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-segmented {
+    flex: 1 1 auto;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .wv4-filter-actions__button {
+    flex: 1 1 0;
+  }
+}
+
 /* 中等宽度：隐藏「住院状态」字样（分段选项自身已表意，分组仍有 aria-label），给搜索框让出空间 */
 @media (max-width: 1320px) {
   .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-hosp-filter__label {
     display: none;
+  }
+}
+
+/* 办公屏（1280×800 / 1366×860）：收紧筛选区行距，为首屏病历列表与右侧预览主按钮留出纵向空间 */
+@media (max-width: 1420px), (max-height: 880px) {
+  .workstation-shell .wv4-record-pool-hero .wv4-record-pool-filter--pool .workbench-filter-toolbar {
+    gap: 8px 10px;
   }
 }

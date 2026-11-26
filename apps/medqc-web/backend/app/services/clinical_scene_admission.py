@@ -12,7 +12,8 @@ def resolve_scene(*, discharge: DischargeTime, document_present: bool,
     """出院状态与时间完整性独立；调用者先按来源、三坐标及核验时效过滤投影。"""
     time_status = "conflict" if discharge.conflict else "present" if discharge.value else "missing"
     time_proves_discharge = isinstance(discharge.value, (date, datetime)) and not (
-        document_invalid and discharge.source.startswith("discharge_record.")
+        (document_invalid and discharge.source.startswith("discharge_record."))
+        or (discharge.conflict and discharge.source.startswith("death_record."))
     )
     if verified_status == "inpatient" and time_proves_discharge:
         scene, state, reason = "unknown", "unknown", "discharge_state_conflict"

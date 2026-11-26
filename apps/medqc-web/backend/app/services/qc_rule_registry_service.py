@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import uuid
 import hashlib
 from pathlib import Path
@@ -9,13 +10,29 @@ from typing import Any
 
 from sqlalchemy import text
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from .sc_rule_launch_tier import load_sc_intrinsic_launch_tier_map, resolve_sc_intrinsic_launch_tier
 
 logger = logging.getLogger(__name__)
 
-_PUBLISH_ACTIONS = {"publish", "published", "promote", "stable", "activate"}
-_INACTIVE_ACTIONS = {"rollback", "unpublish", "deprecate", "archive", "disable"}
+
+def _qc_table(table_name: str, session: Any = None) -> str:
+    """按 DB_SCHEMA_MODE 动态解析治理表前缀：split 使用 qc.，single/SQLite 使用无前缀表名。"""
+    try:
+        if session is not None and hasattr(session, "get_bind"):
+            bind = session.get_bind()
+            if bind is not None and getattr(getattr(bind, "dialect", None), "name", "") == "sqlite":
+                return table_name
+    except Exception:
+        pass
+    mode = getattr(db_connection, "DB_SCHEMA_MODE", None)
+    if mode is None:
+        mode = os.getenv("DB_SCHEMA_MODE", "single")
+    return f"qc.{table_name}" if str(mode).strip().lower() == "split" else table_name
+
+_PUBLISH_ACTIONS = {"publish", "published", "promote", "stable", "activate", "rollback"}
+_INACTIVE_ACTIONS = {"unpublish", "deprecate", "archive", "disable"}
 _PREFERRED_STATUSES = {"published", "stable"}
 
 _DEFAULT_RULE_VERSION = "2026.04.p0"
@@ -92,10 +109,11 @@ class QCRuleRegistryService:
             if str(rule_id or "").strip():
                 where = "WHERE rule_id = :rule_id"
                 params["rule_id"] = str(rule_id).strip()
+            history_table = _qc_table("qc_rule_publish_history", session)
             sql = text(
                 f"""
                 SELECT id, rule_id, rule_version_id, action, reason, operator, created_at
-                FROM qc.qc_rule_publish_history
+                FROM {history_table}
                 {where}
                 ORDER BY created_at DESC
                 LIMIT :limit
@@ -135,6 +153,8 @@ class QCRuleRegistryService:
         published = 0
         session = self._session_factory()
         try:
+            versions_table = _qc_table("qc_rule_versions", session)
+            history_table = _qc_table("qc_rule_publish_history", session)
             for rule in rules:
                 rule_id = str(rule.get("rule_id") or "").strip()
                 if not rule_id:
@@ -145,9 +165,9 @@ class QCRuleRegistryService:
                 latest_row = (
                     session.execute(
                         text(
-                            """
+                            f"""
                             SELECT id, version_no, checksum
-                            FROM qc.qc_rule_versions
+                            FROM {versions_table}
                             WHERE rule_id = :rule_id
                             ORDER BY version_no DESC
                             LIMIT 1
@@ -168,8 +188,8 @@ class QCRuleRegistryService:
                 status = "published" if mark_published else "draft"
                 session.execute(
                     text(
-                        """
-                        INSERT INTO qc.qc_rule_versions
+                        f"""
+                        INSERT INTO {versions_table}
                           (id, rule_id, version_no, status, payload_json, checksum, created_by, created_at)
                         VALUES
                           (:id, :rule_id, :version_no, :status, :payload_json, :checksum, :created_by, NOW())
@@ -190,8 +210,8 @@ class QCRuleRegistryService:
                 if mark_published:
                     session.execute(
                         text(
-                            """
-                            INSERT INTO qc.qc_rule_publish_history
+                            f"""
+                            INSERT INTO {history_table}
                               (id, rule_id, rule_version_id, action, reason, operator, created_at)
                             VALUES
                               (:id, :rule_id, :rule_version_id, 'publish', :reason, :operator, NOW())
@@ -230,12 +250,13 @@ class QCRuleRegistryService:
             return []
         session = self._session_factory()
         try:
+            versions_table = _qc_table("qc_rule_versions", session)
             rows = (
                 session.execute(
                     text(
-                        """
+                        f"""
                         SELECT id, rule_id, version_no, status, checksum, created_by, created_at
-                        FROM qc.qc_rule_versions
+                        FROM {versions_table}
                         WHERE rule_id = :rule_id
                         ORDER BY version_no DESC
                         LIMIT :limit
@@ -304,12 +325,14 @@ class QCRuleRegistryService:
             return False
         session = self._session_factory()
         try:
+            versions_table = _qc_table("qc_rule_versions", session)
+            history_table = _qc_table("qc_rule_publish_history", session)
             latest = (
                 session.execute(
                     text(
-                        """
+                        f"""
                         SELECT id, version_no, payload_json, checksum
-                        FROM qc.qc_rule_versions
+                        FROM {versions_table}
                         WHERE rule_id = :rule_id
                         ORDER BY version_no DESC
                         LIMIT 1
@@ -339,8 +362,8 @@ class QCRuleRegistryService:
             version_id = str(uuid.uuid4())
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_rule_versions
+                    f"""
+                    INSERT INTO {versions_table}
                       (id, rule_id, version_no, status, payload_json, checksum, created_by, created_at)
                     VALUES
                       (:id, :rule_id, :version_no, 'published', :payload_json, :checksum, :created_by, NOW())
@@ -357,8 +380,8 @@ class QCRuleRegistryService:
             )
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_rule_publish_history
+                    f"""
+                    INSERT INTO {history_table}
                       (id, rule_id, rule_version_id, action, reason, operator, created_at)
                     VALUES
                       (:id, :rule_id, :rule_version_id, 'publish', :reason, :operator, NOW())
@@ -393,13 +416,15 @@ class QCRuleRegistryService:
 
         session = self._session_factory()
         try:
+            versions_table = _qc_table("qc_rule_versions", session)
+            history_table = _qc_table("qc_rule_publish_history", session)
             version_rows = [
                 dict(row)
                 for row in session.execute(
                     text(
-                        """
+                        f"""
                         SELECT id, rule_id, version_no, status, payload_json, created_at
-                        FROM qc.qc_rule_versions
+                        FROM {versions_table}
                         """
                     )
                 )
@@ -413,9 +438,9 @@ class QCRuleRegistryService:
                 dict(row)
                 for row in session.execute(
                     text(
-                        """
+                        f"""
                         SELECT rule_id, rule_version_id, action, created_at
-                        FROM qc.qc_rule_publish_history
+                        FROM {history_table}
                         ORDER BY created_at DESC
                         """
                     )
@@ -638,12 +663,14 @@ class QCRuleRegistryService:
             return False
         session = self._session_factory()
         try:
+            versions_table = _qc_table("qc_rule_versions", session)
+            history_table = _qc_table("qc_rule_publish_history", session)
             target = (
                 session.execute(
                     text(
-                        """
+                        f"""
                         SELECT id
-                        FROM qc.qc_rule_versions
+                        FROM {versions_table}
                         WHERE rule_id = :rule_id AND version_no = :version_no
                         LIMIT 1
                         """
@@ -658,8 +685,8 @@ class QCRuleRegistryService:
             version_id = str(target.get("id") or "")
             session.execute(
                 text(
-                    """
-                    UPDATE qc.qc_rule_versions
+                    f"""
+                    UPDATE {versions_table}
                     SET status = 'published'
                     WHERE id = :version_id
                     """
@@ -668,8 +695,8 @@ class QCRuleRegistryService:
             )
             session.execute(
                 text(
-                    """
-                    INSERT INTO qc.qc_rule_publish_history
+                    f"""
+                    INSERT INTO {history_table}
                       (id, rule_id, rule_version_id, action, reason, operator, created_at)
                     VALUES
                       (:id, :rule_id, :rule_version_id, :action, :reason, :operator, NOW())

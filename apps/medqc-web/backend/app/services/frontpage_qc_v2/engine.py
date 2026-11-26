@@ -141,7 +141,11 @@ def evaluate_frontpage(doc: FrontpageDoc, rules: Optional[Iterable[Rule]] = None
         )
 
     fails = [f for f in findings if f.verdict == Verdict.FAIL.value]
-    completeness = [(rule, result) for rule, result in results if rule.group == "completeness"]
+    completeness = [
+        (rule, result)
+        for rule, result in results
+        if rule.group == "completeness" and rule.severity is not Severity.HINT
+    ]
     judged = [result for _rule, result in completeness if result.verdict in (Verdict.PASS, Verdict.FAIL)]
     completeness_rate = (
         _round(sum(1 for result in judged if result.verdict is Verdict.PASS) / len(judged)) if judged else None

@@ -3,13 +3,42 @@ from __future__ import annotations
 
 import io
 from collections import Counter, defaultdict
+from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Sequence
+from zoneinfo import ZoneInfo
 
 from .catalog import RULES_BY_ID
 from .config import GRADE_LABELS
 from .model import GROUP_LABELS, SECTION_LABELS, SEVERITY_LABELS
 
 _JUDGED = ("pass", "fail")
+_SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
+
+ISSUE_LABELS = {
+    "fail": "扣分问题",
+    "hint": "提示问题",
+    "required_missing": "必填缺项",
+    "data_gap": "资料不足",
+    "clean": "无问题",
+}
+
+
+def _format_shanghai_datetime(value: Any) -> str:
+    if value is None or value == "":
+        return ""
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value).strip()
+        if not text:
+            return ""
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return text
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(_SHANGHAI_TZ).strftime("%Y-%m-%d %H:%M:%S")
 
 
 def _rate(numerator: int, denominator: int) -> Optional[float]:
@@ -27,13 +56,31 @@ def _rule_label(rule_id: str) -> Dict[str, Any]:
     }
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_spreadsheet_cell(value: Any) -> Any:
+    """防止 Excel/CSV 公式注入：对危险前缀字符串加前导单引号，保留纯数值类型。"""
+    if not isinstance(value, str) or not value:
+        return value
+    stripped = value.lstrip(" \t\r\n")
+    if value[0] in _FORMULA_PREFIXES or (stripped and stripped[0] in ("=", "+", "-", "@")):
+        return f"'{value}"
+    return value
+
+
+def _sanitize_row(values: Sequence[Any]) -> List[Any]:
+    return [_sanitize_spreadsheet_cell(v) for v in values]
+
+
 def _indicator(rows: Sequence[Dict[str, Any]], key: str, label: str, judge) -> Dict[str, Any]:
-    applicable = [row for row in rows if judge(row["rule_verdicts"]) is not None]
-    ok = sum(1 for row in applicable if judge(row["rule_verdicts"]))
+    applicable = [row for row in rows if judge(row) is not None]
+    ok = sum(1 for row in applicable if judge(row))
     return {"key": key, "label": label, "numerator": ok, "denominator": len(applicable), "rate": _rate(ok, len(applicable))}
 
 
-def _completeness_ok(verdicts: Dict[str, str]) -> Optional[bool]:
+def _completeness_ok(row: Dict[str, Any]) -> Optional[bool]:
+    verdicts = row["rule_verdicts"] if "rule_verdicts" in row else row
     judged = [
         verdict
         for rule_id, verdict in verdicts.items()
@@ -45,13 +92,40 @@ def _completeness_ok(verdicts: Dict[str, str]) -> Optional[bool]:
 
 
 def _all_pass(*rule_ids: str):
-    def judge(verdicts: Dict[str, str]) -> Optional[bool]:
+    def judge(row: Dict[str, Any]) -> Optional[bool]:
+        verdicts = row["rule_verdicts"] if "rule_verdicts" in row else row
         present = [verdicts.get(rule_id) for rule_id in rule_ids]
         if present[0] not in _JUDGED:
             return None
         return all(value != "fail" for value in present)
 
     return judge
+
+
+def _main_diag_code_ok(row: Dict[str, Any]) -> Optional[bool]:
+    """主要诊断编码正确率：L-06 仅在命中主诊断（score_item=='main_diag_code'）时扣减，不被其他诊断污染。"""
+    verdicts = row["rule_verdicts"] if "rule_verdicts" in row else row
+    if verdicts.get("C-D06") not in _JUDGED:
+        return None
+    if any(verdicts.get(rid) == "fail" for rid in ("C-D06", "S-15", "L-14")):
+        return False
+    if verdicts.get("L-06") == "fail":
+        if "l06_main_failed" in row:
+            return not bool(row["l06_main_failed"])
+        if "findings" in row and isinstance(row["findings"], list):
+            return not any(
+                f.get("rule_id") == "L-06"
+                and f.get("verdict") == "fail"
+                and f.get("score_item") == "main_diag_code"
+                for f in row["findings"]
+                if isinstance(f, dict)
+            )
+        if "item_scores" in row and isinstance(row["item_scores"], list):
+            for item in row["item_scores"]:
+                if isinstance(item, dict) and item.get("key") == "main_diag_code":
+                    return float(item.get("deduction") or 0.0) <= 0.0
+        return False
+    return True
 
 
 def build_analytics(rows: Sequence[Dict[str, Any]], *, top_n: int = 10) -> Dict[str, Any]:
@@ -99,11 +173,12 @@ def build_analytics(rows: Sequence[Dict[str, Any]], *, top_n: int = 10) -> Dict[
             "grades": {grade: grades.get(grade, 0) for grade in GRADE_LABELS},
             "issue_records": sum(1 for row in rows if row["fail_count"] > 0),
             "hint_records": sum(1 for row in rows if row["hint_count"] > 0),
+            "required_missing_records": sum(1 for row in rows if row.get("required_missing_count", 0) > 0),
             "data_gap_records": sum(1 for row in rows if row["data_gap_count"] > 0),
         },
         "indicators": [
             _indicator(rows, "completeness", "首页填报完整率", _completeness_ok),
-            _indicator(rows, "main_diag_code", "主要诊断编码正确率（格式层面）", _all_pass("C-D06", "S-15", "L-06", "L-14")),
+            _indicator(rows, "main_diag_code", "主要诊断编码正确率（格式层面）", _main_diag_code_ok),
             _indicator(rows, "surgery_code", "手术及操作编码正确率（格式层面）", _all_pass("C-D18", "S-17", "S-23", "C-D26", "L-07")),
             {
                 "key": "excellent",
@@ -142,16 +217,17 @@ def build_export_workbook(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "病历结果"
-    sheet.append([f"首页质控结果导出（{filters_summary}）"])
+    sheet.append(_sanitize_row([f"首页质控结果导出（{filters_summary}）"]))
     sheet["A1"].font = Font(bold=True)
     headers = ["患者", "住院号", "科室", "出院日期", "得分", "等级", "扣分问题数", "提示数", "必填缺项数", "资料不足项数", "可评分项占比", "质控时间"]
     sheet.append(headers)
     for cell in sheet[2]:
         cell.font = Font(bold=True)
+    visit_by_result_id = {result["id"]: result.get("visit_id", "") for result in results}
     for result in results:
         info = record_info.get(result["id"], {})
         sheet.append(
-            [
+            _sanitize_row([
                 info.get("patient_name", ""),
                 info.get("inpat_no") or result["visit_id"],
                 result.get("department") or info.get("department", ""),
@@ -163,8 +239,8 @@ def build_export_workbook(
                 result["required_missing_count"],
                 result["data_gap_count"],
                 f"{round(result['scorable_ratio'] * 100)}%",
-                result.get("created_at", ""),
-            ]
+                _format_shanghai_datetime(result.get("created_at", "")),
+            ])
         )
 
     detail_sheet = workbook.create_sheet("问题明细")
@@ -175,9 +251,9 @@ def build_export_workbook(
     for finding in findings:
         info = record_info.get(finding["result_id"], {})
         detail_sheet.append(
-            [
+            _sanitize_row([
                 info.get("patient_name", ""),
-                info.get("inpat_no", ""),
+                info.get("inpat_no") or info.get("visit_id") or visit_by_result_id.get(finding["result_id"], ""),
                 finding["rule_id"],
                 finding["rule_name"],
                 GROUP_LABELS.get(finding["group"], finding["group"]),
@@ -190,7 +266,7 @@ def build_export_workbook(
                 finding.get("reason", ""),
                 review_labels.get(finding["review_status"], finding["review_status"]),
                 finding.get("review_note", ""),
-            ]
+            ])
         )
     for row in detail_sheet.iter_rows(min_row=2):
         row[10].alignment = Alignment(wrap_text=True, vertical="top")

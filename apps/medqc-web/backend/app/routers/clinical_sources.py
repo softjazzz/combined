@@ -2,7 +2,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..core.audit import audit_event
-from ..core.clinical_defaults import FIXED_CDM_MODE, INDEPENDENT_CDM, LEGACY_PG, get_clinical_defaults
+from ..core.clinical_defaults import (
+    FIXED_CDM_MODE,
+    INDEPENDENT_CDM,
+    LEGACY_COMPAT_MODE,
+    LEGACY_PG,
+    get_clinical_defaults,
+)
+from ..core.http import validate_db_target_host
 from ..core.response import success_response
 from ..core.security import get_current_user
 from ..database import clinical_connection
@@ -25,10 +32,14 @@ def options(_user: dict = Depends(get_current_user)):
                 "sources": [{"id": INDEPENDENT_CDM, "name": get_clinical_defaults().fixed_cdm_name,
                              "enabled": value.cdm.enabled}],
             })
-        return success_response(data={"default_source": value.default_source, "sources": [
-            {"id": LEGACY_PG, "name": value.legacy_name, "enabled": value.legacy_enabled},
-            {"id": INDEPENDENT_CDM, "name": value.cdm.name, "enabled": value.cdm.enabled},
-        ]})
+        return success_response(data={
+            "mode": LEGACY_COMPAT_MODE,
+            "default_source": value.default_source,
+            "sources": [
+                {"id": LEGACY_PG, "name": value.legacy_name, "enabled": value.legacy_enabled},
+                {"id": INDEPENDENT_CDM, "name": value.cdm.name, "enabled": value.cdm.enabled},
+            ],
+        })
     except PipelineError as error:
         raise HTTPException(error.status, error.code) from None
 
@@ -43,6 +54,11 @@ def configuration(_actor: dict = Depends(require_pipeline_admin)):
 
 @router.put("")
 def configure(value: sources.SourceSettings, request: Request, actor: dict = Depends(require_pipeline_admin)):
+    if value.cdm.enabled:
+        try:
+            validate_db_target_host(value.cdm.host, allowlist_env="CLINICAL_SOURCE_HOST_ALLOWLIST")
+        except ValueError:
+            raise HTTPException(422, "clinical_source_host_not_allowed") from None
     try:
         if SessionLocal is None:
             raise PipelineError("clinical_source_configuration_unavailable")
@@ -60,6 +76,10 @@ def configure(value: sources.SourceSettings, request: Request, actor: dict = Dep
 @router.post("/check")
 def check(value: sources.SourceSettings, _actor: dict = Depends(require_pipeline_admin)):
     # 用户明确点击才连接；不保存设置，不读取患者正文，不做DDL。
+    try:
+        validate_db_target_host(value.cdm.host, allowlist_env="CLINICAL_SOURCE_HOST_ALLOWLIST")
+    except ValueError:
+        raise HTTPException(422, "clinical_source_host_not_allowed") from None
     try:
         selection = sources.snapshot(value, "independent_cdm", allow_disabled=True)
         with clinical_connection.selected(selection):

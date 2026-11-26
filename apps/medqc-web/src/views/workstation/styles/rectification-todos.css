@@ -8,17 +8,36 @@
   padding-top: 20px;
   border-top: 1px solid var(--mq-border);
 }
-header {
+.rectification-todos__header:not(.mq-page-head) {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 16px;
 }
-.rectification-heading {
-  margin-right: auto;
+.rectification-todos__actions a.mq-btn {
+  text-decoration: none;
 }
-h2 {
+.rectification-todos__actions :deep(.rectification-todos__refresh.ant-btn) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  padding: 0;
+  line-height: 1;
+}
+.rectification-todos__actions :deep(.rectification-todos__refresh.ant-btn > span),
+.rectification-todos__actions :deep(.rectification-todos__refresh.ant-btn .mq-icon) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  transform: none;
+}
+.rectification-heading__title {
   margin: 0;
   letter-spacing: 0;
 }

@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page" aria-labelledby="user-management-title">
+  <section class="mq-page" aria-labelledby="user-management-title">
     <header class="mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">数据与配置 · 用户管理</span>
@@ -10,7 +10,7 @@
     <section class="mq-card mq-card--padded">
       <AccountManagementPanel />
     </section>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">

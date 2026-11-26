@@ -1,9 +1,39 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import {
+  resolveAuthorizedWorkstationPath,
+  resolveDefaultWorkstationPath,
+} from '@/components/layout/workstationNav'
+import { effectiveRoles } from '@/utils/effectiveRoles'
 import { canUseMessageCenter, MESSAGE_CENTER_PATH, MESSAGE_CENTER_ROLES } from '@/views/workstation/notificationNavigation'
 import type { RouteRecordRaw } from 'vue-router'
 
+export { resolveAuthorizedWorkstationPath, resolveDefaultWorkstationPath }
+
 const WORKSTATION_BASE_PATH = '/workstation-v5'
 const LEGACY_WORKSTATION_BASE_PATH = '/workstation-v4'
+
+function isTruthyFlag(value: unknown): boolean {
+  return String(value ?? '').trim().toLowerCase() === 'true'
+}
+
+/**
+ * 生产构建下默认关闭匿名 ?demo=true 认证旁路及匿名 /dashboard/test/* 测试路由，
+ * 仅当非生产环境或显式开启 VITE_ALLOW_DEMO_MODE=true / VITE_ENABLE_DEMO_MODE=true 时允许。
+ */
+export function isDemoRouteBypassEnabled(
+  env: Record<string, unknown> = import.meta.env as Record<string, unknown>,
+): boolean {
+  const explicitDemo =
+    isTruthyFlag(env.VITE_ALLOW_DEMO_MODE) || isTruthyFlag(env.VITE_ENABLE_DEMO_MODE)
+  if (Boolean(env.PROD)) {
+    return explicitDemo
+  }
+  return true
+}
+
+function isDashboardTestPath(path: string): boolean {
+  return path === '/dashboard/test' || path.startsWith('/dashboard/test/')
+}
 
 // 历史页面统一经 V4 兼容入口，沿用工作台的 URL 规范化和鉴权。
 const retiredPageRedirect = { path: LEGACY_WORKSTATION_BASE_PATH }
@@ -130,8 +160,8 @@ const routes: RouteRecordRaw[] = [
         path: 'workstation/qc-overview',
         redirect: '/workstation-v5/qc-overview',
         meta: {
-          title: '问题集中点',
-          permission: ['admin', 'qc_manager'],
+          title: '质控首页概览',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
         },
       },
       {
@@ -208,7 +238,7 @@ const routes: RouteRecordRaw[] = [
         meta: {
           title: '整改任务',
           icon: 'ToolOutlined',
-          permission: ['admin', 'qc_manager', 'doctor'],
+          permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'],
         },
       },
 
@@ -370,6 +400,7 @@ const routes: RouteRecordRaw[] = [
           title: 'LLM配置测试',
           icon: 'SettingOutlined',
           hidden: true, // 隐藏在菜单中，只能直接访问
+          permission: ['admin', 'developer'],
         },
       },
       {
@@ -380,6 +411,7 @@ const routes: RouteRecordRaw[] = [
           title: '简化LLM测试',
           icon: 'ExperimentOutlined',
           hidden: true,
+          permission: ['admin', 'developer'],
         },
       },
 
@@ -395,31 +427,56 @@ const routes: RouteRecordRaw[] = [
         path: 'test/modal',
         name: 'ModalTest',
         component: () => import('@/views/test/ModalTest.vue'),
-        meta: { title: 'Modal测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: 'Modal测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/batch-processor',
         name: 'BatchProcessorTest',
         component: () => import('@/views/test/BatchProcessorTest.vue'),
-        meta: { title: '批量处理测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '批量处理测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/multi-file-upload',
         name: 'MultiFileUploadTest',
         component: () => import('@/views/test/MultiFileUploadTest.vue'),
-        meta: { title: '多文件上传测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '多文件上传测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/multi-document-merge',
         name: 'MultiDocumentMergeTest',
         component: () => import('@/views/test/MultiDocumentMergeTest.vue'),
-        meta: { title: '多文档合并测试', icon: 'ExperimentOutlined', hidden: true },
+        meta: {
+          title: '多文档合并测试',
+          icon: 'ExperimentOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
       {
         path: 'test/classification-version',
         name: 'ClassificationVersionTest',
         component: () => import('@/views/test/ClassificationVersionTest.vue'),
-        meta: { title: '分类算法版本测试', icon: 'BranchesOutlined', hidden: true },
+        meta: {
+          title: '分类算法版本测试',
+          icon: 'BranchesOutlined',
+          hidden: true,
+          permission: ['admin', 'developer'],
+        },
       },
 
       // 病历管理路由（隐藏入口，保留兼容访问）
@@ -702,11 +759,11 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'settings',
         name: 'Settings',
-        component: () => import('@/views/settings/SettingsView.vue'),
+        redirect: '/workstation-v5/system-config',
         meta: {
           title: '系统设置',
           icon: 'SettingOutlined',
-          permission: ['admin'],
+          permission: ['admin', 'super_admin', 'sync_admin'],
         },
       },
       {
@@ -717,6 +774,7 @@ const routes: RouteRecordRaw[] = [
           title: 'API测试',
           icon: 'ApiOutlined',
           hidden: true, // 隐藏在菜单中，仅用于调试
+          permission: ['admin', 'super_admin', 'sync_admin'],
         },
       },
     ],
@@ -768,33 +826,48 @@ const routes: RouteRecordRaw[] = [
         path: 'records/outpatient-emergency',
         name: 'WorkstationV4OutpatientEmergencyRecords',
         component: () => import('@/views/workstation/OutpatientEmergencyRecordsView.vue'),
-        meta: { title: '门急诊病历', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '门急诊病历',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'records/running',
         name: 'WorkstationV4RunningRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'inpatient' },
-        meta: { title: '运行病历', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '运行病历',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'records/final',
         name: 'WorkstationV4FinalRecords',
         component: () => import('@/views/workstation-v4/QcRecordResultListView.vue'),
         props: { carePhase: 'discharged' },
-        meta: { title: '终末病历质控', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '终末病历质控',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'frontpage-qc',
         name: 'WorkstationV5FrontpageQc',
         component: () => import('@/views/workstation-v4/frontpage-qc/FrontpageQcView.vue'),
-        meta: { title: '首页质控（新）', permission: ['admin', 'super_admin', 'qc_manager', 'coder'] },
+        meta: {
+          title: '首页质控（新）',
+          permission: ['admin', 'qc_manager', 'coder', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'qc-feedback-demo',
         name: 'WorkstationV4QcFeedbackDemo',
         component: () => import('@/views/workstation-v4/QcResultFeedbackDemoListView.vue'),
-        meta: { title: '质控反馈记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '质控反馈记录',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'case-communications',
@@ -806,7 +879,10 @@ const routes: RouteRecordRaw[] = [
         path: 'feedback',
         name: 'WorkstationV5Feedback',
         component: () => import('@/views/workstation/HomeRectificationTodos.vue'),
-        meta: { title: '整改待办', permission: ['admin', 'qc_manager', 'qc_staff', 'doctor'] },
+        meta: {
+          title: '整改待办',
+          permission: ['admin', 'qc_manager', 'qc_staff', 'doctor', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'qc-task',
@@ -822,7 +898,10 @@ const routes: RouteRecordRaw[] = [
         path: 'qc-result',
         name: 'WorkstationV5NotificationQcResult',
         component: () => import('@/views/workstation/NotificationQcResult.vue'),
-        meta: { title: '质控任务结果', permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'] },
+        meta: {
+          title: '质控任务结果',
+          permission: ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'messages',
@@ -834,14 +913,20 @@ const routes: RouteRecordRaw[] = [
         path: 'customer-sample-validation',
         name: 'WorkstationV4CustomerSampleValidation',
         component: () => import('@/views/workstation-v4/CustomerSampleValidationView.vue'),
-        meta: { title: '客户样本验证', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '客户样本验证',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'customer-sample-validation/synthetic-case/new',
         name: 'WorkstationV4SyntheticCaseNew',
         component: () =>
           import('@/views/workstation-v4/customer-sample-validation/SyntheticCaseBuilderView.vue'),
-        meta: { title: '创建测试病历', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '创建测试病历',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'customer-sample-validation/tasks',
@@ -850,20 +935,29 @@ const routes: RouteRecordRaw[] = [
           import(
             '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
           ),
-        meta: { title: '质控记录', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '质控记录',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'customer-sample-validation/surgery-catalog',
         name: 'WorkstationV4SurgeryProcedureCatalog',
         component: () =>
           import('@/views/workstation-v4/components/SurgeryProcedureCatalogView.vue'),
-        meta: { title: '手术分级目录', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '手术分级目录',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'custom-qc-experience',
         name: 'WorkstationV4CustomQCExperience',
         component: () => import('@/views/workstation-v4/CustomQCExperienceView.vue'),
-        meta: { title: '自定义质控点体验', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '自定义质控点体验',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'icd',
@@ -877,114 +971,168 @@ const routes: RouteRecordRaw[] = [
         name: 'WorkstationV4Upload',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'upload' },
-        meta: { title: '数据上传' },
+        meta: {
+          title: '数据上传',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'stats',
         name: 'WorkstationV4Stats',
         component: () => import('@/views/workstation-v4/LuxianQcAnalyticsView.vue'),
-        meta: { title: '统计分析' },
+        meta: {
+          title: '统计分析',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'reports/record-quality',
         name: 'WorkstationV5RecordQualityReport',
         component: () => import('@/views/qc/reports/RecordQualityReportView.vue'),
-        meta: { title: '病历质量分析', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '病历质量分析',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'reports/special-records',
         name: 'WorkstationV5SpecialRecordReport',
         component: () => import('@/views/qc/reports/SpecialRecordReportView.vue'),
-        meta: { title: '特殊病历报表', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '特殊病历报表',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'reports/frontpage-quality',
         name: 'WorkstationV5FrontpageQualityReport',
         component: () => import('@/views/qc/reports/FrontpageQualityReportView.vue'),
-        meta: { title: '病案首页统计', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '病案首页统计',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'reports/staff-analysis',
         name: 'WorkstationV5StaffAnalysisReport',
         component: () => import('@/views/qc/reports/StaffAnalysisView.vue'),
-        meta: { title: '质控员工作分析', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '质控员工作分析',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'drg/pre',
         name: 'WorkstationV4DRGPre',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'pre-analysis' },
-        meta: { title: '事前分析' },
+        meta: {
+          title: '事前分析',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'drg/mid',
         name: 'WorkstationV4DRGMid',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'mid-analysis' },
-        meta: { title: '事中监控' },
+        meta: {
+          title: '事中监控',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'drg/payment',
         name: 'WorkstationV4DRGPayment',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'payment' },
-        meta: { title: '付费监测' },
+        meta: {
+          title: '付费监测',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'drg/post',
         name: 'WorkstationV4DRGPost',
         component: () => import('@/views/workstation-v4/WorkstationV2View.vue'),
         props: { embedded: true, initialView: 'post-analysis' },
-        meta: { title: '事后分析' },
+        meta: {
+          title: '事后分析',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'grouper',
         name: 'WorkstationV4Grouper',
         component: () => import('@/views/drg-grouper/GrouperTabsView.vue'),
-        meta: { title: '医保分组器' },
+        meta: {
+          title: '医保分组器',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'data',
         name: 'WorkstationV4Data',
         component: () => import('@/views/workstation-v4/CDMDataView.vue'),
-        meta: { title: '数据管理' },
+        meta: {
+          title: '数据管理',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'rules',
         name: 'WorkstationV4Rules',
         component: () => import('@/views/workstation-v4/WorkstationRulesView.vue'),
-        meta: { title: '质控规则管理' },
+        meta: {
+          title: '质控规则管理',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'rules/custom-workspace',
         name: 'WorkstationV4CustomRuleWorkspace',
         component: () => import('@/views/rules/CustomRuleWorkspaceView.vue'),
-        meta: { title: '自定义质控点', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '自定义质控点',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'rules/validation',
         name: 'WorkstationV4RuleValidation',
         component: () => import('@/views/workstation-v4/rule-validation/RuleValidationListView.vue'),
-        meta: { title: '规则验收', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '规则验收',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'rules/validation/:ruleId',
         name: 'WorkstationV4RuleValidationDetail',
         component: () => import('@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'),
-        meta: { title: '规则验收详情', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '规则验收详情',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'rules/validation/:ruleId/cases/new',
         name: 'WorkstationV4RuleValidationNewCase',
         component: () =>
           import('@/views/workstation-v4/rule-validation/RuleValidationNewCaseView.vue'),
-        meta: { title: '新建测试病例', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '新建测试病例',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'qc-overview',
         name: 'WorkstationV4QCOverview',
         component: () => import('@/views/workstation/QCOverviewView.vue'),
-        meta: { title: '问题集中点', permission: ['admin', 'qc_manager', 'sync_admin'] },
+        meta: {
+          title: '质控首页概览',
+          permission: ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'],
+        },
       },
       {
         path: 'system-config',
@@ -999,13 +1147,16 @@ const routes: RouteRecordRaw[] = [
         path: 'users',
         name: 'WorkstationUserManagement',
         component: () => import('@/views/workstation/UserManagementView.vue'),
-        meta: { title: '用户管理', permission: ['admin', 'sync_admin'] },
+        meta: { title: '用户管理', permission: ['admin', 'sync_admin', 'super_admin'] },
       },
       {
         path: 'tender-acceptance',
         name: 'WorkstationV4TenderAcceptance',
         component: () => import('@/views/workstation-v4/components/TenderAcceptanceDashboard.vue'),
-        meta: { title: '投标验收看板', permission: ['admin', 'qc_manager'] },
+        meta: {
+          title: '投标验收看板',
+          permission: ['admin', 'qc_manager', 'sync_admin', 'super_admin'],
+        },
       },
     ],
   },
@@ -1072,13 +1223,15 @@ router.beforeEach(async (to, from, next) => {
   const authStore = await getAuthStore()
   const isWorkstationRoute = to.path.startsWith(WORKSTATION_BASE_PATH)
   const isWorkstationLogin = to.name === 'WorkstationV4Login'
+  const demoBypassEnabled = isDemoRouteBypassEnabled()
+  const isDashboardTestRoute = to.name !== 'NotFound' && isDashboardTestPath(to.path)
 
   // 检查是否为演示模式（通过URL参数 ?demo=true）
   const isDemoMode = to.query.demo === 'true'
   const allowDemo = to.meta.allowDemo === true
 
-  // 如果是演示模式且路由允许演示访问，跳过认证检查
-  if (isDemoMode && allowDemo) {
+  // 仅在非生产构建或显式开启演示开关时允许 ?demo=true 跳过认证检查
+  if (demoBypassEnabled && isDemoMode && allowDemo) {
     // 设置页面标题
     if (to.meta.title) {
       document.title = `${to.meta.title} - 大模型病案质控系统`
@@ -1094,17 +1247,23 @@ router.beforeEach(async (to, from, next) => {
     }
 
     if (authStore.isAuthenticated) {
-      const redirect =
+      const defaultLanding = resolveDefaultWorkstationPath(authStore.userRoles)
+      const rawRedirect =
         typeof to.query.redirect === 'string'
           ? normalizeWorkstationPath(to.query.redirect)
-          : WORKSTATION_BASE_PATH
+          : ''
+      const redirect =
+        rawRedirect && rawRedirect !== WORKSTATION_BASE_PATH ? rawRedirect : defaultLanding
       next(redirect)
       return
     }
   }
 
+  // 生产构建且未开启演示开关时，关闭匿名 /dashboard/test/* 路由，强制认证并拦截访问
+  const requiresAuth = to.meta.requiresAuth !== false || (isDashboardTestRoute && !demoBypassEnabled)
+
   // 检查是否需要认证
-  if (to.meta.requiresAuth !== false) {
+  if (requiresAuth) {
     // 检查用户是否已登录
     if (!authStore.isAuthenticated) {
       // 尝试从存储中恢复用户状态
@@ -1126,6 +1285,15 @@ router.beforeEach(async (to, from, next) => {
       }
     }
 
+    if (isDashboardTestRoute && !demoBypassEnabled) {
+      next({
+        name: 'NotFound',
+        params: { pathMatch: to.path.replace(/^\/+/, '').split('/') },
+        replace: true,
+      })
+      return
+    }
+
     if (to.path === `${WORKSTATION_BASE_PATH}/worklist` && to.query.assist === 'message' &&
         Object.keys(to.query).length === 1 && canUseMessageCenter(authStore.userRoles)) {
       next({ path: MESSAGE_CENTER_PATH, replace: true })
@@ -1134,19 +1302,22 @@ router.beforeEach(async (to, from, next) => {
 
     // 检查权限
     if (to.meta.permission) {
-      const userRoles = authStore.userRoles
+      const userRoles = effectiveRoles(authStore.userRoles)
       const requiredPermissions = to.meta.permission as string[]
 
-      const hasPermission = userRoles.includes('sync_admin') || requiredPermissions.some((permission) => userRoles.includes(permission))
+      const hasPermission =
+        userRoles.includes('sync_admin') ||
+        userRoles.includes('super_admin') ||
+        requiredPermissions.some((permission) => userRoles.includes(permission))
 
       if (!hasPermission) {
-        // 普通质控员已有待办权限，不能回到无权进入的首页形成重定向循环。
-        if (userRoles.includes('qc_staff')) {
-          next('/workstation-v5/feedback')
+        const fallbackWorkstationPath = resolveAuthorizedWorkstationPath(userRoles)
+        if (fallbackWorkstationPath && to.path !== fallbackWorkstationPath) {
+          next(fallbackWorkstationPath)
           return
         }
-        // 仪表板会返回工作台首页。已在首页时，使用登录后可访问的个人资料页。
-        next(to.name === 'WorkstationV4Index' ? '/auth/profile' : '/dashboard')
+        // 无任何可用工作台入口或目标即默认入口时，回退登录后可访问的个人资料页，避免重定向循环。
+        next('/auth/profile')
         return
       }
     }

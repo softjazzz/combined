@@ -8,6 +8,7 @@ from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification
 from ..database.models.v36_reports import QCAppeal as ReportAppeal
@@ -28,8 +29,25 @@ SOURCE_FIELDS = (
     "rule_set_version",
 )
 OPEN = ("pending", "reviewing")
-STATES = (*OPEN, "approved", "rejected", "withdrawn")
-REVIEWERS = {"admin", "qc_manager"}
+STALE_CLOSE_ACTIONS = {"supersede", "close_stale"}
+STATES = (*OPEN, "approved", "rejected", "withdrawn", "superseded")
+REVIEWERS = {"admin", "super_admin", "qc_manager"}
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+def _is_global_scope(actor) -> bool:
+    roles = actor["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor["institute_id"]
+    )
 
 
 class _OwnerBase(DeclarativeBase):
@@ -38,12 +56,14 @@ class _OwnerBase(DeclarativeBase):
 
 # 复用报表合同但固定表 owner；不能给整个会话套 qc 映射（会污染 CDM 查询）。
 class QCAppeal(_OwnerBase):
-    __table__ = ReportAppeal.__table__.to_metadata(_OwnerBase.metadata, schema="qc")
+    __table__ = ReportAppeal.__table__.to_metadata(
+        _OwnerBase.metadata, schema=_qc_schema()
+    )
 
 
 class QCAppealReview(_OwnerBase):
     __table__ = ReportAppealReview.__table__.to_metadata(
-        _OwnerBase.metadata, schema="qc"
+        _OwnerBase.metadata, schema=_qc_schema()
     )
 
 
@@ -51,12 +71,26 @@ def _reviewer(actor):
     return bool(actor["roles"] & REVIEWERS)
 
 
+def _serialize_value(value):
+    if isinstance(value, datetime):
+        aware = (
+            value.replace(tzinfo=timezone.utc)
+            if value.tzinfo is None
+            else value.astimezone(timezone.utc)
+        )
+        return aware.isoformat()
+    return value
+
+
 def _view(row):
-    return {column.name: getattr(row, column.name) for column in row.__table__.columns}
+    return {
+        column.name: _serialize_value(getattr(row, column.name))
+        for column in row.__table__.columns
+    }
 
 
 def _authorized(actor, row):
-    if "admin" not in actor["roles"] and (
+    if not _is_global_scope(actor) and (
         not actor["institute_id"] or actor["institute_id"] != row.institute_id
     ):
         raise RectificationError("无权访问该机构申诉", 403)
@@ -152,7 +186,7 @@ class ModernAppealService:
                     appellant_department=department,
                     case_department=department,
                     status="pending",
-                    created_at=now.replace(tzinfo=None),
+                    created_at=now,
                     updated_at=now,
                 )
                 session.add(row)
@@ -180,7 +214,7 @@ class ModernAppealService:
         statement = _modern(statement)
         if not _reviewer(actor) and "doctor" not in actor["roles"]:
             raise RectificationError("仅医生与申诉审核人员可访问", 403)
-        if "admin" not in actor["roles"]:
+        if not _is_global_scope(actor):
             if not actor["institute_id"]:
                 raise RectificationError("账号缺少可信机构", 403)
             statement = statement.where(QCAppeal.institute_id == actor["institute_id"])
@@ -249,11 +283,40 @@ class ModernAppealService:
             ).all()
             return {**_view(row), "events": [_view(event) for event in events]}
 
+    def _is_source_stale(self, session, data):
+        try:
+            source = self.source(session, data)
+        except RectificationError as exc:
+            if exc.status == 409:
+                return True
+            raise
+        return any(source.get(key) != data[key] for key in SOURCE_FIELDS)
+
+    def close_stale(
+        self,
+        actor_id,
+        appeal_id,
+        *,
+        expected_status="pending",
+        comment="质控已重跑至新轮次，终结原失效轮次未决申诉",
+        action="close_stale",
+    ):
+        if action not in STALE_CLOSE_ACTIONS:
+            raise RectificationError("申诉终结操作无效")
+        return self.transition(
+            actor_id,
+            appeal_id,
+            expected_status=expected_status,
+            action=action,
+            comment=comment,
+        )
+
     def transition(self, actor_id, appeal_id, *, expected_status, action, comment):
         if expected_status not in OPEN or action not in {
             "approve",
             "reject",
             "withdraw",
+            *STALE_CLOSE_ACTIONS,
         }:
             raise RectificationError("申诉操作无效")
         if not isinstance(comment, str) or not 10 <= len(comment.strip()) <= 2000:
@@ -274,6 +337,15 @@ class ModernAppealService:
                 if "doctor" not in actor["roles"] or row.appellant_id != actor_id:
                     raise RectificationError("仅申诉医生本人可以撤回", 403)
                 status = "withdrawn"
+            elif action in STALE_CLOSE_ACTIONS:
+                if not _reviewer(actor) or row.appellant_id == actor_id:
+                    raise RectificationError("仅独立质控审核人员可以终结失效申诉", 403)
+                data = {key: getattr(row, key) for key in SOURCE_FIELDS}
+                if not self._is_source_stale(session, data):
+                    raise RectificationError(
+                        "该申诉仍属于当前最新质控轮次，请按正常流程审核", 409
+                    )
+                status = "superseded"
             else:
                 if not _reviewer(actor) or row.appellant_id == actor_id:
                     raise RectificationError("仅独立质控审核人员可以审核", 403)
@@ -313,7 +385,15 @@ class ModernAppealService:
                     reviewer_name=actor["name"],
                     reviewer_role="doctor"
                     if action == "withdraw"
-                    else ("admin" if "admin" in actor["roles"] else "qc_manager"),
+                    else (
+                        "admin"
+                        if "admin" in actor["roles"]
+                        else (
+                            "super_admin"
+                            if "super_admin" in actor["roles"]
+                            else "qc_manager"
+                        )
+                    ),
                     action=action,
                     comment=comment.strip(),
                     created_at=now,

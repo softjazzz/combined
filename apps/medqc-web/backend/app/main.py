@@ -98,6 +98,13 @@ class UTF8JSONResponse(JSONResponse):
     media_type = "application/json; charset=utf-8"
 
 
+def _is_demo_api_enabled(settings) -> bool:
+    """仅在非生产环境且显式开启 ENABLE_DEMO_API=true 时挂载演示路由。"""
+    if str(getattr(settings, "ENV", "") or "").strip().lower() == "production":
+        return False
+    return os.getenv("ENABLE_DEMO_API", "").strip().lower() in {"1", "true", "yes"}
+
+
 def create_app() -> FastAPI:
     """
     创建并配置 FastAPI 应用实例
@@ -157,7 +164,7 @@ def create_app() -> FastAPI:
         allow_methods=settings.CORS_ALLOW_METHODS,
         allow_headers=settings.CORS_ALLOW_HEADERS,
         # 任务详情 409 时附带任务状态，跨域部署下前端也需能读取
-        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Special-Classification-Version",
+        expose_headers=["X-Batch-Job-Status", "Content-Disposition", "X-Export-Total", "X-Special-Classification-Version",
                         "X-Special-Standard-Id", "X-Special-Standard-Version", "X-Special-Binding-Version"],
     )
 
@@ -303,8 +310,9 @@ def create_app() -> FastAPI:
     app.include_router(record_reviews_router.router)
     # Department QC Rules (Migration 009)
     app.include_router(department_qc_rules_router.router)
-    # Demo page for LX33 rules (no auth required)
-    app.include_router(demo_router.router)
+    # Demo page for LX33 rules (disabled by default and always off in production)
+    if _is_demo_api_enabled(settings):
+        app.include_router(demo_router.router)
     # Front page auto-generation (demo + future real extraction)
     app.include_router(frontpage_router.router)
     # Front page extraction settings
@@ -421,6 +429,9 @@ def create_app() -> FastAPI:
             validate_server_schema(engine)
             app.state.startup_mode = "normal"
             logger.info("服务器必要结构只读校验通过；启动预热和后台恢复已关闭")
+            from .services.daily_qc.runner import start as start_daily_qc
+
+            start_daily_qc(app)
             return
 
         try:

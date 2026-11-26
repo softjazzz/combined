@@ -1,5 +1,8 @@
 <template>
-  <div class="workstation-shell relative h-full flex overflow-hidden">
+  <div
+    class="workstation-shell relative flex"
+    :class="viewMode === 'list' ? 'workstation-shell--list min-h-full' : 'h-full overflow-hidden'"
+  >
     <!-- ====== 列表模式 ====== -->
     <template v-if="viewMode === 'list'">
       <WorkstationV4ListView
@@ -36,32 +39,50 @@
         :qc-scope-total="qcScopeTotal"
         :qc-summary-state="qcSummaryState"
         :record-pool-qc-task="recordPoolQcTask"
+        :batch-qc-results="batchQcResults"
         :analytics-drilldown="analyticsDrilldown"
         :load-error="loadError"
         @update:active-priority-group="activePriorityGroup = $event"
         @update:search-text="searchText = $event"
         @update:date-range="dateRange = $event"
         @update:date-field="dateField = $event"
-        @update:selected-row-keys="selectedWorkbenchKeys = $event"
+        @update:selected-row-keys="handleSelectedWorkbenchKeysChange"
         @priority-open="handlePriorityOpen"
         @priority-defer="handlePriorityDefer"
-        @select-dept="selectDept"
-        @select-doctor="selectDoctor"
+        @select-dept="handleSelectDept"
+        @select-doctor="handleSelectDoctor"
         @select-hosp-filter="handleHospFilter"
-        @select-inpatient-sort="selectInpatientSort"
+        @select-inpatient-sort="handleSelectInpatientSort"
         @toggle-today-inpatient="toggleTodaySyncedInpatient"
         @open-record="handleRowOpen"
         @batch-extract="handleBatchExtract"
+        @preview-run-qc="handlePreviewRecordQc"
         @filter-qc="handleFilterQc"
-        @dismiss-qc-task="recordPoolQcTask = null"
+        @dismiss-qc-task="handleDismissRecordPoolQcTask"
+        @canceled-qc-task="handleCanceledRecordPoolQcTask"
+        @view-qc-results="handleViewRecordPoolQcResults"
+        @open-batch-qc-result="handleOpenBatchQcResult"
+        @exit-batch-qc-results="exitBatchQcResults"
         @back-to-analytics="backToAnalytics"
         @clear-analytics-drilldown="clearAnalyticsDrilldown"
         @batch-defer="handleBatchDefer"
         @batch-assign="handleBatchAssign"
         @clear-filters="handleClearFilters"
+        @search="handleSearch"
+        @refresh="handleRefresh"
         @page-change="handlePageChange"
       />
       <CurrentMedicalRecordDrawer :record="medicalRecordFocus" @close="medicalRecordFocus = null" />
+      <QCRecordResultComparisonDrawer
+        :open="comparisonDrawerOpen"
+        :focus="comparisonFocus"
+        :batch-records="comparisonBatchRecords"
+        :active-batch-index="comparisonActiveIndex"
+        presentation-mode="grouped"
+        :load-job-metadata="!route.path?.startsWith('/workstation-v5/')"
+        @select-batch-index="handleSelectComparisonBatchIndex"
+        @close="closeComparisonDrawer"
+      />
     </template>
     <!-- ====== 详情模式（全屏） ====== -->
     <template v-else-if="viewMode === 'detail'">
@@ -182,7 +203,7 @@
     </template>
 
     <WorkstationV4AssistView
-      v-if="viewMode === 'detail' || assistTab === 'message'"
+      v-if="viewMode === 'detail' || (listAssistExplicitOpen && assistPanelVisible && assistTab === 'message')"
       ref="assistViewRef"
       :visible="assistPanelVisible"
       :assist-tab="assistTab"
@@ -228,7 +249,7 @@
       :is-other-target="isOtherTarget"
       :icd-apply-index="icdApplyIndex"
       :icd-apply-label="icdApplyLabel"
-      @update:visible="assistPanelVisible = $event"
+      @update:visible="handleAssistVisibleChange"
       @tab-change="handleAssistTabChange"
       @refresh-tab="handleAssistTabRefresh"
       @content-issues-change="contentQCCount = $event"
@@ -341,8 +362,8 @@
 
 <script setup lang="ts">
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
-import { defineAsyncComponent, ref, computed, onMounted, watch, nextTick } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { defineAsyncComponent, ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { useRoute, useRouter, type LocationQuery, type LocationQueryRaw } from 'vue-router'
 import { notificationLocation } from '@/views/workstation/notificationNavigation'
 import { apiClient } from '@/services/apiService'
 import { message } from 'ant-design-vue'
@@ -408,7 +429,21 @@ import { useWorkstationSession } from './composables/useWorkstationSession'
 import { useFrontpageDraft } from './composables/useFrontpageDraft'
 import { useQcPipeline } from './composables/useQcPipeline'
 import CurrentMedicalRecordDrawer from './components/CurrentMedicalRecordDrawer.vue'
-import { usePatientRecords } from './composables/usePatientRecords'
+import QCRecordResultComparisonDrawer, {
+  type QCRecordResultBatchItem,
+  type QCRecordResultFocus,
+} from './customer-sample-validation/QCRecordResultComparisonDrawer.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
+import {
+  resolveBatchResultRecords,
+  toComparisonFocusFromBatchItem,
+  type BatchResultRecordItem,
+} from './utils/batchResultViewer'
+import {
+  usePatientRecords,
+  type HospitalStatusScope,
+  type InpatientSort,
+} from './composables/usePatientRecords'
 import { useNotifications } from './composables/useNotifications'
 import { useLocalAssistantRegistration } from './composables/useAssistantRegistry'
 import { pasteFrontpagePresets } from './data/pasteFrontpagePresets'
@@ -465,9 +500,11 @@ const {
 
 const route = useRoute()
 const router = useRouter()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const medicalRecordFocus = ref<PatientRecord | null>(null)
 
 const {
+  sourceId,
   allRecords,
   departments,
   doctors,
@@ -479,10 +516,13 @@ const {
   loadError,
   qcSummary,
   qcSummaryState,
+  qcTotalsReady,
   activeDept,
   activeDoctor,
   searchText,
   dateRange,
+  committedSearchText,
+  committedDateRange,
   dateField,
   hospFilter,
   syncScope,
@@ -533,6 +573,29 @@ const stageServerTotalPages = ref(1)
 const stageLoading = ref(false)
 const batchExtracting = ref(false)
 const recordPoolQcTask = ref<SichuanBatchJob | null>(null)
+const recordPoolTaskSubmittedRecords = new Map<string, PatientRecord[]>()
+const batchQcResults = ref<{
+  jobId: string
+  loading: boolean
+  items: BatchResultRecordItem[]
+  activeRecordKey?: string
+} | null>(null)
+const comparisonDrawerOpen = ref(false)
+const comparisonFocus = ref<QCRecordResultFocus | null>(null)
+const comparisonQueue = ref<BatchResultRecordItem[]>([])
+const comparisonActiveIndex = ref(-1)
+let batchQcResultSequence = 0
+
+const comparisonBatchRecords = computed<QCRecordResultBatchItem[]>(() =>
+  comparisonQueue.value.map((item) => ({
+    recordKey: item.recordKey,
+    patientName: item.patientName,
+    visitId: item.visitId,
+    department: item.department,
+    confirmedIssueCount: item.confirmedIssueCount,
+    resultLabel: item.resultLabel,
+  })),
+)
 const batchRuntimeStatusMap = ref<Record<string, BatchRuntimeStatus>>({})
 const selectedStageRecord = ref<PatientRecord | null>(null)
 // 仅用于当前前端选中行。真实请求仍从 selectedRecord 读取三坐标字段。
@@ -547,15 +610,15 @@ const displayDepartments = computed(() =>
   isAggregatedStageMode.value ? stageDepartments.value : departments.value,
 )
 
-const displayLoading = computed(
-  () => (isAggregatedStageMode.value ? stageLoading.value : loading.value) || batchExtracting.value,
+const displayLoading = computed(() =>
+  isAggregatedStageMode.value ? stageLoading.value : loading.value,
 )
 
 const displayServerTotal = computed(() =>
   isAggregatedStageMode.value ? stageServerTotal.value : serverTotal.value,
 )
 const qcScopeTotal = computed(() =>
-  qcSummaryState.value === 'ready' ? qcSummary.value.totalRecords : serverTotal.value,
+  qcTotalsReady.value ? qcSummary.value.totalRecords : serverTotal.value,
 )
 
 const displayServerTotalPages = computed(() =>
@@ -565,14 +628,17 @@ const displayServerTotalPages = computed(() =>
 const isStageQueueMode = computed(() => Boolean(currentStageFilter.value))
 
 const stageMeta = computed(() => getStageMeta(currentStageFilter.value))
+let stageWorklistRequestSequence = 0
 
 async function fetchStageWorklist(stage: WorkflowStageKey | '') {
+  const requestSequence = ++stageWorklistRequestSequence
   const endpoint = stageWorklistEndpoint(stage)
   if (!endpoint) {
     stageWorklistItems.value = []
     stageDepartments.value = []
     stageServerTotal.value = 0
     stageServerTotalPages.value = 1
+    stageLoading.value = false
     return
   }
 
@@ -586,6 +652,7 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
         keyword: searchText.value.trim() || undefined,
       },
     })
+    if (requestSequence !== stageWorklistRequestSequence) return
     const payload = data?.data || {}
     const items = Array.isArray(payload.items) ? payload.items : []
     stageWorklistItems.value = items.map((item) => normalizeWorklistItem(item))
@@ -601,13 +668,16 @@ async function fetchStageWorklist(stage: WorkflowStageKey | '') {
     )
     stageDepartments.value = normalizeStageDepartments(payload.departments, stageServerTotal.value)
   } catch (error) {
+    if (requestSequence !== stageWorklistRequestSequence) return
     console.error('加载聚合工作台数据失败:', error)
     stageWorklistItems.value = []
     stageDepartments.value = [{ name: '全部科室', total: 0, warningCount: 0 }]
     stageServerTotal.value = 0
     stageServerTotalPages.value = 1
   } finally {
-    stageLoading.value = false
+    if (requestSequence === stageWorklistRequestSequence) {
+      stageLoading.value = false
+    }
   }
 }
 
@@ -667,8 +737,8 @@ const DEMO_HOME_RECORD_ORDER = ['V-ZS-001', 'V-LM-001']
 const DEMO_HOME_RECORD_ORDER_MAP = new Map(DEMO_HOME_RECORD_ORDER.map((id, index) => [id, index]))
 const DEMO_HOME_RECORD_ID_SET = new Set(DEMO_HOME_RECORD_ORDER)
 const DEMO_HOME_NAME_MAP: Record<string, string> = {
-  'V-ZS-001': '寮犱笁',
-  'V-LM-001': '鏉庢槑',
+  'V-ZS-001': '张三',
+  'V-LM-001': '李明',
 }
 
 const stageListRecords = computed<PatientRecord[]>(() =>
@@ -765,6 +835,47 @@ async function handleStageRecordAction(record: PatientRecord) {
 
 const activePriorityGroup = ref('all')
 const selectedWorkbenchKeys = ref<string[]>([])
+const selectedRecordMap = new Map<string, PatientRecord>()
+
+function currentSelectableRecords(): PatientRecord[] {
+  return isAggregatedStageMode.value ? stageListRecords.value : allRecords.value
+}
+
+function handleSelectedWorkbenchKeysChange(nextKeys: string[]) {
+  const normalizedKeys = Array.from(
+    new Set(nextKeys.map((key) => String(key || '').trim()).filter(Boolean)),
+  )
+  const records = currentSelectableRecords()
+  const keepSet = new Set(normalizedKeys)
+  for (const existingKey of Array.from(selectedRecordMap.keys())) {
+    if (!keepSet.has(existingKey)) {
+      selectedRecordMap.delete(existingKey)
+    }
+  }
+  for (const key of normalizedKeys) {
+    const matched = findRecordById(records, key)
+    if (matched) {
+      selectedRecordMap.set(key, matched)
+    }
+  }
+  selectedWorkbenchKeys.value = normalizedKeys
+}
+
+function clearSelectedRecords() {
+  selectedWorkbenchKeys.value = []
+  selectedRecordMap.clear()
+}
+
+watch([allRecords, stageListRecords], () => {
+  if (!selectedWorkbenchKeys.value.length) return
+  const records = currentSelectableRecords()
+  for (const key of selectedWorkbenchKeys.value) {
+    const matched = findRecordById(records, key)
+    if (matched) {
+      selectedRecordMap.set(key, matched)
+    }
+  }
+})
 
 function priorityScore(record: PatientRecord) {
   let score = 0
@@ -1082,10 +1193,20 @@ const {
   (target) => router.push(notificationLocation(target)),
 )
 
+const listAssistExplicitOpen = ref(false)
+
+function handleAssistVisibleChange(visible: boolean) {
+  assistPanelVisible.value = visible
+  if (!visible && viewMode.value === 'list') {
+    listAssistExplicitOpen.value = false
+  }
+}
+
 watch(
   () => route.query.assist,
   (value) => {
     if (value === 'message') {
+      listAssistExplicitOpen.value = true
       assistPanelVisible.value = true
       assistTab.value = 'message'
       void fetchAssistNotifications()
@@ -1150,7 +1271,7 @@ const concatSections = computed(() => {
   if (!concatText.value) return []
   const sections: { title: string; content: string }[] = []
   const pattern =
-    /={40}\s*\r?\n(?:馃搵\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
+    /={40}\s*\r?\n(?:📋\s*)?([^\r\n]+)\r?\n={40}\s*\r?\n\r?\n([\s\S]*?)(?=(?:\r?\n){3}={40}|$)/g
 
   for (const match of concatText.value.matchAll(pattern)) {
     const [, rawTitle = '', rawContent = ''] = match
@@ -1271,6 +1392,7 @@ function handleGenerateFrontpage() {
 }
 
 function openPasteFrontpageModal() {
+  void ensureExtractionSettingsLoaded()
   detailMainTab.value = 'frontpage'
   pasteFrontpageModalVisible.value = true
 }
@@ -2089,16 +2211,35 @@ useWorkstationRouteEffects({
 })
 
 // 统计分析下钻：筛选状态完全由 URL 承载，刷新、返回/前进都按 URL 还原并重新查询。
+const mountedRoutePath = route.path
 const analyticsDrilldown = computed(() => readAnalyticsDrilldown(route.query))
 
 watch(
   () => analyticsDrilldownSignature(route.query),
   (signature, previous) => {
     if (signature === previous) return
+    if (route.path !== mountedRoutePath || isAggregatedStageMode.value) return
+    const rawDept = route.query.department
+    const routeDept = Array.isArray(rawDept)
+      ? typeof rawDept[0] === 'string'
+        ? rawDept[0].trim()
+        : ''
+      : typeof rawDept === 'string'
+        ? rawDept.trim()
+        : ''
+    activeDept.value = routeDept || '全部科室'
+    clearSelectedRecords()
     currentPage.value = 1
     void fetchData(1)
   },
 )
+
+watch(isAggregatedStageMode, (inAggregatedStage, wasInAggregatedStage) => {
+  if (wasInAggregatedStage && !inAggregatedStage && route.path === mountedRoutePath) {
+    currentPage.value = 1
+    void fetchData(1)
+  }
+})
 
 function backToAnalytics() {
   const drilldown = analyticsDrilldown.value
@@ -2109,15 +2250,20 @@ function backToAnalytics() {
 }
 
 function clearAnalyticsDrilldown() {
+  activeDept.value = '全部科室'
   // 查询变化由上面的 watch 统一触发重新加载
   void router.replace({ path: route.path, query: withoutAnalyticsDrilldown(route.query) })
 }
 
 onMounted(() => {
-  if (route.query.assist !== 'message') void ensureExtractionSettingsLoaded()
-  fetchData()
-  void refreshActiveWorklist()
-  fetchAssistNotifications()
+  if (!isAggregatedStageMode.value) {
+    void fetchData()
+  }
+})
+
+onBeforeUnmount(() => {
+  ++stageWorklistRequestSequence
+  ++todayInpatientSequence
 })
 
 // 鍒囨崲鐥呭巻鏃舵竻闄や笂娆＄敓鎴愮粨鏋滐紝骞跺姞杞芥枃涔﹀垪琛ㄤ笌缁撶畻娓呭崟
@@ -2229,6 +2375,7 @@ const icdApplyLabel = computed(() => {
 })
 
 function openRecord(record: PatientRecord) {
+  void ensureExtractionSettingsLoaded()
   selectedStageRecord.value = record
   selectedRecordKey.value = getRecordNavigationKey(record)
   openSessionRecord(record.visitId || record.id)
@@ -2269,7 +2416,108 @@ function openCurrentMedicalRecord(record: PatientRecord) {
     message.warning('无法确认当前病历身份，已停止读取病历文书')
     return
   }
+  closeComparisonDrawer()
   medicalRecordFocus.value = record
+}
+
+function closeComparisonDrawer() {
+  comparisonDrawerOpen.value = false
+  comparisonFocus.value = null
+  comparisonQueue.value = []
+  comparisonActiveIndex.value = -1
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: '' }
+  }
+}
+
+function exitBatchQcResults() {
+  batchQcResultSequence += 1
+  batchQcResults.value = null
+  closeComparisonDrawer()
+}
+
+function handleDismissRecordPoolQcTask() {
+  const dismissedJobId = String(recordPoolQcTask.value?.id || '').trim()
+  recordPoolQcTask.value = null
+  if (dismissedJobId && batchQcResults.value?.jobId === dismissedJobId) {
+    exitBatchQcResults()
+  }
+}
+
+function handleCanceledRecordPoolQcTask(job: SichuanBatchJob) {
+  recordPoolQcTask.value = job
+}
+
+function handleOpenBatchQcResult(payload: {
+  item: BatchResultRecordItem
+  queue: BatchResultRecordItem[]
+  index: number
+}) {
+  medicalRecordFocus.value = null
+  comparisonQueue.value = payload.queue
+  comparisonActiveIndex.value = payload.index
+  comparisonFocus.value = toComparisonFocusFromBatchItem(payload.item)
+  comparisonDrawerOpen.value = true
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: payload.item.recordKey }
+  }
+}
+
+function handleSelectComparisonBatchIndex(nextIndex: number) {
+  const nextItem = comparisonQueue.value[nextIndex]
+  if (!nextItem) return
+  comparisonActiveIndex.value = nextIndex
+  comparisonFocus.value = toComparisonFocusFromBatchItem(nextItem)
+  if (batchQcResults.value) {
+    batchQcResults.value = { ...batchQcResults.value, activeRecordKey: nextItem.recordKey }
+  }
+}
+
+async function handleViewRecordPoolQcResults(job: SichuanBatchJob) {
+  const jobId = String(job?.id || '').trim()
+  if (!jobId) return
+  const sequence = ++batchQcResultSequence
+  const expectedTotal = Math.max(
+    0,
+    Math.trunc(Number(job.total_records ?? job.summary?.total_records ?? 0) || 0),
+  )
+  const submittedRecords = recordPoolTaskSubmittedRecords.get(jobId) ?? []
+  if (expectedTotal !== 1 && submittedRecords.length !== 1) {
+    batchQcResults.value = {
+      jobId,
+      loading: true,
+      items: [],
+      activeRecordKey: '',
+    }
+  }
+  const resolved = await resolveBatchResultRecords({
+    job,
+    sourceId: sourceId.value,
+    submittedRecords,
+    currentRecords: allRecords.value,
+    confirmedOnly: confirmedResultsOnly.value,
+  })
+  if (sequence !== batchQcResultSequence) return
+  if (resolved.items.length === 1) {
+    batchQcResults.value = null
+    medicalRecordFocus.value = null
+    comparisonQueue.value = []
+    comparisonActiveIndex.value = -1
+    comparisonFocus.value = toComparisonFocusFromBatchItem(resolved.items[0])
+    comparisonDrawerOpen.value = true
+    return
+  }
+  if (resolved.items.length >= 2) {
+    batchQcResults.value = {
+      jobId,
+      loading: false,
+      items: resolved.items,
+      activeRecordKey: '',
+    }
+    return
+  }
+  batchQcResults.value = null
+  void router.push(`/workstation-v5/qc-task?job_id=${encodeURIComponent(jobId)}`)
 }
 
 function handleRowOpen(recordId: string) {
@@ -2300,12 +2548,15 @@ function handleRowOpen(recordId: string) {
 }
 
 function findBatchRecordByKey(recordKey: string): PatientRecord | null {
-  const records = isAggregatedStageMode.value ? stageListRecords.value : allRecords.value
-  return findRecordById(records, recordKey) ?? null
+  const records = currentSelectableRecords()
+  return findRecordById(records, recordKey) ?? selectedRecordMap.get(recordKey) ?? null
 }
 
 async function handleBatchExtract(keys: string[]) {
   if (!isStageQueueMode.value) {
+    const submittedSnapshot = keys
+      .map((key) => findBatchRecordByKey(key))
+      .filter((record): record is PatientRecord => Boolean(record))
     await runRecordPoolQc({
       keys,
       getBatchExtracting: () => batchExtracting.value,
@@ -2313,11 +2564,13 @@ async function handleBatchExtract(keys: string[]) {
         batchExtracting.value = value
       },
       findBatchRecordByKey,
-      setSelectedWorkbenchKeys: (nextKeys) => {
-        selectedWorkbenchKeys.value = nextKeys
-      },
+      setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
       onTaskCreated: (job) => {
+        batchQcResults.value = null
         recordPoolQcTask.value = job
+        if (job?.id && submittedSnapshot.length > 0) {
+          recordPoolTaskSubmittedRecords.set(job.id, submittedSnapshot)
+        }
       },
     })
     return
@@ -2334,15 +2587,35 @@ async function handleBatchExtract(keys: string[]) {
     findBatchRecordByKey,
     setBatchRuntimeStatus,
     setSingleBatchRuntimeStatus,
-    setSelectedWorkbenchKeys: (nextKeys) => {
-      selectedWorkbenchKeys.value = nextKeys
-    },
+    setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
     fetchAssistNotifications,
     refreshActiveWorklist,
     refreshData: async () => {
       await Promise.resolve(refreshData())
     },
     refreshSelectedSnapshots,
+  })
+}
+
+async function handlePreviewRecordQc(recordKey: string) {
+  if (!recordKey) return
+  const snapshotRecord = findBatchRecordByKey(recordKey)
+  await runRecordPoolQc({
+    keys: [recordKey],
+    preserveSelection: true,
+    getBatchExtracting: () => batchExtracting.value,
+    setBatchExtracting: (value) => {
+      batchExtracting.value = value
+    },
+    findBatchRecordByKey,
+    setSelectedWorkbenchKeys: handleSelectedWorkbenchKeysChange,
+    onTaskCreated: (job) => {
+      batchQcResults.value = null
+      recordPoolQcTask.value = job
+      if (job?.id && snapshotRecord) {
+        recordPoolTaskSubmittedRecords.set(job.id, [snapshotRecord])
+      }
+    },
   })
 }
 
@@ -2353,14 +2626,16 @@ async function handleFilterQc() {
     syncScope: syncScope.value,
     department: activeDept.value,
     doctor: activeDoctor.value,
-    keyword: searchText.value,
+    keyword: committedSearchText.value,
     dateField: dateField.value,
-    dateRange: dateRange.value,
+    dateRange: committedDateRange.value,
+    hasAnalyticsDrilldown: Boolean(analyticsDrilldown.value),
     getBatchExtracting: () => batchExtracting.value,
     setBatchExtracting: (value) => {
       batchExtracting.value = value
     },
     onTaskCreated: (job) => {
+      batchQcResults.value = null
       recordPoolQcTask.value = job
     },
   })
@@ -2383,40 +2658,139 @@ function handlePageChange(page: number, nextPageSize?: number) {
       : pageSize.value
   if (isAggregatedStageMode.value) {
     const pageSizeChanged = resolvedPageSize !== pageSize.value
+    const nextPage = pageSizeChanged ? 1 : page
+    const queryChanged = pageSizeChanged || currentPage.value !== nextPage
     pageSize.value = resolvedPageSize
-    currentPage.value = pageSizeChanged ? 1 : page
-    void fetchStageWorklist(currentStageFilter.value)
-    document.querySelector('.custom-scrollbar')?.scrollTo({ top: 0, behavior: 'smooth' })
+    currentPage.value = nextPage
+    if (!queryChanged) {
+      void fetchStageWorklist(currentStageFilter.value)
+    }
+    const scrollContainer = document.querySelector('.custom-scrollbar')
+    if (scrollContainer && typeof scrollContainer.scrollTo === 'function') {
+      scrollContainer.scrollTo({ top: 0, behavior: 'smooth' })
+    } else if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
     return
   }
   handleBasePageChange(page, resolvedPageSize)
 }
 
-function handleClearFilters() {
-  resetFilters()
-  selectedWorkbenchKeys.value = []
+function handleSearch() {
+  clearSelectedRecords()
+  const pageChanged = currentPage.value !== 1
+  currentPage.value = 1
   if (isAggregatedStageMode.value) {
-    void fetchStageWorklist(currentStageFilter.value)
+    if (!pageChanged) {
+      void fetchStageWorklist(currentStageFilter.value)
+    }
     return
   }
   void fetchData(1)
 }
 
-function handleHospFilter(value: 'all' | 'inpatient' | 'discharged') {
-  syncScope.value = 'all'
-  dateField.value = 'visit'
-  selectHospFilter(value)
+function handleRefresh() {
+  if (selectedWorkbenchKeys.value.length > 0) {
+    const validKeys = selectedWorkbenchKeys.value.filter((key) => Boolean(findBatchRecordByKey(key)))
+    if (validKeys.length !== selectedWorkbenchKeys.value.length) {
+      handleSelectedWorkbenchKeysChange(validKeys)
+    }
+  }
+  if (isAggregatedStageMode.value) {
+    void fetchStageWorklist(currentStageFilter.value)
+    return
+  }
+  void refreshData()
 }
 
 const hospitalizationStatusVerifying = ref(false)
+let todayInpatientSequence = 0
+
+function stripWorklistFilterQuery(query: LocationQuery): {
+  nextQuery: LocationQueryRaw
+  changed: boolean
+} {
+  const nextQuery: LocationQueryRaw = withoutAnalyticsDrilldown(query)
+  let changed = Object.keys(nextQuery).length !== Object.keys(query).length
+  for (const key of Object.keys(nextQuery)) {
+    if (
+      key === 'department' ||
+      key === 'doctor' ||
+      key === 'keyword' ||
+      key === 'source' ||
+      key.startsWith('analytics_')
+    ) {
+      delete nextQuery[key]
+      changed = true
+    }
+  }
+  return { nextQuery, changed }
+}
+
+async function handleClearFilters() {
+  ++todayInpatientSequence
+  hospitalizationStatusVerifying.value = false
+  resetFilters()
+  clearSelectedRecords()
+  const prevDrilldownSig = analyticsDrilldownSignature(route.query)
+  const { nextQuery, changed } = stripWorklistFilterQuery(route.query)
+  if (changed) {
+    await router.replace({ path: route.path, query: nextQuery })
+  }
+  if (isAggregatedStageMode.value) {
+    void fetchStageWorklist(currentStageFilter.value)
+    return
+  }
+  if (analyticsDrilldownSignature(route.query) !== prevDrilldownSig) {
+    return
+  }
+  void fetchData(1)
+}
+
+function handleSelectDept(deptName: string) {
+  clearSelectedRecords()
+  selectDept(deptName)
+}
+
+function handleSelectDoctor(doctorName: string) {
+  clearSelectedRecords()
+  selectDoctor(doctorName)
+}
+
+function handleSelectInpatientSort(value: InpatientSort) {
+  clearSelectedRecords()
+  selectInpatientSort(value)
+}
+
+function handleHospFilter(value: HospitalStatusScope) {
+  ++todayInpatientSequence
+  hospitalizationStatusVerifying.value = false
+  const wasTodayInpatient = syncScope.value === 'today_inpatient'
+  const prevHospFilter = hospFilter.value
+  syncScope.value = 'all'
+  dateField.value = 'visit'
+  if (value !== 'inpatient') {
+    inpatientSort.value = 'default'
+  }
+  clearSelectedRecords()
+  if (wasTodayInpatient && prevHospFilter === value) {
+    currentPage.value = 1
+    void fetchData(1)
+    return
+  }
+  selectHospFilter(value)
+}
 
 async function toggleTodaySyncedInpatient() {
+  const requestSequence = ++todayInpatientSequence
   const enabled = syncScope.value !== 'today_inpatient'
   if (!enabled) {
+    hospitalizationStatusVerifying.value = false
     syncScope.value = 'all'
     hospFilter.value = 'all'
     dateField.value = 'visit'
-    selectedWorkbenchKeys.value = []
+    inpatientSort.value = 'default'
+    clearSelectedRecords()
     currentPage.value = 1
     await fetchData(1)
     return
@@ -2429,6 +2803,7 @@ async function toggleTodaySyncedInpatient() {
       discharged: number
       unknown: number
     }>('/api/medical-records/workstation/hospitalization-status/verify')
+    if (requestSequence !== todayInpatientSequence) return
     syncScope.value = 'today_inpatient'
     hospFilter.value = 'inpatient'
     dateField.value = 'admission'
@@ -2436,13 +2811,17 @@ async function toggleTodaySyncedInpatient() {
       `已核验 ${data.total} 份：在院 ${data.inpatient}，已出院 ${data.discharged}，待确认 ${data.unknown}`,
     )
   } catch (error) {
+    if (requestSequence !== todayInpatientSequence) return
     console.error('核验病历住院状态失败:', error)
     message.error('住院状态核验失败，已保留原筛选和上次核验结果')
     return
   } finally {
-    hospitalizationStatusVerifying.value = false
+    if (requestSequence === todayInpatientSequence) {
+      hospitalizationStatusVerifying.value = false
+    }
   }
-  selectedWorkbenchKeys.value = []
+  if (requestSequence !== todayInpatientSequence) return
+  clearSelectedRecords()
   currentPage.value = 1
   await fetchData(1)
 }
@@ -2463,6 +2842,7 @@ const { currentRecordIndex, recordCount, goToPrevRecord, goToNextRecord, goBackT
     backToList,
     clearPanels: () => {
       assistPanelVisible.value = false
+      listAssistExplicitOpen.value = false
       icdDrawerVisible.value = false
       suggestionDrawerVisible.value = false
     },

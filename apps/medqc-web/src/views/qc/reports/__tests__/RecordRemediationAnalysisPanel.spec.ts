@@ -9,7 +9,7 @@ const actor = reactive({ id: 'manager' })
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
     get user() {
-      return { id: actor.id }
+      return { id: actor.id, is_demo_account: false }
     },
   }),
 }))
@@ -121,6 +121,7 @@ describe('整改分析', () => {
     expect(metric.attributes('aria-pressed')).toBe('true')
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: 'urged_rectified', page: 1 }),
+      expect.any(AbortSignal),
     )
     wrapper.unmount()
   })
@@ -185,6 +186,7 @@ describe('整改分析', () => {
             scene: change === '场景' ? 'final' : 'running',
             label: change === '标签' ? 'clinical_appeal' : undefined,
           }),
+          expect.any(AbortSignal),
         )
         if (outcome === '成功') resolveOld({ success: true, data: new Blob(['旧导出']) })
         else rejectOld(new Error('旧导出失败'))
@@ -270,6 +272,7 @@ describe('整改分析', () => {
     await flushPromises()
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: 'appeal_rejected', page: 1 }),
+      expect.any(AbortSignal),
     )
     expect(wrapper.get('[data-label="appeal_rejected"]').attributes('aria-pressed')).toBe('true')
     wrapper.unmount()
@@ -285,16 +288,19 @@ describe('整改分析', () => {
     expect(pending.attributes('aria-pressed')).toBe('true')
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: 'pending_acceptance', page: 1 }),
+      expect.any(AbortSignal),
     )
     await wrapper.get('header button').trigger('click')
     await flushPromises()
     expect(mocks.export).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: 'pending_acceptance' }),
+      expect.any(AbortSignal),
     )
     await wrapper.get('.remediation-toolbar button').trigger('click')
     await flushPromises()
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: undefined, page: 1 }),
+      expect.any(AbortSignal),
     )
     expect(wrapper.get('.remediation-toolbar button').attributes('aria-pressed')).toBe('true')
     wrapper.unmount()
@@ -329,24 +335,29 @@ describe('整改分析', () => {
         page: 1,
         page_size: 20,
       }),
+      expect.any(AbortSignal),
     )
     await wrapper.get('.next').trigger('click')
     await flushPromises()
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ label: 'clinical_appeal', page: 2 }),
+      expect.any(AbortSignal),
     )
     await wrapper
       .findAll('button')
       .find((item) => item.text().includes('导出 CSV'))!
       .trigger('click')
     await flushPromises()
-    expect(mocks.export).toHaveBeenCalledWith({
-      scene: 'running',
-      department: '内科',
-      doctor: '甲医生',
-      defect_source: 'all',
-      label: 'clinical_appeal',
-    })
+    expect(mocks.export).toHaveBeenCalledWith(
+      {
+        scene: 'running',
+        department: '内科',
+        doctor: '甲医生',
+        defect_source: 'all',
+        label: 'clinical_appeal',
+      },
+      expect.any(AbortSignal),
+    )
     expect(mocks.download).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
@@ -387,6 +398,7 @@ describe('整改分析', () => {
     await flushPromises()
     expect(mocks.read).toHaveBeenLastCalledWith(
       expect.objectContaining({ scene: 'final', defect_source: 'manual' }),
+      expect.any(AbortSignal),
     )
     expect(wrapper.findAll('tr')).toHaveLength(2)
     wrapper.unmount()

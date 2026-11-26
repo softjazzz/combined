@@ -1,11 +1,16 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import LlmPerformanceObservabilityPanel from '@/views/workstation-v4/components/system-config/LlmPerformanceObservabilityPanel.vue'
-import { getLlmObservabilityOverview, getLlmRecordCallAttempts } from '@/services/llmObservability'
+import {
+  getLlmObservabilityOverview,
+  getLlmObservabilityRecords,
+  getLlmRecordCallAttempts,
+} from '@/services/llmObservability'
 import type { LlmObservabilityOverview, LlmRecordCallAttempts } from '@/types/llmObservability'
 
 vi.mock('@/services/llmObservability', () => ({
   getLlmObservabilityOverview: vi.fn(),
+  getLlmObservabilityRecords: vi.fn(),
   getLlmRecordCallAttempts: vi.fn(),
 }))
 
@@ -153,7 +158,10 @@ function mountPanel() {
   return mount(LlmPerformanceObservabilityPanel, {
     global: {
       stubs: {
-        'a-button': { template: '<button @click="$emit(\'click\')"><slot /></button>' },
+        'a-button': {
+          emits: ['click'],
+          template: '<button @click="$emit(\'click\')"><slot /></button>',
+        },
         'a-select': {
           props: ['value', 'options'],
           emits: ['update:value', 'change'],
@@ -164,7 +172,12 @@ function mountPanel() {
           props: ['open'],
           template: '<aside v-if="open" data-testid="attempt-drawer"><slot /></aside>',
         },
-        'a-pagination': { template: '<div class="pagination-stub" />' },
+        'a-pagination': {
+          props: ['current', 'pageSize', 'total'],
+          emits: ['change'],
+          template:
+            '<button class="pagination-stub" @click="$emit(\'change\', (current || 1) + 1)">page {{ current }}</button>',
+        },
         'a-spin': { template: '<div class="spin-stub"><slot /></div>' },
       },
     },
@@ -174,8 +187,15 @@ function mountPanel() {
 describe('LlmPerformanceObservabilityPanel', () => {
   beforeEach(() => {
     vi.mocked(getLlmObservabilityOverview).mockReset()
+    vi.mocked(getLlmObservabilityRecords).mockReset()
     vi.mocked(getLlmRecordCallAttempts).mockReset()
     vi.mocked(getLlmObservabilityOverview).mockResolvedValue(overview)
+    vi.mocked(getLlmObservabilityRecords).mockResolvedValue({
+      items: overview.records.items,
+      total: overview.records.total,
+      page: 1,
+      page_size: 20,
+    })
     vi.mocked(getLlmRecordCallAttempts).mockResolvedValue(calls)
   })
 
@@ -224,6 +244,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
 
     expect(getLlmObservabilityOverview).toHaveBeenCalledWith(
       expect.objectContaining({ business_scene: 'luxian_0609_qc' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     const options = wrapper.get('[data-testid="business-scene-filter"]').text()
     for (const scene of [
@@ -380,6 +401,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
         business_scene: undefined,
         page: 1,
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.find('[data-testid="attempt-drawer"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('LX0609-04-02-04')
@@ -557,5 +579,82 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('模型性能数据暂不可用')
     expect(wrapper.text()).not.toContain('secret SQL error')
     expect(wrapper.text()).not.toContain('逻辑调用')
+  })
+
+  it('单病历翻页调用 /records 并复用冻结的 start_at/end_at，不重新拉取 /overview', async () => {
+    vi.mocked(getLlmObservabilityOverview).mockResolvedValueOnce({
+      ...overview,
+      records: { ...overview.records, total: 25 },
+    })
+    vi.mocked(getLlmObservabilityRecords).mockResolvedValueOnce({
+      items: [
+        {
+          ...overview.records.items[0],
+          record_key_hash: '99999999000000001111111122222222',
+        },
+      ],
+      total: 25,
+      page: 2,
+      page_size: 20,
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    const initialOverviewQuery = vi.mocked(getLlmObservabilityOverview).mock.calls[0][0]
+    await wrapper.get('.pagination-stub').trigger('click')
+    await flushPromises()
+
+    expect(getLlmObservabilityOverview).toHaveBeenCalledTimes(1)
+    expect(getLlmObservabilityRecords).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start_at: initialOverviewQuery?.start_at,
+        end_at: initialOverviewQuery?.end_at,
+        page: 2,
+        page_size: 20,
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
+    expect(wrapper.text()).toContain('病历 #99999999')
+  })
+
+  it('刷新瞬时失败保留已加载的观测数据，且 upstream_4xx 有可读状态文案', async () => {
+    vi.mocked(getLlmRecordCallAttempts).mockResolvedValueOnce({
+      ...calls,
+      items: [{ ...calls.items[1], status: 'upstream_4xx', safe_error_kind: 'upstream_4xx' }],
+    })
+    const wrapper = mountPanel()
+    await flushPromises()
+    await wrapper.get('[data-testid="view-record-calls"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('上游请求被拒绝')
+
+    vi.mocked(getLlmObservabilityOverview).mockRejectedValueOnce(new Error('transient'))
+    await wrapper.get('.llm-observability__refresh').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('模型性能数据暂不可用')
+    expect(wrapper.text()).toContain('逻辑调用')
+    expect(wrapper.text()).toContain('1,500')
+    wrapper.unmount()
+  })
+
+  it('连续筛选与卸载时中止前序在途观测请求信号', async () => {
+    const signals: AbortSignal[] = []
+    vi.mocked(getLlmObservabilityOverview).mockImplementation((_query, opts) => {
+      if (opts?.signal) signals.push(opts.signal)
+      return new Promise(() => {})
+    })
+
+    const wrapper = mountPanel()
+    expect(signals).toHaveLength(1)
+    expect(signals[0].aborted).toBe(false)
+
+    await wrapper.get('.llm-observability__refresh').trigger('click')
+    expect(signals).toHaveLength(2)
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+
+    wrapper.unmount()
+    expect(signals[1].aborted).toBe(true)
   })
 })

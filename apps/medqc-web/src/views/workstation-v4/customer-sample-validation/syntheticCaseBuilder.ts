@@ -62,14 +62,14 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
     ruleIds: ['LX0609-01-01-01', 'LX0609-01-02-01', 'LX0609-09-01-01', 'LX0609-02-01-01', 'LX0609-02-01-02'],
   },
   {
-    key: 'critical_rounds',
+    key: 'course_quality',
     name: '查房病程',
     description: '覆盖查房频次、病程复制、主诉和诊断依据等病程质量问题。',
     templateKey: 'critical-round-defect',
     ruleIds: ['LX0609-02-01-03', 'LX0609-02-01-04', 'LX0609-02-01-05', 'LX0609-12-01-01', 'LX0609-12-01-02', 'LX0609-01-01-02'],
   },
   {
-    key: 'ct_mri_culture',
+    key: 'exam_lab',
     name: '检查检验',
     description: '覆盖 CT/MRI、细菌培养结果记录与阳性结果分析。',
     templateKey: 'ct-mri-culture-defect',
@@ -132,6 +132,43 @@ const LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS = [
   },
 ] as const
 
+const RULE_FAMILY_KEY_ALIASES: Record<string, string[]> = {
+  course_quality: ['critical_rounds'],
+  critical_rounds: ['course_quality'],
+  exam_lab: ['ct_mri_culture'],
+  ct_mri_culture: ['exam_lab'],
+}
+
+export function resolveSyntheticCaseRuleFamilyKey(
+  requestedKey: string,
+  families: SyntheticCaseRuleFamily[],
+): string {
+  const normalized = String(requestedKey || '').trim()
+  if (!normalized) return ''
+  if (families.some((family) => family.key === normalized)) return normalized
+  const aliases = RULE_FAMILY_KEY_ALIASES[normalized] || []
+  for (const alias of aliases) {
+    if (families.some((family) => family.key === alias)) return alias
+  }
+  return ''
+}
+
+function mapCatalogRuleOption(
+  ruleId: string,
+  rule: ManualLuxian0609RuleCatalogItem,
+): SyntheticCaseRuleFamily['rules'][number] {
+  const requiredDocumentsLabel =
+    rule.required_documents_label ||
+    (Array.isArray(rule.applicable_document_labels)
+      ? rule.applicable_document_labels.join('、')
+      : '')
+  return {
+    ruleId,
+    name: String(rule.name || rule.description || ruleId).trim() || ruleId,
+    requiredDocumentsLabel: String(requiredDocumentsLabel || '病历文书').trim(),
+  }
+}
+
 export function buildSyntheticCaseRuleFamiliesFromCatalog(
   rules: ManualLuxian0609RuleCatalogItem[],
 ): SyntheticCaseRuleFamily[] {
@@ -144,28 +181,41 @@ export function buildSyntheticCaseRuleFamiliesFromCatalog(
       ruleById.set(ruleId, rule)
     }
   })
-  return LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS.map((family) => ({
-    key: family.key,
-    name: family.name,
-    description: family.description,
-    templateKey: family.templateKey,
-    rules: family.ruleIds
-      .map((ruleId) => {
-        const rule = ruleById.get(ruleId)
-        if (!rule) return null
-        const requiredDocumentsLabel =
-          rule.required_documents_label ||
-          (Array.isArray(rule.applicable_document_labels)
-            ? rule.applicable_document_labels.join('、')
-            : '')
-        return {
-          ruleId,
-          name: String(rule.name || rule.description || ruleId).trim() || ruleId,
-          requiredDocumentsLabel: String(requiredDocumentsLabel || '病历文书').trim(),
-        }
-      })
-      .filter((rule): rule is SyntheticCaseRuleFamily['rules'][number] => Boolean(rule)),
-  })).filter((family) => family.rules.length > 0)
+  const usedRuleIds = new Set<string>()
+  const families: SyntheticCaseRuleFamily[] = LUXIAN_0609_SYNTHETIC_RULE_FAMILY_DEFINITIONS.map(
+    (family) => {
+      const familyRules = family.ruleIds
+        .map((ruleId) => {
+          const rule = ruleById.get(ruleId)
+          if (!rule) return null
+          usedRuleIds.add(ruleId)
+          return mapCatalogRuleOption(ruleId, rule)
+        })
+        .filter((rule): rule is SyntheticCaseRuleFamily['rules'][number] => Boolean(rule))
+      return {
+        key: family.key,
+        name: family.name,
+        description: family.description,
+        templateKey: family.templateKey,
+        rules: familyRules,
+      }
+    },
+  ).filter((family) => family.rules.length > 0)
+
+  const extraRules = Array.from(ruleById.entries())
+    .filter(([ruleId]) => !usedRuleIds.has(ruleId))
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([ruleId, rule]) => mapCatalogRuleOption(ruleId, rule))
+  if (extraRules.length) {
+    families.push({
+      key: 'other',
+      name: '其他',
+      description: '后端目录中未归入固定业务族的 LX0609 质控点。',
+      templateKey: 'basic-timeliness-defect',
+      rules: extraRules,
+    })
+  }
+  return families
 }
 
 export function toDateTimeLocal(value: Date): string {
@@ -392,6 +442,7 @@ export function findForbiddenSelfHints(form: TestRecordForm): string[] {
   const forbiddenPatterns = [/备注[:：].*未分析/u, /这里缺失/u, /本条为反例/u, /故意缺失/u]
   const hits: string[] = []
   form.documents.forEach((document) => {
+    if (document.enabled === false) return
     const content = String(document.content || '')
     if (forbiddenPatterns.some((pattern) => pattern.test(content))) {
       hits.push(document.title || documentTypeLabel(document.document_type))

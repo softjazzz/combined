@@ -1,11 +1,13 @@
 """统一消息读取及医生交互提醒；已读状态不代替整改/申诉业务状态。"""
 
 from datetime import datetime, timezone
+import re
 from uuid import NAMESPACE_URL, uuid5
 
 from sqlalchemy import MetaData, and_, exists, func, inspect, or_, select, update
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification as Task
 from ..database.models.v36_reports import Notification as ReportNotification
@@ -23,6 +25,159 @@ from .qc_result_ready_notification import SOURCE as RESULT_SOURCE, ready_predica
 SOURCE = "v5_doctor_feedback"
 QC_SOURCE = "v5_qc_feedback"
 REGISTRATION_SOURCE = "v5_account_registration"
+GLOBAL_ADMIN_ROLES = {"admin", "super_admin"}
+MODERN_SOURCES = (SOURCE, QC_SOURCE, REGISTRATION_SOURCE, RESULT_SOURCE)
+ACCOUNT_REGISTRATION_RELATED_TYPES = (
+    "account_registration",
+    "account_registration_result",
+)
+_LEGACY_TYPE_TO_CANONICAL = {
+    "remediation_assigned": "remediation",
+    "remediation_submitted": "remediation",
+    "remediation_approved": "remediation",
+    "appeal_created": "appeal_result",
+    "appeal_reviewed": "appeal_result",
+    "task_assigned": "task_assign",
+}
+_UUID_PATTERN = (
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+_UUID_FULL_RE = re.compile(rf"^{_UUID_PATTERN}$")
+_UUID_RE = re.compile(_UUID_PATTERN)
+_RECORD_UUID_ANALYSIS_DONE_RE = re.compile(
+    rf"病历\s*{_UUID_PATTERN}\s*analysis\s*完成",
+    re.IGNORECASE,
+)
+_RECORD_UUID_RE = re.compile(rf"病历\s*{_UUID_PATTERN}")
+_ANALYSIS_STAGE_RE = re.compile(
+    r"(?<![A-Za-z0-9_])analysis(?=(?:[\u4e00-\u9fff]|[^A-Za-z0-9_]|$))",
+    re.IGNORECASE,
+)
+_CJK_REDUNDANT_SPACE_RE = re.compile(r"(?<=[\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])")
+
+
+def _is_account_registration_row(row) -> bool:
+    return (
+        row.type == "account_registration"
+        or row.related_type in ACCOUNT_REGISTRATION_RELATED_TYPES
+        or row.source_key == REGISTRATION_SOURCE
+    )
+
+
+def _is_account_registration_expr():
+    return or_(
+        Notification.type == "account_registration",
+        Notification.related_type.in_(ACCOUNT_REGISTRATION_RELATED_TYPES),
+        Notification.source_key == REGISTRATION_SOURCE,
+    )
+
+
+def _is_not_account_registration_expr():
+    return and_(
+        or_(Notification.type.is_(None), Notification.type != "account_registration"),
+        or_(
+            Notification.related_type.is_(None),
+            Notification.related_type.not_in(ACCOUNT_REGISTRATION_RELATED_TYPES),
+        ),
+        or_(
+            Notification.source_key.is_(None),
+            Notification.source_key != REGISTRATION_SOURCE,
+        ),
+    )
+
+
+def _canonical_notification_type(row) -> str | None:
+    if _is_account_registration_row(row):
+        return "account_registration"
+    if row.source_key == RESULT_SOURCE or row.related_type == "qc_result_ready":
+        return "qc_result_ready"
+    if row.related_type == "case_communication":
+        return "case_communication"
+    if row.related_type == "modern_appeal":
+        return "appeal_result"
+    if row.related_type == "rectification" and row.type != "defect_urge":
+        return "remediation"
+    raw_type = row.type
+    if isinstance(raw_type, str):
+        return _LEGACY_TYPE_TO_CANONICAL.get(raw_type, raw_type)
+    return raw_type
+
+
+def _type_filter_predicate(notification_type: str):
+    if notification_type == "account_registration":
+        return _is_account_registration_expr()
+    if notification_type == "system":
+        return and_(Notification.type == "system", _is_not_account_registration_expr())
+    if notification_type == "qc_result_ready":
+        return or_(
+            Notification.type == "qc_result_ready",
+            Notification.related_type == "qc_result_ready",
+            Notification.source_key == RESULT_SOURCE,
+        )
+    if notification_type == "case_communication":
+        return or_(
+            Notification.type == "case_communication",
+            Notification.related_type == "case_communication",
+        )
+    if notification_type == "appeal_result":
+        return or_(
+            Notification.type.in_(
+                ("appeal_result", "appeal_created", "appeal_reviewed")
+            ),
+            Notification.related_type == "modern_appeal",
+        )
+    if notification_type == "remediation":
+        return or_(
+            Notification.type.in_(
+                (
+                    "remediation",
+                    "remediation_assigned",
+                    "remediation_submitted",
+                    "remediation_approved",
+                )
+            ),
+            and_(
+                Notification.related_type == "rectification",
+                or_(Notification.type.is_(None), Notification.type != "defect_urge"),
+            ),
+        )
+    if notification_type == "task_assign":
+        return Notification.type.in_(("task_assign", "task_assigned"))
+    return Notification.type == notification_type
+
+
+def _readable_visit_label(visit_id: str | None) -> str | None:
+    text = str(visit_id or "").strip()
+    if not text or _UUID_FULL_RE.match(text):
+        return None
+    return text
+
+
+def sanitize_legacy_notification_text(
+    text: str | None, *, visit_id: str | None = None
+) -> str | None:
+    """读取投影层清洗历史通知中的英文阶段码（如 analysis）与裸露 36 位 UUID。"""
+    if not isinstance(text, str) or not text:
+        return text
+    cleaned = text
+    visit_label = _readable_visit_label(visit_id)
+    if _RECORD_UUID_ANALYSIS_DONE_RE.search(cleaned):
+        replacement = f"病历 {visit_label} 分析完成" if visit_label else "该病历分析完成"
+        cleaned = _RECORD_UUID_ANALYSIS_DONE_RE.sub(replacement, cleaned)
+    if _RECORD_UUID_RE.search(cleaned):
+        replacement = f"病历 {visit_label}" if visit_label else "该病历"
+        cleaned = _RECORD_UUID_RE.sub(replacement, cleaned)
+    if _UUID_RE.search(cleaned):
+        replacement = f"病历 {visit_label}" if visit_label else "该病历"
+        cleaned = _UUID_RE.sub(replacement, cleaned)
+    if _ANALYSIS_STAGE_RE.search(cleaned):
+        cleaned = _ANALYSIS_STAGE_RE.sub("病历分析", cleaned)
+    if cleaned != text:
+        cleaned = cleaned.replace("该病历 病历分析", "该病历分析")
+        cleaned = cleaned.replace("该病历病历分析", "该病历分析")
+        cleaned = _CJK_REDUNDANT_SPACE_RE.sub("", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
 
 
 def _publish_qc_notification(
@@ -36,21 +191,39 @@ def _publish_qc_notification(
     rows = (
         session.execute(
             select(SysUser).where(
-                SysUser.is_active.is_(True), SysUser.institute_id == source.institute_id
+                SysUser.is_active.is_(True),
+                or_(
+                    SysUser.institute_id == source.institute_id,
+                    and_(
+                        SysUser.institute_id.is_(None),
+                        or_(
+                            SysUser.role.in_(tuple(GLOBAL_ADMIN_ROLES)),
+                            SysUser.roles_json.is_not(None),
+                        ),
+                    ),
+                ),
             ),
             execution_options=user_owner_options(session),
         )
         .scalars()
         .all()
     )
-    eligible = [
-        row
-        for row in rows
-        if row.id != actor_id
-        and _effective_persistent_roles(row.role, row.roles_json)
-        & ({"admin", "qc_manager"} if appeal else MANAGERS)
-    ]
-    # 优先原派发人；不能处理申诉或已停用时转同机构主管，避免丢给无权审核者。
+    same_inst_roles = (
+        {"admin", "super_admin", "qc_manager"}
+        if appeal
+        else (MANAGERS | GLOBAL_ADMIN_ROLES)
+    )
+    eligible = []
+    for row in rows:
+        if row.id == actor_id:
+            continue
+        roles = _effective_persistent_roles(row.role, row.roles_json)
+        if row.institute_id == source.institute_id:
+            if roles & same_inst_roles:
+                eligible.append(row)
+        elif row.institute_id is None and (roles & GLOBAL_ADMIN_ROLES):
+            eligible.append(row)
+    # 优先原派发人（含无机构全局 admin）；不能处理申诉或已停用时先转同机构主管，再兜底全局 admin。
     creator_id = getattr(source, "creator_id", None)
     if appeal:
         from .modern_appeal_service import SOURCE_FIELDS
@@ -64,11 +237,20 @@ def _publish_qc_notification(
             .limit(1)
         )
     preferred = [row for row in eligible if row.id == creator_id]
-    recipients = preferred or [
+    same_institute_managers = [
         row
         for row in eligible
-        if _effective_persistent_roles(row.role, row.roles_json) & {"admin", "qc_manager"}
+        if row.institute_id == source.institute_id
+        and _effective_persistent_roles(row.role, row.roles_json)
+        & {"admin", "super_admin", "qc_manager"}
     ]
+    global_admins = [
+        row
+        for row in eligible
+        if row.institute_id is None
+        and _effective_persistent_roles(row.role, row.roles_json) & GLOBAL_ADMIN_ROLES
+    ]
+    recipients = preferred or same_institute_managers or global_admins
     if not recipients:
         raise RectificationError(
             "没有可接收反馈的同机构质控账号，请联系管理员配置", 409
@@ -102,12 +284,25 @@ def _publish_qc_notification(
         )
 
 
+def _qc_schema(connection=None) -> str | None:
+    if connection is not None and connection.dialect.name == "sqlite":
+        return None
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
 class _Base(DeclarativeBase):
     pass
 
 
 class Notification(_Base):
-    __table__ = ReportNotification.__table__.to_metadata(_Base.metadata, schema="qc")
+    __table__ = ReportNotification.__table__.to_metadata(
+        _Base.metadata, schema=_qc_schema()
+    )
 
 
 def publish_doctor_notification(
@@ -126,7 +321,12 @@ def publish_doctor_notification(
             comment=comment,
         )
     labels = (
-        {"approve": "申诉审核通过", "reject": "申诉已驳回"}
+        {
+            "approve": "申诉审核通过",
+            "reject": "申诉已驳回",
+            "supersede": "原轮次申诉已因新轮质控终结",
+            "close_stale": "原轮次申诉已因新轮质控终结",
+        }
         if appeal
         else {
             "assign": "新的整改任务",
@@ -192,12 +392,23 @@ class DoctorNotificationService:
         )
         modern = False
         qc_feedback = False
-        if actor["roles"] & MANAGERS and actor["institute_id"]:
+        is_global_admin = (
+            "sync_admin" in actor["roles"]
+            or (bool(actor["roles"] & GLOBAL_ADMIN_ROLES) and not actor["institute_id"])
+        )
+        if (
+            actor["roles"] & (MANAGERS | GLOBAL_ADMIN_ROLES) and actor["institute_id"]
+        ) or is_global_admin:
             identity = ("institute_id", "patient_id", "visit_id")
+            task_institute_cond = (
+                (Task.institute_id.is_not(None), func.trim(Task.institute_id) != "")
+                if is_global_admin
+                else (Task.institute_id == actor["institute_id"],)
+            )
             task = exists(
                 select(Task.id).where(
                     Task.id == Notification.related_id,
-                    Task.institute_id == actor["institute_id"],
+                    *task_institute_cond,
                     Task.assignee_id != actor["id"],
                     Task.scene.in_(("running", "final")),
                     Task.target_kind.in_(("canonical_defect", "task_manual_defect")),
@@ -220,11 +431,19 @@ class DoctorNotificationService:
                 )
             )
             appeal = False
-            if actor["roles"] & {"admin", "qc_manager"}:
+            if actor["roles"] & {"admin", "super_admin", "qc_manager"}:
+                appeal_institute_cond = (
+                    (
+                        Appeal.institute_id.is_not(None),
+                        func.trim(Appeal.institute_id) != "",
+                    )
+                    if is_global_admin
+                    else (Appeal.institute_id == actor["institute_id"],)
+                )
                 appeal = exists(
                     select(Appeal.id).where(
                         Appeal.id == Notification.related_id,
-                        Appeal.institute_id == actor["institute_id"],
+                        *appeal_institute_cond,
                         Appeal.appellant_id != actor["id"],
                         Appeal.scene.in_(("running", "final")),
                         Appeal.target_kind.in_(
@@ -249,10 +468,18 @@ class DoctorNotificationService:
                         ),
                     )
                 )
+            notif_institute_cond = (
+                (
+                    Notification.institute_id.is_not(None),
+                    func.trim(Notification.institute_id) != "",
+                )
+                if is_global_admin
+                else (Notification.institute_id == actor["institute_id"],)
+            )
             qc_feedback = and_(
                 Notification.source_key == QC_SOURCE,
                 Notification.identity_version == 1,
-                Notification.institute_id == actor["institute_id"],
+                *notif_institute_cond,
                 or_(
                     and_(Notification.related_type == "rectification", task),
                     and_(Notification.related_type == "modern_appeal", appeal),
@@ -285,7 +512,7 @@ class DoctorNotificationService:
             # 沟通表属于独立历史前置；缺表时只拒绝此类消息，不影响既有整改/申诉。
             communication = False
             connection = session.connection()
-            schema = None if connection.dialect.name == "sqlite" else "qc"
+            schema = _qc_schema(connection)
             if inspect(connection).has_table("qc_case_communications", schema=schema):
                 from ..database.models.case_communication import CaseCommunication
 
@@ -337,8 +564,8 @@ class DoctorNotificationService:
                 applications.c.user_id == Notification.related_id,
                 applications.c.requested_institute_id == Notification.institute_id,
             ))
-            reviewer = "admin" in actor["roles"]
-            if reviewer and actor["institute_id"] and "sync_admin" not in actor["roles"]:
+            reviewer = bool(actor["roles"] & {"admin", "sync_admin", "super_admin"})
+            if reviewer and actor["institute_id"] and not (actor["roles"] & {"sync_admin", "super_admin"}):
                 reviewer = Notification.institute_id == actor["institute_id"]
             registration = and_(
                 Notification.source_key == REGISTRATION_SOURCE,
@@ -381,6 +608,14 @@ class DoctorNotificationService:
             item["interaction_target"] = {"kind": row.related_type, "id": row.related_id}
         if row.source_key == RESULT_SOURCE:
             item["interaction_target"] = {"kind": "qc_result_ready", "id": row.id}
+        item["type"] = _canonical_notification_type(row)
+        if row.source_key not in MODERN_SOURCES:
+            item["title"] = sanitize_legacy_notification_text(
+                item.get("title"), visit_id=row.visit_id
+            )
+            item["content"] = sanitize_legacy_notification_text(
+                item.get("content"), visit_id=row.visit_id
+            )
         return item
 
     def result_ready(self, actor_id, notification_id, loader):
@@ -409,7 +644,7 @@ class DoctorNotificationService:
             predicate = self._predicate(actor, session)
             statement = select(Notification).where(predicate)
             if type:
-                statement = statement.where(Notification.type == type)
+                statement = statement.where(_type_filter_predicate(type))
             if is_read is not None:
                 statement = statement.where(Notification.is_read == is_read)
             total = session.scalar(

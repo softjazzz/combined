@@ -8,6 +8,7 @@ const api = vi.hoisted(() => ({
   list: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
+  resetPassword: vi.fn(),
   success: vi.fn(),
 }))
 const actor = reactive({ id: 'admin', roles: ['admin'] })
@@ -26,6 +27,7 @@ vi.mock('@/api/accountManagement', () => ({
   listManagedAccounts: api.list,
   createManagedAccount: api.create,
   updateManagedAccount: api.update,
+  resetManagedAccountPassword: api.resetPassword,
 }))
 vi.mock('ant-design-vue', () => ({ message: { success: api.success } }))
 const row: ManagedAccount = {
@@ -70,6 +72,7 @@ beforeEach(() => {
   api.list.mockResolvedValue(structuredClone(payload))
   api.create.mockResolvedValue(row)
   api.update.mockResolvedValue(row)
+  api.resetPassword.mockResolvedValue({ ...row, updated_at: '2026-10-25T02:00:00+00:00' })
 })
 
 describe('V5 持久账号管理', () => {
@@ -243,7 +246,7 @@ describe('V5 持久账号管理', () => {
     expect(api.list).toHaveBeenLastCalledWith(expect.objectContaining({ page: 2 }))
     wrapper.unmount()
   })
-  it('自身账号不可停用或变更角色科室', async () => {
+  it('自身账号不可停用或变更角色科室，且不显示重置密码入口', async () => {
     api.list.mockResolvedValue({ ...payload, items: [{ ...row, id: 'admin', roles: ['admin'] }] })
     const wrapper = make()
     await flushPromises()
@@ -251,6 +254,111 @@ describe('V5 持久账号管理', () => {
     expect(wrapper.get('.accounts-role-fields').attributes('disabled')).toBeDefined()
     expect(wrapper.get('.accounts-enabled input').attributes('disabled')).toBeDefined()
     expect(wrapper.get('input[aria-label="科室"]').attributes('readonly')).toBeDefined()
+    expect(wrapper.find('[data-testid="toggle-reset-password"]').exists()).toBe(false)
+    wrapper.unmount()
+  })
+  it('编辑无邮箱与历史用户名账号时取消只读字段的原生必填与正则校验', async () => {
+    api.list.mockResolvedValue({
+      ...payload,
+      items: [{ ...row, username: 'legacy@user', email: null }],
+    })
+    const wrapper = make()
+    await flushPromises()
+    // 新建时仍保留 required 与 pattern
+    await wrapper.get('.accounts-actions button:last-child').trigger('click')
+    expect(wrapper.get('input[aria-label="用户名"]').attributes('required')).toBeDefined()
+    expect(wrapper.get('input[aria-label="用户名"]').attributes('pattern')).toBe(
+      '[A-Za-z0-9][A-Za-z0-9_.-]+',
+    )
+    expect(wrapper.get('input[aria-label="邮箱"]').attributes('required')).toBeDefined()
+    await wrapper.get('.accounts-editor-actions button[type="button"]').trigger('click')
+
+    // 编辑历史账号时取消必填、最小长度与正则约束
+    await wrapper.get('[aria-label="编辑合成医生"]').trigger('click')
+    expect(wrapper.get('input[aria-label="用户名"]').attributes('required')).toBeUndefined()
+    expect(wrapper.get('input[aria-label="用户名"]').attributes('pattern')).toBeUndefined()
+    expect(wrapper.get('input[aria-label="用户名"]').attributes('minlength')).toBeUndefined()
+    expect(wrapper.get('input[aria-label="邮箱"]').attributes('required')).toBeUndefined()
+    wrapper.unmount()
+  })
+  it('编辑未绑定全局管理员允许保持机构 ID 为空而不强制降级', async () => {
+    actor.roles = ['super_admin']
+    api.list.mockResolvedValue({
+      ...payload,
+      managed_institute_id: null,
+      items: [
+        {
+          ...row,
+          id: 'global-admin',
+          username: 'global_admin',
+          display_name: '全局管理员',
+          institute_id: null,
+          roles: ['admin'],
+        },
+      ],
+    })
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('[aria-label="编辑全局管理员"]').trigger('click')
+    expect(wrapper.get('input[aria-label="机构 ID"]').attributes('required')).toBeUndefined()
+    await wrapper.get('input[aria-label="姓名"]').setValue('全局管理员已改')
+    await wrapper.get('.accounts-editor').trigger('submit')
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledWith(
+      'global-admin',
+      expect.objectContaining({
+        display_name: '全局管理员已改',
+        institute_id: null,
+        roles: ['admin'],
+      }),
+    )
+    wrapper.unmount()
+  })
+  it('支持编码员(coder)角色展示、筛选与编辑', async () => {
+    api.list.mockResolvedValue({
+      ...payload,
+      items: [{ ...row, id: 'coder1', display_name: '编码员甲', roles: ['coder'] }],
+    })
+    const wrapper = make()
+    await flushPromises()
+    expect(wrapper.text()).toContain('编码员')
+    const editBtn = wrapper.get('[aria-label="编辑编码员甲"]')
+    expect(editBtn.attributes('disabled')).toBeUndefined()
+    await editBtn.trigger('click')
+    const coderCheckbox = wrapper.get('.accounts-role-fields input[value="coder"]')
+    expect((coderCheckbox.element as HTMLInputElement).checked).toBe(true)
+    wrapper.unmount()
+  })
+  it('编辑非本人账号支持重置密码、校验口令并同步更新时间', async () => {
+    const wrapper = make()
+    await flushPromises()
+    await wrapper.get('[aria-label="编辑合成医生"]').trigger('click')
+    await wrapper.get('[data-testid="toggle-reset-password"]').trigger('click')
+
+    // 短口令不触发请求
+    await wrapper.get('input[aria-label="新口令"]').setValue('too-short')
+    await wrapper.get('.accounts-reset-form').trigger('submit')
+    expect(api.resetPassword).not.toHaveBeenCalled()
+    expect(wrapper.get('.accounts-reset-section').text()).toContain('至少12个字符')
+
+    // 合法口令提交后提示成功、清空输入并更新 expected_updated_at
+    await wrapper.get('input[aria-label="新口令"]').setValue('new-valid-password-123!')
+    await wrapper.get('.accounts-reset-form').trigger('submit')
+    await flushPromises()
+    expect(api.resetPassword).toHaveBeenCalledWith('doc', {
+      password: 'new-valid-password-123!',
+      expected_updated_at: row.updated_at,
+    })
+    expect(api.success).toHaveBeenCalledWith('密码已重置')
+    expect(wrapper.get('.accounts-reset-section').text()).toContain('密码已重置')
+
+    // 后续保存使用更新后的 updated_at，不触发 409
+    await wrapper.get('.accounts-editor').trigger('submit')
+    await flushPromises()
+    expect(api.update).toHaveBeenCalledWith(
+      'doc',
+      expect.objectContaining({ expected_updated_at: '2026-10-25T02:00:00+00:00' }),
+    )
     wrapper.unmount()
   })
 })

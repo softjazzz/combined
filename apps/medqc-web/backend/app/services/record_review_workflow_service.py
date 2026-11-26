@@ -1,6 +1,7 @@
 """运行/终末病历审核写 owner；决定行本身即不可变工作事件。"""
 
 import json
+import logging
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
@@ -8,6 +9,7 @@ from sqlalchemy import select, text, tuple_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import QCDefect, QCDefectHistory
 from ..database.models.v36_reports import QCRecordReview as ReportReview
@@ -28,8 +30,32 @@ SOURCE_FIELDS = (
     "rule_set_version",
 )
 STATES = ("pending_review", "pending_recheck", "approved", "doubtful")
-REVIEWERS = {"admin", "qc_manager", "qc_staff"}
+REVIEWERS = {"admin", "super_admin", "qc_manager", "qc_staff"}
 MAX_CASES = 5000
+_SKIPPABLE_SUMMARY_ERROR_REASONS = frozenset(
+    {
+        "canonical_envelope_missing",
+        "canonical_result_envelope_invalid",
+        "generation_conflict",
+    }
+)
+logger = logging.getLogger(__name__)
+
+
+def _qc_schema() -> str | None:
+    return (
+        "qc"
+        if str(getattr(db_connection, "DB_SCHEMA_MODE", "") or "").strip().lower()
+        == "split"
+        else None
+    )
+
+
+def _is_global_scope(actor) -> bool:
+    roles = actor["roles"]
+    return ("sync_admin" in roles) or (
+        bool(roles & {"admin", "super_admin"}) and not actor["institute_id"]
+    )
 
 
 class _OwnerBase(DeclarativeBase):
@@ -37,7 +63,9 @@ class _OwnerBase(DeclarativeBase):
 
 
 class QCRecordReview(_OwnerBase):
-    __table__ = ReportReview.__table__.to_metadata(_OwnerBase.metadata, schema="qc")
+    __table__ = ReportReview.__table__.to_metadata(
+        _OwnerBase.metadata, schema=_qc_schema()
+    )
 
 
 def _source(data):
@@ -67,22 +95,25 @@ def _source(data):
 def _authorized(actor, institute_id):
     if not actor["roles"] & REVIEWERS:
         raise RectificationError("仅持久质控账号可审核病历", 403)
-    if "admin" not in actor["roles"] and (
+    if not _is_global_scope(actor) and (
         not actor["institute_id"] or actor["institute_id"] != institute_id
     ):
         raise RectificationError("无权访问该机构病历审核", 403)
 
 
-def _case_rows(session, identity):
+def _case_rows(session, identity, *, scene=None):
+    conditions = [
+        *(
+            getattr(QCRecordReview, key) == value
+            for key, value in zip(SOURCE_FIELDS[:3], identity)
+        ),
+        QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
+    ]
+    if scene is not None:
+        conditions.append(QCRecordReview.scene == scene)
     return session.scalars(
         select(QCRecordReview)
-        .where(
-            *(
-                getattr(QCRecordReview, key) == value
-                for key, value in zip(SOURCE_FIELDS[:3], identity)
-            ),
-            QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
-        )
+        .where(*conditions)
         .order_by(QCRecordReview.created_at.desc(), QCRecordReview.id.desc())
     ).all()
 
@@ -118,9 +149,10 @@ class _ManualSnapshotReadSession:
 
     def __init__(self, session):
         self.session = session
+        schema = _qc_schema()
         self.options = (
-            {"schema_translate_map": {None: "qc"}}
-            if session.get_bind().dialect.name == "postgresql"
+            {"schema_translate_map": {None: schema}}
+            if schema and session.get_bind().dialect.name == "postgresql"
             else {}
         )
 
@@ -262,10 +294,12 @@ def _candidate_sources(session, actor):
         department=None,
         doctor=None,
         hospital_status="all",
-        institute_id=None if "admin" in actor["roles"] else actor["institute_id"],
+        institute_id=None if _is_global_scope(actor) else actor["institute_id"],
     )
     if len(records) > MAX_CASES:
         raise RectificationError("病历审核范围超过5000份，无法完整核对", 422)
+    if not records:
+        return []
     summaries = CustomQCWorkspaceService(
         readonly=True
     ).build_luxian_0609_completed_record_result_summaries(
@@ -274,13 +308,31 @@ def _candidate_sources(session, actor):
         include_rule_set_context=True,
         session_factory=lambda: _BorrowedReadSession(session),
     )
-    if any(row.get("status") not in {"ready", "not_run"} for row in summaries.values()):
+    skipped_reasons: dict[str, int] = {}
+    for row in summaries.values():
+        status = row.get("status")
+        if status in {"ready", "not_run"}:
+            continue
+        reason_code = str(row.get("reason_code") or "").strip()
+        if (
+            status == "technical_error"
+            and reason_code in _SKIPPABLE_SUMMARY_ERROR_REASONS
+        ):
+            skipped_reasons[reason_code] = skipped_reasons.get(reason_code, 0) + 1
+            continue
         raise RectificationError("当前保存结果存在读取失败，审核待办暂不可用", 503)
+    if skipped_reasons:
+        logger.warning(
+            "病历审核跳过不可用历史保存结果 skipped=%s",
+            skipped_reasons,
+        )
     job_ids = {
         row.get("root_job_id")
         for row in summaries.values()
-        if row.get("status") == "ready"
+        if row.get("status") == "ready" and row.get("root_job_id")
     }
+    if not job_ids:
+        return []
     table = _batch_jobs_table(readonly=True)
     jobs = {
         row["id"]: row
@@ -344,9 +396,16 @@ class RecordReviewWorkflowService:
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             _, department = self._resolve(session, actor, source)
-            rows = _case_rows(session, tuple(source[key] for key in SOURCE_FIELDS[:3]))
+            rows = _case_rows(
+                session,
+                tuple(source[key] for key in SOURCE_FIELDS[:3]),
+                scene=source["scene"],
+            )
             state, stage, row = _derive_state(
-                rows, source["root_job_id"], source["envelope_id"]
+                rows,
+                source["root_job_id"],
+                source["envelope_id"],
+                scene=source["scene"],
             )
             return {
                 **source,
@@ -366,7 +425,11 @@ class RecordReviewWorkflowService:
                 raise RectificationError("审核历史不存在", 404)
             _authorized(actor, row.institute_id)
             view = _row_view(row)
-            rows = _case_rows(session, (row.institute_id, row.patient_id, row.visit_id))
+            rows = _case_rows(
+                session,
+                (row.institute_id, row.patient_id, row.visit_id),
+                scene=row.scene,
+            )
             return {
                 **{key: view[key] for key in SOURCE_FIELDS},
                 "case_department": view["case_department"],
@@ -413,20 +476,23 @@ class RecordReviewWorkflowService:
                         raise RectificationError("请求ID已用于其他审核内容", 409)
                     return view | {"idempotent": True}
                 identity = tuple(source[key] for key in SOURCE_FIELDS[:3])
-                # 锁串行化同病例跨结果的阶段推导，唯一约束兜底同结果竞争。
+                # 锁串行化同病例同场景跨结果的阶段推导，唯一约束兜底同结果竞争。
                 if session.get_bind().dialect.name == "postgresql":
                     session.execute(
                         text("SELECT pg_advisory_xact_lock(hashtext(:key))"),
                         {
                             "key": "record_review|"
-                            + "|".join((*identity, source["rule_set_key"]))
+                            + "|".join(
+                                (*identity, source["rule_set_key"], source["scene"])
+                            )
                         },
                     )
                 current, department = self._resolve(session, actor, source)
                 state, stage, row = _derive_state(
-                    _case_rows(session, identity),
+                    _case_rows(session, identity, scene=source["scene"]),
                     source["root_job_id"],
                     source["envelope_id"],
+                    scene=source["scene"],
                 )
                 if row is not None or state != expected_state:
                     raise RectificationError("审核状态已变化，请刷新核对", 409)
@@ -483,7 +549,7 @@ class RecordReviewWorkflowService:
         with self.sessions() as session:
             actor = self.person(session, actor_id)
             if not actor["roles"] & REVIEWERS or (
-                "admin" not in actor["roles"] and not actor["institute_id"]
+                not _is_global_scope(actor) and not actor["institute_id"]
             ):
                 raise RectificationError("缺少持久质控账号或机构范围", 403)
             sources = self.candidates(session, actor)
@@ -508,7 +574,7 @@ class RecordReviewWorkflowService:
                 )
                 for row in rows:
                     grouped.setdefault(
-                        (row.institute_id, row.patient_id, row.visit_id), []
+                        (row.institute_id, row.patient_id, row.visit_id, row.scene), []
                     ).append(row)
             items = []
             for source in sources:
@@ -518,9 +584,15 @@ class RecordReviewWorkflowService:
                 _authorized(actor, source["institute_id"])
                 if scene and source["scene"] != scene:
                     continue
-                rows = grouped.get(tuple(source[key] for key in SOURCE_FIELDS[:3]), [])
+                rows = grouped.get(
+                    (*tuple(source[key] for key in SOURCE_FIELDS[:3]), source["scene"]),
+                    [],
+                )
                 current_state, stage, row = _derive_state(
-                    rows, source["root_job_id"], source["envelope_id"]
+                    rows,
+                    source["root_job_id"],
+                    source["envelope_id"],
+                    scene=source["scene"],
                 )
                 items.append(
                     {
@@ -537,7 +609,7 @@ class RecordReviewWorkflowService:
                     QCRecordReview.scene.in_(("running", "final")),
                     QCRecordReview.rule_set_key == LUXIAN_0609_RULE_SET_KEY,
                 )
-                if "admin" not in actor["roles"]:
+                if not _is_global_scope(actor):
                     statement = statement.where(
                         QCRecordReview.institute_id == actor["institute_id"]
                     )

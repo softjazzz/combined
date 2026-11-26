@@ -18,7 +18,6 @@
         :document-options="documentOptions"
         :pagination="tablePagination"
         @update:keyword-input="keywordInput = $event"
-        @update:rule-set-key="handleRuleSetChange"
         @rule-set-change="handleRuleSetChange"
         @update:complexity="queryState.complexity = $event"
         @update:defect-level="queryState.defectLevel = $event"
@@ -37,6 +36,7 @@
       :rule="selectedRule"
       :is-admin="isAdmin"
       :prompt-loading="promptLoading"
+      :prompt-error="promptError"
       :is-editing-prompt="isEditingPrompt"
       :current-prompt="currentPrompt"
       :editing-prompt="editingPrompt"
@@ -87,15 +87,42 @@
       @update:open="(value) => (batchLaunchModalOpen = value)"
       @update:batch-launch-filters="(value) => Object.assign(batchLaunchFilters, value)"
     />
+
+    <SemanticRulesBatchResultDrawer
+      :open="resultDrawerOpen"
+      :batch-job-detail="batchJobDetail"
+      :batch-job-debug-snapshot="batchJobDebugSnapshot"
+      :batch-job-debug-loading="batchJobDebugLoading"
+      :fetch-batch-job-debug-snapshot="confirmedResultsOnly ? undefined : fetchBatchJobDebugSnapshot"
+      :batch-job-detail-loading="batchJobDetailLoading"
+      :close="closeBatchJobDrawer"
+      :export-batch-job-report="exportBatchJobReport"
+      :review-batch-job-result="confirmedResultsOnly ? undefined : handleReviewBatchJobResult"
+      :review-batch-job-loading="reviewBatchJobLoading"
+      :cancel-batch-job="executeCancelBatchJob"
+      :cancel-batch-job-loading="Boolean(cancellingBatchJobId)"
+      :get-batch-job-status-tag-class="getBatchJobStatusTagClass"
+      :get-batch-job-status-text="getBatchJobStatusText"
+      :format-date-time="formatDateTime"
+      back-label="返回语义规则"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
+import { message } from 'ant-design-vue'
+import { reviewSichuanWorkspaceBatchJob } from '@/services/sichuan-rule-workspace-service'
 import { useSemanticRulesWorkspace } from './composables/useSemanticRulesWorkspace'
 import SemanticRulesTableSection from './components/SemanticRulesTableSection.vue'
+import SemanticRulesBatchResultDrawer from './components/SemanticRulesBatchResultDrawer.vue'
 import SemanticRuleDetailModal from './components/modals/SemanticRuleDetailModal.vue'
 import SemanticRuleTestModal from './components/modals/SemanticRuleTestModal.vue'
 import CustomQcBatchLaunchModal from '@/views/rules/components/CustomQcBatchLaunchModal.vue'
+import {
+  getBatchJobStatusTagClass,
+  getBatchJobStatusText,
+} from '@/views/rules/utils/customQcWorkspacePresentation'
 
 const {
   loading,
@@ -115,7 +142,9 @@ const {
   openRuleDetail,
   closeRuleDetail,
   isAdmin,
+  confirmedResultsOnly,
   promptLoading,
+  promptError,
   isEditingPrompt,
   currentPrompt,
   editingPrompt,
@@ -144,6 +173,17 @@ const {
   confirmBatchLaunch,
   testingBatch,
   batchJobScopeOptions,
+  batchJobDetail,
+  batchJobDetailLoading,
+  batchJobDebugSnapshot,
+  batchJobDebugLoading,
+  cancellingBatchJobId,
+  resultDrawerOpen,
+  closeBatchJobDrawer,
+  fetchBatchJobDebugSnapshot,
+  executeCancelBatchJob,
+  exportBatchJobReport,
+  formatDateTime,
 } = useSemanticRulesWorkspace()
 
 function handleDetailOpenChange(value: boolean) {
@@ -164,6 +204,30 @@ function handleStartTestFromDetail() {
   if (!selectedRule.value) return
   closeRuleDetail()
   startRuleTest(selectedRule.value)
+}
+
+const reviewBatchJobLoading = ref(false)
+
+async function handleReviewBatchJobResult() {
+  const current = batchJobDetail.value
+  if (!current?.id || reviewBatchJobLoading.value) return
+  reviewBatchJobLoading.value = true
+  try {
+    const result = await reviewSichuanWorkspaceBatchJob(current.id)
+    if (!result.success || !result.data?.job) {
+      message.error(result.message || '复核本次结果失败')
+      return
+    }
+    if (batchJobDetail.value?.id === result.data.job.id) {
+      batchJobDetail.value = result.data.job
+    }
+    const count = Number(result.data.review_report?.summary?.total_findings || 0)
+    message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
+  } catch (error) {
+    message.error(error instanceof Error ? error.message : '复核本次结果失败')
+  } finally {
+    reviewBatchJobLoading.value = false
+  }
 }
 </script>
 

@@ -130,6 +130,31 @@ describe('batchJobPresentation', () => {
     expect(model.scopeText).toContain('待验收 1 条')
   })
 
+  it('全量76条0609任务在无显式筛选且仅返回42条draft_ids时不误标为选定42个质控点', () => {
+    const draftIds = Array.from(
+      { length: 42 },
+      (_, index) => `LX0609-01-${String(Math.floor(index / 9) + 1).padStart(2, '0')}-${String((index % 9) + 1).padStart(2, '0')}`,
+    )
+    const job = buildJob({
+      status: 'completed',
+      customer_rule_count: 76,
+      draft_ids: draftIds,
+      filters: {},
+      summary: {
+        ...buildJob().summary!,
+        total_records: 1,
+        success_count: 1,
+        completed_rule_count: 76,
+      },
+    })
+
+    const model = buildBatchJobPresentation(job)
+
+    expect(model.resultProgressText).toBe('结果回写：76 / 76 条')
+    expect(model.scopeText).toBe('全部 76 个质控点')
+    expect(model.scopeText).not.toContain('选定 42')
+  })
+
   it('自动补跑排队期间保持运行态，不展示最终失败', () => {
     const job = buildJob({ status: 'failed' })
     job.summary = {

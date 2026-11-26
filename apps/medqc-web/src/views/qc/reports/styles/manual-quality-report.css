@@ -90,13 +90,25 @@
 .manual-table :deep(.ant-table) {
   background: transparent;
 }
+.manual-table :deep(.ant-table-content) {
+  overflow-x: auto;
+}
+.manual-table :deep(.ant-table-content table) {
+  width: 100%;
+  table-layout: fixed;
+}
 .manual-table :deep(.ant-table-cell) {
+  padding: 10px 8px;
   white-space: nowrap;
+}
+.manual-table :deep(.ant-table-cell-ellipsis) {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .manual-pager {
   display: flex;
   justify-content: flex-end;
-  padding: 14px 20px;
+  padding: 14px 124px 14px 20px;
 }
 .link {
   min-height: 36px;
@@ -117,6 +129,17 @@
   }
   .manual-summary > :first-child {
     grid-column: 1 / -1;
+  }
+}
+@media (max-width: 900px) {
+  .manual-table :deep(.ant-table-content table) {
+    min-width: 820px;
+  }
+}
+@media (max-width: 640px) {
+  .manual-pager {
+    justify-content: flex-start;
+    padding: 14px 20px;
   }
 }
 @media (max-width: 480px) {

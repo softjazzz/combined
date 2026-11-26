@@ -667,11 +667,15 @@ export interface SichuanBatchJob {
   has_results?: boolean
   rule_results?: SichuanBatchJobRuleResult[]
   idempotency_reused?: boolean
+  is_sample_validation?: boolean
+  task_origin?: 'sample_validation' | 'record_pool' | string
 }
 
 export interface SichuanBatchJobQuery {
   /** 仅质控记录页使用，跳过完整结果摘要读取。 */
   view?: 'overview'
+  /** 病历池等非样本验证入口用于排除客户样本验证任务。 */
+  exclude_validation?: boolean
   status?: SichuanBatchJobStatus
   scope?: 'all' | 'running' | 'final'
   q?: string

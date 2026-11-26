@@ -1,46 +1,54 @@
 <template>
   <section v-if="allowed" class="rectification-todos" :class="{ 'mq-page': !scope }">
-    <header :class="{ 'mq-page-head': !scope }">
+    <header class="rectification-todos__header" :class="{ 'mq-page-head': !scope }">
       <div class="rectification-heading mq-page-head__copy">
         <span v-if="!scope" class="mq-page-eyebrow">质控作业 · 整改处理</span>
-        <h2 :class="scope ? 'mq-card__title' : 'mq-page-title'">
+        <h2 class="rectification-heading__title" :class="scope ? 'mq-card__title' : 'mq-page-title'">
           {{ scope ? '该缺陷整改' : '缺陷整改待办' }}
         </h2>
       </div>
-      <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
-        <MqIcon name="task" :size="16" />人工缺陷处理
-      </button>
-      <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
-        <MqIcon name="task" :size="16" />申诉处理
-      </button>
-      <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
-        <MqIcon name="task" :size="16" />病历审核
-      </button>
-      <router-link v-if="!scope && auth.hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
-        <MqIcon name="task" :size="16" />病历沟通
-      </router-link>
-      <router-link
-        v-if="!scope && auth.hasRole('doctor')"
-        class="mq-btn"
-        to="/workstation-v5/worklist?assist=message"
-        >消息面板</router-link
-      >
-      <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
-        >整改状态</label
-      >
-      <a-select
-        :id="scope ? 'defect-rectification-status' : 'rectification-status'"
-        v-model:value="state"
-        :get-popup-container="popupContainer"
-        :options="states"
-        style="width: 130px"
-        @change="changeState"
-      />
-      <a-button :disabled="loading" aria-label="刷新整改待办" @click="load">
-        <template #icon>
-          <MqIcon name="sync" :size="16" />
-        </template>
-      </a-button>
+      <div class="mq-page-head__actions rectification-todos__actions">
+        <button v-if="!scope && manager" class="mq-btn" type="button" @click="manualOpen = true">
+          <MqIcon name="task" :size="16" />人工缺陷处理
+        </button>
+        <button v-if="!scope && appealAllowed" class="mq-btn" type="button" @click="openAppeals()">
+          <MqIcon name="task" :size="16" />申诉处理
+        </button>
+        <button v-if="!scope && manager" class="mq-btn" type="button" @click="reviewOpen = true">
+          <MqIcon name="task" :size="16" />病历审核
+        </button>
+        <router-link v-if="!scope && hasRole('doctor')" class="mq-btn" to="/workstation-v5/case-communications">
+          <MqIcon name="task" :size="16" />病历沟通
+        </router-link>
+        <router-link
+          v-if="!scope && hasRole('doctor')"
+          class="mq-btn"
+          to="/workstation-v5/worklist?assist=message"
+          >消息面板</router-link
+        >
+        <label class="sr-only" :for="scope ? 'defect-rectification-status' : 'rectification-status'"
+          >整改状态</label
+        >
+        <a-select
+          :id="scope ? 'defect-rectification-status' : 'rectification-status'"
+          :value="state"
+          :get-popup-container="popupContainer"
+          :options="states"
+          style="width: 130px"
+          @change="changeState"
+        />
+        <a-button
+          class="rectification-todos__refresh"
+          shape="circle"
+          :disabled="loading"
+          aria-label="刷新整改待办"
+          @click="load"
+        >
+          <template #icon>
+            <MqIcon name="sync" :size="16" />
+          </template>
+        </a-button>
+      </div>
     </header>
     <p v-if="error" class="state-error" role="alert">
       <MqIcon name="issue" :size="16" />{{ error }}
@@ -65,11 +73,11 @@
       </p>
       <a-pagination
         v-if="!error && total"
-        v-model:current="page"
+        :current="page"
         :total="total"
         :page-size="10"
         :show-size-changer="false"
-        @change="load"
+        @change="handlePageChange"
       />
     </a-spin>
     <ManualDefectWorkflowDrawer
@@ -83,7 +91,7 @@
       :open="appealOpen"
       :source="appealSource"
       :appeal-id="appealId"
-      @close="appealOpen = false"
+      @close="closeAppeals"
       @changed="emit('changed')"
     />
     <RecordReviewWorkflowDrawer
@@ -136,7 +144,7 @@
         </a-descriptions>
         <button
           v-if="
-            auth.hasRole('doctor') &&
+            hasRole('doctor') &&
             selected.assignee_id === auth.user?.id &&
             ['running', 'final'].includes(selected.scene)
           "
@@ -146,11 +154,23 @@
         >
           申诉该缺陷
         </button>
-        <a-form v-if="actions.length" layout="vertical" class="rectification-todos__action">
+        <a-form v-if="showCommentForm" layout="vertical" class="rectification-todos__action">
           <a-form-item label="处理说明">
-            <a-textarea v-model:value="comment" :rows="4" :maxlength="2000" />
+            <a-textarea
+              v-model:value="comment"
+              :rows="4"
+              :maxlength="2000"
+              placeholder="请输入处理说明（至少 10 字）"
+            />
+            <p class="rectification-comment-hint" data-testid="rectification-comment-hint">
+              {{
+                commentLength >= 10
+                  ? `至少 10 字 · 当前已输入 ${commentLength} 字`
+                  : `至少 10 字（当前 ${commentLength}/10 字）`
+              }}
+            </p>
           </a-form-item>
-          <a-space wrap>
+          <a-space v-if="actions.length" wrap>
             <a-button
               v-for="action in actions"
               :key="action.value"
@@ -158,7 +178,7 @@
                 action.value === 'submit' || action.value === 'approve' ? 'primary' : 'default'
               "
               :danger="action.value === 'reject'"
-              :disabled="saving || uncertain || comment.trim().length < 10"
+              :disabled="saving || uncertain || commentLength < 10"
               @click="submit(action.value)"
             >
               {{ action.label }}
@@ -175,7 +195,7 @@
             {{ comparison.reason }}
           </p>
           <template v-else>
-            <p>{{ comparison.before_at }} / {{ comparison.after_at }}</p>
+            <p>{{ formatTime(comparison.before_at) }} / {{ formatTime(comparison.after_at) }}</p>
             <p v-if="comparison.unavailable_documents">
               {{ comparison.unavailable_documents }} 份文书缺少稳定标识或完整正文，不可比较
             </p>
@@ -206,7 +226,7 @@
           <a-timeline-item v-for="event in selected.events" :key="event.id">
             {{ eventLabels[event.action] || event.action }} · {{ event.comment }}
             <div class="rectification-event-time mq-mono">
-              {{ event.created_at }}
+              {{ formatTime(event.created_at) }}
             </div>
             <a-button
               v-if="event.action === 'submit'"
@@ -216,8 +236,8 @@
               查看本次正文比较
             </a-button>
             <a-button
-              v-if="manager && event.can_withdraw"
-              :disabled="saving || uncertain || comment.trim().length < 10"
+              v-if="canWithdrawUrge(event)"
+              :disabled="saving || uncertain || commentLength < 10"
               @click="submit('withdraw_urge', event.id)"
             >
               撤回该催办
@@ -227,15 +247,34 @@
       </template>
     </a-drawer>
   </section>
+  <section
+    v-else
+    class="rectification-todos rectification-todos--denied"
+    :class="{ 'mq-page': !scope }"
+    role="status"
+    aria-label="无权访问缺陷整改待办"
+  >
+    <header v-if="!scope" class="rectification-todos__header mq-page-head">
+      <div class="rectification-heading mq-page-head__copy">
+        <span class="mq-page-eyebrow">质控作业 · 整改处理</span>
+        <h2 class="rectification-heading__title mq-page-title">缺陷整改待办</h2>
+      </div>
+    </header>
+    <div class="rectification-empty" :class="{ 'mq-card': !scope }">
+      当前账号无权访问缺陷整改待办，请联系管理员核对角色权限。
+    </div>
+  </section>
 </template>
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import * as vueRouter from 'vue-router'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ManualDefectWorkflowDrawer from '@/components/qc/ManualDefectWorkflowDrawer.vue'
 import ModernAppealWorkflowDrawer from '@/components/qc/ModernAppealWorkflowDrawer.vue'
 import RecordReviewWorkflowDrawer from '@/components/qc/RecordReviewWorkflowDrawer.vue'
 import { useAuthStore } from '@/stores/auth'
+import { effectiveRoles } from '@/utils/effectiveRoles'
+import { parseQcTaskTime, QC_TASK_TIME_ZONE } from '@/views/workstation-v4/utils/qcTaskTime'
 import {
   actOnRectification,
   getRectification,
@@ -252,26 +291,85 @@ import {
 const props = defineProps<{ scope?: RectificationSource; refreshKey?: number }>()
 const emit = defineEmits<{ changed: [] }>()
 const auth = useAuthStore()
-const route = useRoute()
+function safeUseRoute() {
+  try {
+    return typeof vueRouter.useRoute === 'function' ? vueRouter.useRoute() : undefined
+  } catch {
+    return undefined
+  }
+}
+function safeUseRouter() {
+  try {
+    return typeof vueRouter.useRouter === 'function' ? vueRouter.useRouter() : undefined
+  } catch {
+    return undefined
+  }
+}
+const route = safeUseRoute()
+const router = safeUseRouter()
 const manualOpen = ref(false)
 const reviewOpen = ref(false)
 const appealOpen = ref(false),
   appealSource = ref<Rectification | null>(null)
 const appealId = ref<string>()
+let disposed = false
+const shanghaiDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+  timeZone: QC_TASK_TIME_ZONE,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+  hourCycle: 'h23',
+})
+function formatTime(value?: string | null): string {
+  if (!value) return '时间未知'
+  const parsed = parseQcTaskTime(value)
+  if (!parsed) return value
+  return shanghaiDateTimeFormatter.format(parsed)
+}
+const effectiveUserRoles = computed(() => {
+  const raw = Array.isArray(auth.userRoles)
+    ? auth.userRoles
+    : Array.isArray(auth.user?.roles)
+      ? auth.user.roles
+      : auth.user?.role
+        ? [auth.user.role]
+        : []
+  return effectiveRoles(raw)
+})
+const hasRole = (role: string) =>
+  effectiveUserRoles.value.includes(role) ||
+  (typeof auth.hasRole === 'function' && auth.hasRole(role))
 const appealAllowed = computed(() =>
-  ['admin', 'qc_manager', 'doctor'].some((role) => auth.hasRole(role)),
+  ['admin', 'qc_manager', 'doctor', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
 )
+function clearRouteQueryKeys(...keys: string[]) {
+  if (props.scope || disposed || !route || typeof router?.replace !== 'function') return
+  const hasAny = keys.some((key) => route.query[key] !== undefined)
+  if (!hasAny) return
+  const nextQuery = { ...route.query }
+  for (const key of keys) delete nextQuery[key]
+  void router.replace({ path: route.path, query: nextQuery })
+}
 function openAppeals(source: Rectification | null = null) {
   appealId.value = undefined
   appealSource.value = source
   open.value = false
   appealOpen.value = true
 }
+function closeAppeals() {
+  appealOpen.value = false
+  appealId.value = undefined
+  appealSource.value = null
+  clearRouteQueryKeys('appeal_id')
+}
 const popupContainer = (trigger: HTMLElement) => trigger.parentElement || trigger
 const manager = computed(() =>
-  ['admin', 'qc_manager', 'qc_staff'].some((role) => auth.hasRole(role)),
+  ['admin', 'qc_manager', 'qc_staff', 'sync_admin', 'super_admin'].some((role) => hasRole(role)),
 )
-const allowed = computed(() => manager.value || auth.hasRole('doctor'))
+const allowed = computed(() => manager.value || hasRole('doctor'))
 const labels: Record<RectificationState, string> = {
   pending: '待整改',
   submitted: '待验收',
@@ -297,10 +395,35 @@ const states = [
   { value: '', label: '全部状态' },
   ...Object.entries(labels).map(([value, label]) => ({ value, label })),
 ]
-const state = ref<RectificationState | ''>(
-    props.scope ? '' : manager.value ? 'submitted' : 'pending',
-  ),
-  page = ref(1),
+const VALID_STATES = new Set<RectificationState>(['pending', 'submitted', 'approved', 'rejected'])
+function normalizeStateValue(value: unknown): RectificationState | '' {
+  if (typeof value !== 'string') return ''
+  const normalized = value.trim()
+  if (!normalized || normalized === 'all') return ''
+  return VALID_STATES.has(normalized as RectificationState)
+    ? (normalized as RectificationState)
+    : ''
+}
+function defaultState(): RectificationState | '' {
+  return props.scope ? '' : manager.value ? 'submitted' : 'pending'
+}
+function readStateFromQuery(): RectificationState | '' {
+  if (props.scope || !route) return defaultState()
+  const raw = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status
+  if (typeof raw !== 'string') return defaultState()
+  const normalized = raw.trim()
+  if (normalized === 'all') return ''
+  if (VALID_STATES.has(normalized as RectificationState)) return normalized as RectificationState
+  return defaultState()
+}
+function readPageFromQuery(): number {
+  if (props.scope || !route) return 1
+  const raw = Array.isArray(route.query.page) ? route.query.page[0] : route.query.page
+  const parsed = Number(raw)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : 1
+}
+const state = ref<RectificationState | ''>(readStateFromQuery()),
+  page = ref(readPageFromQuery()),
   total = ref(0)
 const items = ref<Rectification[]>([]),
   selected = ref<RectificationDetail | null>(null)
@@ -388,11 +511,20 @@ function resetComparison() {
 }
 let listToken = 0,
   detailToken = 0
+const commentLength = computed(() => comment.value.trim().length)
+function canWithdrawUrge(event: RectificationDetail['events'][number]): boolean {
+  return Boolean(
+    manager.value &&
+      selected.value &&
+      selected.value.assignee_id !== auth.user?.id &&
+      event.can_withdraw,
+  )
+}
 const actions = computed<Array<{ value: RectificationAction; label: string }>>(() => {
   const item = selected.value
   if (!item) return []
   const pending = item.status === 'pending' || item.status === 'rejected'
-  if (item.assignee_id === auth.user?.id && auth.hasRole('doctor') && pending)
+  if (item.assignee_id === auth.user?.id && hasRole('doctor') && pending)
     return [{ value: 'submit', label: '提交整改' }]
   if (!manager.value || item.assignee_id === auth.user?.id) return []
   if (item.status === 'submitted')
@@ -402,17 +534,66 @@ const actions = computed<Array<{ value: RectificationAction; label: string }>>((
     ]
   return pending ? [{ value: 'urge', label: '催办' }] : []
 })
-function changeState() {
-  page.value = 1
+const hasWithdrawableUrge = computed(() =>
+  Boolean(selected.value?.events.some((event) => canWithdrawUrge(event))),
+)
+const showCommentForm = computed(() => actions.value.length > 0 || hasWithdrawableUrge.value)
+let routeSyncToken = 0
+let pendingRouteSync: { state: RectificationState | ''; page: number } | null = null
+async function applyFilters(nextState: RectificationState | '', nextPage: number) {
+  if (disposed || !allowed.value) return
+  if (props.scope || !route || typeof router?.replace !== 'function') {
+    state.value = nextState
+    page.value = nextPage
+    void load()
+    return
+  }
+  const nextStatus = nextState === '' ? 'all' : nextState
+  const nextPageQuery = nextPage > 1 ? String(nextPage) : undefined
+  const curStatus = Array.isArray(route.query.status) ? route.query.status[0] : route.query.status
+  const curPage = Array.isArray(route.query.page) ? route.query.page[0] : route.query.page
+
+  state.value = nextState
+  page.value = nextPage
+
+  if (curStatus === nextStatus && curPage === nextPageQuery) {
+    void load()
+    return
+  }
+
+  const token = ++routeSyncToken
+  pendingRouteSync = { state: nextState, page: nextPage }
+  const nextQuery = { ...route.query }
+  nextQuery.status = nextStatus
+  if (nextPageQuery) nextQuery.page = nextPageQuery
+  else delete nextQuery.page
+
+  try {
+    await router.replace({ path: route.path, query: nextQuery })
+  } finally {
+    if (token === routeSyncToken) {
+      pendingRouteSync = null
+    }
+  }
+
+  if (disposed || token !== routeSyncToken || !allowed.value) return
   void load()
+}
+function changeState(nextValue?: unknown) {
+  const nextState = normalizeStateValue(nextValue)
+  if (nextState === state.value && page.value === 1) return
+  void applyFilters(nextState, 1)
+}
+function handlePageChange(nextPage: number) {
+  if (!Number.isInteger(nextPage) || nextPage < 1) return
+  if (nextPage === page.value) return
+  void applyFilters(state.value, nextPage)
 }
 async function load() {
   const token = ++listToken
   if (!allowed.value) return
   loading.value = true
   error.value = ''
-  items.value = []
-  total.value = 0
   try {
     const result = props.scope
       ? await listRectifications(state.value || undefined, page.value, props.scope)
@@ -481,6 +662,8 @@ function reset() {
   resetComparison()
   ++listToken
   ++detailToken
+  ++routeSyncToken
+  pendingRouteSync = null
   items.value = []
   selected.value = null
   open.value = false
@@ -488,15 +671,31 @@ function reset() {
   loading.value = false
   saving.value = false
 }
+const authIdentityKey = computed(() =>
+  [
+    auth.user?.id ?? '',
+    auth.user?.role ?? '',
+    Array.isArray(auth.user?.roles) ? auth.user.roles.join(',') : '',
+    effectiveUserRoles.value.join(','),
+    allowed.value ? '1' : '0',
+  ].join('|'),
+)
+let authInitialized = false
 watch(
-  () => [auth.user?.id, auth.user?.roles, allowed.value],
+  authIdentityKey,
   () => {
     reset()
-    page.value = 1
-    state.value = props.scope ? '' : manager.value ? 'submitted' : 'pending'
+    if (!authInitialized) {
+      authInitialized = true
+      state.value = readStateFromQuery()
+      page.value = readPageFromQuery()
+    } else {
+      page.value = 1
+      state.value = defaultState()
+    }
     if (allowed.value) void load()
   },
-  { immediate: true, deep: true },
+  { immediate: true },
 )
 watch(open, (value) => {
   if (!value) {
@@ -504,19 +703,35 @@ watch(open, (value) => {
     ++detailToken
     selected.value = null
     saving.value = false
+    clearRouteQueryKeys('rectification_id')
   }
 })
+watch(
+  () => [route?.query?.status, route?.query?.page],
+  () => {
+    if (props.scope || !allowed.value || pendingRouteSync) return
+    const nextState = readStateFromQuery()
+    const nextPage = readPageFromQuery()
+    if (nextState === state.value && nextPage === page.value) return
+    state.value = nextState
+    page.value = nextPage
+    void load()
+  },
+)
 watch(
   () => [props.scope, props.refreshKey],
   () => {
     reset()
     page.value = 1
-    state.value = props.scope ? '' : manager.value ? 'submitted' : 'pending'
+    state.value = defaultState()
     if (allowed.value) void load()
   },
   { deep: true },
 )
-onUnmounted(reset)
+onUnmounted(() => {
+  disposed = true
+  reset()
+})
 watch(
   () => [route?.query.rectification_id, route?.query.appeal_id, auth.user?.id],
   () => {

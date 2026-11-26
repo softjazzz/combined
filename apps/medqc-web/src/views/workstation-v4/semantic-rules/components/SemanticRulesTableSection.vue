@@ -16,6 +16,7 @@
             <a-select
               :value="selectedRuleSetValue"
               class="rule-set-select"
+              aria-label="切换规则集"
               popup-class-name="semantic-rule-select-dropdown"
               @change="handleRuleSetSelectChange"
             >
@@ -34,7 +35,7 @@
           <span class="table-shell-label">条目录规则 · 当前结果可查看</span>
         </div>
       </div>
-      <div class="table-shell-actions">
+      <div v-if="!confirmedResultsOnly" class="table-shell-actions">
         <a-button class="table-secondary-btn" @click="emit('openCustomWorkspace')">
           <SlidersHorizontal class="button-icon" />
           自定义规则工作台
@@ -170,6 +171,7 @@
             <div class="rule-main">
               <div class="rule-main-content">
                 <button
+                  type="button"
                   class="rule-main-title"
                   @click="emit('viewDetail', record as SemanticRuleItem)"
                 >
@@ -209,15 +211,23 @@
                   {{ rowAction.primaryLabel }}
                 </a-button>
                 <a-button
+                  v-if="!confirmedResultsOnly"
                   size="small"
                   class="action-secondary"
-                  @click="emit('startTest', record as SemanticRuleItem)"
+                  data-testid="start-rule-test"
+                  :disabled="isLuxianRule(record as SemanticRuleItem)"
+                  :title="
+                    isLuxianRule(record as SemanticRuleItem)
+                      ? 'LX0609 规则不支持纯文本测试，请前往规则验收使用结构化病例验证'
+                      : undefined
+                  "
+                  @click="handleStartTest(record as SemanticRuleItem)"
                 >
                   <ClipboardCheck class="button-icon" />
                   {{ rowAction.secondaryLabel }}
                 </a-button>
                 <router-link
-                  v-if="record.release_scope === 'acceptance_only'"
+                  v-if="!confirmedResultsOnly && record.release_scope === 'acceptance_only'"
                   class="ant-btn ant-btn-sm action-secondary"
                   data-testid="go-rule-validation"
                   :to="{
@@ -243,6 +253,7 @@ import { ClipboardCheck, FileSearch, Play, Search, SlidersHorizontal } from 'luc
 import MqIcon from '@/components/icons/MqIcon.vue'
 import ProQueryBar from '@/components/pro/ProQueryBar.vue'
 import ProStandardTable from '@/components/pro/ProStandardTable.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type { SemanticRuleItem, SichuanRuleSetOption } from '../types'
 import { getDocTypeZh } from '../types'
 import { executionStatus, executionStatusHint } from '../executionStatus'
@@ -283,20 +294,31 @@ const emit = defineEmits<{
   startTest: [rule: SemanticRuleItem]
 }>()
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
+function isLuxianRule(rule: SemanticRuleItem | undefined): boolean {
+  return Boolean(rule?.rule_id && String(rule.rule_id).startsWith('LX0609-'))
+}
+
+function handleStartTest(rule: SemanticRuleItem) {
+  if (confirmedResultsOnly.value || isLuxianRule(rule)) return
+  emit('startTest', rule)
+}
+
 /** 只有 LX0609 规则带目录发布范围；其他规则集不显示发布范围列与筛选 */
 const hasReleaseScope = computed(
   () => props.rules.some((rule) => Boolean(rule.release_scope)) || Boolean(props.releaseScope),
 )
 const columns = computed(() => [
-  { title: '序号', key: 'index', width: 56, align: 'center' as const, responsive: ['md'] },
-  { title: '编号', key: 'rule_id', width: 158 },
+  { title: '序号', key: 'index', width: 52, align: 'center' as const, responsive: ['md'] },
+  { title: '编号', key: 'rule_id', width: 142 },
   { title: '规则名称', key: 'name' },
   ...(hasReleaseScope.value
-    ? [{ title: '发布范围', key: 'release_scope', width: 108, responsive: ['lg'] }]
+    ? [{ title: '发布范围', key: 'release_scope', width: 92, responsive: ['lg'] }]
     : []),
-  { title: '适用文书', key: 'applicable_documents', width: 140, responsive: ['lg'] },
+  { title: '适用文书', key: 'applicable_documents', width: 116, responsive: ['lg'] },
   ...(props.ruleSetKey === 'luxian_0609_qc_v1'
-    ? [{ title: '执行状态', key: 'execution_status', width: 118, responsive: ['lg'] }]
+    ? [{ title: '执行状态', key: 'execution_status', width: 96, responsive: ['lg'] }]
     : []),
 ])
 

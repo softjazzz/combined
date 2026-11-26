@@ -1,5 +1,5 @@
 <template>
-  <main
+  <section
     class="mq-page rule-validation-page"
     data-testid="rule-validation-detail"
   >
@@ -28,6 +28,15 @@
         </router-link>
       </div>
     </header>
+
+    <a-alert
+      v-if="confirmedResultsOnly"
+      type="info"
+      show-icon
+      data-testid="rule-validation-demo-readonly"
+      message="演示账号只读模式"
+      description="演示账号仅支持查看规则验收状态与结果，已隐藏病例编辑、运行验证、验收结论提交与批准上线入口。"
+    />
 
     <a-alert
       v-if="error"
@@ -156,7 +165,10 @@
                 每个病例按本规则单独标注预期；病例创建后内容与评价时间点固定，需修改请复制为新病例。
               </p>
             </div>
-            <div class="mq-page-head__actions">
+            <div
+              v-if="!confirmedResultsOnly"
+              class="mq-page-head__actions"
+            >
               <button
                 type="button"
                 class="mq-btn"
@@ -227,23 +239,25 @@
                     <span class="mq-mono">r{{ item.answer_revision }}</span>
                   </td>
                   <td class="rv-right rv-row-actions">
-                    <router-link
-                      class="mq-btn"
-                      :to="{
-                        name: 'WorkstationV4RuleValidationNewCase',
-                        params: { ruleId },
-                        query: { copyFrom: item.item_id },
-                      }"
-                    >
-                      复制
-                    </router-link>
-                    <button
-                      type="button"
-                      class="mq-btn"
-                      @click="openAnswer(item)"
-                    >
-                      编辑预期
-                    </button>
+                    <template v-if="!confirmedResultsOnly">
+                      <router-link
+                        class="mq-btn"
+                        :to="{
+                          name: 'WorkstationV4RuleValidationNewCase',
+                          params: { ruleId },
+                          query: { copyFrom: item.item_id },
+                        }"
+                      >
+                        复制
+                      </router-link>
+                      <button
+                        type="button"
+                        class="mq-btn"
+                        @click="openAnswer(item)"
+                      >
+                        编辑预期
+                      </button>
+                    </template>
                   </td>
                 </tr>
                 <tr v-if="!detail.cases.length">
@@ -286,6 +300,7 @@
               </p>
             </div>
             <button
+              v-if="!confirmedResultsOnly"
               type="button"
               class="mq-btn mq-btn--primary"
               data-testid="start-run"
@@ -403,10 +418,11 @@
                   </td>
                   <td class="rv-right">
                     <button
+                      v-if="!confirmedResultsOnly"
                       type="button"
                       class="mq-btn"
                       :disabled="row.comparison === 'pending'"
-                      @click="reviewIndex = i"
+                      @click="openCaseReview(i)"
                     >
                       核对证据
                     </button>
@@ -543,7 +559,11 @@
               </li>
             </ul>
           </div>
-          <div class="rv-form">
+          <div
+            v-if="!confirmedResultsOnly"
+            class="rv-form"
+            data-testid="rule-validation-conclusion-form"
+          >
             <label class="mq-field">
               <span class="mq-field__label">验收意见</span>
               <a-textarea
@@ -636,7 +656,7 @@
       :reviews="latestRunReviews"
       @close="reviewIndex = -1"
       @navigate="(i) => (reviewIndex = i)"
-      @reviewed="load"
+      @reviewed="() => load()"
     />
     <ApprovalModal
       v-if="detail"
@@ -646,13 +666,14 @@
       @close="approvalOpen = false"
       @done="onApprovalDone"
     />
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { message } from 'ant-design-vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   concludeRule,
   getValidationRule,
@@ -686,6 +707,7 @@ import type { Labeled } from './presentation'
 const POLL_MS = 5000
 
 const route = useRoute()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const ruleId = computed(() => String(route.params.ruleId || ''))
 const detail = ref<RuleDetail | null>(null)
 const loading = ref(false)
@@ -700,6 +722,11 @@ const approvalOpen = ref(false)
 const conclusionNote = ref('')
 const gapAck = ref('')
 let pollTimer: ReturnType<typeof setTimeout> | undefined
+let disposed = false
+let activeGeneration = 0
+let requestSeq = 0
+let pollInFlight = false
+let loadAbortController: AbortController | null = null
 
 const latestRun = computed<ValidationRun | null>(() => detail.value?.runs[0] ?? null)
 const allRows = computed(() => detail.value?.latest_run_rows ?? [])
@@ -891,88 +918,187 @@ const checks = computed(() => {
   ] as { label: string; note: string; state: 'ok' | 'no' | 'warn' }[]
 })
 
-async function load() {
-  if (!ruleId.value) return
-  loading.value = true
-  const response = await getValidationRule(ruleId.value)
-  loading.value = false
-  if (!response.success) {
-    error.value = response.error || '规则验收详情加载失败'
-    return
+function stopPolling() {
+  if (pollTimer !== undefined) {
+    clearTimeout(pollTimer)
+    pollTimer = undefined
   }
-  error.value = ''
-  detail.value = response.data
-  schedulePoll()
 }
 
-function schedulePoll() {
-  clearTimeout(pollTimer)
-  if (runInProgress.value) pollTimer = setTimeout(() => void load(), POLL_MS)
+function isCurrentContext(generation: number, targetRuleId: string) {
+  return !disposed && generation === activeGeneration && ruleId.value === targetRuleId
+}
+
+async function load(options: { fromPoll?: boolean; expectedGeneration?: number } = {}) {
+  const targetRuleId = ruleId.value
+  if (disposed || !targetRuleId) return
+  const generation = options.expectedGeneration ?? activeGeneration
+  if (generation !== activeGeneration) return
+  if (options.fromPoll && pollInFlight) return
+
+  stopPolling()
+  const seq = ++requestSeq
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
+  if (options.fromPoll) {
+    pollInFlight = true
+  }
+  loading.value = true
+  try {
+    const response = await getValidationRule(targetRuleId, {
+      signal: controller.signal,
+      skipErrorToast: true,
+    })
+    if (controller.signal.aborted || !isCurrentContext(generation, targetRuleId) || seq !== requestSeq) {
+      return
+    }
+    loading.value = false
+    if (!response.success) {
+      error.value = response.error || '规则验收详情加载失败'
+      return
+    }
+    error.value = ''
+    detail.value = response.data
+    schedulePoll(generation, targetRuleId)
+  } finally {
+    if (loadAbortController === controller) {
+      loadAbortController = null
+    }
+    if (options.fromPoll) {
+      pollInFlight = false
+    }
+    if (isCurrentContext(generation, targetRuleId) && seq === requestSeq) {
+      loading.value = false
+    }
+  }
+}
+
+function schedulePoll(generation = activeGeneration, targetRuleId = ruleId.value) {
+  stopPolling()
+  if (!isCurrentContext(generation, targetRuleId)) return
+  if (runInProgress.value) {
+    pollTimer = setTimeout(() => {
+      pollTimer = undefined
+      if (!isCurrentContext(generation, targetRuleId) || pollInFlight) return
+      void load({ fromPoll: true, expectedGeneration: generation })
+    }, POLL_MS)
+  }
 }
 
 function openAnswer(item: ValidationCase | null) {
+  if (confirmedResultsOnly.value) return
   answerTarget.value = item
   answerOpen.value = true
 }
+function openCaseReview(index: number) {
+  if (confirmedResultsOnly.value) return
+  reviewIndex.value = index
+}
+watch(confirmedResultsOnly, (restricted) => {
+  if (restricted) {
+    reviewIndex.value = -1
+    answerOpen.value = false
+    approvalOpen.value = false
+  }
+})
 async function onAnswerSaved() {
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
   answerOpen.value = false
   message.success('预期已保存')
-  await load()
+  if (!isCurrentContext(generation, targetRuleId)) return
+  await load({ expectedGeneration: generation })
 }
 
 async function startRun() {
+  if (confirmedResultsOnly.value || starting.value || runInProgress.value) return
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
+  if (disposed || !targetRuleId) return
   starting.value = true
   actionError.value = ''
-  const response = await startValidationRun(ruleId.value)
-  starting.value = false
-  if (!response.success) {
-    // 超时不代表失败：任务可能已在后台建成，刷新后以服务端记录为准，避免重复创建
-    const timedOut = /timeout/i.test(response.error || '')
-    actionError.value = timedOut
-      ? '创建运行超时，可能仍在后台完成；已刷新详情，请勿重复点击运行'
-      : response.error || '运行创建失败'
-    if (timedOut) await load()
-    return
+  try {
+    const response = await startValidationRun(targetRuleId)
+    if (!isCurrentContext(generation, targetRuleId)) return
+    starting.value = false
+    if (!response.success) {
+      // 超时不代表失败：任务可能已在后台建成，刷新后以服务端记录为准，避免重复创建
+      const timedOut = /timeout/i.test(response.error || '')
+      actionError.value = timedOut
+        ? '创建运行超时，可能仍在后台完成；已刷新详情，请勿重复点击运行'
+        : response.error || '运行创建失败'
+      if (timedOut) await load({ expectedGeneration: generation })
+      return
+    }
+    message.success('已创建验收运行')
+    await load({ expectedGeneration: generation })
+  } finally {
+    if (isCurrentContext(generation, targetRuleId)) {
+      starting.value = false
+    }
   }
-  message.success('已创建验收运行')
-  await load()
 }
 
 async function conclude(decision: 'accepted' | 'rejected') {
-  if (!latestRun.value) return
+  if (confirmedResultsOnly.value || busy.value || !latestRun.value) return
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
   busy.value = true
   actionError.value = ''
-  const response = await concludeRule(ruleId.value, {
-    run_id: latestRun.value.id,
-    decision,
-    note: conclusionNote.value.trim(),
-    gap_ack: gapAck.value.trim(),
-  })
-  busy.value = false
-  if (!response.success) {
-    actionError.value = response.error || '提交验收结论失败'
-    return
+  try {
+    const response = await concludeRule(targetRuleId, {
+      run_id: latestRun.value.id,
+      decision,
+      note: conclusionNote.value.trim(),
+      gap_ack: gapAck.value.trim(),
+    })
+    if (!isCurrentContext(generation, targetRuleId)) return
+    busy.value = false
+    if (!response.success) {
+      actionError.value = response.error || '提交验收结论失败'
+      return
+    }
+    conclusionNote.value = ''
+    gapAck.value = ''
+    message.success(decision === 'accepted' ? '已记录验收通过' : '已记录验收不通过')
+    await load({ expectedGeneration: generation })
+  } finally {
+    if (isCurrentContext(generation, targetRuleId)) {
+      busy.value = false
+    }
   }
-  conclusionNote.value = ''
-  gapAck.value = ''
-  message.success(decision === 'accepted' ? '已记录验收通过' : '已记录验收不通过')
-  await load()
 }
 
 async function onApprovalDone() {
-  await load()
+  const generation = activeGeneration
+  const targetRuleId = ruleId.value
+  if (!isCurrentContext(generation, targetRuleId)) return
+  await load({ expectedGeneration: generation })
 }
 
 watch(
   ruleId,
   () => {
+    activeGeneration += 1
+    requestSeq += 1
+    loadAbortController?.abort()
+    stopPolling()
     detail.value = null
+    error.value = ''
+    actionError.value = ''
     reviewIndex.value = -1
     void load()
   },
   { immediate: true },
 )
-onBeforeUnmount(() => clearTimeout(pollTimer))
+onBeforeUnmount(() => {
+  disposed = true
+  activeGeneration += 1
+  requestSeq += 1
+  loadAbortController?.abort()
+  stopPolling()
+})
 </script>
 
 <style scoped src="./styles/rule-validation.css"></style>

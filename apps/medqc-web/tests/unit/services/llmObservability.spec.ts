@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { getLlmObservabilityOverview, getLlmRecordCallAttempts } from '@/services/llmObservability'
+import {
+  getLlmObservabilityOverview,
+  getLlmObservabilityRecords,
+  getLlmRecordCallAttempts,
+} from '@/services/llmObservability'
 
 const authFetch = vi.fn()
 
@@ -125,5 +129,55 @@ describe('llmObservability service', () => {
     )
 
     await expect(getLlmObservabilityOverview()).rejects.toThrow('模型性能数据暂不可用')
+  })
+
+  it('通过冻结时间窗口分页读取单病历汇总列表', async () => {
+    authFetch.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          success: true,
+          data: {
+            range: {
+              start_at: '2026-08-03T00:00:00Z',
+              end_at: '2026-08-10T00:00:00Z',
+              timezone: 'Asia/Shanghai',
+            },
+            items: [],
+            total: 42,
+            page: 2,
+            page_size: 20,
+          },
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      ),
+    )
+
+    const result = await getLlmObservabilityRecords({
+      start_at: '2026-08-03T00:00:00Z',
+      end_at: '2026-08-10T00:00:00Z',
+      page: 2,
+      page_size: 20,
+    })
+
+    const requestedUrl = String(authFetch.mock.calls[0][0])
+    expect(requestedUrl).toContain('/api/v1/system/llm-observability/records?')
+    expect(requestedUrl).toContain('start_at=2026-08-03T00%3A00%3A00Z')
+    expect(requestedUrl).toContain('end_at=2026-08-10T00%3A00%3A00Z')
+    expect(requestedUrl).toContain('page=2')
+    expect(result.total).toBe(42)
+  })
+
+  it('透传 AbortSignal 到 authFetch 且中止时原样抛出 AbortError', async () => {
+    const controller = new AbortController()
+    const abortError = new DOMException('Aborted', 'AbortError')
+    authFetch.mockImplementationOnce((_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBe(controller.signal)
+      return Promise.reject(abortError)
+    })
+
+    controller.abort()
+    await expect(getLlmObservabilityOverview({}, { signal: controller.signal })).rejects.toBe(
+      abortError,
+    )
   })
 })

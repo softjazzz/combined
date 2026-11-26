@@ -1,13 +1,21 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { Popconfirm } from 'ant-design-vue'
+import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
+  cancelSichuanWorkspaceBatchJob: vi.fn(),
   downloadBlob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
 }))
 
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
+
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
+  cancelSichuanWorkspaceBatchJob: mocks.cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob: mocks.exportSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJob: mocks.getSichuanWorkspaceBatchJob,
 }))
@@ -394,9 +402,148 @@ it('材料准备失败显示根因与零执行，不显示76条已执行', () =>
 it('失败任务提供明确任务ID入口，不依赖通知ID', () => {
   const wrapper = mount(RecordPoolQcTaskStatusBar, {
     props: { job: job({ id: 'failed-job', status: 'failed' }), autoPoll: false },
+    global: {
+      stubs: {
+        RouterLink: {
+          props: ['to'],
+          template: '<a :href="typeof to === \'string\' ? to : \'\'"><slot /></a>',
+        },
+      },
+    },
   })
   expect(wrapper.get('[data-testid="qc-task-detail-link"]').attributes('href')).toBe(
     '/workstation-v5/qc-task?job_id=failed-job',
   )
+  wrapper.unmount()
+})
+
+it('紧凑单行进度条默认折叠详情、0% 显示活态微光类并支持点击展开/收起', async () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      job: job({
+        status: 'running',
+        total_records: 1,
+        summary: {
+          total_records: 1,
+          success_count: 0,
+          failed_count: 0,
+          issue_records: 0,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 0,
+            rule_count: 76,
+            processed_records: 0,
+            total_records: 1,
+          },
+        },
+      }),
+      autoPoll: false,
+    },
+  })
+  const progressBar = wrapper.get('[role="progressbar"]')
+  expect(progressBar.classes()).toContain('is-indeterminate')
+  const toggle = wrapper.get('[data-testid="record-pool-qc-details-toggle"]')
+  const panel = wrapper.get('[data-testid="record-pool-qc-details-panel"]')
+  expect(toggle.attributes('aria-expanded')).toBe('false')
+  expect((panel.element as HTMLElement).style.display).toBe('none')
+
+  await toggle.trigger('click')
+  expect(toggle.attributes('aria-expanded')).toBe('true')
+  expect((panel.element as HTMLElement).style.display).toBe('')
+
+  await toggle.trigger('click')
+  expect(toggle.attributes('aria-expanded')).toBe('false')
+  expect((panel.element as HTMLElement).style.display).toBe('none')
+  wrapper.unmount()
+})
+
+it('多病历并发仍有执行中病历时，不将已完成单份的 76/76 重复计入导致提前显示 100%', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      autoPoll: false,
+      job: job({
+        status: 'running',
+        total_records: 2,
+        success_count: 1,
+        failed_count: 0,
+        summary: {
+          total_records: 2,
+          success_count: 1,
+          failed_count: 0,
+          issue_records: 1,
+          compliant_records: 0,
+          total_tokens: 0,
+          total_processing_time: 0,
+          rule_count: 76,
+          progress: {
+            step_key: 'run',
+            processed_rule_count: 76,
+            rule_count: 76,
+            processed_records: 1,
+            total_records: 2,
+            max_parallel_records: 2,
+            active_record_count: 1,
+            queued_record_count: 0,
+          },
+        },
+      }),
+    },
+  })
+
+  expect(wrapper.get('[role="progressbar"]').attributes('aria-valuenow')).toBe('50')
+  expect(wrapper.text()).toContain('50%')
+  expect(wrapper.text()).toContain('已处理 1 / 2 份病历')
+  expect(wrapper.text()).not.toContain('处理进度已达 100%')
+  expect(wrapper.text()).not.toContain('当前单份规则进度 76 / 76')
+  wrapper.unmount()
+})
+
+it('执行中/排队中展示停止按钮，确认停止后调用取消接口并切换为已停止状态', async () => {
+  const canceledJob = job({
+    status: 'canceled',
+    success_count: 0,
+    failed_count: 0,
+  })
+  mocks.cancelSichuanWorkspaceBatchJob.mockResolvedValue({
+    success: true,
+    data: canceledJob,
+  })
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: { job: job({ status: 'running' }), autoPoll: false, inlineResultViewer: true },
+  })
+
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(true)
+  expect(wrapper.get('[data-testid="record-pool-qc-cancel-btn"]').text()).toContain('停止')
+
+  await wrapper.findComponent(Popconfirm).vm.$emit('confirm')
+  await flushPromises()
+
+  expect(mocks.cancelSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
+  expect(wrapper.text()).toContain('质控任务已停止')
+  expect(wrapper.text()).toContain('未完成的病历不会继续执行')
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="record-pool-qc-details-toggle"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(false)
+  expect(wrapper.emitted('canceled')).toEqual([[canceledJob]])
+  expect(wrapper.emitted('results-updated')).toHaveLength(1)
+  wrapper.unmount()
+})
+
+it('已停止但已有完成病历时保留查看本次质控结果入口', () => {
+  const wrapper = mount(RecordPoolQcTaskStatusBar, {
+    props: {
+      job: job({ status: 'canceled', total_records: 3, success_count: 1, failed_count: 0 }),
+      autoPoll: false,
+      inlineResultViewer: true,
+    },
+  })
+
+  expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="record-pool-qc-details-toggle"]').exists()).toBe(true)
+  expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(true)
+  expect(wrapper.text()).toContain('已完成结果已保留，其余不再继续')
   wrapper.unmount()
 })

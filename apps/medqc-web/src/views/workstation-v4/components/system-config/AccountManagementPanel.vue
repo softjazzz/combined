@@ -23,7 +23,8 @@
         :class="{ 'is-active': section === 'registrations' }"
         :aria-selected="section === 'registrations'"
         :disabled="saving"
-        @click="section = 'registrations'"
+        data-testid="accounts-section-registrations"
+        @click="showRegistrations"
       >
         注册审批
       </button>
@@ -184,8 +185,8 @@
         :z-index="1100"
         centered
         wrap-class-name="mq-modal"
-        :mask-closable="!saving"
-        :keyboard="!saving"
+        :mask-closable="!saving && !resettingPassword"
+        :keyboard="!saving && !resettingPassword"
         @cancel="close"
       >
         <form class="accounts-editor" @submit.prevent="save">
@@ -200,11 +201,11 @@
                 v-model="form.username"
                 class="mq-input"
                 :readonly="!!editing"
-                :disabled="saving"
-                required
-                minlength="3"
+                :disabled="saving || resettingPassword"
+                :required="!editing"
+                :minlength="editing ? undefined : 3"
                 maxlength="50"
-                pattern="[A-Za-z0-9][A-Za-z0-9_.-]+"
+                :pattern="editing ? undefined : '[A-Za-z0-9][A-Za-z0-9_.-]+'"
                 aria-label="用户名"
                 autocomplete="off"
             /></label>
@@ -214,9 +215,9 @@
                 v-model="form.email"
                 class="mq-input"
                 :readonly="!!editing"
-                :disabled="saving"
+                :disabled="saving || resettingPassword"
                 type="email"
-                required
+                :required="!editing"
                 maxlength="100"
                 aria-label="邮箱"
                 autocomplete="off"
@@ -226,7 +227,7 @@
               ><input
                 v-model="form.display_name"
                 class="mq-input"
-                :disabled="saving"
+                :disabled="saving || resettingPassword"
                 required
                 maxlength="100"
                 aria-label="姓名"
@@ -237,8 +238,9 @@
                 v-model="form.institute_id"
                 class="mq-input"
                 :readonly="!!managedInstitute || isSelf"
-                :disabled="saving"
-                required
+                :disabled="saving || resettingPassword"
+                :required="!allowEmptyInstitute"
+                :placeholder="allowEmptyInstitute ? '全局管理员可留空' : undefined"
                 maxlength="128"
                 aria-label="机构 ID"
             /></label>
@@ -248,7 +250,7 @@
                 v-model="form.department"
                 class="mq-input"
                 :readonly="isSelf"
-                :disabled="saving"
+                :disabled="saving || resettingPassword"
                 required
                 maxlength="100"
                 aria-label="科室"
@@ -268,7 +270,7 @@
               /><span class="mq-field__hint">至少12个字符，最多72字节</span></label
             >
           </div>
-          <fieldset class="accounts-role-fields" :disabled="saving || isSelf">
+          <fieldset class="accounts-role-fields" :disabled="saving || resettingPassword || isSelf">
             <legend>角色</legend>
             <label v-for="item in roleOptions" :key="item.value"
               ><input v-model="form.roles" type="checkbox" :value="item.value" />{{
@@ -280,17 +282,91 @@
             ><input
               v-model="form.is_active"
               type="checkbox"
-              :disabled="saving || isSelf"
+              :disabled="saving || resettingPassword || isSelf"
             />账号启用</label
           >
           <p v-if="saveError" class="accounts-error" role="alert">{{ saveError }}</p>
           <footer class="accounts-editor-actions">
-            <button type="button" class="mq-btn" :disabled="saving" @click="close">取消</button
-            ><button type="submit" class="mq-btn mq-btn--primary" :disabled="saving">
+            <button
+              type="button"
+              class="mq-btn"
+              :disabled="saving || resettingPassword"
+              @click="close"
+            >
+              取消</button
+            ><button
+              type="submit"
+              class="mq-btn mq-btn--primary"
+              :disabled="saving || resettingPassword"
+            >
               {{ saving ? '保存中' : '保存账号' }}
             </button>
           </footer>
         </form>
+        <section
+          v-if="editing && !isSelf"
+          class="accounts-reset-section"
+          aria-label="重置密码"
+        >
+          <div class="accounts-reset-head">
+            <div>
+              <h3 class="accounts-reset-title">重置密码</h3>
+              <p class="accounts-reset-desc">为该账号设置新的登录口令，提交后立即生效</p>
+            </div>
+            <button
+              v-if="!resetOpen"
+              type="button"
+              class="mq-btn"
+              :disabled="saving || resettingPassword"
+              data-testid="toggle-reset-password"
+              @click="openResetPassword"
+            >
+              <KeyRound :size="16" />重置密码
+            </button>
+          </div>
+          <form
+            v-if="resetOpen"
+            class="accounts-reset-form"
+            @submit.prevent="submitResetPassword"
+          >
+            <label class="mq-field"
+              ><span class="mq-field__label">新口令</span
+              ><input
+                v-model="resetPassword"
+                class="mq-input"
+                type="password"
+                required
+                minlength="12"
+                maxlength="72"
+                :disabled="saving || resettingPassword"
+                aria-label="新口令"
+                autocomplete="new-password"
+              /><span class="mq-field__hint">至少12个字符，UTF-8长度最多72字节</span></label
+            >
+            <div class="accounts-reset-actions">
+              <button
+                type="button"
+                class="mq-btn"
+                :disabled="resettingPassword"
+                @click="cancelResetPassword"
+              >
+                取消
+              </button>
+              <button
+                type="submit"
+                class="mq-btn mq-btn--primary"
+                :disabled="saving || resettingPassword"
+                data-testid="confirm-reset-password"
+              >
+                {{ resettingPassword ? '重置中' : '确认重置密码' }}
+              </button>
+            </div>
+          </form>
+          <p v-if="resetError" class="accounts-error" role="alert">{{ resetError }}</p>
+          <p v-if="resetSuccess" class="accounts-reset-success" role="status">
+            {{ resetSuccess }}
+          </p>
+        </section>
       </a-modal>
     </template>
   </section>
@@ -298,46 +374,106 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, reactive, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import * as vueRouter from 'vue-router'
 import RegistrationReviewPanel from './RegistrationReviewPanel.vue'
 import { message } from 'ant-design-vue'
-import { ChevronLeft, ChevronRight, Pencil, RefreshCw } from 'lucide-vue-next'
+import { ChevronLeft, ChevronRight, KeyRound, Pencil, RefreshCw } from 'lucide-vue-next'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import MqIconTile from '@/components/icons/MqIconTile.vue'
 import { useAuthStore } from '@/stores/auth'
 import {
   createManagedAccount,
   listManagedAccounts,
+  resetManagedAccountPassword,
   updateManagedAccount,
   type AccountRole,
   type ManagedAccount,
 } from '@/api/accountManagement'
 
 const auth = useAuthStore()
-const route = useRoute()
-const section = ref<'accounts' | 'registrations'>('accounts')
+function tryUseRoute() {
+  try {
+    return typeof vueRouter.useRoute === 'function' ? vueRouter.useRoute() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+function tryUseRouter() {
+  try {
+    return typeof vueRouter.useRouter === 'function' ? vueRouter.useRouter() : undefined
+  } catch {
+    return undefined
+  }
+}
+
+const route = tryUseRoute()
+const router = tryUseRouter()
+
+const canManageAccounts = computed(() =>
+  auth.userRoles.some((item) => item === 'admin' || item === 'super_admin'),
+)
+
+const registrationId = computed(() =>
+  typeof route?.query?.registration_id === 'string' ? route.query.registration_id : undefined,
+)
+const requestedSection = computed<'accounts' | 'registrations'>(() => {
+  if (registrationId.value) return 'registrations'
+  return route?.query?.section === 'registrations' ? 'registrations' : 'accounts'
+})
+
+const section = ref<'accounts' | 'registrations'>(requestedSection.value)
+
+function syncSectionToRoute(nextSection: 'accounts' | 'registrations') {
+  if (!router || typeof router.replace !== 'function') return
+  const currentQuery = route?.query || {}
+  const currentSection = typeof currentQuery.section === 'string' ? currentQuery.section : ''
+  const nextQuery: Record<string, any> = { ...currentQuery, section: nextSection }
+  if (nextSection === 'accounts') {
+    delete nextQuery.registration_id
+  }
+  if (currentSection === nextSection && (nextSection === 'registrations' || !currentQuery.registration_id)) {
+    return
+  }
+  void Promise.resolve(router.replace({ query: nextQuery })).catch(() => {})
+}
+
 function showAccounts() {
   section.value = 'accounts'
-  void load(1)
+  syncSectionToRoute('accounts')
+  if (canManageAccounts.value) {
+    void load(1)
+  }
 }
-const registrationId = computed(() =>
-  typeof route?.query.registration_id === 'string' ? route.query.registration_id : undefined,
-)
+
+function showRegistrations() {
+  listAbortController?.abort()
+  listAbortController = null
+  section.value = 'registrations'
+  syncSectionToRoute('registrations')
+}
+
 watch(
-  registrationId,
-  (id) => {
-    if (id) section.value = 'registrations'
+  [() => route?.query?.section, registrationId],
+  () => {
+    const next = requestedSection.value
+    if (next !== section.value) {
+      section.value = next
+    }
   },
   { immediate: true },
 )
 const roleOptions: Array<{ value: AccountRole; label: string }> = [
   { value: 'doctor', label: '医生' },
+  { value: 'coder', label: '编码员' },
   { value: 'qc_staff', label: '质控员' },
   { value: 'qc_manager', label: '质控主管' },
   { value: 'admin', label: '系统管理员' },
 ]
 const roleName = (role: string) =>
-  role === 'sync_admin' ? '超级管理员' : roleOptions.find((item) => item.value === role)?.label || '未知角色'
+  role === 'sync_admin' || role === 'super_admin'
+    ? '超级管理员'
+    : roleOptions.find((item) => item.value === role)?.label || '未知角色'
 const editableRoles = (roles: string[]) =>
   roles.every((role) => roleOptions.some((item) => item.value === role))
 const formatTime = (value: string | null) => {
@@ -367,6 +503,11 @@ const managedInstitute = ref<string | null>(null),
   actorId = ref(''),
   dialog = ref(false)
 const editing = ref<ManagedAccount | null>(null)
+const resetOpen = ref(false),
+  resettingPassword = ref(false),
+  resetPassword = ref(''),
+  resetError = ref(''),
+  resetSuccess = ref('')
 const emptyForm = () => ({
   username: '',
   email: '',
@@ -379,10 +520,30 @@ const emptyForm = () => ({
 })
 const form = reactive(emptyForm())
 const isSelf = computed(() => !!editing.value && editing.value.id === actorId.value)
+const isUnboundGlobalAdmin = computed(
+  () =>
+    !!editing.value &&
+    !(editing.value.institute_id || '').trim() &&
+    editing.value.roles.includes('admin'),
+)
+const allowEmptyInstitute = computed(
+  () => isUnboundGlobalAdmin.value && form.roles.includes('admin'),
+)
+function clearResetState() {
+  resetOpen.value = false
+  resettingPassword.value = false
+  resetPassword.value = ''
+  resetError.value = ''
+  resetSuccess.value = ''
+}
 let generation = 0
+let listAbortController: AbortController | null = null
 async function load(next = 1) {
-  if (saving.value) return
+  if (saving.value || resettingPassword.value) return
   const token = ++generation
+  listAbortController?.abort()
+  const controller = new AbortController()
+  listAbortController = controller
   loading.value = true
   error.value = ''
   try {
@@ -393,7 +554,7 @@ async function load(next = 1) {
       page: next,
       page_size: 20,
     })
-    if (token !== generation) return
+    if (token !== generation || controller.signal.aborted) return
     rows.value = data.items
     total.value = data.total
     page.value = data.page
@@ -401,19 +562,23 @@ async function load(next = 1) {
     actorId.value = data.actor_id
     ready.value = true
   } catch (err) {
-    if (token !== generation) return
+    if (token !== generation || controller.signal.aborted) return
     error.value = err instanceof Error ? err.message : '账号读取失败'
     rows.value = []
     total.value = 0
     ready.value = false
   } finally {
-    if (token === generation) loading.value = false
+    if (token === generation && listAbortController === controller) {
+      loading.value = false
+      listAbortController = null
+    }
   }
 }
 function openCreate() {
   editing.value = null
   Object.assign(form, emptyForm(), { institute_id: managedInstitute.value || '' })
   saveError.value = ''
+  clearResetState()
   dialog.value = true
 }
 function openEdit(row: ManagedAccount) {
@@ -426,17 +591,65 @@ function openEdit(row: ManagedAccount) {
     department: row.department || '',
   })
   saveError.value = ''
+  clearResetState()
   dialog.value = true
 }
 function close() {
-  if (saving.value) return
+  if (saving.value || resettingPassword.value) return
   dialog.value = false
   editing.value = null
   Object.assign(form, emptyForm())
   saveError.value = ''
+  clearResetState()
+}
+function openResetPassword() {
+  resetPassword.value = ''
+  resetError.value = ''
+  resetSuccess.value = ''
+  resetOpen.value = true
+}
+function cancelResetPassword() {
+  if (resettingPassword.value) return
+  resetOpen.value = false
+  resetPassword.value = ''
+  resetError.value = ''
+}
+async function submitResetPassword() {
+  if (!editing.value || isSelf.value || resettingPassword.value || saving.value) return
+  resetError.value = ''
+  resetSuccess.value = ''
+  if (
+    resetPassword.value.length < 12 ||
+    new TextEncoder().encode(resetPassword.value).length > 72
+  ) {
+    resetError.value = '口令至少12个字符，UTF-8长度最多72字节'
+    return
+  }
+  const token = generation
+  const targetId = editing.value.id
+  resettingPassword.value = true
+  try {
+    const updated = await resetManagedAccountPassword(targetId, {
+      password: resetPassword.value,
+      expected_updated_at: editing.value.updated_at,
+    })
+    if (token !== generation) return
+    resetPassword.value = ''
+    resetOpen.value = false
+    editing.value = updated
+    rows.value = rows.value.map((item) => (item.id === updated.id ? updated : item))
+    resetSuccess.value = '密码已重置，新口令已生效'
+    message.success('密码已重置')
+  } catch (err) {
+    if (token === generation) {
+      resetError.value = err instanceof Error ? err.message : '密码重置失败，请刷新核对'
+    }
+  } finally {
+    if (token === generation) resettingPassword.value = false
+  }
 }
 async function save() {
-  if (saving.value) return
+  if (saving.value || resettingPassword.value) return
   saveError.value = ''
   if (!form.roles.length) {
     saveError.value = '至少选择一个角色'
@@ -452,9 +665,10 @@ async function save() {
   const token = generation
   const nextPage = editing.value ? page.value : 1
   saving.value = true
+  const trimmedInstitute = form.institute_id.trim()
   const binding = {
     display_name: form.display_name.trim(),
-    institute_id: form.institute_id.trim(),
+    institute_id: trimmedInstitute,
     department: form.department.trim(),
     roles: [...form.roles],
   }
@@ -462,6 +676,7 @@ async function save() {
     if (editing.value) {
       await updateManagedAccount(editing.value.id, {
         ...binding,
+        institute_id: trimmedInstitute || (allowEmptyInstitute.value ? null : ''),
         is_active: form.is_active,
         expected_updated_at: editing.value.updated_at,
       })
@@ -489,12 +704,15 @@ watch(
   () => [auth.user?.id, auth.userRoles.join(',')],
   () => {
     generation++
+    listAbortController?.abort()
+    listAbortController = null
     dialog.value = false
     saving.value = false
     ready.value = false
     rows.value = []
     Object.assign(form, emptyForm())
-    if (auth.userRoles.includes('admin')) void load(1)
+    clearResetState()
+    if (canManageAccounts.value) void load(1)
     else {
       error.value = '仅系统管理员可管理账号'
       loading.value = false
@@ -504,8 +722,52 @@ watch(
 )
 onBeforeUnmount(() => {
   generation++
+  listAbortController?.abort()
+  listAbortController = null
   Object.assign(form, emptyForm())
+  clearResetState()
 })
 </script>
 
 <style scoped src="../../styles/account-management.css"></style>
+<style scoped>
+.accounts-reset-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--mq-border-subtle, #e5e7eb);
+}
+.accounts-reset-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.accounts-reset-title {
+  margin: 0;
+  font-size: var(--mq-font-14);
+  font-weight: 600;
+}
+.accounts-reset-desc {
+  margin: 4px 0 0;
+  color: var(--mq-text-secondary);
+  font-size: var(--mq-font-12);
+}
+.accounts-reset-form {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.accounts-reset-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.accounts-reset-success {
+  margin: 8px 0 0;
+  color: var(--mq-success-text, #15803d);
+  font-size: var(--mq-font-13);
+  line-height: 1.5;
+}
+</style>

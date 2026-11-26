@@ -11,6 +11,7 @@ from typing import Any, Callable
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
+from ..database import connection as db_connection
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import (
     DefectRectification,
@@ -65,6 +66,9 @@ APPEAL_COUNT_FIELDS = ("appeal_approved_count", "appeal_rejected_count")
 DETAIL_METRICS = frozenset(COUNT_FIELDS)
 MAX_EXPORT_ROWS = 5_000
 MAX_DETAIL_PAGE_SIZE = 100
+MAX_DATE_RANGE_DAYS = 366
+MAX_EVENT_SOURCE_ROWS = 50_000
+_IN_CHUNK_SIZE = 500
 FILTER_NOT_ATTRIBUTABLE = "filter_not_attributable"
 DEPARTMENT_SOURCE_UNAVAILABLE = "department_source_unavailable"
 TASK_SOURCE_UNAVAILABLE = "task_source_unavailable"
@@ -195,6 +199,10 @@ def _scope(
         raise StaffWorkAnalysisInvalid("start_date 与 end_date 必须同时提供")
     if start and end and start > end:
         raise StaffWorkAnalysisInvalid("start_date 不能晚于 end_date")
+    if start and end and (end - start).days >= MAX_DATE_RANGE_DAYS:
+        raise StaffWorkAnalysisInvalid(
+            f"查询日期跨度不能超过 {MAX_DATE_RANGE_DAYS} 天"
+        )
     anchor = _parse_as_of(as_of, now)
     try:
         period_window = compute_window(period, anchor)
@@ -237,6 +245,18 @@ def _task_identity(histories: list[Any], defect: Any) -> tuple[str, str] | None:
     return task_id.strip(), task_record_id.strip()
 
 
+def _as_naive_utc(value: datetime) -> datetime:
+    if value.tzinfo is not None and value.utcoffset() is not None:
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+    return value
+
+
+def _chunked(values: list[Any], size: int | None = None):
+    chunk_size = _IN_CHUNK_SIZE if size is None else size
+    for start in range(0, len(values), chunk_size):
+        yield values[start : start + chunk_size]
+
+
 def _event(
     *,
     event_id: str,
@@ -255,7 +275,7 @@ def _event(
     return {
         "event_id": event_id,
         "event_type": event_type,
-        "occurred_at": occurred_at,
+        "occurred_at": _as_naive_utc(occurred_at),
         "user_id": user_id,
         "institute_id": institute_id,
         "patient_id": patient_id,
@@ -270,8 +290,11 @@ def _event(
 
 
 def _appeal_execution_options(session: Any) -> dict[str, Any]:
-    """申诉与申诉审核的权威表在 qc；PostgreSQL 下不经 search_path 命中 public 同名旧表。"""
-    if session.get_bind().dialect.name == "postgresql":
+    """申诉与申诉审核的权威表在 split 模式下位于 qc；single/SQLite 不附加 qc schema 映射。"""
+    schema_mode = str(
+        getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single"
+    ).strip().lower()
+    if session.get_bind().dialect.name == "postgresql" and schema_mode == "split":
         return {"schema_translate_map": {None: "qc"}}
     return {}
 
@@ -290,19 +313,26 @@ def _load_base_events(
         review_predicates.append(QCRecordReview.institute_id == scope.institute_id)
     reviews = (
         session.execute(
-            select(QCRecordReview).where(*review_predicates),
+            select(QCRecordReview)
+            .where(*review_predicates)
+            .limit(MAX_EVENT_SOURCE_ROWS + 1),
             execution_options=_appeal_execution_options(session),
         )
         .scalars()
         .all()
     )
+    if len(reviews) > MAX_EVENT_SOURCE_ROWS:
+        raise StaffWorkAnalysisInvalid(
+            f"审核事件数量超过上限（{MAX_EVENT_SOURCE_ROWS} 条），请缩小查询范围"
+        )
     events = []
     confirmed_keys = set()
-    for row in sorted(reviews, key=lambda item: (item.created_at, item.id)):
+    for row in sorted(reviews, key=lambda item: (_as_naive_utc(item.created_at), item.id)):
+        occurred_at = _as_naive_utc(row.created_at)
         event = _event(
             event_id=row.id,
             event_type="record_review",
-            occurred_at=row.created_at,
+            occurred_at=occurred_at,
             user_id=str(row.reviewer_id),
             institute_id=str(row.institute_id),
             patient_id=str(row.patient_id),
@@ -320,7 +350,7 @@ def _load_base_events(
                             field: getattr(row, field)
                             for field in _SNAPSHOT_SOURCE_FIELDS
                         },
-                        "created_at": row.created_at,
+                        "created_at": occurred_at,
                     },
                 )
             except DefectSnapshotInvalid:
@@ -343,7 +373,7 @@ def _load_base_events(
                         confirmed = _event(
                             event_id=f"{row.id}:{kind}:{item['defect_id']}",
                             event_type="initial_defect_confirmed",
-                            occurred_at=row.created_at,
+                            occurred_at=occurred_at,
                             user_id=str(row.reviewer_id),
                             institute_id=source["institute_id"],
                             patient_id=source["patient_id"],
@@ -367,7 +397,8 @@ def _load_base_events(
 
     event_histories = (
         session.execute(
-            select(QCDefectHistory).where(
+            select(QCDefectHistory)
+            .where(
                 QCDefectHistory.action.in_(
                     (
                         "manual_create",
@@ -385,43 +416,51 @@ def _load_base_events(
                     )
                 ),
             )
+            .limit(MAX_EVENT_SOURCE_ROWS + 1)
         )
         .scalars()
         .all()
     )
-    event_defect_ids = {row.defect_id for row in event_histories}
+    if len(event_histories) > MAX_EVENT_SOURCE_ROWS:
+        raise StaffWorkAnalysisInvalid(
+            f"人工缺陷事件数量超过上限（{MAX_EVENT_SOURCE_ROWS} 条），请缩小查询范围"
+        )
+    event_defect_ids = sorted({row.defect_id for row in event_histories})
     defects = []
     if event_defect_ids:
-        defects = (
-            session.execute(
-                select(QCDefect).where(
-                    QCDefect.id.in_(event_defect_ids),
-                    *_manual_scope(scene=scope.scene),
+        for chunk in _chunked(event_defect_ids):
+            defects.extend(
+                session.execute(
+                    select(QCDefect).where(
+                        QCDefect.id.in_(chunk),
+                        *_manual_scope(scene=scope.scene),
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
 
     histories_by_defect: dict[str, list[Any]] = {}
     if defects:
         defect_ids = [row.id for row in defects]
-        create_histories = (
-            session.execute(
-                select(QCDefectHistory).where(
-                    QCDefectHistory.defect_id.in_(defect_ids),
-                    QCDefectHistory.action == "manual_create",
+        create_histories = []
+        for chunk in _chunked(defect_ids):
+            create_histories.extend(
+                session.execute(
+                    select(QCDefectHistory).where(
+                        QCDefectHistory.defect_id.in_(chunk),
+                        QCDefectHistory.action == "manual_create",
+                    )
                 )
+                .scalars()
+                .all()
             )
-            .scalars()
-            .all()
-        )
         relevant_ids = set(defect_ids)
         histories = [
             row
             for row in event_histories
             if row.defect_id in relevant_ids and row.action != "manual_create"
-        ] + list(create_histories)
+        ] + create_histories
         for history in histories:
             histories_by_defect.setdefault(history.defect_id, []).append(history)
 
@@ -446,14 +485,15 @@ def _load_base_events(
     if record_ids:
         try:
             with session.begin_nested():
-                records = {
-                    row.id: row
-                    for row in session.execute(
-                        select(QCTaskRecord).where(QCTaskRecord.id.in_(record_ids))
-                    )
-                    .scalars()
-                    .all()
-                }
+                for chunk in _chunked(sorted(record_ids)):
+                    for row in (
+                        session.execute(
+                            select(QCTaskRecord).where(QCTaskRecord.id.in_(chunk))
+                        )
+                        .scalars()
+                        .all()
+                    ):
+                        records[row.id] = row
         except SQLAlchemyError as exc:
             if scope.task_id is not None:
                 raise StaffWorkAnalysisUnavailable("任务归属读取失败") from exc
@@ -490,13 +530,14 @@ def _load_base_events(
             if row.action == "manual_create"
         ]
         if create_rows and defect.manual_created_by is not None:
-            created = min(create_rows, key=lambda row: row.created_at)
-            if window.utc_start <= created.created_at < window.utc_end:
+            created = min(create_rows, key=lambda row: _as_naive_utc(row.created_at))
+            created_at = _as_naive_utc(created.created_at)
+            if window.utc_start <= created_at < window.utc_end:
                 events.append(
                     _event(
                         event_id=created.id,
                         event_type="manual_defect_created",
-                        occurred_at=created.created_at,
+                        occurred_at=created_at,
                         user_id=str(defect.manual_created_by),
                         institute_id=identity[0] or None,
                         patient_id=identity[1] or None,
@@ -517,7 +558,7 @@ def _load_base_events(
                 _event(
                     event_id=history.id,
                     event_type=history.action,
-                    occurred_at=history.created_at,
+                    occurred_at=_as_naive_utc(history.created_at),
                     user_id=str(history.actor_id),
                     institute_id=identity[0] or None,
                     patient_id=identity[1] or None,
@@ -552,12 +593,14 @@ def _load_base_events(
             statement = _modern(statement, QCAppeal)
         if scope.institute_id is not None:
             statement = statement.where(QCAppeal.institute_id == scope.institute_id)
-        if scope.department is not None:
-            statement = statement.where(QCAppeal.case_department == scope.department)
         appeals = session.execute(
-            statement,
+            statement.limit(MAX_EVENT_SOURCE_ROWS + 1),
             execution_options=_appeal_execution_options(session),
         ).all()
+        if len(appeals) > MAX_EVENT_SOURCE_ROWS:
+            raise StaffWorkAnalysisInvalid(
+                f"申诉审核事件数量超过上限（{MAX_EVENT_SOURCE_ROWS} 条），请缩小查询范围"
+            )
         for row, source in appeals:
             if not row.reviewer_id:
                 raise StaffWorkAnalysisUnavailable("申诉审核事件缺少审核人")
@@ -566,7 +609,7 @@ def _load_base_events(
                 event_type="appeal_approved"
                 if row.action == "approve"
                 else "appeal_rejected",
-                occurred_at=row.created_at,
+                occurred_at=_as_naive_utc(row.created_at),
                 user_id=str(row.reviewer_id),
                 appeal_id=row.appeal_id,
                 decision="approved" if row.action == "approve" else "rejected",
@@ -616,10 +659,17 @@ def _load_events(
                     statement = statement.where(
                         DefectRectification.institute_id == scope.institute_id
                     )
-                urges = session.execute(statement).all()
+                urges = session.execute(
+                    statement.limit(MAX_EVENT_SOURCE_ROWS + 1)
+                ).all()
+            if len(urges) > MAX_EVENT_SOURCE_ROWS:
+                raise StaffWorkAnalysisInvalid(
+                    f"催办事件数量超过上限（{MAX_EVENT_SOURCE_ROWS} 条），请缩小查询范围"
+                )
             seen_urges = set()
             for entry, source in sorted(
-                urges, key=lambda pair: (pair[0].created_at, pair[0].id)
+                urges,
+                key=lambda pair: (_as_naive_utc(pair[0].created_at), pair[0].id),
             ):
                 source_key = (
                     source.institute_id,
@@ -640,7 +690,7 @@ def _load_events(
                 event = _event(
                     event_id=entry.id,
                     event_type="defect_urged",
-                    occurred_at=entry.created_at,
+                    occurred_at=_as_naive_utc(entry.created_at),
                     user_id=entry.actor_id,
                     institute_id=source.institute_id,
                     patient_id=source.patient_id,
@@ -701,6 +751,9 @@ def _load_events(
         ):
             event["department"] = departments.get(identity)
 
+    # 在应用 task_id 与 department 自身筛选前先计算全量可用任务选项（遵循当前用户院区隔离）。
+    option_task_ids = sorted({event["task_id"] for event in events if event["task_id"]})
+
     context_unavailable_count = 0
     if scope.task_id is not None:
         filtered = []
@@ -730,19 +783,17 @@ def _load_events(
                 context_unavailable_count += 1
         events = filtered
 
-    task_ids = sorted({event["task_id"] for event in events if event["task_id"]})
     task_names = {}
-    if task_ids:
+    if option_task_ids:
         try:
             with session.begin_nested():
-                task_names = {
-                    row.id: row.task_name
-                    for row in session.execute(
-                        select(QCTask).where(QCTask.id.in_(task_ids))
-                    )
-                    .scalars()
-                    .all()
-                }
+                for chunk in _chunked(option_task_ids):
+                    for row in (
+                        session.execute(select(QCTask).where(QCTask.id.in_(chunk)))
+                        .scalars()
+                        .all()
+                    ):
+                        task_names[row.id] = row.task_name
         except SQLAlchemyError:
             task_names = {}
             task_source_unavailable = True
@@ -753,7 +804,8 @@ def _load_events(
             for institute, name in department_options
         ],
         task_options=[
-            {"task_id": value, "task_name": task_names.get(value)} for value in task_ids
+            {"task_id": value, "task_name": task_names.get(value)}
+            for value in option_task_ids
         ],
         filter_options_unavailable_reason=(
             department_error
@@ -926,7 +978,7 @@ def _read(
     session = SessionLocal()
     try:
         return session, _load_events(session, scope, department_loader)
-    except StaffWorkAnalysisUnavailable:
+    except (StaffWorkAnalysisInvalid, StaffWorkAnalysisUnavailable):
         session.close()
         raise
     except SQLAlchemyError as exc:
@@ -1080,17 +1132,19 @@ def get_staff_work_details(
     if metric == "record_review_count":
         selected = [event for event in events if event["event_type"] == "record_review"]
     elif metric in {"reviewed_case_count", "rechecked_case_count"}:
+        candidates = [
+            event
+            for event in events
+            if event["event_type"] == "record_review"
+            and (metric != "rechecked_case_count" or event["stage"] == "recheck")
+        ]
         selected = []
         seen = set()
         for event in sorted(
-            events,
-            key=lambda item: (item["occurred_at"], item["event_id"]),
+            candidates,
+            key=lambda item: (_as_naive_utc(item["occurred_at"]), item["event_id"]),
             reverse=True,
         ):
-            if event["event_type"] != "record_review":
-                continue
-            if metric == "rechecked_case_count" and event["stage"] != "recheck":
-                continue
             identity = (event["institute_id"], event["patient_id"], event["visit_id"])
             if identity not in seen:
                 seen.add(identity)
@@ -1116,7 +1170,8 @@ def get_staff_work_details(
             event for event in events if event["event_type"] == type_by_metric[metric]
         ]
     selected.sort(
-        key=lambda item: (item["occurred_at"], item["event_id"]), reverse=True
+        key=lambda item: (_as_naive_utc(item["occurred_at"]), item["event_id"]),
+        reverse=True,
     )
     total = len(selected)
     offset = (page - 1) * page_size

@@ -89,15 +89,15 @@
           <span class="remediation-state-label">处理状态</span>
           <div class="other-counts mq-segmented" role="group" aria-label="其他处理状态">
             <button
-              v-for="(value, key) in analysis.state_counts"
+              v-for="[key, value] in visibleStateCounts"
               :key="key"
               class="mq-segmented__item"
               type="button"
               :class="{ 'is-active': label === key, 'has-value': value > 0 }"
               :aria-pressed="label === key"
-              @click="selectLabel(String(key))"
+              @click="selectLabel(key)"
             >
-              <span>{{ stateName(String(key)) }}</span
+              <span>{{ stateName(key) }}</span
               ><strong>{{ value }}</strong>
             </button>
           </div>
@@ -116,7 +116,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="row in analysis.items" :key="rowKey(row)">
+              <tr v-for="row in visibleItems" :key="rowKey(row)">
                 <td>
                   {{ row.patient_name || '姓名未知'
                   }}<small>{{ row.visit_id }} · {{ row.department }} · {{ row.doctor }}</small>
@@ -132,7 +132,9 @@
                   <span class="mq-status" :class="statusClass(row.rectification_state)">{{
                     stateName(row.rectification_state)
                   }}</span
-                  ><small v-if="row.source_reason">{{ sourceReason(row.source_reason) }}</small
+                  ><small v-if="!confirmedResultsOnly && row.source_reason">{{
+                    sourceReason(row.source_reason)
+                  }}</small
                   ><small>{{ row.labels.map(labelName).join('、') || '未纳入七标签' }}</small
                   ><small>受领医生：{{ row.assignee_name || '未知' }}</small>
                 </td>
@@ -142,7 +144,7 @@
                   </button>
                 </td>
               </tr>
-              <tr v-if="!analysis.items.length">
+              <tr v-if="!visibleItems.length">
                 <td colspan="4" class="empty-cell">暂无匹配的保存缺陷</td>
               </tr>
             </tbody>
@@ -200,14 +202,16 @@
         <dl class="remediation-source mq-soft">
           <dt>三坐标</dt>
           <dd>{{ selected.institute_id }} / {{ selected.patient_id }} / {{ selected.visit_id }}</dd>
-          <dt>冻结运行 / 结果</dt>
-          <dd>{{ selected.root_job_id || '未知' }} / {{ selected.envelope_id || '未知' }}</dd>
-          <dt>本次提交事件</dt>
-          <dd>{{ selected.submission_event_id || '未知或尚未验收' }}</dd>
-          <dt>提交时有效催办</dt>
-          <dd>{{ selected.submission_urge_ids.join('、') || '无或尚未核实' }}</dd>
+          <template v-if="!confirmedResultsOnly">
+            <dt>冻结运行 / 结果</dt>
+            <dd>{{ selected.root_job_id || '未知' }} / {{ selected.envelope_id || '未知' }}</dd>
+            <dt>本次提交事件</dt>
+            <dd>{{ selected.submission_event_id || '未知或尚未验收' }}</dd>
+            <dt>提交时有效催办</dt>
+            <dd>{{ selected.submission_urge_ids.join('、') || '无或尚未核实' }}</dd>
+          </template>
         </dl>
-        <p v-if="selected.source_reason">
+        <p v-if="!confirmedResultsOnly && selected.source_reason">
           {{ sourceReason(selected.source_reason) }}
         </p>
         <h4>整改事件</h4>
@@ -240,6 +244,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
 import CaseRectificationCreate from '@/components/qc/CaseRectificationCreate.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 import { exportRecordRemediationAnalysis, getRecordRemediationAnalysis } from '@/api/qualityReports'
 import type {
@@ -250,6 +255,8 @@ import type {
 import { downloadBlob } from '@/views/workstation-v4/customer-sample-validation/batchExport'
 const props = defineProps<{ filters: RecordQualityFilters }>()
 const auth = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
+const HIDDEN_DEMO_STATES = new Set(['source_unknown', 'history_unknown'])
 const analysis = ref<RecordRemediationAnalysis>(),
   selected = ref<RemediationRow>()
 const label = ref<string>(),
@@ -282,21 +289,50 @@ const metricGroups = computed(() => [
     items: (analysis.value?.labels || []).filter((item) => appealLabelKeys.has(item.key)),
   },
 ])
+const visibleStateCounts = computed(() => {
+  const entries = Object.entries(analysis.value?.state_counts || {})
+  return confirmedResultsOnly.value
+    ? entries.filter(([key]) => !HIDDEN_DEMO_STATES.has(key))
+    : entries
+})
+const visibleItems = computed(() => {
+  const items = analysis.value?.items || []
+  return confirmedResultsOnly.value
+    ? items.filter((row) => !HIDDEN_DEMO_STATES.has(row.rectification_state))
+    : items
+})
 let generation = 0
+let loadController: AbortController | null = null
+let exportController: AbortController | null = null
+function abortLoad() {
+  loadController?.abort()
+  loadController = null
+}
+function abortExport() {
+  exportController?.abort()
+  exportController = null
+}
 async function load(page = 1) {
   const token = ++generation
+  abortLoad()
+  abortExport()
+  const controller = new AbortController()
+  loadController = controller
   exporting.value = false
   busy.value = true
   error.value = ''
   selected.value = undefined
   try {
-    const response = await getRecordRemediationAnalysis({
-      ...props.filters,
-      label: label.value,
-      page,
-      page_size: 20,
-    })
-    if (token !== generation) return
+    const response = await getRecordRemediationAnalysis(
+      {
+        ...props.filters,
+        label: label.value,
+        page,
+        page_size: 20,
+      },
+      controller.signal,
+    )
+    if (token !== generation || controller.signal.aborted) return
     if (!response.success || !response.data)
       throw new Error(response.message || '整改分析来源不可用')
     if (
@@ -324,7 +360,7 @@ async function load(page = 1) {
       throw new Error('整改分析响应无法确认')
     analysis.value = response.data
   } catch (reason) {
-    if (token === generation) {
+    if (token === generation && !controller.signal.aborted) {
       analysis.value = undefined
       error.value = reason instanceof Error ? reason.message : '读取失败'
     }
@@ -339,14 +375,22 @@ function selectLabel(value?: string) {
 async function download() {
   if (!analysis.value || busy.value || exporting.value) return
   const token = generation
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   exporting.value = true
   try {
-    const response = await exportRecordRemediationAnalysis({ ...props.filters, label: label.value })
-    if (token !== generation) return
+    const response = await exportRecordRemediationAnalysis(
+      { ...props.filters, label: label.value },
+      controller.signal,
+    )
+    if (token !== generation || controller.signal.aborted) return
     if (!response.success || !response.data) throw new Error(response.message || '导出失败')
     downloadBlob(response.data, `整改分析_${props.filters.scene}.csv`)
   } catch (reason) {
-    if (token === generation) error.value = reason instanceof Error ? reason.message : '导出失败'
+    if (token === generation && !controller.signal.aborted) {
+      error.value = reason instanceof Error ? reason.message : '导出失败'
+    }
   } finally {
     if (token === generation) exporting.value = false
   }
@@ -405,6 +449,8 @@ watch(
   () => [props.filters, auth.user?.id],
   () => {
     generation += 1
+    abortLoad()
+    abortExport()
     analysis.value = undefined
     selected.value = undefined
     label.value = undefined
@@ -414,6 +460,8 @@ watch(
 )
 onBeforeUnmount(() => {
   generation += 1
+  abortLoad()
+  abortExport()
 })
 </script>
 <style scoped src="@/views/qc/reports/styles/record-remediation-analysis.css"></style>

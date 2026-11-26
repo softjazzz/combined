@@ -55,7 +55,7 @@
     <a-drawer
       :open="Boolean(editing)"
       title="禁用计划草稿"
-      :width="640"
+      width="min(640px, 100vw)"
       :mask-closable="!locked"
       :keyboard="!locked"
       :closable="!locked"
@@ -167,9 +167,27 @@ function configOf(row: SyncSchedule): ScheduleDraftConfig {
   return { frequency: row.config.frequency, local_time: row.config.local_time, window_days: row.config.window_days,
     ...(row.config.frequency === 'weekly' ? { weekday: row.config.weekday } : {}), interfaces: [...row.config.request.interfaces] }
 }
+function createSafeUuid(): string {
+  const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    cryptoObj.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256)
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
 function edit(row?: SyncSchedule) {
   if (!canSave.value || busy.value || pending.value || row?.enabled) return
-  editing.value = { id: row?.schedule_id || crypto.randomUUID(), version: row?.version ?? null }
+  editing.value = { id: row?.schedule_id || createSafeUuid(), version: row?.version ?? null }
   Object.assign(form, row ? configOf(row) : { frequency: 'daily', local_time: '02:00', window_days: 1, weekday: 0, interfaces: [] })
   latest.value = null; error.value = ''; saved.value = false; conflict.value = false
 }

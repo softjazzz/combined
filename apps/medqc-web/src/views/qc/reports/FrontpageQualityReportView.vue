@@ -1,5 +1,5 @@
 <template>
-  <main class="mq-page report-page">
+  <section class="mq-page report-page" aria-label="病案首页统计分析">
     <header class="page-head mq-page-head">
       <div class="mq-page-head__copy">
         <span class="mq-page-eyebrow">统计分析 · 质量报表</span>
@@ -40,18 +40,20 @@
           placeholder="全部医生"
         />
       </div>
-      <div class="field mq-field">
+      <div class="field field--datetime mq-field">
         <label for="fp-from">质控时间起</label
         ><input id="fp-from" v-model="draft.analyzed_from" class="mq-input" type="datetime-local" />
       </div>
-      <div class="field mq-field">
+      <div class="field field--datetime mq-field">
         <label for="fp-to">质控时间止</label
         ><input id="fp-to" v-model="draft.analyzed_to" class="mq-input" type="datetime-local" />
       </div>
-      <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
-        <MqIcon name="search" :size="16" />查询
-      </button>
-      <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+      <div class="filter-actions">
+        <button class="primary mq-btn mq-btn--primary" type="button" @click="applyFilters">
+          <MqIcon name="search" :size="16" />查询
+        </button>
+        <button class="secondary mq-btn" type="button" @click="resetFilters">重置</button>
+      </div>
     </section>
 
     <div v-if="loading" class="status" role="status">正在读取病案首页统计…</div>
@@ -59,6 +61,45 @@
       <MqIcon name="issue" :size="18" />{{ loadError }}
     </div>
     <template v-else-if="report">
+      <section
+        v-if="isZeroCaseReport"
+        class="empty-guide mq-card"
+        role="status"
+        data-testid="frontpage-empty-guide"
+      >
+        <div class="empty-guide__copy">
+          <MqIcon name="issue" :size="18" />
+          <div>
+            <p class="empty-guide__title">
+              {{
+                hasActiveFilters
+                  ? '当前筛选条件下暂无病案首页或编码质控结果（0 份）'
+                  : '当前范围内暂无已核验病例身份的首页或编码质控结果（0 份）'
+              }}
+            </p>
+            <p class="empty-guide__desc">
+              {{
+                hasActiveFilters
+                  ? '可清空科室、主治医师或放宽质控时间范围后重新查询。'
+                  : '请先在病案首页质控工作台完成首页质控或编码质控分析，或点击刷新同步最新统计。'
+              }}
+            </p>
+          </div>
+        </div>
+        <div class="empty-guide__actions">
+          <button
+            v-if="hasActiveFilters"
+            class="mq-btn mq-btn--primary"
+            type="button"
+            @click="resetFilters"
+          >
+            重置筛选条件
+          </button>
+          <button v-else class="mq-btn" type="button" :disabled="loading" @click="loadReport">
+            刷新数据
+          </button>
+        </div>
+      </section>
       <section class="overview" aria-label="总览">
         <h2>总览</h2>
         <div class="metrics">
@@ -89,37 +130,37 @@
                 'is-active': activeSource === source.source_key,
               }"
               :aria-pressed="activeSource === source.source_key"
-              @click="activeSource = source.source_key"
+              @click="setActiveSource(source.source_key)"
             >
               {{ source.label }}
             </button>
           </div>
         </div>
         <template v-if="currentSource">
-          <div class="distribution-grid">
+          <div class="distribution-grid distribution-grid--two">
             <div class="data-panel mq-card">
               <h3>严重度</h3>
               <div
-                v-for="item in currentSource.severity_distribution"
+                v-for="item in visibleSeverities"
                 :key="item.severity"
                 class="data-row"
               >
                 <span>{{ severityText(item.severity) }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </div>
-              <p v-if="!currentSource.severity_distribution.length" class="empty">暂无缺陷</p>
+              <p v-if="!visibleSeverities.length" class="empty">暂无缺陷</p>
             </div>
             <div class="data-panel mq-card">
               <h3>缺陷分类</h3>
               <div
-                v-for="item in currentSource.category_distribution"
+                v-for="item in visibleCategories"
                 :key="item.category"
                 class="data-row"
               >
                 <span>{{ categoryText(item.category) }}</span
                 ><strong>{{ item.defect_total }}</strong>
               </div>
-              <p v-if="!currentSource.category_distribution.length" class="empty">暂无缺陷</p>
+              <p v-if="!visibleCategories.length" class="empty">暂无缺陷</p>
             </div>
           </div>
           <div class="top-panel mq-card">
@@ -151,15 +192,15 @@
             <span>{{ report.department_rows.length }} 个科室</span>
           </div>
           <div class="table-scroll">
-            <table class="mq-table">
+            <table class="mq-table mq-table--sticky-first">
               <thead>
                 <tr>
-                  <th>科室</th>
-                  <th>病案数</th>
-                  <th>问题病案数</th>
-                  <th>问题病案率</th>
-                  <th>非编码缺陷</th>
-                  <th>编码缺陷</th>
+                  <th scope="col">科室</th>
+                  <th scope="col" class="col-compact">病案数</th>
+                  <th scope="col" class="col-compact">问题病案数</th>
+                  <th scope="col" class="col-compact">问题病案率</th>
+                  <th scope="col" class="col-compact">非编码缺陷</th>
+                  <th scope="col" class="col-compact">编码缺陷</th>
                 </tr>
               </thead>
               <tbody>
@@ -285,13 +326,15 @@
         </button>
       </div>
     </a-drawer>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
 import MqIcon from '@/components/icons/MqIcon.vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { useAuthStore } from '@/stores/auth'
 import {
   exportFrontpageQualityReport,
@@ -311,7 +354,63 @@ const SOURCE_FILTER: Record<FrontpageSourceKey, 'frontpage' | 'coding'> = {
   frontpage_formal_qc: 'frontpage',
   coding_qc: 'coding',
 }
+const NON_CONFIRMED_LABELS = new Set(['data_gap', 'uncertain'])
+const route = useRoute()
+const router = useRouter()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
+
+function queryString(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+function toShanghaiDateTime(value?: string): string | undefined {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return undefined
+  if (/(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) return trimmed
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(trimmed)) return `${trimmed}:00+08:00`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(trimmed)) return `${trimmed}+08:00`
+  return trimmed
+}
+function toLocalDateTimeInput(value?: string): string {
+  const trimmed = (value || '').trim()
+  if (!trimmed) return ''
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/.test(trimmed)) {
+    return trimmed.slice(0, 16)
+  }
+  const parsed = new Date(trimmed)
+  if (Number.isNaN(parsed.getTime())) return ''
+  const shanghai = new Date(parsed.getTime() + 8 * 60 * 60 * 1000)
+  return shanghai.toISOString().slice(0, 16)
+}
+function sourceFromQuery(value: unknown): FrontpageSourceKey {
+  const raw = queryString(value)
+  return raw === 'coding_qc' || raw === 'coding' ? 'coding_qc' : 'frontpage_formal_qc'
+}
+function draftFromRoute() {
+  return {
+    department: queryString(route?.query?.department).trim(),
+    doctor: queryString(route?.query?.doctor).trim(),
+    analyzed_from: toLocalDateTimeInput(queryString(route?.query?.analyzed_from)),
+    analyzed_to: toLocalDateTimeInput(queryString(route?.query?.analyzed_to)),
+  }
+}
+function buildFiltersFromDraft(sourceDraft: {
+  department: string
+  doctor: string
+  analyzed_from: string
+  analyzed_to: string
+}): FrontpageQualityFilters {
+  const next: FrontpageQualityFilters = {}
+  if (sourceDraft.department) next.department = sourceDraft.department
+  if (sourceDraft.doctor) next.doctor = sourceDraft.doctor
+  const from = toShanghaiDateTime(sourceDraft.analyzed_from)
+  const to = toShanghaiDateTime(sourceDraft.analyzed_to)
+  if (from) next.analyzed_from = from
+  if (to) next.analyzed_to = to
+  return next
+}
+
 const authKey = computed(() =>
   JSON.stringify([
     authStore.user?.id,
@@ -320,13 +419,13 @@ const authKey = computed(() =>
     authStore.user?.roles || authStore.user?.role,
   ]),
 )
-const draft = ref({ department: '', doctor: '', analyzed_from: '', analyzed_to: '' })
-const filters = ref<FrontpageQualityFilters>({})
+const draft = ref(draftFromRoute())
+const filters = ref<FrontpageQualityFilters>(buildFiltersFromDraft(draft.value))
 const report = ref<FrontpageQualityReport | null>(null)
 const loading = ref(false)
 const loadError = ref('')
 const exporting = ref<FrontpageSheet | null>(null)
-const activeSource = ref<FrontpageSourceKey>('frontpage_formal_qc')
+const activeSource = ref<FrontpageSourceKey>(sourceFromQuery(route?.query?.source))
 const drawerOpen = ref(false)
 const drilldownTitle = ref('病案明细')
 const drilldown = ref<Partial<FrontpageDrilldownFilters>>({})
@@ -336,15 +435,35 @@ const recordsError = ref('')
 let reportRequest = 0
 let recordsRequest = 0
 let exportRequest = 0
+let reportController: AbortController | null = null
+let recordsController: AbortController | null = null
+let exportController: AbortController | null = null
+
+function abortReport(): void {
+  reportController?.abort()
+  reportController = null
+}
+function abortRecords(): void {
+  recordsController?.abort()
+  recordsController = null
+}
+function abortExport(): void {
+  exportController?.abort()
+  exportController = null
+}
+
 const exportScope = computed(() => JSON.stringify([filters.value, draft.value, drilldown.value]))
 function invalidateExport(): void {
   ++exportRequest
+  abortExport()
   exporting.value = null
 }
 watch([authKey, exportScope], invalidateExport, { flush: 'sync' })
 watch(authKey, () => {
   ++reportRequest
   ++recordsRequest
+  abortReport()
+  abortRecords()
   report.value = null
   recordsPage.value = null
   drawerOpen.value = false
@@ -352,10 +471,40 @@ watch(authKey, () => {
   recordsLoading.value = false
   if (authStore.user?.id) void loadReport()
 })
+watch(drawerOpen, (open) => {
+  if (!open) {
+    ++recordsRequest
+    abortRecords()
+    recordsLoading.value = false
+  }
+})
 
+const isZeroCaseReport = computed(
+  () => report.value !== null && report.value.kpis.case_total === 0,
+)
+const hasActiveFilters = computed(() =>
+  Boolean(
+    filters.value.department ||
+      filters.value.doctor ||
+      filters.value.analyzed_from ||
+      filters.value.analyzed_to,
+  ),
+)
 const currentSource = computed(
   () => report.value?.sources.find((item) => item.source_key === activeSource.value) ?? null,
 )
+const visibleSeverities = computed(() => {
+  const items = currentSource.value?.severity_distribution || []
+  return confirmedResultsOnly.value
+    ? items.filter((item) => !NON_CONFIRMED_LABELS.has(item.severity.trim().toLowerCase()))
+    : items
+})
+const visibleCategories = computed(() => {
+  const items = currentSource.value?.category_distribution || []
+  return confirmedResultsOnly.value
+    ? items.filter((item) => !NON_CONFIRMED_LABELS.has(item.category.trim().toLowerCase()))
+    : items
+})
 const kpiCards = computed(() => {
   const k = report.value?.kpis
   if (!k) return []
@@ -424,11 +573,41 @@ function formatTime(value: string | null): string {
       }).format(parsed)
 }
 
+function syncUrlQuery(): void {
+  if (!route || !router || typeof router.replace !== 'function') return
+  const nextQuery: Record<string, string> = {}
+  for (const [key, value] of Object.entries(route.query || {})) {
+    if (['source', 'department', 'doctor', 'analyzed_from', 'analyzed_to'].includes(key)) continue
+    const str = queryString(value)
+    if (str) nextQuery[key] = str
+  }
+  if (activeSource.value !== 'frontpage_formal_qc') nextQuery.source = activeSource.value
+  if (filters.value.department) nextQuery.department = filters.value.department
+  if (filters.value.doctor) nextQuery.doctor = filters.value.doctor
+  if (filters.value.analyzed_from) nextQuery.analyzed_from = filters.value.analyzed_from
+  if (filters.value.analyzed_to) nextQuery.analyzed_to = filters.value.analyzed_to
+  const currentEntries = Object.entries(route.query || {})
+    .map(([k, v]) => [k, queryString(v)] as const)
+    .filter(([, v]) => Boolean(v))
+    .sort(([a], [b]) => a.localeCompare(b))
+  const nextEntries = Object.entries(nextQuery).sort(([a], [b]) => a.localeCompare(b))
+  if (JSON.stringify(currentEntries) === JSON.stringify(nextEntries)) return
+  void router.replace({ path: route.path, query: nextQuery })
+}
+function setActiveSource(next: FrontpageSourceKey): void {
+  activeSource.value = next
+  syncUrlQuery()
+}
+
 async function loadReport(): Promise<void> {
   invalidateExport()
   const request = ++reportRequest
   const identity = authKey.value
   ++recordsRequest
+  abortReport()
+  abortRecords()
+  const controller = new AbortController()
+  reportController = controller
   drawerOpen.value = false
   drilldown.value = {}
   recordsPage.value = null
@@ -436,13 +615,13 @@ async function loadReport(): Promise<void> {
   loading.value = true
   loadError.value = ''
   report.value = null
-  const result = await getFrontpageQualityReport(filters.value)
-  if (request !== reportRequest || identity !== authKey.value) return
+  const result = await getFrontpageQualityReport(filters.value, controller.signal)
+  if (request !== reportRequest || identity !== authKey.value || controller.signal.aborted) return
   loading.value = false
   if (result.success && result.data) report.value = result.data
   else
     loadError.value =
-      result.code === 'schema_unavailable'
+      result.code === 'schema_unavailable' && !confirmedResultsOnly.value
         ? '首页质控数据源未部署：业务库尚未执行现代身份迁移，暂不能统计。'
         : result.message || '病案首页统计暂不可用'
 }
@@ -455,7 +634,8 @@ function applyFilters(): void {
     message.error('质控时间起不能晚于质控时间止')
     return
   }
-  filters.value = { ...draft.value }
+  filters.value = buildFiltersFromDraft(draft.value)
+  syncUrlQuery()
   void loadReport()
 }
 function resetFilters(): void {
@@ -465,16 +645,22 @@ function resetFilters(): void {
 async function loadRecords(page = 1): Promise<void> {
   const request = ++recordsRequest
   const identity = authKey.value
+  abortRecords()
+  const controller = new AbortController()
+  recordsController = controller
   recordsLoading.value = true
   recordsError.value = ''
   recordsPage.value = null
-  const result = await getFrontpageQualityRecords({
-    ...filters.value,
-    ...drilldown.value,
-    page,
-    page_size: 20,
-  })
-  if (request !== recordsRequest || identity !== authKey.value) return
+  const result = await getFrontpageQualityRecords(
+    {
+      ...filters.value,
+      ...drilldown.value,
+      page,
+      page_size: 20,
+    },
+    controller.signal,
+  )
+  if (request !== recordsRequest || identity !== authKey.value || controller.signal.aborted) return
   recordsLoading.value = false
   if (result.success && result.data) recordsPage.value = result.data
   else recordsError.value = result.message || '病案明细暂不可用'
@@ -496,13 +682,19 @@ async function download(sheet: FrontpageSheet): Promise<void> {
   const request = ++exportRequest
   const identity = authKey.value
   const scope = exportScope.value
+  abortExport()
+  const controller = new AbortController()
+  exportController = controller
   const query = { ...filters.value, ...(sheet === 'records' ? drilldown.value : {}) }
   const filename = `病案首页统计-${sheet}.csv`
   const current = () =>
-    request === exportRequest && identity === authKey.value && scope === exportScope.value
+    request === exportRequest &&
+    identity === authKey.value &&
+    scope === exportScope.value &&
+    !controller.signal.aborted
   exporting.value = sheet
   try {
-    const result = await exportFrontpageQualityReport(query, sheet)
+    const result = await exportFrontpageQualityReport(query, sheet, controller.signal)
     if (!current()) return
     if (!result.success || !result.data) {
       message.error(result.message || '导出失败')
@@ -522,9 +714,28 @@ async function download(sheet: FrontpageSheet): Promise<void> {
     if (request === exportRequest) exporting.value = null
   }
 }
+watch(
+  () => route?.query,
+  (query) => {
+    if (!query) return
+    const nextSource = sourceFromQuery(query.source)
+    if (activeSource.value !== nextSource) activeSource.value = nextSource
+    const nextDraft = draftFromRoute()
+    const nextFilters = buildFiltersFromDraft(nextDraft)
+    if (JSON.stringify(nextFilters) !== JSON.stringify(filters.value)) {
+      draft.value = nextDraft
+      filters.value = nextFilters
+      drawerOpen.value = false
+      void loadReport()
+    }
+  },
+  { deep: true },
+)
 onBeforeUnmount(() => {
   ++reportRequest
   ++recordsRequest
+  abortReport()
+  abortRecords()
   invalidateExport()
 })
 onMounted(() => {

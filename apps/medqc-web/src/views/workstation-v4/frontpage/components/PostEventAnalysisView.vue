@@ -12,7 +12,11 @@
       </div>
 
       <div class="header-actions">
-        <span v-if="useDemoData || hasUploadedDataset" class="mode-chip">
+        <span
+          v-if="useDemoData || hasUploadedDataset || hasSmartUploadAnalysis"
+          class="mode-chip"
+          data-testid="post-analysis-mode-chip"
+        >
           <MqIcon name="issue" />
           {{ drgModeHintText }}
         </span>
@@ -53,7 +57,7 @@
 
       <div class="filter-actions">
         <a-range-picker
-          v-if="!useDemoData && !hasUploadedDataset && batchId"
+          v-if="!useDemoData && !hasUploadedDataset && !hasSmartUploadAnalysis && batchId"
           v-model:value="dateRange"
           class="date-range-picker"
         />
@@ -257,8 +261,8 @@
 
     <section class="supplementary-grid">
       <OverCostAnalysisCard
-        :batch-id="useDemoData || hasUploadedDataset ? undefined : batchId"
-        :session-id="useDemoData || hasUploadedDataset ? undefined : sessionId"
+        :batch-id="useDemoData || hasUploadedDataset || hasSmartUploadAnalysis ? undefined : batchId"
+        :session-id="useDemoData || hasUploadedDataset || hasSmartUploadAnalysis ? undefined : sessionId"
         :dimension="analysisDimension"
         :dimension-label="dimensionLabel"
       />
@@ -274,33 +278,70 @@
       </article>
     </section>
 
-    <section v-if="advancedChartsAvailable" class="advanced-chart-grid">
-      <article v-show="stats.charts.profit_waterfall" class="analysis-panel mq-card">
+    <section
+      v-if="advancedChartsAvailable"
+      class="advanced-chart-grid"
+      data-testid="uploaded-analysis-charts"
+    >
+      <article
+        v-if="stats.charts.profit_waterfall"
+        class="analysis-panel mq-card"
+        data-testid="uploaded-chart-card"
+        data-chart-key="profit_waterfall"
+      >
         <div class="panel-header">
           <div>
-            <h3>支付差额瀑布</h3>
-            <p>后端专项图表</p>
+            <h3>{{ stats.charts.profit_waterfall?.title?.text || '支付差额瀑布' }}</h3>
+            <p>{{ hasSmartUploadAnalysis ? '智能上传专项图表' : '后端专项图表' }}</p>
           </div>
         </div>
         <div ref="waterfallRef" class="advanced-chart" />
       </article>
-      <article v-show="stats.charts.dept_profit_ranking" class="analysis-panel mq-card">
+      <article
+        v-if="stats.charts.dept_profit_ranking"
+        class="analysis-panel mq-card"
+        data-testid="uploaded-chart-card"
+        data-chart-key="dept_profit_ranking"
+      >
         <div class="panel-header">
           <div>
-            <h3>科室盈亏排行</h3>
-            <p>后端专项图表</p>
+            <h3>{{ stats.charts.dept_profit_ranking?.title?.text || '科室盈亏排行' }}</h3>
+            <p>{{ hasSmartUploadAnalysis ? '智能上传专项图表' : '后端专项图表' }}</p>
           </div>
         </div>
         <div ref="deptRankingRef" class="advanced-chart" />
       </article>
-      <article v-show="stats.charts.drg_scatter" class="analysis-panel mq-card wide">
+      <article
+        v-if="stats.charts.drg_scatter"
+        class="analysis-panel mq-card wide"
+        data-testid="uploaded-chart-card"
+        data-chart-key="drg_scatter"
+      >
         <div class="panel-header">
           <div>
-            <h3>DRG 风险散点</h3>
-            <p>后端专项图表</p>
+            <h3>{{ stats.charts.drg_scatter?.title?.text || 'DRG 风险散点' }}</h3>
+            <p>{{ hasSmartUploadAnalysis ? '智能上传专项图表' : '后端专项图表' }}</p>
           </div>
         </div>
         <div ref="drgScatterRef" class="advanced-chart large" />
+      </article>
+      <article
+        v-for="extraChart in extraUploadedCharts"
+        :key="extraChart.key"
+        class="analysis-panel mq-card"
+        data-testid="uploaded-chart-card"
+        :data-chart-key="extraChart.key"
+      >
+        <div class="panel-header">
+          <div>
+            <h3>{{ extraChart.title }}</h3>
+            <p>智能上传专项图表</p>
+          </div>
+        </div>
+        <div
+          :ref="(el) => setExtraChartRef(extraChart.key, el as HTMLElement | null)"
+          class="advanced-chart"
+        />
       </article>
     </section>
   </div>
@@ -311,8 +352,8 @@
     :title="drillTitle"
     :dimension="drillDimension"
     :value="drillValue"
-    :session-id="useDemoData || hasUploadedDataset ? undefined : sessionId"
-    :batch-id="useDemoData || hasUploadedDataset ? undefined : batchId"
+    :session-id="useDemoData || hasUploadedDataset || hasSmartUploadAnalysis ? undefined : sessionId"
+    :batch-id="useDemoData || hasUploadedDataset || hasSmartUploadAnalysis ? undefined : batchId"
   />
 </template>
 
@@ -332,9 +373,23 @@ import { useDrgDatasetStore } from '@/stores/drgDataset'
 import { buildPostEventDatasetStats, type PostEventDimension } from '@/utils/drg-aggregation'
 import DatasetUploadPanel from '@/components/drg/DatasetUploadPanel.vue'
 
+export interface SmartUploadedAnalysisPayload {
+  charts?: Record<string, any>
+  aiInsights?: string[]
+  analysisResults?: Record<string, any>
+}
+
+const SMART_UPLOAD_ANALYSIS_STORAGE_KEY = 'medqc:smart-upload-analysis-ready'
+const NAMED_ADVANCED_CHART_KEYS = new Set([
+  'profit_waterfall',
+  'dept_profit_ranking',
+  'drg_scatter',
+])
+
 const props = defineProps<{
   sessionId?: string // 新增：session_id
   batchId?: string
+  uploadedAnalysis?: SmartUploadedAnalysisPayload | null
 }>()
 
 const qualityTrendRef = ref<HTMLElement | null>(null)
@@ -346,6 +401,64 @@ const costStructureRef = ref<HTMLElement | null>(null)
 const waterfallRef = ref<HTMLElement | null>(null)
 const deptRankingRef = ref<HTMLElement | null>(null)
 const drgScatterRef = ref<HTMLElement | null>(null)
+const extraChartDomMap = new Map<string, HTMLElement>()
+const extraChartInstances = new Map<string, echarts.ECharts>()
+
+const setExtraChartRef = (key: string, el: HTMLElement | null) => {
+  if (el) {
+    extraChartDomMap.set(key, el)
+  } else {
+    extraChartDomMap.delete(key)
+  }
+}
+
+const readStoredSmartUploadAnalysis = (): SmartUploadedAnalysisPayload | null => {
+  try {
+    const raw = window.sessionStorage?.getItem(SMART_UPLOAD_ANALYSIS_STORAGE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (!parsed || typeof parsed !== 'object') return null
+    return {
+      charts: parsed.charts && typeof parsed.charts === 'object' ? parsed.charts : {},
+      aiInsights: Array.isArray(parsed.aiInsights) ? parsed.aiInsights : [],
+      analysisResults:
+        parsed.analysisResults && typeof parsed.analysisResults === 'object'
+          ? parsed.analysisResults
+          : {},
+    }
+  } catch {
+    return null
+  }
+}
+
+const hasValidSmartUploadPayload = (
+  payload: SmartUploadedAnalysisPayload | null | undefined,
+): payload is SmartUploadedAnalysisPayload => {
+  if (!payload || typeof payload !== 'object') return false
+  const hasCharts = Boolean(
+    payload.charts && typeof payload.charts === 'object' && Object.keys(payload.charts).length > 0,
+  )
+  const hasInsights = Array.isArray(payload.aiInsights) && payload.aiInsights.length > 0
+  const hasResults = Boolean(
+    payload.analysisResults &&
+      typeof payload.analysisResults === 'object' &&
+      Object.keys(payload.analysisResults).length > 0,
+  )
+  return hasCharts || hasInsights || hasResults
+}
+
+const storedSmartUploadAnalysis = ref<SmartUploadedAnalysisPayload | null>(
+  readStoredSmartUploadAnalysis(),
+)
+const effectiveSmartUploadAnalysis = computed<SmartUploadedAnalysisPayload | null>(() => {
+  if (props.uploadedAnalysis !== undefined) {
+    return hasValidSmartUploadPayload(props.uploadedAnalysis) ? props.uploadedAnalysis : null
+  }
+  return hasValidSmartUploadPayload(storedSmartUploadAnalysis.value)
+    ? storedSmartUploadAnalysis.value
+    : null
+})
+const hasSmartUploadAnalysis = computed(() => Boolean(effectiveSmartUploadAnalysis.value))
 
 const dateRange = ref<any>(null)
 const analysisType = ref('quality')
@@ -355,14 +468,29 @@ const analysisDimension = ref<'hospital' | 'department' | 'ward' | 'chief_group'
 const drgMockEnabled = ref(isDrgMockModeEnabled())
 const drgDatasetStore = useDrgDatasetStore()
 const hasUploadedDataset = computed(() => drgDatasetStore.hasUploadedData)
-const useDemoData = computed(() => drgMockEnabled.value || !props.sessionId)
-const drgModeHintText = computed(() =>
-  hasUploadedDataset.value
-    ? `当前使用模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length} 例）`
-    : drgMockEnabled.value
-      ? '当前处于降级数据模式，仅用于复核展示'
-      : '当前缺少 session_id，展示待接入数据状态',
+const useDemoData = computed(
+  () =>
+    !hasSmartUploadAnalysis.value &&
+    !hasUploadedDataset.value &&
+    (drgMockEnabled.value || !props.sessionId),
 )
+const drgModeHintText = computed(() => {
+  if (hasSmartUploadAnalysis.value) {
+    const cases = safeNumber(
+      effectiveSmartUploadAnalysis.value?.analysisResults?.overview?.total_cases,
+    )
+    const chartNum = Object.keys(effectiveSmartUploadAnalysis.value?.charts || {}).length
+    return cases > 0
+      ? `当前使用智能上传分析结果（${cases} 例 · ${chartNum} 个图表）`
+      : `当前使用智能上传分析结果（${chartNum} 个图表）`
+  }
+  if (hasUploadedDataset.value) {
+    return `当前使用模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length} 例）`
+  }
+  return drgMockEnabled.value
+    ? '当前处于降级数据模式，仅用于复核展示'
+    : '当前缺少 session_id，展示待接入数据状态'
+})
 let unsubscribeDrgMockMode: (() => void) | null = null
 
 // 维度标签映射
@@ -512,9 +640,40 @@ const primaryKpiCards = computed(() => {
   return kpiCards.value.filter((card) => preferredLabels.has(card.label))
 })
 
-const advancedChartsAvailable = computed(
-  () => stats.value.charts && Object.keys(stats.value.charts).length > 0,
-)
+const isRenderableEChartOption = (option: unknown): option is Record<string, any> => {
+  if (!option || typeof option !== 'object' || Array.isArray(option)) return false
+  const record = option as Record<string, any>
+  if (record.type === 'text' || record.type === 'kpi_card' || record.type === 'table') {
+    return false
+  }
+  return Boolean(
+    record.series || record.xAxis || record.yAxis || record.radar || record.visualMap || record.option,
+  )
+}
+
+const extraUploadedCharts = computed(() => {
+  const chartMap = stats.value.charts || {}
+  return Object.entries(chartMap)
+    .filter(([key, option]) => !NAMED_ADVANCED_CHART_KEYS.has(key) && isRenderableEChartOption(option))
+    .slice(0, 6)
+    .map(([key, option]) => ({
+      key,
+      title: String((option as any)?.title?.text || key),
+      option: (option as any)?.option && typeof (option as any).option === 'object'
+        ? (option as any).option
+        : option,
+    }))
+})
+
+const advancedChartsAvailable = computed(() => {
+  const chartMap = stats.value.charts || {}
+  return Boolean(
+    chartMap.profit_waterfall ||
+      chartMap.dept_profit_ranking ||
+      chartMap.drg_scatter ||
+      extraUploadedCharts.value.length > 0,
+  )
+})
 
 const getKpiToneClass = (index: number) => {
   const classes = ['tone-blue', 'tone-green', 'tone-orange', 'tone-red']
@@ -665,6 +824,116 @@ const improvementTasks = computed(() => {
   })
 })
 
+const applySmartUploadAnalysis = () => {
+  const payload = effectiveSmartUploadAnalysis.value
+  if (!payload) return
+  const results = (payload.analysisResults || {}) as Record<string, any>
+  const overview = (results.overview || {}) as Record<string, any>
+  const totalCost = safeNumber(overview.total_cost)
+  const totalPayment = safeNumber(overview.total_payment)
+  const totalProfit = safeNumber(overview.total_profit_loss)
+  const totalCases = safeNumber(overview.total_cases)
+  const costConsumptionIndex =
+    totalCost > 0 && totalPayment > 0 ? Number((totalCost / totalPayment).toFixed(2)) : 0
+
+  const rawDepartments = (
+    Array.isArray(results.department) && results.department.length
+      ? results.department
+      : Array.isArray(results.department_top10)
+        ? results.department_top10
+        : []
+  ) as Record<string, any>[]
+
+  const departmentStats = rawDepartments.map((item) => {
+    const deptCost = safeNumber(item['总费用'] ?? item.total_cost)
+    const deptPayment = safeNumber(item['总支付标准'] ?? item.dip_payment)
+    const costIndex =
+      deptCost > 0 && deptPayment > 0
+        ? Number((deptCost / deptPayment).toFixed(2))
+        : safeNumber(item.cost_index ?? item.cost_consumption_index, 1)
+    return {
+      dept_name: String(item.department ?? item['科室'] ?? item.dept_name ?? item.name ?? '未知科室'),
+      case_count: safeNumber(item['病例数'] ?? item.case_count ?? item.count),
+      count: safeNumber(item['病例数'] ?? item.case_count ?? item.count),
+      total_profit: safeNumber(item['盈亏'] ?? item['盈亏额'] ?? item.profit_loss ?? item.total_profit),
+      avg_cmi: safeNumber(item.cmi ?? item.avg_cmi ?? overview.cmi),
+      cost_index: costIndex,
+      cost_rate: costIndex,
+      avg_los: safeNumber(item['平均住院日'] ?? item.avg_los),
+    }
+  })
+
+  const rawDoctors = (Array.isArray(results.doctor) ? results.doctor : []) as Record<string, any>[]
+  const doctorStats = rawDoctors.map((item) => ({
+    doctor: String(item.doctor ?? item['主管医生'] ?? item.name ?? '未分配医师'),
+    count: safeNumber(item['病例数'] ?? item.case_count ?? item.count),
+    total_profit: safeNumber(item['盈亏'] ?? item.profit_loss ?? item.total_profit),
+    avg_cmi: safeNumber(item.cmi ?? item.avg_cmi ?? overview.cmi),
+  }))
+
+  const rawMonthly = (
+    Array.isArray(results.monthly_trend) ? results.monthly_trend : []
+  ) as Record<string, any>[]
+  const dailyTrends = rawMonthly.map((item) => ({
+    date: String(item['数据月份'] ?? item.month ?? item.date ?? ''),
+    count: safeNumber(item['病例数'] ?? item.case_count ?? item.count),
+    avg_cmi: safeNumber(item.cmi ?? item.avg_cmi ?? overview.cmi),
+  }))
+
+  const rawDiseases = (
+    Array.isArray(results.disease_top10) && results.disease_top10.length
+      ? results.disease_top10
+      : Array.isArray(results.disease)
+        ? results.disease
+        : []
+  ) as Record<string, any>[]
+  const drgDistribution = rawDiseases.map((item) => ({
+    drg_name: String(item.dip_name ?? item['病种'] ?? item.drg_name ?? item.name ?? ''),
+    mdc: String(item.dip_name ?? item['病种'] ?? item.drg_name ?? item.name ?? ''),
+    count: safeNumber(item['病例数'] ?? item.case_count ?? item.count),
+  }))
+
+  const breakdown = (results.cost_structure?.breakdown || {}) as Record<string, any>
+  const costStructure = {
+    drug: safeNumber(breakdown.drug_cost?.amount ?? results.cost_structure?.drug),
+    material: safeNumber(breakdown.material_cost?.amount ?? results.cost_structure?.material),
+    exam: safeNumber(breakdown.exam_cost?.amount ?? results.cost_structure?.exam),
+    treatment: safeNumber(breakdown.treatment_cost?.amount ?? results.cost_structure?.treatment),
+  }
+
+  stats.value = {
+    ...stats.value,
+    summary: {
+      ...stats.value.summary,
+      total_records: totalCases,
+      drg_count: safeNumber(overview.disease_count || totalCases),
+      grouping_success_rate: totalCases > 0 ? 1 : 0,
+      avg_cmi: safeNumber(overview.cmi),
+      total_weight: 0,
+      total_fee: totalCost,
+      total_profit: totalProfit,
+      insurance_profit: totalProfit,
+      cost_consumption_index: costConsumptionIndex,
+      time_consumption_index: 0,
+      low_risk_mortality_rate: 0,
+      low_risk_death_count: 0,
+      low_risk_total_count: totalCases,
+      avg_length_of_stay: safeNumber(overview.avg_los),
+      avg_inpatient_cost: safeNumber(overview.avg_cost_per_case),
+    },
+    department_stats: departmentStats,
+    doctor_stats: doctorStats,
+    daily_trends: dailyTrends,
+    mdc_distribution: drgDistribution,
+    drg_distribution: drgDistribution,
+    cost_structure: costStructure,
+    ai_insights: Array.isArray(payload.aiInsights) ? [...payload.aiInsights] : [],
+    charts: payload.charts && typeof payload.charts === 'object' ? { ...payload.charts } : {},
+  } as any
+
+  void updateCharts()
+}
+
 const updateDatasetDataForDimension = () => {
   if (!hasUploadedDataset.value) return
   stats.value = {
@@ -679,7 +948,9 @@ const updateDatasetDataForDimension = () => {
 
 /** 数据集变更（上传/清除）后刷新 */
 const handleDatasetChanged = () => {
-  if (hasUploadedDataset.value) {
+  if (hasSmartUploadAnalysis.value) {
+    applySmartUploadAnalysis()
+  } else if (hasUploadedDataset.value) {
     updateDatasetDataForDimension()
   } else {
     initMockCharts()
@@ -689,6 +960,10 @@ const handleDatasetChanged = () => {
 // 处理维度切换
 const handleDimensionChange = () => {
   message.info(`切换到【${dimensionLabel.value}】维度，正在加载数据...`)
+  if (hasSmartUploadAnalysis.value) {
+    applySmartUploadAnalysis()
+    return
+  }
   if (hasUploadedDataset.value) {
     updateDatasetDataForDimension()
     return
@@ -1687,7 +1962,7 @@ const fetchStatistics = async () => {
 const updateCharts = async () => {
   await nextTick()
 
-  // 如果后端的 charts 数据存在，则显示高级图表
+  // 如果后端/智能上传的 charts 数据存在，则显示高级图表
   if (stats.value.charts && Object.keys(stats.value.charts).length > 0) {
     const c = stats.value.charts
 
@@ -1705,6 +1980,29 @@ const updateCharts = async () => {
       if (!drgScatterChart) drgScatterChart = echarts.init(drgScatterRef.value)
       drgScatterChart.setOption(c.drg_scatter, true)
     }
+
+    const activeExtraKeys = new Set(extraUploadedCharts.value.map((item) => item.key))
+    for (const [key, instance] of extraChartInstances.entries()) {
+      if (!activeExtraKeys.has(key)) {
+        instance.dispose()
+        extraChartInstances.delete(key)
+      }
+    }
+    for (const extraChart of extraUploadedCharts.value) {
+      const dom = extraChartDomMap.get(extraChart.key)
+      if (!dom) continue
+      let instance = extraChartInstances.get(extraChart.key)
+      if (!instance) {
+        instance = echarts.init(dom)
+        extraChartInstances.set(extraChart.key, instance)
+      }
+      instance.setOption(extraChart.option, true)
+    }
+  } else {
+    for (const instance of extraChartInstances.values()) {
+      instance.dispose()
+    }
+    extraChartInstances.clear()
   }
 
   // 回退到静态降级图表（如果 backend 没有提供 charts）
@@ -1810,7 +2108,8 @@ const updateCharts = async () => {
     const labels = ['药品', '耗材', '检查', '治疗']
     const s = stats.value.cost_structure
     const data = [s.drug, s.material, s.exam, s.treatment]
-    const barColor = getComputedStyle(costChart.getDom()).getPropertyValue('--mq-brand-600').trim()
+    const costDom = costChart.getDom?.()
+    const barColor = costDom ? getComputedStyle(costDom).getPropertyValue('--mq-brand-600').trim() : ''
 
     costChart.setOption({
       xAxis: { type: 'value' },
@@ -1860,6 +2159,10 @@ onMounted(() => {
   drgMockEnabled.value = isDrgMockModeEnabled()
   unsubscribeDrgMockMode = onDrgMockModeChange((enabled) => {
     drgMockEnabled.value = enabled
+    if (hasSmartUploadAnalysis.value) {
+      applySmartUploadAnalysis()
+      return
+    }
     if (hasUploadedDataset.value) {
       initMockCharts()
       return
@@ -1872,6 +2175,10 @@ onMounted(() => {
   })
 
   // Initial load
+  if (hasSmartUploadAnalysis.value) {
+    applySmartUploadAnalysis()
+    return
+  }
   if (hasUploadedDataset.value) {
     initMockCharts()
     return
@@ -1884,8 +2191,32 @@ onMounted(() => {
 })
 
 watch(
+  effectiveSmartUploadAnalysis,
+  (nextPayload) => {
+    if (nextPayload) {
+      applySmartUploadAnalysis()
+      return
+    }
+    if (hasUploadedDataset.value) {
+      updateDatasetDataForDimension()
+      return
+    }
+    if (!useDemoData.value && props.sessionId) {
+      fetchStatistics()
+    } else {
+      initMockCharts()
+    }
+  },
+  { deep: true },
+)
+
+watch(
   () => props.sessionId,
   (newVal) => {
+    if (hasSmartUploadAnalysis.value) {
+      applySmartUploadAnalysis()
+      return
+    }
     if (hasUploadedDataset.value) {
       initMockCharts()
       return
@@ -1899,6 +2230,10 @@ watch(
 )
 
 const initMockCharts = () => {
+  if (hasSmartUploadAnalysis.value) {
+    applySmartUploadAnalysis()
+    return
+  }
   if (hasUploadedDataset.value) {
     updateDatasetDataForDimension()
     return
@@ -1909,6 +2244,10 @@ const initMockCharts = () => {
 watch(
   () => drgDatasetStore.meta?.uploadedAt,
   () => {
+    if (hasSmartUploadAnalysis.value) {
+      applySmartUploadAnalysis()
+      return
+    }
     if (hasUploadedDataset.value) {
       initMockCharts()
       return
@@ -1937,11 +2276,13 @@ const buildMockExportPayload = () => {
       ['导出时间', new Date().toLocaleString('zh-CN')],
       [
         '数据模式',
-        hasUploadedDataset.value
-          ? `模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length}例）`
-          : drgMockEnabled.value
-            ? '降级数据模式'
-            : '无 session_id 的降级导出',
+        hasSmartUploadAnalysis.value
+          ? `智能上传分析结果（${safeNumber(stats.value.summary.total_records)}例）`
+          : hasUploadedDataset.value
+            ? `模板上传数据（${drgDatasetStore.meta?.validCount ?? drgDatasetStore.records.length}例）`
+            : drgMockEnabled.value
+              ? '降级数据模式'
+              : '无 session_id 的降级导出',
       ],
     ] as Array<[string, string]>,
     kpis: kpiCards.value.map(
@@ -1979,9 +2320,11 @@ const handleExport = async ({ key }: MenuInfo) => {
   const format = formatMap[keyStr]
   if (!format) return
 
-  if (hasUploadedDataset.value || useDemoData.value || !props.sessionId) {
+  if (hasSmartUploadAnalysis.value || hasUploadedDataset.value || useDemoData.value || !props.sessionId) {
     exportDrgMockReport(keyStr as DrgExportFormat, buildMockExportPayload())
-    if (hasUploadedDataset.value) {
+    if (hasSmartUploadAnalysis.value) {
+      message.success(`已导出 ${format.name} 智能上传分析报告`)
+    } else if (hasUploadedDataset.value) {
       message.success(`已导出 ${format.name} 模板数据报告`)
     } else {
       message.warning(`当前缺少 session_id，已导出 ${format.name} 降级数据报告`)
@@ -2033,6 +2376,11 @@ onUnmounted(() => {
   waterfallChart?.dispose()
   deptRankingChart?.dispose()
   drgScatterChart?.dispose()
+  for (const instance of extraChartInstances.values()) {
+    instance.dispose()
+  }
+  extraChartInstances.clear()
+  extraChartDomMap.clear()
 })
 </script>
 

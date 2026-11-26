@@ -3,7 +3,7 @@
     <div
       class="customer-sample-scroll custom-scrollbar flex-1 overflow-y-auto px-4 pt-4 xl:px-5"
       :class="{
-        'has-work-dock': Boolean(currentQcTask) || selectedRecordStats.selectedCount > 0,
+        'has-work-dock': hasWorkDock,
       }"
     >
       <div class="customer-sample-container mx-auto w-full max-w-[1440px]">
@@ -122,6 +122,12 @@
                         <a-menu-item @click="handleMoreActionKey('mode-legacy-customer')">
                           历史客户包
                         </a-menu-item>
+                        <template v-if="!confirmedResultsOnly">
+                          <a-menu-divider />
+                          <a-menu-item @click="handleMoreActionKey('toggle-internal-diagnostic')">
+                            {{ internalDiagnosticExpanded ? '隐藏内部验收诊断' : '展开内部验收诊断' }}
+                          </a-menu-item>
+                        </template>
                       </a-sub-menu>
                     </a-menu>
                   </template>
@@ -158,7 +164,7 @@
                     </a-button>
                     <span
                       v-if="ruleSetDirectoryFallbackActive"
-                      class="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[12px] font-medium text-amber-700"
+                      class="customer-sample-subtle-notice-badge shrink-0"
                     >
                       内置目录
                     </span>
@@ -220,7 +226,7 @@
                       selectedRuleSet?.artifact_freshness?.status &&
                       selectedRuleSet.artifact_freshness.status !== 'fresh'
                     "
-                    class="customer-sample-coverage-chip border-amber-200 bg-amber-50 text-amber-700"
+                    class="customer-sample-coverage-chip customer-sample-subtle-notice-badge"
                   >
                     验收工件需刷新
                   </span>
@@ -232,7 +238,7 @@
                     质控记录
                   </button>
                   <button
-                    v-if="selectedRuleSetCoverageChips.length"
+                    v-if="!confirmedResultsOnly && selectedRuleSetCoverageChips.length"
                     type="button"
                     class="customer-sample-internal-toggle"
                     @click="toggleInternalDiagnostic"
@@ -323,19 +329,17 @@
                 data-customer-guide="lx0609-scope"
                 class="customer-sample-scope-disclosure"
                 :class="customerSampleGuideTargetClass('lx0609-scope')"
-                :open="
-                  customerSampleGuideOpen &&
-                  currentCustomerSampleGuideStep?.target === 'lx0609-scope'
-                    ? true
-                    : undefined
-                "
+                :open="isLuxianScopeExpanded"
+                @toggle="handleLuxianScopeToggle"
               >
                 <summary class="customer-sample-scope-summary">
                   <span class="customer-sample-scope-summary__title">质控点范围</span>
                   <span class="customer-sample-scope-summary__value">{{
                     luxianScopeModeText
                   }}</span>
-                  <span class="customer-sample-scope-summary__action">调整范围</span>
+                  <span class="customer-sample-scope-summary__action">{{
+                    isLuxianScopeExpanded ? '收起范围' : '调整范围'
+                  }}</span>
                 </summary>
                 <LuxianRuleScopePanel
                   :families="luxianRuleFamilies"
@@ -355,7 +359,10 @@
               </details>
             </section>
 
-            <section class="customer-sample-diagnostic-panel">
+            <section
+              v-if="!confirmedResultsOnly && internalDiagnosticExpanded"
+              class="customer-sample-diagnostic-panel"
+            >
               <a-collapse
                 v-model:active-key="internalDiagnosticKeys"
                 ghost
@@ -551,7 +558,7 @@
                       搜索、筛选并勾选病历后发起当前模式的质控任务。
                     </div>
                   </div>
-                  <div class="customer-sample-scope-pill">
+                  <div class="customer-sample-scope-pill" :title="currentScopeDescription">
                     {{ currentScopeDescription }}
                   </div>
                 </div>
@@ -562,10 +569,11 @@
                   <div class="flex flex-1 flex-col gap-3 xl:flex-row xl:items-center">
                     <a-input
                       v-model:value="filters.query"
+                      allow-clear
                       class="w-full xl:min-w-[320px] xl:flex-1 customer-sample-toolbar-input"
                       size="middle"
                       placeholder="搜索患者、住院号或问题摘要"
-                      @press-enter="loadRecords()"
+                      @press-enter="handleSearchRecords"
                     />
                   </div>
 
@@ -577,6 +585,7 @@
                       allow-clear
                       placeholder="样本范围"
                       :options="coverageOptions"
+                      @change="handleFilterChange"
                     />
                     <a-select
                       v-model:value="filters.matchStatus"
@@ -585,9 +594,10 @@
                       allow-clear
                       placeholder="病历关联"
                       :options="matchStatusOptions"
+                      @change="handleFilterChange"
                     />
                     <div
-                      class="flex items-center rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                      class="customer-sample-filter-control flex items-center border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
                     >
                       <span class="mr-2">{{
                         isSyncedOnlyValidationMode ? '首批筛选已关闭' : '仅首批'
@@ -595,28 +605,52 @@
                       <a-switch
                         v-model:checked="filters.includeInBatch"
                         :disabled="isSyncedOnlyValidationMode"
+                        @change="handleFilterChange"
                       />
                     </div>
                     <div
-                      class="flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 text-[13px] text-slate-600"
+                      class="customer-sample-filter-control customer-sample-filter-control--select flex items-center gap-2 border border-slate-200 bg-slate-50 pl-3 pr-1 text-[13px] text-slate-600"
                     >
                       <span>并发病历数</span>
                       <a-select
                         v-model:value="runOptions.maxParallelRecords"
                         :disabled="initialConfigLoading"
-                        class="w-[88px] customer-sample-toolbar-select"
-                        size="middle"
+                        class="w-[78px] customer-sample-filter-inline-select"
+                        size="small"
                         :options="parallelOptions"
                       />
                     </div>
-                    <a-button type="primary" class="!rounded-full" @click="loadRecords()">
+                    <a-button
+                      type="primary"
+                      class="customer-sample-filter-btn"
+                      @click="handleSearchRecords"
+                    >
                       查询
                     </a-button>
-                    <a-button class="!rounded-full" @click="resetFilters"> 重置 </a-button>
+                    <a-button class="customer-sample-filter-btn" @click="resetFilters">
+                      重置
+                    </a-button>
                   </div>
                 </div>
 
+                <div
+                  v-if="recordsLoadError"
+                  class="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-[13px] text-rose-700"
+                  data-testid="records-load-error-banner"
+                  role="alert"
+                >
+                  <span>病历列表加载失败：{{ recordsLoadError }}</span>
+                  <a-button
+                    size="small"
+                    class="!rounded-full"
+                    :loading="itemLoading"
+                    @click="loadRecords()"
+                  >
+                    重新加载
+                  </a-button>
+                </div>
                 <a-table
+                  v-else
                   class="customer-sample-record-table"
                   row-key="id"
                   size="middle"
@@ -636,8 +670,9 @@
     </div>
 
     <div
-      v-if="currentQcTask || selectedRecordStats.selectedCount > 0 || runLoading"
+      v-if="hasWorkDock"
       class="customer-sample-work-dock"
+      :class="{ 'is-compact': isWorkDockTaskCompact }"
       data-testid="customer-sample-work-dock"
       aria-live="polite"
     >
@@ -647,11 +682,14 @@
           :loading="currentQcTaskLoading"
           :canceling="cancelBatchJobLoading"
           :reviewing="reviewBatchJobLoadingId === currentQcTask?.id"
+          :compact="isWorkDockTaskCompact"
+          :collapsible="canCollapseWorkDockTask"
           @view-result="openCurrentTaskResult"
           @cancel="confirmCancelBatchJob"
           @review="handleReviewCurrentTask"
           @export="handleExportCurrentTask"
           @open-history="openTaskHistoryPage"
+          @toggle-compact="toggleWorkDockTaskCompact"
         />
       </div>
 
@@ -1025,7 +1063,13 @@
 
         <div
           class="grid grid-cols-1 gap-3"
-          :class="hospitalizationScopeNeedsDischargeRange ? 'sm:grid-cols-3' : ''"
+          :class="
+            hospitalizationSyncForm.scopeMode === 'active_and_discharged'
+              ? 'sm:grid-cols-3'
+              : hospitalizationSyncForm.scopeMode === 'discharged'
+                ? 'sm:grid-cols-2'
+                : ''
+          "
         >
           <label v-if="hospitalizationSyncForm.scopeMode !== 'discharged'" class="block">
             <span class="mb-1.5 block text-[13px] font-medium text-slate-700">在院统计日期</span>
@@ -1812,16 +1856,20 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, watchEffect } from 'vue'
+import { computed, reactive, ref, watch, watchEffect } from 'vue'
 import { formatPaddedQcTaskDateTime } from './utils/qcTaskTime'
+import { isBatchJobPollingActive } from './semantic-rules/utils/batchJobStatus'
 import { deferredComponent } from './customer-sample-validation/deferredComponent'
 const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rules/components/QCRecordCompareWorkbench.vue'))
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import { useMinimumLoading } from '@/composables/useMinimumLoading'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import RecordViewCloseIcon from './components/RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const {
   initialConfigLoading,
@@ -1905,10 +1953,12 @@ const {
   handleDownloadTemplate,
   handleExportBatchReport,
   handleExportCurrentTask,
+  handleFilterChange,
   handleHospitalizationSync,
   handleImportFileSelect,
   handleImportPool,
   handleInternalDiagnosticChange,
+  handleLuxianScopeToggle,
   handleMoreActionKey,
   handlePoolChange,
   handlePoolManagementSearch,
@@ -1917,6 +1967,7 @@ const {
   handleReviewCurrentTask,
   handleRuleSetChange,
   handleRunPool,
+  handleSearchRecords,
   handleSyncPoolRecords,
   History,
   hospitalizationPreviewMetrics,
@@ -1938,12 +1989,14 @@ const {
   importWorkflow,
   importWorkflowSteps,
   InboxOutlined,
+  internalDiagnosticExpanded,
   internalDiagnosticKeys,
   isAllLuxianRulesSelected,
   isEditableCopyDocumentGroupExpanded,
   isEditableOrderDocument,
   isLastCustomerSampleGuideStep,
   isLuxian0609Mode,
+  isLuxianScopeExpanded,
   isSyncedOnlyValidationMode,
   itemColumns,
   itemLoading,
@@ -1992,6 +2045,7 @@ const {
   recordResultComparisonFocus,
   recordResultComparisonOpen,
   records,
+  recordsLoadError,
   recordScopeHint,
   refreshHospitalizationScopePreview,
   refreshLuxianAggregateJobs,
@@ -2066,6 +2120,53 @@ watchEffect(() => {
   if (batchResultOpen.value) mountedDrawers.batch = true
   if (recordResultComparisonOpen.value) mountedDrawers.comparison = true
   if (reviewDrawerVisible.value) mountedDrawers.review = true
+})
+
+const hasWorkDock = computed(
+  () =>
+    Boolean(currentQcTask.value) || selectedRecordStats.value.selectedCount > 0 || runLoading.value,
+)
+
+const isCurrentQcTaskRunning = computed(() => isBatchJobPollingActive(currentQcTask.value))
+
+const canCollapseWorkDockTask = computed(
+  () =>
+    Boolean(currentQcTask.value) &&
+    !isCurrentQcTaskRunning.value &&
+    selectedRecordStats.value.selectedCount === 0 &&
+    !runLoading.value,
+)
+
+// 历史终态任务默认以单行紧凑底栏呈现，避免挤压病历池空间；新任务运行或勾选病历时自动展开。
+const workDockTaskCompact = ref(true)
+
+const isWorkDockTaskCompact = computed(
+  () => canCollapseWorkDockTask.value && workDockTaskCompact.value,
+)
+
+function toggleWorkDockTaskCompact() {
+  if (!canCollapseWorkDockTask.value) return
+  workDockTaskCompact.value = !workDockTaskCompact.value
+}
+
+watch(
+  [isCurrentQcTaskRunning, () => selectedRecordStats.value.selectedCount, runLoading],
+  ([running, selectedCount, loading]) => {
+    if (running || selectedCount > 0 || loading) {
+      workDockTaskCompact.value = false
+    }
+  },
+  { immediate: true },
+)
+
+watch(selectedPoolId, () => {
+  if (
+    !isCurrentQcTaskRunning.value &&
+    selectedRecordStats.value.selectedCount === 0 &&
+    !runLoading.value
+  ) {
+    workDockTaskCompact.value = true
+  }
 })
 </script>
 

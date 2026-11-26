@@ -524,7 +524,7 @@ async def test_run_final_fast_screen_pack_failure_should_only_mark_that_pack_unc
     )
 
     by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
-    assert by_rule["SC-023"]["status"] == "uncertain"
+    assert by_rule["SC-023"]["status"] == "technical_error_internal"
     assert by_rule["SC-004"]["status"] == "compliant"
     assert by_rule["SC-032"]["status"] == "compliant"
     assert by_rule["SC-121"]["status"] == "compliant"
@@ -621,8 +621,8 @@ async def test_run_final_fast_screen_missing_rule_item_after_retry_should_be_unc
 
     by_rule = {item["rule_id"]: item for item in result["evaluation_results"]}
     assert set(by_rule) == {"SC-023", "SC-024"}
-    assert by_rule["SC-023"]["status"] == "uncertain"
-    assert by_rule["SC-024"]["status"] == "uncertain"
+    assert by_rule["SC-023"]["status"] == "technical_error_internal"
+    assert by_rule["SC-024"]["status"] == "technical_error_internal"
     assert engine.call_counts["first_course_features"] == 3
     assert result["pack_metrics"]["provider_error_count"] == 0
     assert result["pack_metrics"]["retry_count"] == 2

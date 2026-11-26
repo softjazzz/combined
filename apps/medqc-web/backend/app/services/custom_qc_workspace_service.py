@@ -6,14 +6,18 @@ import json
 import logging
 import re
 import uuid
+import weakref
 
 from ..core.execution_timing import project_stage_timing, timed
 from ..core.settings import get_settings
 
+from collections import OrderedDict
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO, StringIO
 from functools import lru_cache, partial
+from threading import RLock
 from time import monotonic
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
@@ -98,6 +102,7 @@ from .qc_workspace.partial_record_delivery import select_complete_record_items
 from .qc_workspace.partial_record_read import (
     MATERIAL_PREPARATION_FAILURE_STAGES,
     read_saved_partial_record_row,
+    SavedPartialRecordBatch,
     saved_record_rule_scope,
 )
 from .qc_workspace.record_repository import RecordRepository, WorkspaceListResult
@@ -289,6 +294,54 @@ _CUSTOMER_TEXT_FORBIDDEN = re.compile(
 
 def _now_utc() -> datetime:
     return datetime.utcnow()
+
+
+def _now_utc_aware() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+_SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
+_SPREADSHEET_CONTROL_PREFIXES = ("\t", "\r", "\n")
+
+
+def _sanitize_spreadsheet_cell(value: Any) -> Any:
+    """中和 CSV/Excel 公式注入，保持数值和空白原样。"""
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, (list, tuple, dict)):
+        text = json.dumps(value, ensure_ascii=False, default=str)
+    elif isinstance(value, str):
+        text = value
+    else:
+        text = str(value)
+    if not text:
+        return text
+    if (
+        text.startswith(_SPREADSHEET_CONTROL_PREFIXES)
+        or text.lstrip().startswith(_SPREADSHEET_FORMULA_PREFIXES)
+    ):
+        return "'" + text
+    return text
+
+
+def _sanitize_spreadsheet_row(values: Sequence[Any]) -> List[Any]:
+    return [_sanitize_spreadsheet_cell(value) for value in values]
+
+
+def _sanitize_spreadsheet_rows(rows: Sequence[Sequence[Any]]) -> List[List[Any]]:
+    return [_sanitize_spreadsheet_row(row) for row in rows]
+
+
+def _sanitize_spreadsheet_summary(summary: Dict[str, Any]) -> Dict[str, Any]:
+    sanitized = dict(summary)
+    if "operation_ref" in sanitized:
+        sanitized["operation_ref"] = _sanitize_spreadsheet_cell(sanitized["operation_ref"])
+    status_counts = sanitized.get("status_counts")
+    if isinstance(status_counts, dict):
+        sanitized["status_counts"] = {
+            str(_sanitize_spreadsheet_cell(k)): v for k, v in status_counts.items()
+        }
+    return sanitized
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -1064,6 +1117,37 @@ def _safe_review_report(
     }
 
 
+_SAMPLE_VALIDATION_JOB_SOURCES = frozenset(
+    {
+        "manual_problem_sample_pool",
+        "manual_sample_formal_fast_screen_full",
+    }
+)
+
+
+def is_sample_validation_batch_job(job_or_filters: Mapping[str, Any] | None) -> bool:
+    """判断批次任务是否属于客户样本验证入口（不误伤病历池直连原生规则任务）。"""
+
+    if not isinstance(job_or_filters, Mapping):
+        return False
+    raw_filters = job_or_filters.get("filters")
+    filters = raw_filters if isinstance(raw_filters, Mapping) else job_or_filters
+    if _safe_text(filters.get("sample_pool_id")):
+        return True
+    source = _safe_text(filters.get("source")).lower()
+    if source in _SAMPLE_VALIDATION_JOB_SOURCES or source.startswith("manual_problem_sample_pool"):
+        return True
+    if job_or_filters.get("is_sample_validation") is True:
+        return True
+    if _safe_text(job_or_filters.get("task_origin")).lower() == "sample_validation":
+        return True
+    return False
+
+
+def resolve_batch_job_origin(job_or_filters: Mapping[str, Any] | None) -> str:
+    return "sample_validation" if is_sample_validation_batch_job(job_or_filters) else "record_pool"
+
+
 def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     """质控记录列表的一行：任务元数据、范围与病历进度，不含任何结果计数、结论或证据。
 
@@ -1082,6 +1166,7 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
     total_records = _to_int(job.get("total_records"))
     success_count = _to_int(job.get("success_count"))
     customer_rule_count = _to_int(filters.get("customer_rule_count"))
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         "schema_version": "customer-qc-job-overview-v1",
         "id": _safe_text(job.get("id")),
@@ -1093,6 +1178,8 @@ def project_batch_job_overview(job: Dict[str, Any]) -> Dict[str, Any]:
         "rule_set_name": _safe_text(filters.get("rule_set_name")),
         "scene": _safe_text(job.get("scene")),
         "scope": _safe_text(job.get("scope")),
+        "is_sample_validation": is_sample_validation,
+        "task_origin": "sample_validation" if is_sample_validation else "record_pool",
         "created_at": _safe_text(job.get("created_at")),
         "started_at": _safe_text(job.get("started_at")),
         "finished_at": _safe_text(job.get("finished_at")),
@@ -1488,8 +1575,11 @@ def project_customer_safe_batch_job(
     if isinstance(raw_summary.get("execution_error"), dict):
         from .qc_execution_errors import safe_failure_projection
         safe_summary["execution_error"] = safe_failure_projection(raw_summary["execution_error"])
+    is_sample_validation = is_sample_validation_batch_job(job)
     return {
         "schema_version": "customer-qc-job-v1",
+        "is_sample_validation": is_sample_validation,
+        "task_origin": "sample_validation" if is_sample_validation else "record_pool",
         "retry_lineage": retry_lineage or None,
         "retry_of_job_id": retry_lineage.get("source_job_id", ""),
         "retry_root_job_id": retry_lineage.get("root_job_id", ""),
@@ -2376,12 +2466,19 @@ def _customer_export_rows(
 
 def _export_customer_safe_workbook(job: Dict[str, Any], *, hmac_key: str) -> BytesIO:
     items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
-    return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
+    return render_customer_safe_workbook(
+        items=items,
+        rows=_sanitize_spreadsheet_rows(rows),
+        summary=_sanitize_spreadsheet_summary(summary),
+    )
 
 
 def _export_customer_safe_csv(job: Dict[str, Any], *, hmac_key: str) -> StringIO:
     _items, rows, summary = _customer_export_rows(job, hmac_key=hmac_key)
-    return render_customer_safe_csv(rows=rows, summary=summary)
+    return render_customer_safe_csv(
+        rows=_sanitize_spreadsheet_rows(rows),
+        summary=_sanitize_spreadsheet_summary(summary),
+    )
 
 
 def _canonical_customer_export_rows(
@@ -2448,6 +2545,144 @@ class WorkspaceBatchJobListResult:
     total: int
     page: int
     page_size: int
+
+
+_SUMMARY_CACHE_LOCK = RLock()
+_WATERMARK_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[tuple[str, str, str], Dict[str, Any]]]" = OrderedDict()
+_WATERMARK_SUMMARY_CACHE_MAX = 32
+_ENVELOPE_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_ENVELOPE_SUMMARY_CACHE_MAX = 4096
+_PARTIAL_SUMMARY_CACHE: "OrderedDict[tuple[Any, ...], Dict[str, Any]]" = OrderedDict()
+_PARTIAL_SUMMARY_CACHE_MAX = 2048
+_RECORD_ID_ILIKE_SQL_THRESHOLD = 50
+_TRACKED_CACHE_SCOPE_KEYS: set[str] = set()
+_SCOPE_EVICTION_CALLBACKS: list[Callable[[str], None]] = []
+
+
+def register_summary_cache_scope_eviction_callback(callback: Callable[[str], None]) -> None:
+    """注册随数据库作用域（bind GC）同步失效的下游缓存回调。"""
+    with _SUMMARY_CACHE_LOCK:
+        if callback not in _SCOPE_EVICTION_CALLBACKS:
+            _SCOPE_EVICTION_CALLBACKS.append(callback)
+
+
+def _evict_summary_caches_for_scope(scope_key: str) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        for cache in (
+            _WATERMARK_SUMMARY_CACHE,
+            _ENVELOPE_SUMMARY_CACHE,
+            _PARTIAL_SUMMARY_CACHE,
+        ):
+            stale_keys = [key for key in cache if key and key[0] == scope_key]
+            for key in stale_keys:
+                cache.pop(key, None)
+        _TRACKED_CACHE_SCOPE_KEYS.discard(scope_key)
+        callbacks = tuple(_SCOPE_EVICTION_CALLBACKS)
+    for callback in callbacks:
+        try:
+            callback(scope_key)
+        except Exception:
+            pass
+
+
+def _register_scope_key_finalizer(bind_obj: Any, scope_key: str) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        if scope_key in _TRACKED_CACHE_SCOPE_KEYS:
+            return
+        try:
+            weakref.finalize(bind_obj, _evict_summary_caches_for_scope, scope_key)
+            _TRACKED_CACHE_SCOPE_KEYS.add(scope_key)
+        except TypeError:
+            pass
+
+
+def clear_luxian_0609_summary_caches() -> None:
+    """清空基于不可变版本键的质控摘要缓存（供测试或运维手动重置）。"""
+    with _SUMMARY_CACHE_LOCK:
+        _WATERMARK_SUMMARY_CACHE.clear()
+        _ENVELOPE_SUMMARY_CACHE.clear()
+        _PARTIAL_SUMMARY_CACHE.clear()
+
+
+def _watermark_bucket_get(
+    bucket_key: tuple[Any, ...],
+    identities: set[tuple[str, str, str]],
+) -> tuple[Dict[tuple[str, str, str], Dict[str, Any]], set[tuple[str, str, str]]]:
+    with _SUMMARY_CACHE_LOCK:
+        bucket = _WATERMARK_SUMMARY_CACHE.get(bucket_key)
+        if bucket is None:
+            return {}, set(identities)
+        _WATERMARK_SUMMARY_CACHE.move_to_end(bucket_key)
+        hits: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+        missing: set[tuple[str, str, str]] = set()
+        for identity in identities:
+            cached = bucket.get(identity)
+            if cached is not None:
+                hits[identity] = deepcopy(cached)
+            else:
+                missing.add(identity)
+        return hits, missing
+
+
+def _watermark_bucket_merge(
+    bucket_key: tuple[Any, ...],
+    projections: Mapping[tuple[str, str, str], Dict[str, Any]],
+) -> None:
+    if not projections:
+        return
+    with _SUMMARY_CACHE_LOCK:
+        bucket = _WATERMARK_SUMMARY_CACHE.get(bucket_key)
+        if bucket is None:
+            bucket = {}
+            _WATERMARK_SUMMARY_CACHE[bucket_key] = bucket
+        for identity, value in projections.items():
+            bucket[identity] = deepcopy(value)
+        _WATERMARK_SUMMARY_CACHE.move_to_end(bucket_key)
+        while len(_WATERMARK_SUMMARY_CACHE) > _WATERMARK_SUMMARY_CACHE_MAX:
+            _WATERMARK_SUMMARY_CACHE.popitem(last=False)
+
+
+def _session_cache_scope_key(session: Session) -> Optional[str]:
+    bind = session.get_bind() if hasattr(session, "get_bind") else None
+    if bind is None:
+        return None
+    bind_obj = getattr(bind, "engine", bind)
+    dialect_name = getattr(getattr(bind_obj, "dialect", None), "name", "")
+    if dialect_name == "sqlite":
+        scope_key = f"sqlite:{id(bind_obj)}"
+        _register_scope_key_finalizer(bind_obj, scope_key)
+        return scope_key
+    url = getattr(bind_obj, "url", None)
+    if url is not None and hasattr(url, "render_as_string"):
+        return f"{dialect_name}:{url.render_as_string(hide_password=True)}"
+    scope_key = f"{dialect_name}:{id(bind_obj)}"
+    _register_scope_key_finalizer(bind_obj, scope_key)
+    return scope_key
+
+
+def _lru_cache_get(
+    cache: "OrderedDict[tuple[Any, ...], Dict[str, Any]]",
+    key: tuple[Any, ...],
+) -> Optional[Dict[str, Any]]:
+    with _SUMMARY_CACHE_LOCK:
+        cached = cache.get(key)
+        if cached is None:
+            return None
+        cache.move_to_end(key)
+        return deepcopy(cached)
+
+
+def _lru_cache_put(
+    cache: "OrderedDict[tuple[Any, ...], Dict[str, Any]]",
+    key: tuple[Any, ...],
+    value: Dict[str, Any],
+    max_size: int,
+) -> None:
+    with _SUMMARY_CACHE_LOCK:
+        cache[key] = deepcopy(value)
+        cache.move_to_end(key)
+        while len(cache) > max_size:
+            cache.popitem(last=False)
 
 
 class CustomQCWorkspaceService:
@@ -3134,6 +3369,7 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         page: int,
         page_size: int,
+        institute_id: Optional[str] = None,
     ) -> WorkspaceListResult:
         return self._record_repository().list_records(
             scope=scope,
@@ -3145,6 +3381,7 @@ class CustomQCWorkspaceService:
             keyword=keyword,
             page=page,
             page_size=page_size,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def get_record_filters(
@@ -3152,10 +3389,12 @@ class CustomQCWorkspaceService:
         *,
         scope: str,
         department: Optional[str],
+        institute_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         return self._record_repository().get_record_filters(
             scope=scope,
             department=department,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def collect_records(
@@ -3223,6 +3462,7 @@ class CustomQCWorkspaceService:
         keyword: Optional[str],
         record_ids: Optional[Sequence[str]] = None,
         record_refs: Optional[Sequence[CaseRefInput]] = None,
+        institute_id: Optional[str] = None,
     ) -> int:
         return self._record_repository().count_records(
             scope=scope,
@@ -3234,6 +3474,7 @@ class CustomQCWorkspaceService:
             keyword=keyword,
             record_ids=record_ids,
             record_refs=record_refs,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
         )
 
     def hydrate_records_with_medical_text(
@@ -3475,13 +3716,14 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
-    def get_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+    def get_batch_job(self, *, job_id: str, created_by: Optional[str] = None) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            clauses = [self._batch_job_table.c.id == job_id]
+            if created_by is not None:
+                clauses.append(self._batch_job_table.c.created_by == created_by)
             row = session.execute(
-                select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                select(self._batch_job_table).where(and_(*clauses))
             ).mappings().first()
             if not row:
                 return None
@@ -3493,15 +3735,16 @@ class CustomQCWorkspaceService:
         self,
         *,
         job_id: str,
-        created_by: str,
+        created_by: Optional[str] = None,
         review_report: Dict[str, Any],
     ) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            clauses = [self._batch_job_table.c.id == job_id]
+            if created_by is not None:
+                clauses.append(self._batch_job_table.c.created_by == created_by)
             row = session.execute(
-                select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
-                )
+                select(self._batch_job_table).where(and_(*clauses))
             ).mappings().first()
             if not row:
                 return None
@@ -3517,7 +3760,7 @@ class CustomQCWorkspaceService:
             }
             session.execute(
                 update(self._batch_job_table)
-                .where(and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by))
+                .where(and_(*clauses))
                 .values(summary_json=_safe_json_dumps(next_summary), updated_at=now)
             )
             session.commit()
@@ -3596,7 +3839,7 @@ class CustomQCWorkspaceService:
     def _batch_job_list_where(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         draft_id: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
@@ -3608,7 +3851,9 @@ class CustomQCWorkspaceService:
     ):
         """任务列表的筛选条件；完整列表与概览列表共用，保证两者筛选口径一致。"""
 
-        clauses = [self._batch_job_table.c.created_by == created_by]
+        clauses = []
+        if created_by is not None:
+            clauses.append(self._batch_job_table.c.created_by == created_by)
         if not include_children:
             clauses.append(
                 or_(
@@ -3654,18 +3899,19 @@ class CustomQCWorkspaceService:
                     escape="\\",
                 )
             )
-        return and_(*clauses)
+        return and_(*clauses) if clauses else sa.true()
 
     def list_batch_job_overviews(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
         query: Optional[str] = None,
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
         record_id: Optional[str] = None,
+        exclude_validation: bool = False,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
@@ -3708,21 +3954,42 @@ class CustomQCWorkspaceService:
         )
         session = _session()
         try:
-            total = int(
-                session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
-                or 0
-            )
-            rows = (
-                session.execute(
-                    select(*columns)
-                    .where(where_clause)
-                    .order_by(desc(table.c.created_at))
-                    .offset(max(page - 1, 0) * page_size)
-                    .limit(page_size)
+            if not exclude_validation:
+                total = int(
+                    session.execute(select(func.count()).select_from(table).where(where_clause)).scalar()
+                    or 0
                 )
-                .mappings()
-                .all()
-            )
+                rows = (
+                    session.execute(
+                        select(*columns)
+                        .where(where_clause)
+                        .order_by(desc(table.c.created_at))
+                        .offset(max(page - 1, 0) * page_size)
+                        .limit(page_size)
+                    )
+                    .mappings()
+                    .all()
+                )
+            else:
+                all_rows = (
+                    session.execute(
+                        select(*columns)
+                        .where(where_clause)
+                        .order_by(desc(table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
+                filtered_rows = [
+                    raw_row
+                    for raw_row in all_rows
+                    if not is_sample_validation_batch_job(
+                        _safe_json_loads(raw_row.get("filters_json"), {})
+                    )
+                ]
+                total = len(filtered_rows)
+                offset = max(page - 1, 0) * page_size
+                rows = filtered_rows[offset : offset + page_size]
         finally:
             session.close()
         items: List[Dict[str, Any]] = []
@@ -3753,10 +4020,50 @@ class CustomQCWorkspaceService:
             )
         return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
+    @staticmethod
+    def _batch_job_matches_institute_scope(
+        job: Mapping[str, Any],
+        institute_scope: Optional[str],
+    ) -> bool:
+        if institute_scope is None:
+            return True
+        if not isinstance(job, Mapping):
+            return False
+        filters = job.get("filters") if isinstance(job.get("filters"), Mapping) else {}
+        record_refs = filters.get("record_refs")
+        items = job.get("items")
+        checked = False
+        if isinstance(record_refs, list) and record_refs:
+            for ref in record_refs:
+                if not isinstance(ref, Mapping):
+                    return False
+                ref_inst = ref.get("institute_id")
+                if not isinstance(ref_inst, str) or not ref_inst.strip() or ref_inst != institute_scope:
+                    return False
+            checked = True
+        if isinstance(items, list) and items:
+            for item in items:
+                if not isinstance(item, Mapping):
+                    return False
+                item_inst = item.get("institute_id")
+                if item_inst is not None:
+                    if not isinstance(item_inst, str) or not item_inst.strip() or item_inst != institute_scope:
+                        return False
+                    checked = True
+                elif not checked:
+                    return False
+        if checked:
+            return True
+        filter_inst = filters.get("institute_id")
+        if isinstance(filter_inst, str) and filter_inst.strip() and filter_inst == institute_scope:
+            if int(job.get("total_records") or 0) == 0:
+                return True
+        return False
+
     def list_batch_jobs(
         self,
         *,
-        created_by: str,
+        created_by: Optional[str] = None,
         draft_id: Optional[str] = None,
         status: Optional[str] = None,
         scope: Optional[str] = None,
@@ -3766,7 +4073,9 @@ class CustomQCWorkspaceService:
         created_start_date: Optional[str] = None,
         created_end_date: Optional[str] = None,
         record_id: Optional[str] = None,
+        exclude_validation: bool = False,
         include_children: bool = False,
+        institute_id: Optional[str] = None,
         page: int = 1,
         page_size: int = DEFAULT_BATCH_JOB_PAGE_SIZE,
     ) -> WorkspaceBatchJobListResult:
@@ -3784,26 +4093,70 @@ class CustomQCWorkspaceService:
                 include_children=include_children,
             )
             executor_value = _safe_text(executor_type).lower()
-            enable_runtime_filter = executor_value in {"program", "llm"} or cache_hit is not None
+            institute_scope = _safe_text(institute_id) or None
+            enable_runtime_filter = (
+                executor_value in {"program", "llm"}
+                or cache_hit is not None
+                or institute_scope is not None
+            )
 
             if not enable_runtime_filter:
-                total = int(
-                    session.execute(
-                        select(func.count()).select_from(self._batch_job_table).where(where_clause)
-                    ).scalar()
-                    or 0
-                )
-                rows = (
-                    session.execute(
-                        select(self._batch_job_table)
-                        .where(where_clause)
-                        .order_by(desc(self._batch_job_table.c.created_at))
-                        .offset(max(page - 1, 0) * page_size)
-                        .limit(page_size)
+                offset = max(page - 1, 0) * page_size
+                if not exclude_validation:
+                    total = int(
+                        session.execute(
+                            select(func.count()).select_from(self._batch_job_table).where(where_clause)
+                        ).scalar()
+                        or 0
                     )
-                    .mappings()
-                    .all()
-                )
+                    rows = (
+                        session.execute(
+                            select(self._batch_job_table)
+                            .where(where_clause)
+                            .order_by(desc(self._batch_job_table.c.created_at))
+                            .offset(offset)
+                            .limit(page_size)
+                        )
+                        .mappings()
+                        .all()
+                    )
+                else:
+                    candidate_rows = (
+                        session.execute(
+                            select(
+                                self._batch_job_table.c.id,
+                                self._batch_job_table.c.filters_json,
+                            )
+                            .where(where_clause)
+                            .order_by(desc(self._batch_job_table.c.created_at))
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    matched_job_ids = [
+                        str(row["id"])
+                        for row in candidate_rows
+                        if not is_sample_validation_batch_job(
+                            _safe_json_loads(row.get("filters_json"), {})
+                        )
+                    ]
+                    total = len(matched_job_ids)
+                    page_job_ids = matched_job_ids[offset : offset + page_size]
+                    if not page_job_ids:
+                        return WorkspaceBatchJobListResult(
+                            items=[], total=total, page=page, page_size=page_size
+                        )
+                    fetched_rows = (
+                        session.execute(
+                            select(self._batch_job_table).where(
+                                self._batch_job_table.c.id.in_(page_job_ids)
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
+                    row_by_id = {str(row["id"]): row for row in fetched_rows}
+                    rows = [row_by_id[jid] for jid in page_job_ids if jid in row_by_id]
                 items = [
                     self._aggregate_parent_job(
                         session,
@@ -3814,15 +4167,51 @@ class CustomQCWorkspaceService:
                 ]
                 return WorkspaceBatchJobListResult(items=items, total=total, page=page, page_size=page_size)
 
-            rows = (
-                session.execute(
-                    select(self._batch_job_table)
-                    .where(where_clause)
-                    .order_by(desc(self._batch_job_table.c.created_at))
+            if exclude_validation:
+                candidate_rows = (
+                    session.execute(
+                        select(
+                            self._batch_job_table.c.id,
+                            self._batch_job_table.c.filters_json,
+                        )
+                        .where(where_clause)
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
                 )
-                .mappings()
-                .all()
-            )
+                matched_job_ids = [
+                    str(row["id"])
+                    for row in candidate_rows
+                    if not is_sample_validation_batch_job(
+                        _safe_json_loads(row.get("filters_json"), {})
+                    )
+                ]
+                if not matched_job_ids:
+                    return WorkspaceBatchJobListResult(
+                        items=[], total=0, page=page, page_size=page_size
+                    )
+                fetched_rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .where(self._batch_job_table.c.id.in_(matched_job_ids))
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
+                row_by_id = {str(row["id"]): row for row in fetched_rows}
+                rows = [row_by_id[jid] for jid in matched_job_ids if jid in row_by_id]
+            else:
+                rows = (
+                    session.execute(
+                        select(self._batch_job_table)
+                        .where(where_clause)
+                        .order_by(desc(self._batch_job_table.c.created_at))
+                    )
+                    .mappings()
+                    .all()
+                )
             all_items = [
                 self._aggregate_parent_job(
                     session,
@@ -3833,6 +4222,12 @@ class CustomQCWorkspaceService:
             ]
 
             filtered_items = all_items
+            if institute_scope is not None:
+                filtered_items = [
+                    item
+                    for item in filtered_items
+                    if self._batch_job_matches_institute_scope(item, institute_scope)
+                ]
             if executor_value in {"program", "llm"}:
                 filtered_items = [
                     item
@@ -4395,6 +4790,114 @@ class CustomQCWorkspaceService:
         finally:
             session.close()
 
+    def _read_luxian_summary_watermark(
+        self,
+        session: Session,
+    ) -> Optional[tuple[Any, ...]]:
+        """读取质控任务与信封表的每行版本水印，零 TOAST 读取且感知任意历史行更新。"""
+        try:
+            from ..database import clinical_connection as _clinical_conn
+
+            active_sel = _clinical_conn.current_selection()
+            clinical_binding = (
+                None if active_sel is None else str(active_sel.get("binding") or "")
+            )
+            bind = session.get_bind() if hasattr(session, "get_bind") else None
+            dialect_name = getattr(getattr(bind, "dialect", None), "name", "")
+
+            job_col_names = (
+                "id",
+                "status",
+                "updated_at",
+                "finished_at",
+                "created_at",
+                "total_records",
+                "success_count",
+                "failed_count",
+                "issue_records",
+                "compliant_records",
+            )
+            env_col_names = (
+                "id",
+                "root_job_id",
+                "institute_id",
+                "patient_id",
+                "visit_id",
+                "rule_set_key",
+                "rule_set_version",
+                "updated_at",
+            )
+            job_cols = [
+                self._batch_job_table.c[name]
+                for name in job_col_names
+                if name in self._batch_job_table.c
+            ]
+            env_cols = [
+                self._record_result_envelope_table.c[name]
+                for name in env_col_names
+                if name in self._record_result_envelope_table.c
+            ]
+            if not job_cols or not env_cols:
+                return None
+
+            def _read_signatures() -> Optional[tuple[Any, ...]]:
+                if dialect_name == "postgresql":
+                    def _pg_row_digest(table: Table, cols: list[Any]) -> Optional[tuple[str, ...]]:
+                        row_sig = sa.func.concat_ws(
+                            "|",
+                            *(sa.func.coalesce(sa.cast(col, sa.String), "") for col in cols),
+                        )
+                        row_hash = sa.func.hashtext(row_sig)
+                        agg = session.execute(
+                            select(
+                                sa.func.count().label("cnt"),
+                                sa.func.coalesce(
+                                    sa.func.sum(sa.cast(row_hash, sa.BigInteger)),
+                                    0,
+                                ).label("sum_hash"),
+                                sa.func.coalesce(
+                                    sa.func.bit_xor(row_hash),
+                                    0,
+                                ).label("xor_hash"),
+                            ).select_from(table)
+                        ).first()
+                        if agg is None:
+                            return None
+                        return tuple(str(v) if v is not None else "" for v in agg)
+
+                    job_sig = _pg_row_digest(self._batch_job_table, job_cols)
+                    env_sig = _pg_row_digest(self._record_result_envelope_table, env_cols)
+                    if job_sig is None or env_sig is None:
+                        return None
+                    return (clinical_binding, job_sig, env_sig)
+
+                def _python_row_digest(table: Table, cols: list[Any]) -> tuple[str, ...]:
+                    rows = session.execute(
+                        select(*cols).order_by(table.c.id.asc())
+                    ).all()
+                    hasher = hashlib.blake2b(digest_size=16)
+                    for row in rows:
+                        hasher.update(
+                            "|".join("" if v is None else str(v) for v in row).encode("utf-8")
+                        )
+                        hasher.update(b"\n")
+                    return (str(len(rows)), hasher.hexdigest())
+
+                return (
+                    clinical_binding,
+                    _python_row_digest(self._batch_job_table, job_cols),
+                    _python_row_digest(self._record_result_envelope_table, env_cols),
+                )
+
+            # 在 SAVEPOINT 内读取水印，防止缺表、旧版 PG 缺 bit_xor 或权限异常毒化主事务。
+            begin_nested = getattr(session, "begin_nested", None)
+            if callable(begin_nested):
+                with begin_nested():
+                    return _read_signatures()
+            return _read_signatures()
+        except Exception:
+            return None
+
     def build_luxian_0609_completed_record_result_summaries(
         self,
         *,
@@ -4427,24 +4930,13 @@ class CustomQCWorkspaceService:
         identities = {identity for identity in identities if all(identity)}
         if not identities:
             return {}
+        requested_identities_count = len(identities)
 
         normalized_rule_set_key = _safe_text(rule_set_key)
         normalized_rule_set_version = _safe_text(rule_set_version)
         if not normalized_rule_set_key or not normalized_rule_set_version:
             raise ValueError("病历池结果摘要缺少规则集身份")
 
-        visit_ids = sorted({identity[2] for identity in identities})
-        escaped_visit_ids = {
-            visit_id: visit_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace('"', '\\"')
-            for visit_id in visit_ids
-        }
-        record_id_conditions = [
-            self._batch_job_table.c.record_ids_json.ilike(
-                f'%"{escaped_visit_ids[visit_id]}"%',
-                escape="\\",
-            )
-            for visit_id in visit_ids
-        ]
         # 规则集身份仍由 Python 做精确校验；这里仅以文本预筛掉与当前 LX0609
         # 代次无关的历史任务，避免全院首页解析大批无关 filters/summary JSON。
         # 两处都保留，是为了维持读取模型“filters 优先、summary 兼容回退”的合同。
@@ -4464,7 +4956,46 @@ class CustomQCWorkspaceService:
         rule_version_candidate = or_(filters_rule_version_candidate, summary_rule_version_candidate)
         session = (session_factory or _session)()
         try:
-            base_job_predicate = and_(
+            cache_scope_key = _session_cache_scope_key(session) if not include_items else None
+            watermark_bucket_key: Optional[tuple[Any, ...]] = None
+            cached_watermark_hits: Dict[tuple[str, str, str], Dict[str, Any]] = {}
+            if cache_scope_key is not None:
+                wm_started = monotonic()
+                watermark = self._read_luxian_summary_watermark(session)
+                query_seconds += monotonic() - wm_started
+                if watermark is not None:
+                    watermark_bucket_key = (
+                        cache_scope_key,
+                        normalized_rule_set_key,
+                        normalized_rule_set_version,
+                        bool(include_rule_set_context),
+                        bool(include_latest_partial),
+                        watermark,
+                    )
+                    cached_watermark_hits, missing_identities = _watermark_bucket_get(
+                        watermark_bucket_key,
+                        identities,
+                    )
+                    if not missing_identities:
+                        return cached_watermark_hits
+                    identities = missing_identities
+
+            visit_ids = sorted({identity[2] for identity in identities})
+            use_record_id_ilike = len(visit_ids) <= _RECORD_ID_ILIKE_SQL_THRESHOLD
+            record_id_conditions = []
+            if use_record_id_ilike:
+                escaped_visit_ids = {
+                    visit_id: visit_id.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_").replace('"', '\\"')
+                    for visit_id in visit_ids
+                }
+                record_id_conditions = [
+                    self._batch_job_table.c.record_ids_json.ilike(
+                        f'%"{escaped_visit_ids[visit_id]}"%',
+                        escape="\\",
+                    )
+                    for visit_id in visit_ids
+                ]
+            base_predicates = [
                 self._batch_job_table.c.status.in_(
                     ("completed", "failed", "running", "queued", "canceled")
                 ),
@@ -4472,12 +5003,15 @@ class CustomQCWorkspaceService:
                     self._batch_job_table.c.parent_job_id.is_(None),
                     self._batch_job_table.c.parent_job_id == "",
                 ),
-                or_(*record_id_conditions),
-            )
+            ]
+            if record_id_conditions:
+                base_predicates.append(or_(*record_id_conditions))
+            base_job_predicate = and_(*base_predicates)
             job_columns = (
                 self._batch_job_table.c.id,
                 self._batch_job_table.c.status,
                 self._batch_job_table.c.created_at,
+                self._batch_job_table.c.updated_at,
                 self._batch_job_table.c.finished_at,
                 self._batch_job_table.c.filters_json,
                 self._batch_job_table.c.record_ids_json,
@@ -4577,6 +5111,7 @@ class CustomQCWorkspaceService:
                     "id": job_id,
                     "status": _safe_text(row.get("status"), "queued"),
                     "created_at": row.get("created_at"),
+                    "updated_at": row.get("updated_at"),
                     "finished_at": row.get("finished_at"),
                     "record_ids": record_ids if isinstance(record_ids, list) else [],
                     "filters": filters if isinstance(filters, dict) else {},
@@ -4589,7 +5124,8 @@ class CustomQCWorkspaceService:
                     or _rule_set_value(job, "rule_set_version") != normalized_rule_set_version
                 ):
                     continue
-                for visit_id in set(_safe_text(value) for value in job["record_ids"]):
+                job_visit_ids = {_safe_text(value) for value in job["record_ids"]}
+                for visit_id in job_visit_ids:
                     if (
                         visit_id in requested_visit_ids
                         and _safe_text(job.get("status")).lower() == "completed"
@@ -4604,27 +5140,44 @@ class CustomQCWorkspaceService:
                         if (
                             all(exact_ref)
                             and identity in identities
-                            and exact_ref.visit_id in {
-                                _safe_text(value) for value in job["record_ids"]
-                            }
+                            and exact_ref.visit_id in job_visit_ids
                         ):
                             failed_jobs_by_identity.setdefault(identity, []).append(job)
             if not jobs_by_id:
-                return {identity: {"status": "not_run"} for identity in identities}
+                empty_projections = {identity: {"status": "not_run"} for identity in identities}
+                if watermark_bucket_key is not None:
+                    _watermark_bucket_merge(watermark_bucket_key, empty_projections)
+                if cached_watermark_hits:
+                    empty_projections.update(cached_watermark_hits)
+                return empty_projections
 
-            query_started = monotonic()
-            envelope_rows = (
-                session.execute(
-                    select(self._record_result_envelope_table).where(
-                        and_(
-                            self._record_result_envelope_table.c.root_job_id.in_(list(jobs_by_id)),
-                            self._record_result_envelope_table.c.visit_id.in_(visit_ids),
-                        )
-                    )
-                )
-                .mappings()
-                .all()
+            envelope_columns = self._record_result_envelope_table.c
+            envelope_selection_columns = (
+                envelope_columns.id, envelope_columns.root_job_id, envelope_columns.institute_id,
+                envelope_columns.patient_id, envelope_columns.visit_id, envelope_columns.rule_set_key,
+                envelope_columns.rule_set_version, envelope_columns.updated_at,
             )
+            job_ids = list(jobs_by_id)
+            envelope_batch_size = 500
+            envelope_rows: list[Any] = []
+            query_started = monotonic()
+            for job_offset in range(0, len(job_ids), envelope_batch_size):
+                job_chunk = job_ids[job_offset : job_offset + envelope_batch_size]
+                visit_batch_size = min(envelope_batch_size, max(1, 999 - len(job_chunk)))
+                for visit_offset in range(0, len(visit_ids), visit_batch_size):
+                    visit_chunk = visit_ids[visit_offset : visit_offset + visit_batch_size]
+                    envelope_rows.extend(
+                        session.execute(
+                            select(*envelope_selection_columns).where(
+                                and_(
+                                    envelope_columns.root_job_id.in_(job_chunk),
+                                    envelope_columns.visit_id.in_(visit_chunk),
+                                )
+                            )
+                        )
+                        .mappings()
+                        .all()
+                    )
             query_seconds += monotonic() - query_started
             envelopes_by_identity: Dict[tuple[str, str, str], Dict[str, list[Dict[str, Any]]]] = {}
             current_envelopes_by_job_visit: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
@@ -4655,7 +5208,8 @@ class CustomQCWorkspaceService:
                 ]
 
             projections: Dict[tuple[str, str, str], Dict[str, Any]] = {}
-            saved_partial_rows_by_job: Dict[str, Optional[Dict[str, Any]]] = {}
+            saved_partial_batches: dict[str, SavedPartialRecordBatch | str] = {}
+            selected_canonical = []
             for identity in identities:
                 _, _, visit_id = identity
                 exact_envelopes = envelopes_by_identity.get(identity, {})
@@ -4753,7 +5307,25 @@ class CustomQCWorkspaceService:
                     if ready_selection.job.get("saved_partial_attempt"):
                         selected_job = ready_selection.job
                         selected_job_id = _safe_text(selected_job.get("id"))
-                        if selected_job_id not in saved_partial_rows_by_job:
+                        partial_cache_key: Optional[tuple[Any, ...]] = None
+                        if cache_scope_key is not None:
+                            filters_digest = hashlib.sha256(
+                                str(selected_job.get("saved_filters_json") or "").encode("utf-8")
+                            ).hexdigest()
+                            partial_cache_key = (
+                                cache_scope_key,
+                                selected_job_id,
+                                str(selected_job.get("updated_at") or ""),
+                                str(selected_job.get("finished_at") or ""),
+                                filters_digest,
+                                identity,
+                                tuple(selected_job["result_rule_scope"]),
+                            )
+                            cached_partial = _lru_cache_get(_PARTIAL_SUMMARY_CACHE, partial_cache_key)
+                            if cached_partial is not None:
+                                projections[identity] = cached_partial
+                                continue
+                        if selected_job_id not in saved_partial_batches:
                             query_started = monotonic()
                             saved_row = session.execute(select(
                                 self._batch_job_table.c.items_json,
@@ -4766,14 +5338,21 @@ class CustomQCWorkspaceService:
                                 == selected_job.get("saved_filters_json"),
                             ))).mappings().one_or_none()
                             query_seconds += monotonic() - query_started
-                            saved_partial_rows_by_job[selected_job_id] = (
-                                dict(saved_row) if saved_row is not None else None
-                            )
-                        saved = saved_partial_rows_by_job[selected_job_id]
-                        if saved is None:
+                            if saved_row is None:
+                                saved_partial_batches[selected_job_id] = "saved_partial_task_changed"
+                            else:
+                                parse_started = monotonic()
+                                try:
+                                    saved_partial_batches[selected_job_id] = SavedPartialRecordBatch.from_row(saved_row)
+                                except ValueError:
+                                    saved_partial_batches[selected_job_id] = "saved_partial_result_invalid"
+                                finally:
+                                    result_parse_seconds += monotonic() - parse_started
+                        saved = saved_partial_batches[selected_job_id]
+                        if isinstance(saved, str):
                             projections[identity] = {
                                 "status": "technical_error",
-                                "reason_code": "saved_partial_task_changed",
+                                "reason_code": saved,
                                 "result_rule_scope": list(
                                     selected_job["result_rule_scope"]
                                 ),
@@ -4782,8 +5361,8 @@ class CustomQCWorkspaceService:
                         projection_key = customer_safe_projection_key()
                         parse_started = monotonic()
                         try:
-                            partial = read_saved_partial_record_row(
-                                saved, ref=CaseRef(*identity),
+                            partial = saved.read(
+                                ref=CaseRef(*identity),
                                 expected_rules=selected_job["result_rule_scope"],
                                 projection_key=projection_key,
                                 projector=lambda item: self._envelope_item_from_rule_result(
@@ -4805,7 +5384,7 @@ class CustomQCWorkspaceService:
                         finally:
                             result_parse_seconds += monotonic() - parse_started
                         if partial.get("failure_stage"):
-                            projections[identity] = {
+                            projection_result = {
                                 "status": "technical_error",
                                 "data_origin": "saved_partial_task",
                                 "job_id": selected_job_id,
@@ -4813,19 +5392,40 @@ class CustomQCWorkspaceService:
                                 "result_rule_scope": list(selected_job["result_rule_scope"]),
                                 **partial,
                             }
+                            if partial_cache_key is not None:
+                                _lru_cache_put(
+                                    _PARTIAL_SUMMARY_CACHE,
+                                    partial_cache_key,
+                                    projection_result,
+                                    _PARTIAL_SUMMARY_CACHE_MAX,
+                                )
+                            projections[identity] = projection_result
                             continue
+                        excluded_rule_ids = (
+                            LUXIAN_0609_CUSTOMER_EXCLUDED_RULE_IDS
+                            if normalized_rule_set_key == LUXIAN_0609_RULE_SET_KEY
+                            else frozenset()
+                        )
+                        visible_partial_items = [
+                            item
+                            for item in partial["items"]
+                            if _safe_text(
+                                item.get("rule_id") or item.get("rule_code")
+                            ).upper()
+                            not in excluded_rule_ids
+                        ]
                         status_counts: Dict[str, int] = {}
-                        for item in partial["items"]:
+                        for item in visible_partial_items:
                             item_status = _safe_text(item.get("status"), "unknown")
                             status_counts[item_status] = status_counts.get(item_status, 0) + 1
-                        projections[identity] = {
-                            "status": "ready" if partial["items"] else "failed",
+                        projection_result = {
+                            "status": "ready" if visible_partial_items else "failed",
                             "completed_at": (
                                 selected_job.get("finished_at").isoformat()
                                 if isinstance(selected_job.get("finished_at"), datetime)
                                 else _safe_text(selected_job.get("finished_at")) or None
                             ),
-                            "total_rule_count": len(partial["items"]),
+                            "total_rule_count": len(visible_partial_items),
                             "status_counts": dict(sorted(status_counts.items())),
                             "data_origin": "saved_partial_task",
                             "job_id": selected_job_id,
@@ -4834,39 +5434,32 @@ class CustomQCWorkspaceService:
                                 "result_scope_kind", "unknown"
                             ),
                             **partial,
+                            "execution_status": (
+                                "partial_failed" if visible_partial_items else "failed"
+                            ),
+                            "completed_rule_count": len(visible_partial_items),
+                            "items": visible_partial_items,
                         }
+                        if not include_items:
+                            # 摘要模式下统一剥离大体积明细，避免污染 _PARTIAL_SUMMARY_CACHE 与 _WATERMARK_SUMMARY_CACHE。
+                            projection_result.pop("items", None)
+                        if partial_cache_key is not None:
+                            _lru_cache_put(
+                                _PARTIAL_SUMMARY_CACHE,
+                                partial_cache_key,
+                                projection_result,
+                                _PARTIAL_SUMMARY_CACHE_MAX,
+                            )
+                        projections[identity] = projection_result
                         continue
                     selected_job_id = _safe_text(ready_selection.job.get("id"))
                     selected_envelopes = exact_envelopes.get(selected_job_id, [])
-                    if len(selected_envelopes) != 1:
-                        projections[identity] = {
-                            "status": "technical_error",
-                            "reason_code": "canonical_result_envelope_invalid",
-                        }
-                        continue
-                    parse_started = monotonic()
-                    summary = self._summarize_completed_record_result_envelope(
-                        envelope_row=selected_envelopes[0],
-                        completed_at=ready_selection.job.get("finished_at"),
-                        include_items=include_items,
-                        rule_set_key=normalized_rule_set_key,
-                    )
-                    result_parse_seconds += monotonic() - parse_started
-                    if include_rule_set_context and summary.get("status") == "ready":
-                        # 供报表绑定已选中的持久结果；不改变候选、选轮或旧调用输出。
-                        summary.update({
-                            "root_job_id": selected_job_id,
-                            "envelope_id": _safe_text(selected_envelopes[0].get("id")),
-                            "rule_set_key": normalized_rule_set_key,
-                            "rule_set_version": _rule_set_value(ready_selection.job, "rule_set_version"),
-                            "result_rule_scope": list(
-                                ready_selection.job.get("result_rule_scope") or []
-                            ),
-                            "result_scope_kind": ready_selection.job.get(
-                                "result_scope_kind", "unknown"
-                            ),
-                        })
-                    projections[identity] = summary
+                    projections[identity] = {
+                        "status": "technical_error",
+                        "reason_code": "canonical_result_envelope_invalid",
+                    }
+                    if len(selected_envelopes) == 1:
+                        selected_canonical.append((identity, ready_selection.job, selected_envelopes[0]))
                     continue
 
                 # 仅以 visit_id 保存的历史根任务不能形成 ready。若该任务已有同
@@ -4889,6 +5482,77 @@ class CustomQCWorkspaceService:
                     }
                 else:
                     projections[identity] = {"status": "not_run"}
+
+            # 选轮只读取元数据；摘要模式先命中不可变版本键缓存，仅对未命中行加载信封正文。
+            uncached_selected: list[tuple[tuple[str, str, str], Dict[str, Any], Dict[str, Any], Optional[tuple[Any, ...]]]] = []
+            for identity, job, selected_row in selected_canonical:
+                env_cache_key: Optional[tuple[Any, ...]] = None
+                if cache_scope_key is not None:
+                    env_cache_key = (
+                        cache_scope_key,
+                        _safe_text(selected_row.get("id")),
+                        str(selected_row.get("updated_at") or ""),
+                        normalized_rule_set_key,
+                        normalized_rule_set_version,
+                        str(job.get("finished_at") or ""),
+                    )
+                    cached_summary = _lru_cache_get(_ENVELOPE_SUMMARY_CACHE, env_cache_key)
+                    if cached_summary is not None:
+                        if include_rule_set_context and cached_summary.get("status") == "ready":
+                            cached_summary.update({
+                                "root_job_id": _safe_text(job.get("id")),
+                                "envelope_id": _safe_text(selected_row.get("id")),
+                                "rule_set_key": normalized_rule_set_key,
+                                "rule_set_version": _rule_set_value(job, "rule_set_version"),
+                                "result_rule_scope": list(job.get("result_rule_scope") or []),
+                                "result_scope_kind": job.get("result_scope_kind", "unknown"),
+                            })
+                        projections[identity] = cached_summary
+                        continue
+                uncached_selected.append((identity, job, selected_row, env_cache_key))
+
+            batch_size = 500
+            for offset in range(0, len(uncached_selected), batch_size):
+                selected_batch = uncached_selected[offset:offset + batch_size]
+                query_started = monotonic()
+                rows = session.execute(select(
+                    *envelope_selection_columns, envelope_columns.envelope_json,
+                ).where(envelope_columns.id.in_([row["id"] for _, _, row, _ in selected_batch]))).mappings().all()
+                query_seconds += monotonic() - query_started
+                bodies_by_id = {row["id"]: row for row in rows}
+                for identity, job, selected_row, env_cache_key in selected_batch:
+                    body = bodies_by_id.get(selected_row["id"])
+                    if body is None or any(body[key] != value for key, value in selected_row.items()):
+                        continue
+                    parse_started = monotonic()
+                    summary = self._summarize_completed_record_result_envelope(
+                        envelope_row=body,
+                        completed_at=job.get("finished_at"),
+                        include_items=include_items,
+                        rule_set_key=normalized_rule_set_key,
+                    )
+                    result_parse_seconds += monotonic() - parse_started
+                    if env_cache_key is not None:
+                        _lru_cache_put(
+                            _ENVELOPE_SUMMARY_CACHE,
+                            env_cache_key,
+                            summary,
+                            _ENVELOPE_SUMMARY_CACHE_MAX,
+                        )
+                    if include_rule_set_context and summary.get("status") == "ready":
+                        summary.update({
+                            "root_job_id": _safe_text(job.get("id")),
+                            "envelope_id": _safe_text(selected_row.get("id")),
+                            "rule_set_key": normalized_rule_set_key,
+                            "rule_set_version": _rule_set_value(job, "rule_set_version"),
+                            "result_rule_scope": list(job.get("result_rule_scope") or []),
+                            "result_scope_kind": job.get("result_scope_kind", "unknown"),
+                        })
+                    projections[identity] = summary
+            if watermark_bucket_key is not None:
+                _watermark_bucket_merge(watermark_bucket_key, projections)
+            if cached_watermark_hits:
+                projections.update(cached_watermark_hits)
             return projections
         finally:
             session.close()
@@ -4898,7 +5562,7 @@ class CustomQCWorkspaceService:
                     "workstation_qc_summary_slow query_ms=%d result_parse_ms=%d other_ms=%d total_ms=%d matched=%d",
                     query_seconds * 1000, result_parse_seconds * 1000,
                     max(0.0, elapsed - query_seconds - result_parse_seconds) * 1000,
-                    elapsed * 1000, len(identities),
+                    elapsed * 1000, requested_identities_count,
                 )
 
     @staticmethod
@@ -5354,12 +6018,17 @@ class CustomQCWorkspaceService:
                     )
         return items
 
-    def cancel_batch_job(self, *, job_id: str, created_by: str) -> Optional[Dict[str, Any]]:
+    def cancel_batch_job(self, *, job_id: str, created_by: Optional[str] = None) -> Optional[Dict[str, Any]]:
         session = _session()
         try:
+            owner_clauses = (
+                [self._batch_job_table.c.created_by == created_by]
+                if created_by is not None
+                else []
+            )
             row = session.execute(
                 select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(self._batch_job_table.c.id == job_id, *owner_clauses)
                 ).with_for_update()
             ).mappings().first()
             if not row:
@@ -5385,7 +6054,7 @@ class CustomQCWorkspaceService:
                 .where(
                     and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                         self._batch_job_table.c.status.in_(["queued", "running"]),
                     )
                 )
@@ -5402,7 +6071,7 @@ class CustomQCWorkspaceService:
                                 "step_label": "已停止",
                             },
                             "user_cancelled": True,
-                            "cancelled_by": created_by,
+                            "cancelled_by": created_by or "super_admin",
                             "cancelled_at": now.isoformat(),
                             "updated_at": now.isoformat(),
                         }
@@ -5435,7 +6104,7 @@ class CustomQCWorkspaceService:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
                 active_child_scope = and_(
                     child_where,
-                    self._batch_job_table.c.created_by == created_by,
+                    *owner_clauses,
                     self._batch_job_table.c.status.in_(["queued", "running"]),
                 )
                 child_cancel_values = {
@@ -5456,7 +6125,7 @@ class CustomQCWorkspaceService:
                             update(self._batch_job_table)
                             .where(and_(
                                 self._batch_job_table.c.id == child_row["id"],
-                                self._batch_job_table.c.created_by == created_by,
+                                *owner_clauses,
                                 self._batch_job_table.c.status.in_(["queued", "running"]),
                             ))
                             .values(
@@ -5598,7 +6267,7 @@ class CustomQCWorkspaceService:
         if qc_dispatch_mode_from_filters(filters) == "rabbitmq":
             self._qc_dispatch.assert_ready(session)
             self._qc_dispatch.add_dispatch(session, job_id=new_id, mode="rabbitmq", enqueue_leaf=True,
-                                           available_at=now + timedelta(seconds=retry_delay_seconds))
+                                           available_at=_now_utc_aware() + timedelta(seconds=retry_delay_seconds))
             source_dispatch = self._qc_dispatch.get_dispatch(source_id, session=session)
             self._qc_dispatch.link_retry_successor(
                 session, source_job_id=source_id, source_generation=source_dispatch.generation,
@@ -5611,7 +6280,7 @@ class CustomQCWorkspaceService:
         self,
         *,
         job_id: str,
-        created_by: str,
+        created_by: Optional[str] = None,
         automatic: bool = False,
         expected_attempt_filters_json: str | None = None,
         retry_delay_seconds: float = 0.0,
@@ -5621,9 +6290,14 @@ class CustomQCWorkspaceService:
             raise ValueError("retry_delay_seconds must not be negative")
         session = _session()
         try:
+            owner_clauses = (
+                [self._batch_job_table.c.created_by == created_by]
+                if created_by is not None
+                else []
+            )
             row = session.execute(
                 select(self._batch_job_table).where(
-                    and_(self._batch_job_table.c.id == job_id, self._batch_job_table.c.created_by == created_by)
+                    and_(self._batch_job_table.c.id == job_id, *owner_clauses)
                 ).with_for_update()
             ).mappings().first()
             if not row:
@@ -5645,7 +6319,7 @@ class CustomQCWorkspaceService:
                     raise ValueError("MQ任务持久调度身份损坏，禁止回退legacy重试")
             current = _row_to_batch_job(dict(row))
             formal_0609 = (current.get("filters") or {}).get("rule_set_key") == LUXIAN_0609_RULE_SET_KEY
-            if formal_0609:
+            if formal_0609 and created_by is not None:
                 from .saved_result_access import require_retry_record_institutes
                 require_retry_record_institutes(created_by, current["filters"].get("record_refs"))
             dispatch_mode = (
@@ -5659,10 +6333,9 @@ class CustomQCWorkspaceService:
                 if dispatch_record is None:
                     raise RuntimeError("MQ任务缺少持久调度身份")
             original_filters_json = row.get("filters_json")
-            if formal_0609 and (
-                current.get("status") not in {"canceled", "completed", "failed"}
-                or (automatic and original_filters_json != expected_attempt_filters_json)
-            ):
+            if current.get("status") not in {"canceled", "completed", "failed"}:
+                return None
+            if formal_0609 and automatic and original_filters_json != expected_attempt_filters_json:
                 return None
             if formal_0609:
                 current["filters"]["scoped_customer_rule_ids"] = frozen_luxian_0609_delivery_scope(current["filters"])
@@ -5753,12 +6426,12 @@ class CustomQCWorkspaceService:
                 child_rows = session.execute(
                     select(self._batch_job_table).where(and_(
                         child_where,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                     ))
                 ).mappings().all()
                 retryable_children = 0
                 manual_scope_children = 0
-                due_at = now + timedelta(seconds=retry_delay_seconds)
+                due_at = _now_utc_aware() + timedelta(seconds=retry_delay_seconds)
                 for child_row in child_rows:
                     child = _row_to_batch_job(dict(child_row))
                     if child.get("status") == "completed":
@@ -6022,17 +6695,18 @@ class CustomQCWorkspaceService:
                 .where(
                     and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
                         self._batch_job_table.c.status == current.get("status"),
                         self._batch_job_table.c.filters_json == original_filters_json,
                     ) if formal_0609 else and_(
                         self._batch_job_table.c.id == job_id,
-                        self._batch_job_table.c.created_by == created_by,
+                        *owner_clauses,
+                        self._batch_job_table.c.status == current.get("status"),
                     )
                 )
                 .values(**reset_values)
             )
-            if formal_0609 and getattr(retry_update, "rowcount", 0) != 1:
+            if getattr(retry_update, "rowcount", 0) != 1:
                 session.rollback()
                 return None
             if (
@@ -6043,14 +6717,14 @@ class CustomQCWorkspaceService:
                     session,
                     job_id=job_id,
                     expected_generation=dispatch_record.generation,
-                    available_at=now + timedelta(seconds=retry_delay_seconds),
+                    available_at=_now_utc_aware() + timedelta(seconds=retry_delay_seconds),
                 )
             # 子任务单独重试也会废弃父聚合的旧读取快照；与父刷新争用同一父行。
             if formal_0609 and parent_job_id:
                 parent_row = session.execute(
                     select(self._batch_job_table).where(
                         and_(self._batch_job_table.c.id == parent_job_id,
-                             self._batch_job_table.c.created_by == created_by)
+                             *owner_clauses)
                     )
                 ).mappings().first()
                 if parent_row:
@@ -6079,7 +6753,7 @@ class CustomQCWorkspaceService:
                 child_where = self._batch_job_table.c.parent_job_id == job_id
                 if child_ids:
                     child_where = or_(child_where, self._batch_job_table.c.id.in_(child_ids))
-                child_scope = and_(child_where, self._batch_job_table.c.created_by == created_by)
+                child_scope = and_(child_where, *owner_clauses)
                 child_reset = {key: value for key, value in reset_values.items() if key != "filters_json"}
                 if formal_0609:
                     child_rows = session.execute(
@@ -6108,9 +6782,24 @@ class CustomQCWorkspaceService:
                             session.rollback()
                             return None
                 else:
-                    session.execute(
-                        update(self._batch_job_table).where(child_scope).values(**child_reset)
-                    )
+                    child_rows = session.execute(
+                        select(self._batch_job_table).where(child_scope)
+                    ).mappings().all()
+                    for child_row in child_rows:
+                        if child_row["status"] not in {"canceled", "completed", "failed"}:
+                            session.rollback()
+                            return None
+                        child_update = session.execute(
+                            update(self._batch_job_table)
+                            .where(and_(
+                                self._batch_job_table.c.id == child_row["id"],
+                                self._batch_job_table.c.status == child_row["status"],
+                            ))
+                            .values(**child_reset)
+                        )
+                        if getattr(child_update, "rowcount", 0) != 1:
+                            session.rollback()
+                            return None
             session.commit()
             self.refresh_parent_batch_job(parent_job_id=parent_job_id)
             return self.get_batch_job(job_id=job_id, created_by=created_by)
@@ -6121,7 +6810,7 @@ class CustomQCWorkspaceService:
         session = _session()
         try:
             clauses = [self._batch_job_table.c.parent_job_id == parent_job_id]
-            if created_by:
+            if created_by is not None:
                 clauses.append(self._batch_job_table.c.created_by == created_by)
             rows = (
                 session.execute(
@@ -6161,9 +6850,7 @@ class CustomQCWorkspaceService:
                 ):
                     session.rollback()
                     return False
-            if current.get("status") in {"canceled", "completed", "failed"}:
-                return False
-            if formal_0609 and current.get("status") != "queued":
+            if current.get("status") != "queued":
                 return False
             current_summary = _safe_json_loads(row.get("summary_json"), {})
             if not isinstance(current_summary, dict):
@@ -6201,7 +6888,10 @@ class CustomQCWorkspaceService:
                         self._batch_job_table.c.id == job_id,
                         self._batch_job_table.c.status == "queued",
                         self._batch_job_table.c.filters_json == original_filters_json,
-                    ) if formal_0609 else self._batch_job_table.c.id == job_id
+                    ) if formal_0609 else and_(
+                        self._batch_job_table.c.id == job_id,
+                        self._batch_job_table.c.status == "queued",
+                    )
                 )
                 .values(
                     status="running",
@@ -6221,7 +6911,7 @@ class CustomQCWorkspaceService:
                     ),
                 )
             )
-            if formal_0609 and getattr(running_update, "rowcount", 0) != 1:
+            if getattr(running_update, "rowcount", 0) != 1:
                 session.rollback()
                 return False
             if dispatch_record is not None and not self._qc_dispatch.transition_dispatch(
@@ -6916,7 +7606,11 @@ class CustomQCWorkspaceService:
                 hmac_key=customer_safe_projection_key(),
                 canonical_items=self._load_batch_job_export_items(job=job),
             )
-            return render_customer_safe_workbook(items=items, rows=rows, summary=summary)
+            return render_customer_safe_workbook(
+                items=items,
+                rows=_sanitize_spreadsheet_rows(rows),
+                summary=_sanitize_spreadsheet_summary(summary),
+            )
         return self._export_batch_job_workbook_legacy(job=job)
 
     def _export_batch_job_workbook_legacy(self, *, job: Dict[str, Any]) -> BytesIO:
@@ -6971,7 +7665,7 @@ class CustomQCWorkspaceService:
             ("执行规则数", _to_int(summary.get("rule_count"), 1)),
         ]
         for label, value in summary_rows:
-            ws_summary.append([label, value])
+            ws_summary.append(_sanitize_spreadsheet_row([label, value]))
         ws_summary.column_dimensions["A"].width = 24
         ws_summary.column_dimensions["B"].width = 80
 
@@ -6997,7 +7691,7 @@ class CustomQCWorkspaceService:
         for item in issue_items:
             append_complete_workbook_row(
                 ws_items,
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
@@ -7011,7 +7705,7 @@ class CustomQCWorkspaceService:
                     item.get("evidence") or "",
                     _to_float(item.get("confidence"), 0.0),
                     "是" if item.get("refined") is True else "否",
-                ]
+                ]),
             )
         ws_items.freeze_panes = "A2"
         ws_items.column_dimensions["A"].width = 16
@@ -7051,7 +7745,7 @@ class CustomQCWorkspaceService:
         for item in items:
             append_complete_workbook_row(
                 ws_all,
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
@@ -7066,7 +7760,7 @@ class CustomQCWorkspaceService:
                     item.get("evidence") or "",
                     _to_float(item.get("confidence"), 0.0),
                     "是" if item.get("refined") is True else "否",
-                ]
+                ]),
             )
         ws_all.freeze_panes = "A2"
 
@@ -7075,12 +7769,12 @@ class CustomQCWorkspaceService:
         ws_failed.append(["病历号", "患者姓名", "科室", "失败原因"])
         for item in failed_records:
             ws_failed.append(
-                [
+                _sanitize_spreadsheet_row([
                     item.get("record_id") or "",
                     item.get("patient_name") or "",
                     item.get("department") or "",
                     item.get("error") or "",
-                ]
+                ])
             )
         ws_failed.freeze_panes = "A2"
         ws_failed.column_dimensions["A"].width = 16
@@ -7110,7 +7804,7 @@ class CustomQCWorkspaceService:
             ("summary(raw)", _safe_json_dumps(summary)),
         ]
         for label, value in tech_rows:
-            ws_tech.append([label, value])
+            ws_tech.append(_sanitize_spreadsheet_row([label, value]))
         ws_tech.column_dimensions["A"].width = 24
         ws_tech.column_dimensions["B"].width = 96
 
@@ -7125,7 +7819,10 @@ class CustomQCWorkspaceService:
                 hmac_key=customer_safe_projection_key(),
                 canonical_items=self._load_batch_job_export_items(job=job),
             )
-            return render_customer_safe_csv(rows=rows, summary=summary)
+            return render_customer_safe_csv(
+                rows=_sanitize_spreadsheet_rows(rows),
+                summary=_sanitize_spreadsheet_summary(summary),
+            )
         return self._export_batch_job_csv_legacy(job=job)
 
     def _export_batch_job_csv_legacy(self, *, job: Dict[str, Any]) -> StringIO:
@@ -7151,25 +7848,25 @@ class CustomQCWorkspaceService:
                 issue_items.append(item or {})
 
         writer.writerow(["管理摘要"])
-        writer.writerow(["任务编号", _safe_text(job.get("id"), "-")])
-        writer.writerow(["任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")])
-        writer.writerow(["规则集", _safe_text(summary.get("rule_set_name") or (job.get("filters") or {}).get("rule_set_name"), "手工选择规则")])
-        writer.writerow(["执行策略", _safe_text(summary.get("quality_profile") or (job.get("filters") or {}).get("quality_profile"), "-")])
-        writer.writerow(["分桶策略", _safe_text(summary.get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy"), "-")])
-        writer.writerow(["精审规则数", _to_int(summary.get("refined_rule_count"))])
-        writer.writerow(["适用场景", _map_scene_label(job.get("scene"))])
-        writer.writerow(["覆盖范围", _map_scope_label(job.get("scope"))])
-        writer.writerow(["当前状态", _map_job_status_label(job.get("status"))])
-        writer.writerow(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))])
-        writer.writerow(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))])
-        writer.writerow(["AI判断病历数", _to_int(summary.get("uncertain_records"))])
-        writer.writerow(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))])
-        writer.writerow(["执行规则数", _to_int(summary.get("rule_count"), 1)])
+        writer.writerow(_sanitize_spreadsheet_row(["任务编号", _safe_text(job.get("id"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["任务名称", _safe_text(job.get("rule_name"), "终末病历批量质控任务")]))
+        writer.writerow(_sanitize_spreadsheet_row(["规则集", _safe_text(summary.get("rule_set_name") or (job.get("filters") or {}).get("rule_set_name"), "手工选择规则")]))
+        writer.writerow(_sanitize_spreadsheet_row(["执行策略", _safe_text(summary.get("quality_profile") or (job.get("filters") or {}).get("quality_profile"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["分桶策略", _safe_text(summary.get("bucket_strategy") or (job.get("filters") or {}).get("bucket_strategy"), "-")]))
+        writer.writerow(_sanitize_spreadsheet_row(["精审规则数", _to_int(summary.get("refined_rule_count"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["适用场景", _map_scene_label(job.get("scene"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["覆盖范围", _map_scope_label(job.get("scope"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["当前状态", _map_job_status_label(job.get("status"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["纳入病历数", _to_int(summary.get("total_records"), _to_int(job.get("total_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["发现问题病历数", _to_int(summary.get("issue_records"), _to_int(job.get("issue_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["AI判断病历数", _to_int(summary.get("uncertain_records"))]))
+        writer.writerow(_sanitize_spreadsheet_row(["合规病历数", _to_int(summary.get("compliant_records"), _to_int(job.get("compliant_records")))]))
+        writer.writerow(_sanitize_spreadsheet_row(["执行规则数", _to_int(summary.get("rule_count"), 1)]))
         writer.writerow([])
         writer.writerow(["问题明细"])
         writer.writerow(["病历号", "患者姓名", "科室", "质控点编码", "质控点名称", "文书域", "规则族", "判定结果", "问题结论", "整改建议", "证据摘要", "置信度", "是否精审"])
         for item in issue_items:
-            writer.writerow([
+            writer.writerow(_sanitize_spreadsheet_row([
                 item.get("record_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
@@ -7183,17 +7880,17 @@ class CustomQCWorkspaceService:
                 item.get("evidence") or "",
                 _to_float(item.get("confidence"), 0.0),
                 "是" if item.get("refined") is True else "否",
-            ])
+            ]))
         writer.writerow([])
         writer.writerow(["失败明细"])
         writer.writerow(["病历号", "患者姓名", "科室", "失败原因"])
         for item in job.get("failed_records") or []:
-            writer.writerow([
+            writer.writerow(_sanitize_spreadsheet_row([
                 item.get("record_id") or "",
                 item.get("patient_name") or "",
                 item.get("department") or "",
                 item.get("error") or "",
-            ])
+            ]))
         output.seek(0)
         return output
 
@@ -7702,6 +8399,7 @@ class CustomQCWorkspaceService:
                 )
             )
             session.commit()
+            _invalidate_in_process_rule_caches()
             return {
                 "draft_id": draft_id,
                 "rule_code": draft["rule_code"],
@@ -7710,6 +8408,37 @@ class CustomQCWorkspaceService:
             }
         finally:
             session.close()
+
+
+def _invalidate_in_process_rule_caches() -> None:
+    """发布自定义规则后联动清理进程内规则缓存，失败仅记录日志不影响发布结果。"""
+    log = logging.getLogger(__name__)
+    try:
+        from . import sichuan_qc_service as _sichuan_svc_mod
+
+        fn = getattr(_sichuan_svc_mod, "invalidate_rule_cache", None)
+        if callable(fn):
+            fn()
+    except Exception:
+        log.debug("跳过 sichuan_qc_service.invalidate_rule_cache 清理", exc_info=True)
+
+    try:
+        from ..routers import qc_sichuan as _qc_sichuan_router
+
+        singleton = getattr(_qc_sichuan_router, "service", None)
+        if singleton is not None:
+            inv = getattr(singleton, "invalidate_rule_cache", None)
+            if callable(inv):
+                inv()
+    except Exception:
+        log.debug("跳过 qc_sichuan.service.invalidate_rule_cache 清理", exc_info=True)
+
+    try:
+        from .customer_rule_sets import invalidate_customer_rule_set_cache
+
+        invalidate_customer_rule_set_cache()
+    except Exception:
+        log.debug("跳过 invalidate_customer_rule_set_cache 清理", exc_info=True)
 
 
 # SQLAlchemy is imported lazily here to avoid polluting top-level namespace usage above.

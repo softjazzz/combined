@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from types import SimpleNamespace
 from typing import Any, Callable, Iterable, Mapping
 
 from sqlalchemy import inspect as sa_inspect
-from sqlalchemy import text, tuple_
+from sqlalchemy import select, text, tuple_
 from sqlalchemy.orm import Session
 
+from ..database import clinical_connection
+from .clinical_read import clinical_query, clinical_read_schema, clinical_table_sql
 from .luxian_0609_rule_catalog import LUXIAN_0609_RULE_SET_KEY
 from .medical_records.query_service import (
     AdmissionRecord,
@@ -21,19 +23,66 @@ from .medical_records.query_service import (
     _workstation_discharge_summary_subquery,
 )
 
+_IN_CHUNK_SIZE = 500
+
+
+def _chunked(
+    values: list[Any], size: int | None = None
+) -> Iterable[list[Any]]:
+    chunk_size = _IN_CHUNK_SIZE if size is None else size
+    for start in range(0, len(values), chunk_size):
+        yield values[start : start + chunk_size]
+
+
+def _independent_clinical_has_catalog(bind: Any) -> bool:
+    inspector = sa_inspect(bind)
+    return inspector.has_table("admission_record", schema="cdm") and inspector.has_table(
+        "discharge_record", schema="cdm"
+    )
+
+
+def _match_independent_date_filter(
+    row: Mapping[str, Any],
+    *,
+    start_date: date | None,
+    end_date: date | None,
+    date_field: str,
+    datetime_parser: Callable[[Any], Any],
+) -> bool:
+    if start_date is None and end_date is None:
+        return True
+    names = (
+        ("admission", "discharge")
+        if date_field in (None, "visit")
+        else (date_field,)
+    )
+    for name in names:
+        parsed = datetime_parser(row.get(name))
+        if parsed is None:
+            continue
+        day = parsed.date() if isinstance(parsed, datetime) else parsed
+        if start_date is not None and day < start_date:
+            continue
+        if end_date is not None and day > end_date:
+            continue
+        return True
+    return False
+
 
 def _load_indexed_registration_records(
     session, *, institute_id: str | None = None
 ) -> list[SimpleNamespace]:
     """读取已同步但尚无病案首页的病例，不向 ``mr`` 写入伪首页。"""
 
-    bind = session.get_bind()
-    if not sa_inspect(bind).has_table("visit_index"):
+    conn = session.connection()
+    schema = clinical_read_schema()
+    if not sa_inspect(conn).has_table("visit_index", schema=schema):
         return []
+    visit_index_sql = clinical_table_sql("visit_index")
     indexed_rows = (
         session.execute(
             text(
-                "SELECT institute_id, patient_id, visit_id FROM visit_index"
+                f"SELECT institute_id, patient_id, visit_id FROM {visit_index_sql}"
                 + (
                     " WHERE institute_id = :institute_id"
                     if institute_id is not None
@@ -64,21 +113,26 @@ def _load_indexed_registration_records(
     visit_ids = sorted(
         {visit_id for _institute_id, _patient_id, visit_id in indexed_refs}
     )
-    frontpage_refs = {
-        (str(row.institute_id), str(row.patient_id), str(row.visit_id))
-        for row in session.query(
-            MedicalRecordFrontpage.institute_id,
-            MedicalRecordFrontpage.patient_id,
-            MedicalRecordFrontpage.visit_id,
-        )
-        .filter(
-            MedicalRecordFrontpage.visit_id.in_(visit_ids),
-            True
-            if institute_id is None
-            else MedicalRecordFrontpage.institute_id == institute_id,
-        )
-        .all()
-    }
+    frontpage_refs: set[tuple[str, str, str]] = set()
+    for chunk in _chunked(visit_ids):
+        for row in (
+            clinical_query(
+                session,
+                MedicalRecordFrontpage.institute_id,
+                MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id,
+            )
+            .filter(
+                MedicalRecordFrontpage.visit_id.in_(chunk),
+                True
+                if institute_id is None
+                else MedicalRecordFrontpage.institute_id == institute_id,
+            )
+            .all()
+        ):
+            frontpage_refs.add(
+                (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+            )
     missing_refs = indexed_refs - frontpage_refs
     if not missing_refs:
         return []
@@ -86,35 +140,36 @@ def _load_indexed_registration_records(
     missing_visit_ids = sorted(
         {visit_id for _institute_id, _patient_id, visit_id in missing_refs}
     )
-    registrations = [
-        row
-        for row in session.query(InpatRegistration)
-        .filter(
-            InpatRegistration.visit_id.in_(missing_visit_ids),
-            True
-            if institute_id is None
-            else InpatRegistration.institute_id == institute_id,
+    registrations = []
+    for chunk in _chunked(missing_visit_ids):
+        registrations.extend(
+            row
+            for row in clinical_query(session, InpatRegistration)
+            .filter(
+                InpatRegistration.visit_id.in_(chunk),
+                True
+                if institute_id is None
+                else InpatRegistration.institute_id == institute_id,
+            )
+            .all()
+            if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+            in missing_refs
         )
-        .all()
-        if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
-        in missing_refs
-    ]
-    admission_rows = (
-        session.query(AdmissionRecord)
-        .filter(
-            AdmissionRecord.visit_id.in_(missing_visit_ids),
-            True
-            if institute_id is None
-            else AdmissionRecord.institute_id == institute_id,
+    admission_rows = []
+    for chunk in _chunked(missing_visit_ids):
+        admission_rows.extend(
+            row
+            for row in clinical_query(session, AdmissionRecord)
+            .filter(
+                AdmissionRecord.visit_id.in_(chunk),
+                True
+                if institute_id is None
+                else AdmissionRecord.institute_id == institute_id,
+            )
+            .all()
+            if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
+            in missing_refs
         )
-        .all()
-    )
-    admission_rows = [
-        row
-        for row in admission_rows
-        if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
-        in missing_refs
-    ]
     registration_by_ref = {
         (str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
         for row in registrations
@@ -126,29 +181,33 @@ def _load_indexed_registration_records(
     discharge_by_ref: dict[tuple[str, str, str], Any] = {}
     discharge_summary = _workstation_discharge_summary_subquery(session)
     if discharge_summary is not None:
-        discharge_rows = (
-            session.query(
-                discharge_summary.c.institute_id,
-                discharge_summary.c.patient_id,
-                discharge_summary.c.visit_id,
-                discharge_summary.c.discharge_time,
-                discharge_summary.c.dept_name,
-                discharge_summary.c.document_id,
+        for chunk in _chunked(missing_visit_ids):
+            discharge_rows = (
+                clinical_query(
+                    session,
+                    discharge_summary.c.institute_id,
+                    discharge_summary.c.patient_id,
+                    discharge_summary.c.visit_id,
+                    discharge_summary.c.discharge_time,
+                    discharge_summary.c.dept_name,
+                    discharge_summary.c.document_id,
+                )
+                .filter(
+                    discharge_summary.c.visit_id.in_(chunk),
+                    True
+                    if institute_id is None
+                    else discharge_summary.c.institute_id == institute_id,
+                )
+                .all()
             )
-            .filter(
-                discharge_summary.c.visit_id.in_(missing_visit_ids),
-                True
-                if institute_id is None
-                else discharge_summary.c.institute_id == institute_id,
-            )
-            .all()
-        )
-        discharge_by_ref = {
-            (str(row.institute_id), str(row.patient_id), str(row.visit_id)): row
-            for row in discharge_rows
-            if (str(row.institute_id), str(row.patient_id), str(row.visit_id))
-            in missing_refs
-        }
+            for row in discharge_rows:
+                identity = (
+                    str(row.institute_id),
+                    str(row.patient_id),
+                    str(row.visit_id),
+                )
+                if identity in missing_refs:
+                    discharge_by_ref[identity] = row
     records: list[SimpleNamespace] = []
     for identity in sorted(missing_refs):
         registration = registration_by_ref.get(identity)
@@ -224,6 +283,93 @@ def build_review_anchors(
     return anchors
 
 
+def _load_scoring_departments_from_session(
+    active: Session, normalized: list[tuple[str, str, str]]
+) -> dict[tuple[str, str, str], str]:
+    discharge_summary = _workstation_discharge_summary_subquery(active)
+    base_query = clinical_query(
+        active,
+        MedicalRecordFrontpage.institute_id,
+        MedicalRecordFrontpage.patient_id,
+        MedicalRecordFrontpage.visit_id,
+        _workstation_department_expr(discharge_summary).label("department"),
+    )
+    if discharge_summary is not None:
+        base_query = base_query.outerjoin(
+            discharge_summary,
+            _workstation_discharge_join_condition(discharge_summary),
+        )
+    candidates: dict[tuple[str, str, str], set[str]] = {}
+    for chunk in _chunked(normalized):
+        rows = base_query.filter(
+            tuple_(
+                MedicalRecordFrontpage.institute_id,
+                MedicalRecordFrontpage.patient_id,
+                MedicalRecordFrontpage.visit_id,
+            ).in_(chunk)
+        ).all()
+        for row in rows:
+            identity = tuple(str(value or "").strip() for value in row[:3])
+            department = str(row.department or "").strip()
+            if all(identity) and department:
+                candidates.setdefault(identity, set()).add(department)
+    return {
+        identity: next(iter(names))
+        for identity, names in candidates.items()
+        if len(names) == 1
+    }
+
+
+def _load_independent_scoring_departments(
+    normalized: list[tuple[str, str, str]],
+) -> dict[tuple[str, str, str], str]:
+    clinical_engine = clinical_connection.get_engine()
+    if clinical_engine is None:
+        return {}
+    if not _independent_clinical_has_catalog(clinical_engine):
+        with Session(clinical_engine) as active:
+            return _load_scoring_departments_from_session(active, normalized)
+
+    from . import clinical_case_catalog as catalog_service
+
+    source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+    candidates: dict[tuple[str, str, str], set[str]] = {}
+    with clinical_engine.connect() as connection:
+        for chunk in _chunked(normalized):
+            rows = (
+                connection.execute(
+                    select(
+                        source.c.institute_id,
+                        source.c.patient_id,
+                        source.c.visit_id,
+                        source.c.department,
+                    ).where(
+                        tuple_(
+                            source.c.institute_id,
+                            source.c.patient_id,
+                            source.c.visit_id,
+                        ).in_(chunk)
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            for row in rows:
+                identity = (
+                    _safe_text(row.get("institute_id")),
+                    _safe_text(row.get("patient_id")),
+                    _safe_text(row.get("visit_id")),
+                )
+                department = _safe_text(row.get("department"))
+                if all(identity) and department:
+                    candidates.setdefault(identity, set()).add(department)
+    return {
+        identity: next(iter(names))
+        for identity, names in candidates.items()
+        if len(names) == 1
+    }
+
+
 def load_scoring_departments(
     identities: Iterable[tuple[str, str, str]],
     *,
@@ -242,43 +388,14 @@ def load_scoring_departments(
     if not normalized:
         return {}
 
-    def read(active: Session) -> dict[tuple[str, str, str], str]:
-        discharge_summary = _workstation_discharge_summary_subquery(active)
-        query = active.query(
-            MedicalRecordFrontpage.institute_id,
-            MedicalRecordFrontpage.patient_id,
-            MedicalRecordFrontpage.visit_id,
-            _workstation_department_expr(discharge_summary).label("department"),
-        )
-        if discharge_summary is not None:
-            query = query.outerjoin(
-                discharge_summary,
-                _workstation_discharge_join_condition(discharge_summary),
-            )
-        rows = query.filter(
-            tuple_(
-                MedicalRecordFrontpage.institute_id,
-                MedicalRecordFrontpage.patient_id,
-                MedicalRecordFrontpage.visit_id,
-            ).in_(normalized)
-        ).all()
-        candidates: dict[tuple[str, str, str], set[str]] = {}
-        for row in rows:
-            identity = tuple(str(value or "").strip() for value in row[:3])
-            department = str(row.department or "").strip()
-            if all(identity) and department:
-                candidates.setdefault(identity, set()).add(department)
-        return {
-            identity: next(iter(names))
-            for identity, names in candidates.items()
-            if len(names) == 1
-        }
+    if clinical_connection.configured():
+        return _load_independent_scoring_departments(normalized)
 
     if session is not None:
-        return read(session)
+        return _load_scoring_departments_from_session(session, normalized)
     factory = session_factory or _session_factory
     with factory() as active:
-        return read(active)
+        return _load_scoring_departments_from_session(active, normalized)
 
 
 def _safe_text(value: Any, default: str = "") -> str:
@@ -295,6 +412,196 @@ def _identity_from_record(record: Mapping[str, Any]) -> tuple[str, str, str] | N
     return identity if all(identity) else None
 
 
+def _load_workstation_records_from_session(
+    session: Session,
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    date_field: str = "visit",
+    institute_id: str | None = None,
+) -> list[dict[str, str]]:
+    from .medical_records.query_service import (
+        MedicalRecordFrontpage,
+        _apply_workstation_filters,
+        _filter_indexed_registration_records,
+        _load_hospitalization_projection_map,
+        _workstation_department_expr,
+        _workstation_discharge_join_condition,
+        _workstation_discharge_summary_subquery,
+    )
+
+    discharge_summary = _workstation_discharge_summary_subquery(session)
+    query = clinical_query(session, MedicalRecordFrontpage)
+    if institute_id is not None:
+        query = query.filter(MedicalRecordFrontpage.institute_id == institute_id)
+    if discharge_summary is not None:
+        query = query.outerjoin(
+            discharge_summary,
+            _workstation_discharge_join_condition(discharge_summary),
+        )
+    query = _apply_workstation_filters(
+        query,
+        dept=department,
+        doctor=doctor,
+        keyword=None,
+        start_date=start_date,
+        end_date=end_date,
+        date_field=date_field,
+        hospital_status=hospital_status,
+        sync_scope="all",
+        include_department=True,
+        include_doctor=True,
+        discharge_summary=discharge_summary,
+    )
+    department_expr = _workstation_department_expr(discharge_summary).label(
+        "department"
+    )
+    rows = query.with_entities(
+        MedicalRecordFrontpage.institute_id,
+        MedicalRecordFrontpage.patient_id,
+        MedicalRecordFrontpage.visit_id,
+        MedicalRecordFrontpage.name.label("patient_name"),
+        MedicalRecordFrontpage.attending_physician_sign.label(
+            "attending_physician"
+        ),
+        department_expr,
+    ).all()
+    records = [
+        {
+            "institute_id": _safe_text(row.institute_id),
+            "patient_id": _safe_text(row.patient_id),
+            "visit_id": _safe_text(row.visit_id),
+            "patient_name": _safe_text(row.patient_name),
+            "department": _safe_text(row.department, "未分科室") or "未分科室",
+            "attending_physician": _safe_text(
+                row.attending_physician,
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for row in rows
+    ]
+    indexed_records = _filter_indexed_registration_records(
+        _load_indexed_registration_records(
+            session,
+            **({"institute_id": institute_id} if institute_id is not None else {}),
+        ),
+        dept=department,
+        doctor=doctor,
+        keyword=None,
+        start_date=start_date,
+        end_date=end_date,
+        date_field=date_field,
+        hospital_status=hospital_status,
+        sync_scope="all",
+        hospitalization_projection_map=_load_hospitalization_projection_map(session),
+    )
+    records.extend(
+        {
+            "institute_id": _safe_text(record.institute_id),
+            "patient_id": _safe_text(record.patient_id),
+            "visit_id": _safe_text(record.visit_id),
+            "patient_name": _safe_text(record.name),
+            "department": _safe_text(
+                record.discharge_dept_name or record.admission_dept_name,
+                "未分科室",
+            )
+            or "未分科室",
+            "attending_physician": _safe_text(
+                record.attending_physician_sign,
+                "未登记主治医师",
+            )
+            or "未登记主治医师",
+        }
+        for record in indexed_records
+        if institute_id is None or _safe_text(record.institute_id) == institute_id
+    )
+    return records
+
+
+def _load_independent_workstation_records(
+    *,
+    department: str | None,
+    doctor: str | None,
+    hospital_status: str,
+    start_date: date | None = None,
+    end_date: date | None = None,
+    date_field: str = "visit",
+    institute_id: str | None = None,
+) -> list[dict[str, str]]:
+    clinical_engine = clinical_connection.get_engine()
+    if clinical_engine is None:
+        return []
+    if not _independent_clinical_has_catalog(clinical_engine):
+        with Session(clinical_engine) as session:
+            return _load_workstation_records_from_session(
+                session,
+                department=department,
+                doctor=doctor,
+                hospital_status=hospital_status,
+                start_date=start_date,
+                end_date=end_date,
+                date_field=date_field,
+                institute_id=institute_id,
+            )
+
+    from . import clinical_case_catalog as catalog_service
+
+    source = catalog_service.catalog(clinical_engine, include_frontpage=False)
+    is_sqlite = clinical_engine.dialect.name == "sqlite"
+    predicates = catalog_service._predicates(
+        source,
+        dept=department,
+        doctor=doctor,
+        keyword=None,
+        start_date=None if is_sqlite else start_date,
+        end_date=None if is_sqlite else end_date,
+        date_field=date_field,
+        hospital_status=hospital_status,
+        institute_id=institute_id,
+    )
+    columns = [
+        source.c.institute_id,
+        source.c.patient_id,
+        source.c.visit_id,
+        source.c.name,
+        source.c.department,
+        source.c.doctor,
+    ]
+    if is_sqlite and (start_date is not None or end_date is not None):
+        columns.extend([source.c.admission, source.c.discharge, source.c.updated])
+    with clinical_engine.connect() as connection:
+        rows = connection.execute(select(*columns).where(*predicates)).mappings().all()
+    records: list[dict[str, str]] = []
+    for row in rows:
+        if is_sqlite and not _match_independent_date_filter(
+            row,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            datetime_parser=catalog_service._datetime,
+        ):
+            continue
+        records.append(
+            {
+                "institute_id": _safe_text(row.get("institute_id")),
+                "patient_id": _safe_text(row.get("patient_id")),
+                "visit_id": _safe_text(row.get("visit_id")),
+                "patient_name": _safe_text(row.get("name")),
+                "department": _safe_text(row.get("department"), "未分科室") or "未分科室",
+                "attending_physician": _safe_text(
+                    row.get("doctor"),
+                    "未登记主治医师",
+                )
+                or "未登记主治医师",
+            }
+        )
+    return records
+
+
 def load_current_workstation_records(
     *,
     department: str | None,
@@ -307,109 +614,33 @@ def load_current_workstation_records(
 ) -> list[dict[str, str]]:
     """用病历池同一筛选口径读取当前范围的最小身份与维度字段。"""
 
-    from .medical_records.query_service import (
-        MedicalRecordFrontpage,
-        _apply_workstation_filters,
-        _filter_indexed_registration_records,
-        _load_hospitalization_projection_map,
-        _session_factory,
-        _workstation_department_expr,
-        _workstation_discharge_join_condition,
-        _workstation_discharge_summary_subquery,
-    )
+    if clinical_connection.configured():
+        records = _load_independent_workstation_records(
+            department=department,
+            doctor=doctor,
+            hospital_status=hospital_status,
+            start_date=start_date,
+            end_date=end_date,
+            date_field=date_field,
+            institute_id=institute_id,
+        )
+    else:
+        from .medical_records.query_service import _session_factory as query_session_factory
 
-    session = _session_factory()
-    try:
-        discharge_summary = _workstation_discharge_summary_subquery(session)
-        query = session.query(MedicalRecordFrontpage)
-        if institute_id is not None:
-            query = query.filter(MedicalRecordFrontpage.institute_id == institute_id)
-        if discharge_summary is not None:
-            query = query.outerjoin(
-                discharge_summary,
-                _workstation_discharge_join_condition(discharge_summary),
-            )
-        query = _apply_workstation_filters(
-            query,
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=start_date,
-            end_date=end_date,
-            date_field=date_field,
-            hospital_status=hospital_status,
-            sync_scope="all",
-            include_department=True,
-            include_doctor=True,
-            discharge_summary=discharge_summary,
-        )
-        department_expr = _workstation_department_expr(discharge_summary).label(
-            "department"
-        )
-        rows = query.with_entities(
-            MedicalRecordFrontpage.institute_id,
-            MedicalRecordFrontpage.patient_id,
-            MedicalRecordFrontpage.visit_id,
-            MedicalRecordFrontpage.name.label("patient_name"),
-            MedicalRecordFrontpage.attending_physician_sign.label(
-                "attending_physician"
-            ),
-            department_expr,
-        ).all()
-        records = [
-            {
-                "institute_id": _safe_text(row.institute_id),
-                "patient_id": _safe_text(row.patient_id),
-                "visit_id": _safe_text(row.visit_id),
-                "patient_name": _safe_text(row.patient_name),
-                "department": _safe_text(row.department, "未分科室") or "未分科室",
-                "attending_physician": _safe_text(
-                    row.attending_physician,
-                    "未登记主治医师",
-                )
-                or "未登记主治医师",
-            }
-            for row in rows
-        ]
-        indexed_records = _filter_indexed_registration_records(
-            _load_indexed_registration_records(
+        session = query_session_factory()
+        try:
+            records = _load_workstation_records_from_session(
                 session,
-                **({"institute_id": institute_id} if institute_id is not None else {}),
-            ),
-            dept=department,
-            doctor=doctor,
-            keyword=None,
-            start_date=start_date,
-            end_date=end_date,
-            date_field=date_field,
-            hospital_status=hospital_status,
-            sync_scope="all",
-            hospitalization_projection_map=_load_hospitalization_projection_map(
-                session
-            ),
-        )
-        records.extend(
-            {
-                "institute_id": _safe_text(record.institute_id),
-                "patient_id": _safe_text(record.patient_id),
-                "visit_id": _safe_text(record.visit_id),
-                "patient_name": _safe_text(record.name),
-                "department": _safe_text(
-                    record.discharge_dept_name or record.admission_dept_name,
-                    "未分科室",
-                )
-                or "未分科室",
-                "attending_physician": _safe_text(
-                    record.attending_physician_sign,
-                    "未登记主治医师",
-                )
-                or "未登记主治医师",
-            }
-            for record in indexed_records
-            if institute_id is None or _safe_text(record.institute_id) == institute_id
-        )
-    finally:
-        session.close()
+                department=department,
+                doctor=doctor,
+                hospital_status=hospital_status,
+                start_date=start_date,
+                end_date=end_date,
+                date_field=date_field,
+                institute_id=institute_id,
+            )
+        finally:
+            session.close()
 
     unique_records: dict[tuple[str, str, str], dict[str, str]] = {}
     for record in records:

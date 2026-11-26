@@ -1,5 +1,8 @@
 <template>
-  <main class="catalog-page">
+  <section
+    class="catalog-page"
+    aria-label="手术操作分级目录"
+  >
     <div class="catalog-page-inner">
       <header class="catalog-page-header">
         <div class="catalog-title-block">
@@ -12,7 +15,11 @@
           <p>查看质控引擎用于区分手术、操作及手术等级的当前口径。</p>
         </div>
         <div class="catalog-page-actions">
-          <span class="catalog-version">{{ data?.version || '目录加载中' }}</span>
+          <span
+            class="catalog-version"
+            :class="{ 'is-error': Boolean(loadError && !data?.version) }"
+            data-testid="catalog-version"
+          >{{ versionBadgeText }}</span>
           <a-button @click="goBack">
             <ArrowLeft :size="15" />返回样本验证
           </a-button>
@@ -34,29 +41,38 @@
 
         <div class="summary-strip">
           <button
+            type="button"
             class="summary-item"
-            :class="{ active: !filters.category && !filters.level }"
+            :class="{ active: isAllFilter }"
+            :aria-pressed="isAllFilter"
+            data-testid="catalog-summary-all"
             @click="showAll"
           >
             <span>目录总数</span><strong>{{ data?.summary.total ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: filters.category === '手术' && !filters.level }"
+            :aria-pressed="filters.category === '手术' && !filters.level"
             @click="showSurgeries"
           >
             <span>手术</span><strong>{{ data?.summary.surgery ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: isLevelFourFilter }"
+            :aria-pressed="isLevelFourFilter"
             @click="showLevelFour"
           >
             <span>四级手术</span><strong>{{ data?.summary.level_four_surgery ?? '—' }}</strong>
           </button>
           <button
+            type="button"
             class="summary-item"
             :class="{ active: filters.category === 'operation' }"
+            :aria-pressed="filters.category === 'operation'"
             @click="showOperations"
           >
             <span>非手术操作</span><strong>{{ data?.summary.operation ?? '—' }}</strong>
@@ -123,18 +139,35 @@
               {{ source.label }}
             </a-select-option>
           </a-select>
-          <a-button
-            type="primary"
-            @click="applyFilters"
-          >
-            <Search :size="15" />查询
-          </a-button>
-          <a-button @click="resetFilters">
-            <RefreshCw :size="15" />重置
-          </a-button>
+          <div class="filter-actions">
+            <a-button
+              type="primary"
+              @click="applyFilters"
+            >
+              <Search :size="15" />查询
+            </a-button>
+            <a-button @click="resetFilters">
+              <RefreshCw :size="15" />重置
+            </a-button>
+          </div>
         </div>
 
         <div class="catalog-table-wrap">
+          <div
+            v-if="loadError"
+            class="catalog-error-banner"
+            data-testid="catalog-load-error"
+          >
+            <span>{{ loadError }}</span>
+            <a-button
+              size="small"
+              type="primary"
+              data-testid="catalog-retry"
+              @click="loadCatalog"
+            >
+              重新加载
+            </a-button>
+          </div>
           <div class="catalog-table-meta">
             <span>当前筛选 <strong>{{ data?.total ?? 0 }}</strong> 条</span>
             <span>有效等级是质控判定使用的等级</span>
@@ -145,7 +178,7 @@
             :loading="loading"
             :pagination="pagination"
             :row-key="(record: SurgeryProcedureCatalogItem) => record.code"
-            :scroll="{ x: 1020 }"
+            :scroll="{ x: 840 }"
             size="middle"
             table-layout="fixed"
             @change="handleTableChange"
@@ -186,18 +219,27 @@
               </template>
             </template>
             <template #emptyText>
-              <a-empty description="没有符合当前条件的手术操作" />
+              <a-empty :description="loadError ? '目录加载失败，请点击重试' : '没有符合当前条件的手术操作'">
+                <a-button
+                  v-if="loadError"
+                  size="small"
+                  type="primary"
+                  @click="loadCatalog"
+                >
+                  重新加载
+                </a-button>
+              </a-empty>
             </template>
           </a-table>
         </div>
       </section>
     </div>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { TableColumnsType, TablePaginationConfig } from 'ant-design-vue'
 import { message } from 'ant-design-vue'
 import { ArrowLeft, RefreshCw, Search, ShieldCheck } from 'lucide-vue-next'
@@ -208,8 +250,19 @@ import {
 } from '@/views/workstation-v4/surgery-catalog/service'
 
 const loading = ref(false)
+const loadError = ref('')
 const router = useRouter()
+const route = (() => {
+  try {
+    return typeof useRoute === 'function' ? useRoute() : null
+  } catch {
+    return null
+  }
+})()
 const data = ref<SurgeryProcedureCatalogData>()
+let catalogRequestSeq = 0
+let catalogAbortController: AbortController | null = null
+let isApplyingRouteQuery = false
 const filters = reactive({
   keyword: '',
   category: undefined as string | undefined,
@@ -219,11 +272,80 @@ const filters = reactive({
   pageSize: 20,
 })
 
+function readQueryText(value: unknown): string {
+  if (Array.isArray(value)) return typeof value[0] === 'string' ? value[0] : ''
+  return typeof value === 'string' ? value : ''
+}
+
+function parsePositiveInt(value: unknown, fallback: number): number {
+  const parsed = Number.parseInt(readQueryText(value), 10)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function applyRouteQuery(): boolean {
+  if (!route) return false
+  const nextKeyword = readQueryText(route.query?.keyword)
+  const nextCategory = readQueryText(route.query?.category) || undefined
+  const nextLevel = readQueryText(route.query?.level) || undefined
+  const nextSource = readQueryText(route.query?.source) || undefined
+  const nextPage = parsePositiveInt(route.query?.page, 1)
+  const nextPageSize = parsePositiveInt(route.query?.pageSize, 20)
+  const changed =
+    nextKeyword !== filters.keyword ||
+    nextCategory !== filters.category ||
+    nextLevel !== filters.level ||
+    nextSource !== filters.source ||
+    nextPage !== filters.page ||
+    nextPageSize !== filters.pageSize
+  isApplyingRouteQuery = true
+  filters.keyword = nextKeyword
+  filters.category = nextCategory
+  filters.level = nextLevel
+  filters.source = nextSource
+  filters.page = nextPage
+  filters.pageSize = nextPageSize
+  isApplyingRouteQuery = false
+  return changed
+}
+
+function syncFiltersToRoute() {
+  if (!route || !router || typeof router.replace !== 'function' || isApplyingRouteQuery) return
+  const nextQuery: Record<string, unknown> = { ...(route.query || {}) }
+  delete nextQuery.keyword
+  delete nextQuery.category
+  delete nextQuery.level
+  delete nextQuery.source
+  delete nextQuery.page
+  delete nextQuery.pageSize
+  if (filters.keyword.trim()) nextQuery.keyword = filters.keyword.trim()
+  if (filters.category) nextQuery.category = filters.category
+  if (filters.level) nextQuery.level = filters.level
+  if (filters.source) nextQuery.source = filters.source
+  if (filters.page > 1) nextQuery.page = String(filters.page)
+  if (filters.pageSize !== 20) nextQuery.pageSize = String(filters.pageSize)
+
+  const same =
+    readQueryText(route.query?.keyword) === readQueryText(nextQuery.keyword) &&
+    readQueryText(route.query?.category) === readQueryText(nextQuery.category) &&
+    readQueryText(route.query?.level) === readQueryText(nextQuery.level) &&
+    readQueryText(route.query?.source) === readQueryText(nextQuery.source) &&
+    readQueryText(route.query?.page) === readQueryText(nextQuery.page) &&
+    readQueryText(route.query?.pageSize) === readQueryText(nextQuery.pageSize)
+  if (same) return
+  void router.replace({ query: nextQuery as typeof route.query })
+}
+
+function isAbortError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as { code?: unknown; name?: unknown }
+  return candidate.code === 'ERR_CANCELED' || candidate.name === 'CanceledError' || candidate.name === 'AbortError'
+}
+
 const columns: TableColumnsType<SurgeryProcedureCatalogItem> = [
-  { title: '编码与名称', key: 'identity', width: 500 },
-  { title: '类型', key: 'category', width: 130 },
-  { title: '有效等级', key: 'effective_level', width: 130 },
-  { title: '原始等级与来源', key: 'basis', width: 260 },
+  { title: '编码与名称', key: 'identity', width: 380 },
+  { title: '类型', key: 'category', width: 100 },
+  { title: '有效等级', key: 'effective_level', width: 110 },
+  { title: '原始等级与来源', key: 'basis', width: 220 },
 ]
 
 const categoryOptions = computed(() => {
@@ -244,29 +366,60 @@ const pagination = computed<TablePaginationConfig>(() => ({
   size: 'small',
 }))
 
+const isAllFilter = computed(
+  () =>
+    !filters.category &&
+    !filters.level &&
+    !filters.source &&
+    !String(filters.keyword || '').trim(),
+)
 const isLevelFourFilter = computed(() => filters.category === '手术' && filters.level === '四级')
+const versionBadgeText = computed(() => {
+  if (data.value?.version) return data.value.version
+  if (loading.value) return '目录加载中'
+  if (loadError.value) return '目录加载失败'
+  return '暂无目录版本'
+})
 
 async function loadCatalog(): Promise<void> {
+  const seq = ++catalogRequestSeq
+  catalogAbortController?.abort()
+  const controller = new AbortController()
+  catalogAbortController = controller
   loading.value = true
+  loadError.value = ''
   try {
-    const result = await fetchSurgeryProcedureCatalog({
-      keyword: filters.keyword,
-      category: filters.category,
-      effectiveLevel: filters.level,
-      source: filters.source,
-      page: filters.page,
-      pageSize: filters.pageSize,
-    })
+    const result = await fetchSurgeryProcedureCatalog(
+      {
+        keyword: filters.keyword,
+        category: filters.category,
+        effectiveLevel: filters.level,
+        source: filters.source,
+        page: filters.page,
+        pageSize: filters.pageSize,
+      },
+      { signal: controller.signal, skipErrorToast: true },
+    )
+    if (controller.signal.aborted || seq !== catalogRequestSeq) return
     data.value = result
   } catch (error) {
-    message.error(error instanceof Error ? error.message : '加载手术操作分级目录失败')
+    if (isAbortError(error) || controller.signal.aborted || seq !== catalogRequestSeq) return
+    const errMsg = error instanceof Error ? error.message : '加载手术操作分级目录失败'
+    loadError.value = errMsg
+    message.error(errMsg)
   } finally {
-    loading.value = false
+    if (catalogAbortController === controller) {
+      catalogAbortController = null
+    }
+    if (seq === catalogRequestSeq) {
+      loading.value = false
+    }
   }
 }
 
 function applyFilters(): void {
   filters.page = 1
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
@@ -276,12 +429,15 @@ function resetFilters(): void {
   filters.level = undefined
   filters.source = undefined
   filters.page = 1
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
 function showAll(): void {
+  filters.keyword = ''
   filters.category = undefined
   filters.level = undefined
+  filters.source = undefined
   applyFilters()
 }
 
@@ -306,6 +462,7 @@ function showOperations(): void {
 function handleTableChange(paginationValue: TablePaginationConfig): void {
   filters.page = paginationValue.current || 1
   filters.pageSize = paginationValue.pageSize || 20
+  syncFiltersToRoute()
   void loadCatalog()
 }
 
@@ -317,14 +474,36 @@ function goBack(): void {
   void router.push({ name: 'WorkstationV4CustomerSampleValidation' })
 }
 
+if (route) {
+  applyRouteQuery()
+  watch(
+    () => [
+      route.query?.keyword,
+      route.query?.category,
+      route.query?.level,
+      route.query?.source,
+      route.query?.page,
+      route.query?.pageSize,
+    ],
+    () => {
+      if (applyRouteQuery()) {
+        void loadCatalog()
+      }
+    },
+  )
+}
+
 onMounted(() => void loadCatalog())
+onBeforeUnmount(() => {
+  catalogAbortController?.abort()
+})
 </script>
 
 <style scoped>
 .catalog-page {
-  background: #f5f5f7;
+  background: transparent;
   box-sizing: border-box;
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   min-height: 100%;
   overflow-x: hidden;
   padding: 22px 24px 34px;
@@ -346,7 +525,7 @@ onMounted(() => void loadCatalog())
 }
 
 .catalog-title-block h1 {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
@@ -355,7 +534,7 @@ onMounted(() => void loadCatalog())
 }
 
 .catalog-title-block p {
-  color: rgba(29, 29, 31, 0.56);
+  color: var(--mq-text-tertiary);
   font-size: 13px;
   line-height: 20px;
   margin: 7px 0 0;
@@ -369,7 +548,6 @@ onMounted(() => void loadCatalog())
 
 .catalog-page-actions :deep(.ant-btn) {
   align-items: center;
-  border-radius: 8px;
   display: inline-flex;
   font-size: 13px;
   gap: 6px;
@@ -398,7 +576,7 @@ onMounted(() => void loadCatalog())
 .catalog-version {
   background: rgba(0, 0, 0, 0.04);
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-tertiary);
   font-size: 11px;
   padding: 6px 10px;
 }
@@ -423,7 +601,7 @@ onMounted(() => void loadCatalog())
   font-size: 13px;
 }
 .policy-strip span {
-  color: rgba(29, 29, 31, 0.64);
+  color: var(--mq-text-secondary);
   font-size: 12px;
 }
 
@@ -438,12 +616,17 @@ onMounted(() => void loadCatalog())
   background: transparent;
   border: 0;
   border-right: 1px solid rgba(0, 0, 0, 0.08);
-  color: rgba(29, 29, 31, 0.55);
+  color: var(--mq-text-secondary);
   cursor: pointer;
   display: flex;
   gap: 10px;
   justify-content: center;
   padding: 5px 12px;
+}
+
+.summary-item:focus-visible {
+  outline: 2px solid var(--mq-brand-600);
+  outline-offset: 2px;
 }
 
 .summary-item:last-child {
@@ -454,7 +637,7 @@ onMounted(() => void loadCatalog())
   color: #0066cc;
 }
 .summary-item strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 22px;
   line-height: 28px;
 }
@@ -466,28 +649,31 @@ onMounted(() => void loadCatalog())
   align-items: center;
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  padding: 16px 26px;
+  gap: 8px;
+  padding: 14px 22px;
+}
+
+.filter-actions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .catalog-search {
-  flex: 1 1 300px;
-  max-width: 420px;
-  min-width: 260px;
+  flex: 1 1 200px;
+  max-width: 340px;
+  min-width: 180px;
 }
 .catalog-select {
-  width: 150px;
+  flex: 0 0 auto;
+  width: 132px;
 }
 .level-select {
-  width: 125px;
+  width: 112px;
 }
 .source-select {
-  width: 190px;
-}
-.filter-bar :deep(.ant-input-affix-wrapper),
-.filter-bar :deep(.ant-select-selector),
-.filter-bar :deep(.ant-btn) {
-  border-radius: 8px !important;
+  width: 156px;
 }
 .filter-bar :deep(.ant-btn) {
   align-items: center;
@@ -502,7 +688,7 @@ onMounted(() => void loadCatalog())
 }
 .catalog-table-meta {
   box-sizing: border-box;
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   display: flex;
   font-size: 12px;
   justify-content: space-between;
@@ -529,7 +715,7 @@ onMounted(() => void loadCatalog())
 }
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
   background: rgba(0, 0, 0, 0.025);
-  color: rgba(29, 29, 31, 0.52);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -537,7 +723,7 @@ onMounted(() => void loadCatalog())
   border-bottom-color: rgba(0, 0, 0, 0.06);
 }
 .catalog-table-wrap :deep(.ant-table-tbody > tr:hover > td) {
-  background: rgba(0, 102, 204, 0.025) !important;
+  background: rgba(0, 102, 204, 0.025);
 }
 .catalog-table-wrap :deep(.ant-pagination) {
   margin: 16px 24px;
@@ -552,18 +738,18 @@ onMounted(() => void loadCatalog())
 .catalog-identity code {
   background: rgba(0, 0, 0, 0.04);
   border-radius: 6px;
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   flex: 0 0 auto;
   font-size: 12px;
   padding: 3px 7px;
 }
 .catalog-identity strong {
-  color: #1d1d1f;
+  color: var(--mq-text-primary);
   font-size: 14px;
   font-weight: 600;
 }
 .category-label {
-  color: rgba(29, 29, 31, 0.58);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 .category-label.surgery {
@@ -573,7 +759,7 @@ onMounted(() => void loadCatalog())
 .level-label {
   background: rgba(0, 0, 0, 0.045);
   border-radius: 999px;
-  color: rgba(29, 29, 31, 0.68);
+  color: var(--mq-text-secondary);
   display: inline-flex;
   font-size: 12px;
   font-weight: 600;
@@ -589,46 +775,13 @@ onMounted(() => void loadCatalog())
   gap: 2px;
 }
 .basis-cell strong {
-  color: rgba(29, 29, 31, 0.72);
+  color: var(--mq-text-secondary);
   font-size: 13px;
 }
 .basis-cell span,
 .muted-value {
-  color: rgba(29, 29, 31, 0.42);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
-}
-
-@media (max-width: 980px) {
-  .catalog-page {
-    padding: 16px;
-  }
-  .catalog-page-header {
-    align-items: stretch;
-    flex-direction: column;
-    gap: 14px;
-  }
-  .catalog-page-actions {
-    justify-content: space-between;
-  }
-  .filter-bar {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
-  .catalog-search {
-    max-width: none;
-    width: 100%;
-  }
-  .catalog-table-meta {
-    align-items: flex-start;
-    flex-direction: column;
-    white-space: normal;
-  }
-  .summary-strip {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  .summary-item:nth-child(2) {
-    border-right: 0;
-  }
 }
 
 /* ===== v7.1 液态玻璃覆盖（同选择器后写生效） ===== */
@@ -676,6 +829,23 @@ onMounted(() => void loadCatalog())
   font-family: var(--mq-font-mono);
 }
 
+.catalog-version.is-error {
+  background: rgba(207, 19, 34, 0.08);
+  color: #cf1322;
+}
+
+.catalog-error-banner {
+  align-items: center;
+  background: rgba(207, 19, 34, 0.06);
+  border-bottom: 1px solid rgba(207, 19, 34, 0.14);
+  color: #cf1322;
+  display: flex;
+  font-size: 13px;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 10px 26px;
+}
+
 .catalog-workbench {
   border: 1px solid var(--mq-glass-border);
   border-radius: var(--mq-radius-card);
@@ -713,9 +883,9 @@ onMounted(() => void loadCatalog())
 
 .filter-bar :deep(.ant-input-affix-wrapper),
 .filter-bar :deep(.ant-select-selector) {
-  border-color: rgba(60, 60, 80, 0.1) !important;
-  border-radius: var(--mq-radius-control) !important;
-  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(60, 60, 80, 0.1);
+  border-radius: var(--mq-radius-control);
+  background: rgba(255, 255, 255, 0.85);
 }
 
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
@@ -828,6 +998,66 @@ onMounted(() => void loadCatalog())
 
 .catalog-table-wrap :deep(.ant-table-thead > tr > th) {
   font-weight: 500;
+}
+
+@media (max-width: 1360px) {
+  .catalog-page {
+    padding: 8px 18px 28px;
+  }
+  .filter-bar {
+    gap: 8px;
+    padding: 14px 18px;
+  }
+  .catalog-search {
+    flex: 1 1 180px;
+    max-width: 280px;
+    min-width: 160px;
+  }
+  .catalog-select {
+    width: 120px;
+  }
+  .level-select {
+    width: 104px;
+  }
+  .source-select {
+    width: 144px;
+  }
+  .catalog-table-meta {
+    padding: 12px 18px;
+  }
+}
+
+@media (max-width: 980px) {
+  .catalog-page {
+    padding: 16px;
+  }
+  .catalog-page-header {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .catalog-page-actions {
+    justify-content: space-between;
+  }
+  .filter-bar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+  .catalog-search {
+    max-width: none;
+    width: 100%;
+  }
+  .catalog-table-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    white-space: normal;
+  }
+  .summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .summary-item:nth-child(2) {
+    border-right: 0;
+  }
 }
 </style>
 

@@ -63,3 +63,30 @@ it('Gateway配置明确不可编辑', async () => {
   expect(wrapper.text()).toContain('受控 Gateway')
   expect(wrapper.get<HTMLButtonElement>('[data-testid="endpoint-save"]').element.disabled).toBe(true)
 })
+
+it('展示未放行主机告警提示，并能正确映射 422 细分错误码为可读中文提示', async () => {
+  service.load.mockResolvedValue({
+    ...view(),
+    providers: [{ ...view().providers[0], endpoint: 'http://192.168.1.50:11434/v1', host_allowed: false }],
+  })
+  const wrapper = render()
+  await wrapper.get('[data-testid="endpoint-open"]').trigger('click'); await flushPromises()
+  expect(wrapper.find('[data-testid="endpoint-host-warning"]').exists()).toBe(true)
+  expect(wrapper.text()).toContain('OUTBOUND_ALLOWLIST')
+
+  const actualService = await vi.importActual<typeof import('@/services/llmEndpointService')>(
+    '@/services/llmEndpointService',
+  )
+  expect(
+    actualService.mapEndpointErrorMessage(422, 'llm_endpoint_key_reconfirmation_required'),
+  ).toContain('重新输入新地址对应的 API 密钥')
+  expect(actualService.mapEndpointErrorMessage(422, 'llm_endpoint_host_not_allowed')).toContain(
+    'OUTBOUND_ALLOWLIST',
+  )
+  expect(
+    actualService.mapEndpointErrorMessage(422, 'llm_endpoint_configuration_invalid'),
+  ).toContain('http(s)://')
+  expect(actualService.mapEndpointErrorMessage(422, 'unknown_code')).toBe(
+    '请检查服务地址、启用状态和密钥操作。',
+  )
+})

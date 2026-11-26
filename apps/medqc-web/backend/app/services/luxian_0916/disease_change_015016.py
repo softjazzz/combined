@@ -14,7 +14,9 @@ from typing import Any
 
 from sqlalchemy import text
 
+from ...database import clinical_connection
 from ...database.connection import engine
+from ..clinical_read import clinical_table_sql
 
 
 _RULE_IDS = ("LX0916-015", "LX0916-016")
@@ -24,49 +26,57 @@ _EXCLUDED_ORDER_STATUSES = frozenset({"取消", "撤销", "作废"})
 _VOID_MARKERS = ("取消", "撤销", "作废", "解除")
 _CRITICAL_FLAGS = frozenset({"PL", "PH"})
 
-_ORDER_QUERY = text(
-    """
-    SELECT order_id, order_name, order_status, prescribed_datetime
-    FROM cdm.inpat_nondrug_order
-    WHERE institute_id = :institute_id
-      AND patient_id = :patient_id
-      AND visit_id = :visit_id
-      AND (order_name LIKE :critical_name OR order_name LIKE :serious_name)
-    ORDER BY prescribed_datetime ASC NULLS LAST,
-             order_id ASC
-    LIMIT :limit_rows
-    """
-)
-_LAB_QUERY = text(
-    """
-    SELECT item.document_id AS item_document_id,
-           item.test_id AS item_test_id,
-           item.test_no AS item_test_no,
-           item.item_id AS item_id,
-           item.item_name AS item_name,
-           item.result AS result,
-           item.unit AS unit,
-           item.abnormal_indicator AS abnormal_indicator,
-           item.report_time AS item_report_time,
-           master.test_id AS master_test_id,
-           master.report_datetime AS master_report_datetime
-    FROM cdm.labtest_item_report AS item
-    LEFT JOIN cdm.labtest_master AS master
-      ON master.institute_id = item.institute_id
-     AND master.patient_id = item.patient_id
-     AND master.visit_id = item.visit_id
-     AND master.test_id = item.test_id
-    WHERE item.institute_id = :institute_id
-      AND item.patient_id = :patient_id
-      AND item.visit_id = :visit_id
-      AND UPPER(BTRIM(COALESCE(item.abnormal_indicator, ''))) IN ('PL', 'PH')
-    ORDER BY item.report_time ASC NULLS LAST,
-             master.report_datetime ASC NULLS LAST,
-             item.test_id ASC,
-             item.item_id ASC
-    LIMIT :limit_rows
-    """
-)
+
+def _order_query():
+    nondrug_table = clinical_table_sql("inpat_nondrug_order")
+    return text(
+        f"""
+        SELECT order_id, order_name, order_status, prescribed_datetime
+        FROM {nondrug_table}
+        WHERE institute_id = :institute_id
+          AND patient_id = :patient_id
+          AND visit_id = :visit_id
+          AND (order_name LIKE :critical_name OR order_name LIKE :serious_name)
+        ORDER BY prescribed_datetime ASC NULLS LAST,
+                 order_id ASC
+        LIMIT :limit_rows
+        """
+    )
+
+
+def _lab_query():
+    item_table = clinical_table_sql("labtest_item_report")
+    master_table = clinical_table_sql("labtest_master")
+    return text(
+        f"""
+        SELECT item.document_id AS item_document_id,
+               item.test_id AS item_test_id,
+               item.test_no AS item_test_no,
+               item.item_id AS item_id,
+               item.item_name AS item_name,
+               item.result AS result,
+               item.unit AS unit,
+               item.abnormal_indicator AS abnormal_indicator,
+               item.report_time AS item_report_time,
+               master.test_id AS master_test_id,
+               master.report_datetime AS master_report_datetime
+        FROM {item_table} AS item
+        LEFT JOIN {master_table} AS master
+          ON master.institute_id = item.institute_id
+         AND master.patient_id = item.patient_id
+         AND master.visit_id = item.visit_id
+         AND master.test_id = item.test_id
+        WHERE item.institute_id = :institute_id
+          AND item.patient_id = :patient_id
+          AND item.visit_id = :visit_id
+          AND UPPER(TRIM(COALESCE(item.abnormal_indicator, ''))) IN ('PL', 'PH')
+        ORDER BY item.report_time ASC NULLS LAST,
+                 master.report_datetime ASC NULLS LAST,
+                 item.test_id ASC,
+                 item.item_id ASC
+        LIMIT :limit_rows
+        """
+    )
 
 
 def load_disease_change_015016_facts(
@@ -74,7 +84,8 @@ def load_disease_change_015016_facts(
 ) -> dict[str, Any]:
     """读取两类触发源；任何查询异常或截断均不把“无事件”当作事实。"""
 
-    if engine is None:
+    db_engine = clinical_connection.get_engine() if clinical_connection.configured() else engine
+    if db_engine is None:
         return _source_gap("structured_trigger_source_unavailable")
     params = {
         "institute_id": institute_id,
@@ -85,14 +96,16 @@ def load_disease_change_015016_facts(
         "limit_rows": _MAX_ROWS_PER_SOURCE + 1,
     }
     try:
-        with engine.connect() as connection:
+        order_query = _order_query()
+        lab_query = _lab_query()
+        with db_engine.connect() as connection:
             order_rows = [
                 dict(row)
-                for row in connection.execute(_ORDER_QUERY, params).mappings().all()
+                for row in connection.execute(order_query, params).mappings().all()
             ]
             lab_rows = [
                 dict(row)
-                for row in connection.execute(_LAB_QUERY, params).mappings().all()
+                for row in connection.execute(lab_query, params).mappings().all()
             ]
     except Exception:  # noqa: BLE001 - 只将来源故障映射为客户资料缺口。
         return _source_gap("structured_trigger_source_unavailable")

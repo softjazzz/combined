@@ -1,5 +1,10 @@
 import { flushPromises, shallowMount } from '@vue/test-utils'
+import { ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+}))
 
 const mocks = vi.hoisted(() => ({
   createWorkspaceBatchJob: vi.fn(),
@@ -8,10 +13,14 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     success: vi.fn(),
     warning: vi.fn(),
+    info: vi.fn(),
+  },
+  Modal: {
+    confirm: vi.fn(),
   },
 }))
 
-vi.mock('ant-design-vue', () => ({ message: mocks.message }))
+vi.mock('ant-design-vue', () => ({ message: mocks.message, Modal: mocks.Modal }))
 
 vi.mock('@ant-design/icons-vue', () => {
   const icon = { template: '<span />' }

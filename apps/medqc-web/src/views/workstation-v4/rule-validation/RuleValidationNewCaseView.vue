@@ -1,5 +1,5 @@
 <template>
-  <main
+  <section
     class="mq-page rule-validation-page"
     data-testid="rule-validation-new-case"
   >
@@ -347,7 +347,7 @@
         </div>
       </div>
     </a-modal>
-  </main>
+  </section>
 </template>
 
 <script setup lang="ts">
@@ -388,6 +388,9 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const otherType = ref<string>()
+const createdItemId = ref('')
+let loadAbortController: AbortController | null = null
+let loadSequence = 0
 // 未保存离开保护：加载完成时记快照，内容变化后离开需确认
 const baseline = ref('')
 const saved = ref(false)
@@ -422,6 +425,7 @@ function addOtherDocument(value: unknown) {
 function resetToBlank() {
   // 去掉 copyFrom 会触发重新加载：表单与离开保护快照一并重置
   copySource.value = null
+  createdItemId.value = ''
   void router.replace({ query: {} })
 }
 
@@ -444,12 +448,24 @@ function warnUnload(event: BeforeUnloadEvent) {
   event.returnValue = ''
 }
 onMounted(() => window.addEventListener('beforeunload', warnUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', warnUnload))
+onBeforeUnmount(() => {
+  loadAbortController?.abort()
+  window.removeEventListener('beforeunload', warnUnload)
+})
 
 async function load() {
+  const sequence = ++loadSequence
+  loadAbortController?.abort()
+  const controller = new AbortController()
+  loadAbortController = controller
+  createdItemId.value = ''
   loading.value = true
   error.value = ''
-  const response = await getValidationRule(ruleId.value)
+  const response = await getValidationRule(ruleId.value, {
+    signal: controller.signal,
+    skipErrorToast: true,
+  })
+  if (controller.signal.aborted || sequence !== loadSequence) return
   if (!response.success) {
     loading.value = false
     error.value = response.error || '规则加载失败'
@@ -477,6 +493,7 @@ async function load() {
     ...source.record_ref,
     source_view: 'current',
   })
+  if (controller.signal.aborted || sequence !== loadSequence) return
   loading.value = false
   if (!docs.success || !docs.data) {
     error.value = docs.message || '读取源病例文书失败'
@@ -497,6 +514,7 @@ async function load() {
 }
 
 async function save() {
+  if (saving.value || loading.value) return
   const problem = validateDraft(draft)
   if (problem) {
     error.value = problem
@@ -504,29 +522,43 @@ async function save() {
   }
   saving.value = true
   error.value = ''
-  const created = await createManualTestMedicalRecord(
-    buildCreatePayload(draft, ruleId.value, copySource.value ? { itemId: copySource.value.item_id } : undefined),
-  )
-  const itemId = created.success ? created.data?.item?.id : undefined
-  if (!itemId) {
+  try {
+    let itemId = createdItemId.value
+    if (!itemId) {
+      const created = await createManualTestMedicalRecord(
+        buildCreatePayload(
+          draft,
+          ruleId.value,
+          copySource.value ? { itemId: copySource.value.item_id } : undefined,
+        ),
+      )
+      const nextItemId = created.success ? created.data?.item?.id : undefined
+      if (!nextItemId) {
+        error.value = created.success
+          ? '病例已提交但未返回病例编号，请到规则详情用“关联已有病例”核对'
+          : created.message || '创建测试病例失败'
+        return
+      }
+      itemId = nextItemId
+      createdItemId.value = nextItemId
+    }
+    const answered = await saveCaseAnswer(ruleId.value, itemId, {
+      revision: 0,
+      expected_status: draft.expectedStatus,
+      human_reason: draft.reason.trim(),
+      purpose: draft.purpose,
+    })
+    if (!answered.success) {
+      error.value = `病例已创建（${itemId}），但保存预期失败：${answered.error || '未知错误'}。可直接再次点击“保存并关联本规则”重试关联预期，不会重复新建病例。`
+      return
+    }
+    saved.value = true
+    createdItemId.value = ''
+    message.success('测试病例已创建并关联本规则')
+    await router.push(detailRoute.value)
+  } finally {
     saving.value = false
-    error.value = created.success ? '病例已提交但未返回病例编号，请到规则详情用“关联已有病例”核对' : created.message || '创建测试病例失败'
-    return
   }
-  const answered = await saveCaseAnswer(ruleId.value, itemId, {
-    revision: 0,
-    expected_status: draft.expectedStatus,
-    human_reason: draft.reason.trim(),
-    purpose: draft.purpose,
-  })
-  saving.value = false
-  if (!answered.success) {
-    error.value = `病例已创建，但保存预期失败：${answered.error || '未知错误'}。请在规则详情用“关联已有病例”补标预期。`
-    return
-  }
-  saved.value = true
-  message.success('测试病例已创建并关联本规则')
-  await router.push(detailRoute.value)
 }
 
 watch([ruleId, copyFromId], () => void load(), { immediate: true })
@@ -585,6 +617,12 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   gap: 14px;
 }
 
+.nc-grid .mq-input,
+.nc-grid :deep(.ant-picker) {
+  width: 100%;
+  min-width: 0;
+}
+
 .nc-span-2 {
   grid-column: span 2;
 }
@@ -629,18 +667,26 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
 }
 
 .nc-doc__head {
-  display: grid;
-  grid-template-columns: auto 170px 210px minmax(0, 1fr) auto;
-  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
   gap: 10px;
 }
 
 .nc-doc__head > .rv-tag {
+  flex: 0 0 auto;
   align-self: center;
 }
 
+.nc-doc__head > .mq-field {
+  flex: 1 1 170px;
+  min-width: 0;
+}
+
 .nc-remove {
+  flex: 0 0 auto;
   width: 32px;
+  margin-left: auto;
   padding: 0;
   font-size: 16px;
 }
@@ -687,7 +733,7 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   line-height: 1.8;
 }
 
-@media (max-width: 1180px) {
+@media (max-width: 1360px) {
   .nc-layout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -701,7 +747,21 @@ watch([ruleId, copyFromId], () => void load(), { immediate: true })
   }
 
   .nc-doc__head {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    flex-wrap: wrap;
+  }
+
+  .nc-doc__head > .mq-field {
+    flex: 1 1 200px;
+  }
+}
+
+@media (max-width: 720px) {
+  .nc-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .nc-span-2 {
+    grid-column: span 1;
   }
 }
 </style>

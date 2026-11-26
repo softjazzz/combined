@@ -11,7 +11,7 @@ import math
 import os
 from typing import Callable, Mapping
 
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import and_, delete, exists, func, or_, select
 
 from .repository import QCDispatchRepository
 
@@ -77,15 +77,39 @@ class OutboxMaintenance:
 
     def _eligible(self, cutoff: datetime):
         o, d, j = self.repo.outbox_table, self.repo.dispatch_table, self.repo.job_table
+        other_outbox = o.alias("outbox_unconfirmed")
+        has_unconfirmed_outbox = exists(
+            select(1).where(
+                and_(
+                    other_outbox.c.job_id == o.c.job_id,
+                    other_outbox.c.status != "confirmed",
+                )
+            )
+        )
+        settled_terminal = or_(
+            and_(
+                j.c.status.in_(("completed", "canceled")),
+                or_(
+                    d.c.recovery_kind.is_(None),
+                    d.c.recovery_kind == "delivery",
+                ),
+            ),
+            and_(
+                j.c.status == "failed",
+                or_(
+                    d.c.last_failure_code.is_not(None),
+                    d.c.recovery_reason_code == "retry_successor_created",
+                ),
+            ),
+        )
         return select(o).select_from(
             o.join(d, o.c.job_id == d.c.job_id).join(j, j.c.id == d.c.job_id)
         ).where(and_(
             o.c.status == "confirmed", o.c.confirmed_at <= cutoff,
             j.c.status.in_(TERMINAL), d.c.status == j.c.status,
             d.c.mode == "rabbitmq", o.c.generation <= d.c.generation,
-            or_(j.c.status != "failed", d.c.last_failure_code.is_not(None)),
-            d.c.recovery_kind.is_(None), d.c.recovery_registered_at.is_(None),
-            d.c.recovery_scope_json.is_(None), d.c.recovery_reason_code.is_(None),
+            ~has_unconfirmed_outbox,
+            settled_terminal,
         )).order_by(o.c.confirmed_at, o.c.id)
 
     def archive(

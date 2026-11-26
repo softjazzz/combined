@@ -6,9 +6,10 @@
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Literal
 import json
 import os
+import re
 
 from fastapi import APIRouter, Query, Request, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -31,7 +32,7 @@ from ..schemas.demo import (
     CustomRuleSaveRequest,
 )
 from ..database.demo_db import get_db
-from ..core.security import require_roles
+from ..core.security import get_current_user, require_roles
 from ..models.demo import Feedback
 from ..core.settings import get_settings
 from ..core.http import safe_post_json
@@ -340,7 +341,7 @@ def _merge_rules_for_listing() -> List[Dict[str, Any]]:
     return base_rules + demo_rules
 
 
-@router.get("/custom-rules", response_model=dict)
+@router.get("/custom-rules", response_model=dict, dependencies=[Depends(get_current_user)])
 async def list_custom_rules(request: Request):
     """
     返回演示系统中的规则列表（基础规则 + AI 生成规则）
@@ -354,7 +355,7 @@ async def list_custom_rules(request: Request):
     )
 
 
-@router.post("/custom-rules/generate", response_model=dict)
+@router.post("/custom-rules/generate", response_model=dict, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def generate_custom_rule(
     request: Request,
     payload: RuleGenerationRequest,
@@ -389,7 +390,7 @@ async def generate_custom_rule(
     )
 
 
-@router.post("/custom-rules/save", response_model=dict)
+@router.post("/custom-rules/save", response_model=dict, dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def save_custom_rule(
     request: Request,
     payload: CustomRuleSaveRequest,
@@ -792,9 +793,23 @@ async def export_feedbacks(
 
 # ==================== 演示页面质控结果保存和查询 ====================
 
+DemoQCMode = Literal[
+    "sequential_batch",
+    "optimized_batch",
+    "single",
+    "batch",
+    "production",
+    "demo",
+]
+
+_DEMO_RESULT_ID_RE = re.compile(
+    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+)
+
+
 class DemoSaveQCResultRequest(BaseModel):
     """演示页面质控结果保存请求"""
-    mode: str
+    mode: DemoQCMode
     document_type: str
     rule_ids: List[str]
     medical_text: Optional[str] = None
@@ -808,7 +823,7 @@ class DemoSaveQCResultRequest(BaseModel):
     model: Optional[str] = None
 
 
-@router.post("/qc-results/save")
+@router.post("/qc-results/save", dependencies=[Depends(require_roles("admin", "super_admin"))])
 async def save_demo_qc_result(request: Request, req: DemoSaveQCResultRequest):
     """
     保存演示页面的质控结果（独立存储，不与主项目混合）
@@ -816,12 +831,18 @@ async def save_demo_qc_result(request: Request, req: DemoSaveQCResultRequest):
     try:
         # 确保存储目录存在
         DEMO_QC_RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+        base_dir = DEMO_QC_RESULTS_DIR.resolve()
 
         # 生成唯一ID和文件名
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         result_id = str(uuid.uuid4())
         filename = f"demo_{result_id}_{req.mode}_{timestamp}.json"
-        filepath = DEMO_QC_RESULTS_DIR / filename
+        filepath = (base_dir / filename).resolve()
+        if filepath.parent != base_dir:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="非法的保存路径",
+            )
 
         # 构建保存数据
         payload = {
@@ -847,10 +868,12 @@ async def save_demo_qc_result(request: Request, req: DemoSaveQCResultRequest):
             json.dump(payload, f, ensure_ascii=False, indent=2)
 
         return success_response(
-            data={"id": result_id, "path": str(filepath)},
+            data={"id": result_id},
             message="演示质控结果保存成功",
             trace_id=get_trace_id(request)
         )
+    except HTTPException:
+        raise
     except Exception as e:
         return error_response(
             message=f"保存演示质控结果失败: {str(e)}",
@@ -858,7 +881,7 @@ async def save_demo_qc_result(request: Request, req: DemoSaveQCResultRequest):
         )
 
 
-@router.get("/qc-results/history")
+@router.get("/qc-results/history", dependencies=[Depends(get_current_user)])
 async def get_demo_qc_history(
     request: Request,
     page: int = Query(1, ge=1),
@@ -961,40 +984,7 @@ async def get_demo_qc_history(
         )
 
 
-@router.get("/qc-results/{result_id}")
-async def get_demo_qc_result_detail(request: Request, result_id: str):
-    """
-    获取演示页面质控结果的详细信息
-    """
-    try:
-        # 查找对应的结果文件
-        matching_files = list(DEMO_QC_RESULTS_DIR.glob(f"demo_{result_id}_*.json"))
-
-        if not matching_files:
-            return error_response(
-                message=f"未找到ID为 {result_id} 的质控结果",
-                trace_id=get_trace_id(request)
-            )
-
-        filepath = matching_files[0]
-
-        # 读取完整数据
-        with filepath.open("r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        return success_response(
-            data=data,
-            message="获取演示质控结果详情成功",
-            trace_id=get_trace_id(request)
-        )
-    except Exception as e:
-        return error_response(
-            message=f"获取演示质控结果详情失败: {str(e)}",
-            trace_id=get_trace_id(request)
-        )
-
-
-@router.get("/qc-results/latest")
+@router.get("/qc-results/latest", dependencies=[Depends(get_current_user)])
 async def get_demo_latest_qc_result(request: Request):
     """
     获取演示页面最新的质控结果
@@ -1035,10 +1025,65 @@ async def get_demo_latest_qc_result(request: Request):
         )
 
 
+@router.get("/qc-results/{result_id}", dependencies=[Depends(get_current_user)])
+async def get_demo_qc_result_detail(request: Request, result_id: str):
+    """
+    获取演示页面质控结果的详细信息
+    """
+    if not _DEMO_RESULT_ID_RE.fullmatch(str(result_id or "")):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="无效的质控结果 ID",
+        )
+    try:
+        if not DEMO_QC_RESULTS_DIR.exists():
+            return error_response(
+                message=f"未找到ID为 {result_id} 的质控结果",
+                trace_id=get_trace_id(request)
+            )
+        base_dir = DEMO_QC_RESULTS_DIR.resolve()
+        # 仅在严格 UUID 校验通过后按前缀精确匹配，杜绝 glob 通配符泄露
+        prefix = f"demo_{result_id}_"
+        matching_files = [
+            f for f in base_dir.iterdir()
+            if f.is_file() and f.name.startswith(prefix) and f.name.endswith(".json")
+        ]
+
+        if not matching_files:
+            return error_response(
+                message=f"未找到ID为 {result_id} 的质控结果",
+                trace_id=get_trace_id(request)
+            )
+
+        filepath = matching_files[0].resolve()
+        if filepath.parent != base_dir:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="无效的质控结果路径",
+            )
+
+        # 读取完整数据
+        with filepath.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return success_response(
+            data=data,
+            message="获取演示质控结果详情成功",
+            trace_id=get_trace_id(request)
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        return error_response(
+            message=f"获取演示质控结果详情失败: {str(e)}",
+            trace_id=get_trace_id(request)
+        )
+
+
 # ==================== 病案首页与医保清单自动生成 Demo ====================
 
 
-@router.get("/frontpage-demo")
+@router.get("/frontpage-demo", dependencies=[Depends(get_current_user)])
 async def get_frontpage_demo_case(request: Request):
     """
     获取一个模拟病例的病历文本 + 自动生成的病案首页 & 医保结算清单结果。

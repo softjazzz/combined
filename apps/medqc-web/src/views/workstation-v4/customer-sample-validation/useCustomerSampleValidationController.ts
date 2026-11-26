@@ -1,7 +1,7 @@
 import { SAMPLE_RULE_SET_RUN_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { serializeCaseRecordKey } from '../utils/caseRecordKey'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
-import { computed, h, onMounted, onUnmounted, ref } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
 import { deferredComponent } from './deferredComponent'
 import { useRoute, useRouter } from 'vue-router'
 import { message } from 'ant-design-vue'
@@ -150,11 +150,14 @@ export function useCustomerSampleValidationController() {
   const initialConfigLoading = ref(true)
   const initialConfigFailed = ref(false)
   let pageDisposed = false
+  let initialQueryPoolHandled = false
   let recordsRequestSequence = 0
   let syncRequestSequence = 0
   const syncLoading = ref(false)
   const importingPool = ref(false)
   const selectedRowKeys = ref<string[]>([])
+  const selectedRecordsById = ref<Map<string, ManualSamplePoolRecord>>(new Map())
+  const recordsLoadError = ref('')
   const initialQueryJobHandled = ref(false)
   const initialFocusedRecordSearchHandled = ref(false)
   const importModalOpen = ref(false)
@@ -185,9 +188,17 @@ export function useCustomerSampleValidationController() {
   const selectedRuleSetKey = ref<string>(LUXIAN_0609_RULE_SET_KEY)
   const ruleSetDirectoryFallbackActive = ref(false)
   const internalDiagnosticKeys = ref<string[]>([])
+  const internalDiagnosticExpanded = computed(() => internalDiagnosticKeys.value.includes('sheet2'))
   const selectedLuxianCustomerRuleIds = ref<string[]>([])
   const luxian0609RuleCatalog = ref<ManualLuxian0609RuleCatalogItem[]>([])
   const expandedLuxianRuleFamilyKeys = ref<string[]>([])
+  const luxianScopeOpen = ref(false)
+  const isLuxianScopeExpanded = computed(
+    () =>
+      luxianScopeOpen.value ||
+      (customerSampleGuideOpen.value &&
+        currentCustomerSampleGuideStep.value?.target === 'lx0609-scope'),
+  )
   const importWorkflow = ref<ImportWorkflowState | null>(null)
 
   const detailOpen = ref(false)
@@ -284,14 +295,19 @@ export function useCustomerSampleValidationController() {
     dischargeTime?: string
     label: string
   } | null>(null)
+  const MAX_SYNC_JOB_POLL_FAILURES = 5
+  let batchJobGeneration = 0
   let batchJobPollTimer: ReturnType<typeof setInterval> | null = null
   let batchJobPollTick = 0
-  let batchJobPollInFlight = false
   let batchJobPollReadFailures = 0
   let batchJobDebugRequestId = 0
+  let currentQcTaskGeneration = 0
   let currentQcTaskPollTimer: ReturnType<typeof setInterval> | null = null
   let currentQcTaskPollReadFailures = 0
+  let luxianAggregateGeneration = 0
+  let luxianAggregateRefreshInFlightGeneration: number | null = null
   let luxianAggregatePollTimer: ReturnType<typeof setInterval> | null = null
+  let syncJobGeneration = 0
   let syncJobPollTimer: ReturnType<typeof setInterval> | null = null
   const primaryVisibleRefreshedSyncJobs = new Set<string>()
   const syncJobDetail = ref<ManualSamplePoolSyncJob>()
@@ -334,7 +350,9 @@ export function useCustomerSampleValidationController() {
     records,
     pagination,
     selectedRowKeys,
+    clearSelectedRecords,
     loadPools,
+    restoreCurrentQcTaskForSelectedPool,
   })
 
   const filters = ref({
@@ -473,18 +491,33 @@ export function useCustomerSampleValidationController() {
     () =>
       luxianRuleFamilies.value.filter((family) => luxianRuleFamilySelectedCount(family) > 0).length,
   )
-  const luxianDefaultRuleCount = computed(
-    () => Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
-  )
-  const luxianScopeModeText = computed(() =>
-    selectedLuxianCustomerRuleIds.value.length
-      ? selectedAcceptanceCount.value
-        ? `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
-        : isAllLuxianRulesSelected.value
-          ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-          : `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
-      : `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点`,
-  )
+  const luxianDefaultRuleCount = computed(() => {
+    if (luxian0609RuleCatalog.value.length > 0) {
+      return Math.max(0, defaultLuxianRuleIds.value.length)
+    }
+    return Math.max(
+      0,
+      Number(selectedRuleSet.value?.rule_count || 71) - acceptanceOnlyRuleIds.value.size,
+    )
+  })
+  const luxianScopeModeText = computed(() => {
+    const acceptanceHint =
+      acceptanceOnlyRuleIds.value.size > 0
+        ? `（另有 ${acceptanceOnlyRuleIds.value.size} 个待验收）`
+        : ''
+    if (!selectedLuxianCustomerRuleIds.value.length) {
+      return `当前将运行：全部 ${luxianDefaultRuleCount.value} 个0609质控点${acceptanceHint}`
+    }
+    if (selectedAcceptanceCount.value) {
+      return `当前将运行：${selectedLuxianCustomerRuleIds.value.length} 个质控点 · 待验收 ${selectedAcceptanceCount.value} 条`
+    }
+    if (isAllLuxianRulesSelected.value) {
+      return acceptanceHint
+        ? `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个0609质控点${acceptanceHint}`
+        : `当前将运行：全部 ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+    }
+    return `当前将运行：${selectedLuxianFamilyCount.value} 个质控族 · ${selectedLuxianCustomerRuleIds.value.length} 个质控点`
+  })
   const luxianScopeHelperText = computed(() =>
     selectedLuxianCustomerRuleIds.value.length
       ? '已限定本次质控范围；待验收规则须逐条勾选，全选和质控族选择不包含待验收规则。'
@@ -608,13 +641,20 @@ export function useCustomerSampleValidationController() {
     ]
   })
 
+  const poolRunnableCount = computed(() => {
+    const pool = selectedPool.value
+    if (isSyncedOnlyValidationMode.value) {
+      return pool?.matched_items ?? 0
+    }
+    if (typeof pool?.ready_items === 'number') {
+      return pool.ready_items
+    }
+    return records.value.filter((record) => isRunnableRecord(record)).length
+  })
+
   const workflowSteps = computed(() => {
     const pool = selectedPool.value
-    const runnableValue = isLuxian0609Mode.value
-      ? (pool?.matched_items ?? 0)
-      : isSyncedOnlyValidationMode.value
-        ? (pool?.matched_items ?? 0)
-        : (pool?.ready_items ?? 0)
+    const runnableValue = poolRunnableCount.value
     return [
       {
         label: '匹配',
@@ -636,14 +676,10 @@ export function useCustomerSampleValidationController() {
 
   const summaryCards = computed(() => {
     const pool = selectedPool.value
-    const runnableValue = isLuxian0609Mode.value
-      ? (pool?.matched_items ?? 0)
-      : isSyncedOnlyValidationMode.value
-        ? (pool?.matched_items ?? 0)
-        : (pool?.ready_items ?? 0)
+    const runnableValue = poolRunnableCount.value
     let runnableHelp = '文书已就绪，可直接开始当前模式质控'
     if (isLuxian0609Mode.value) {
-      runnableHelp = '已关联真实病历即可开始0609质控；可再限定 LX0609 质控点范围'
+      runnableHelp = '已关联、已同步且文书已就绪的病历可开始0609质控；可再限定 LX0609 质控点范围'
     } else if (isFormalFastScreenMode.value) {
       runnableHelp = '已匹配且已同步，可开始正式 84 条质控'
     } else if (selectedValidationMode.value === 'programmatic') {
@@ -771,9 +807,10 @@ export function useCustomerSampleValidationController() {
   })
 
   const selectedRecordStats = computed(() => {
-    const selectedRecords = records.value.filter((record) =>
-      selectedRowKeys.value.includes(record.id),
-    )
+    const currentRecordsById = new Map(records.value.map((record) => [record.id, record]))
+    const selectedRecords = selectedRowKeys.value
+      .map((key) => currentRecordsById.get(key) || selectedRecordsById.value.get(key))
+      .filter((record): record is ManualSamplePoolRecord => Boolean(record))
     const runnableRecords = selectedRecords.filter((record) => isRunnableRecord(record))
     const blockerCounts = selectedRecords.reduce(
       (counts, record) => {
@@ -836,7 +873,13 @@ export function useCustomerSampleValidationController() {
   )
 
   const runButtonDisabled = computed(
-    () => initialConfigLoading.value || initialConfigFailed.value || runLoading.value || !selectedPoolId.value || !selectedPool.value?.total_items,
+    () =>
+      initialConfigLoading.value ||
+      initialConfigFailed.value ||
+      runLoading.value ||
+      !selectedPoolId.value ||
+      !selectedPool.value?.total_items ||
+      (requiresSelectedRecords.value && selectedRecordStats.value.selectedCount === 0),
   )
 
   const runButtonActionText = computed(() =>
@@ -850,19 +893,19 @@ export function useCustomerSampleValidationController() {
   )
 
   const runButtonText = computed(() =>
-    initialConfigLoading.value ? '正在加载配置…' : initialConfigFailed.value ? '配置加载失败，请刷新' : runLoading.value
-      ? '正在创建…'
-      : isFormalFastScreenMode.value
-        ? selectedRecordStats.value.selectedCount > 0
-          ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
-          : '请先选择病历'
-        : isLuxian0609Mode.value
-          ? selectedRecordStats.value.selectedCount > 0
-            ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
-            : '请先选择病历'
-          : selectedRecordStats.value.selectedCount > 0
-            ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
-            : runButtonActionText.value,
+    initialConfigLoading.value
+      ? '正在加载配置…'
+      : initialConfigFailed.value
+        ? '配置加载失败，请刷新'
+        : runLoading.value
+          ? '正在创建…'
+          : requiresSelectedRecords.value
+            ? selectedRecordStats.value.selectedCount > 0
+              ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+              : '请先选择病历'
+            : selectedRecordStats.value.selectedCount > 0
+              ? `${runButtonActionText.value}（已选 ${selectedRecordStats.value.selectedCount} 份）`
+              : runButtonActionText.value,
   )
 
   const selectedRunScopeSummary = computed(() => {
@@ -870,12 +913,21 @@ export function useCustomerSampleValidationController() {
     if (!isLuxian0609Mode.value) return validationModeLabel(selectedValidationMode.value)
     if (!selectedLuxianCustomerRuleIds.value.length) return '全量0609'
     const selected = new Set(selectedLuxianCustomerRuleIds.value)
-    const fullFamilies = luxianRuleFamilies.value.filter(
-      (family) =>
-        family.ruleIds.length > 0 && family.ruleIds.every((ruleId) => selected.has(ruleId)),
-    )
+    const fullFamilies = luxianRuleFamilies.value
+      .map((family) => ({
+        family,
+        defaultRuleIds: family.ruleIds.filter(
+          (ruleId) => !acceptanceOnlyRuleIds.value.has(ruleId),
+        ),
+      }))
+      .filter(
+        ({ defaultRuleIds }) =>
+          defaultRuleIds.length > 0 && defaultRuleIds.every((ruleId) => selected.has(ruleId)),
+      )
     if (fullFamilies.length > 0) {
-      const allSelectedRuleIds = new Set(fullFamilies.flatMap((family) => family.ruleIds))
+      const allSelectedRuleIds = new Set(
+        fullFamilies.flatMap(({ defaultRuleIds }) => defaultRuleIds),
+      )
       const hasOnlyFullFamilies = selectedLuxianCustomerRuleIds.value.every((ruleId) =>
         allSelectedRuleIds.has(ruleId),
       )
@@ -1071,8 +1123,27 @@ export function useCustomerSampleValidationController() {
 
   const rowSelection = computed(() => ({
     selectedRowKeys: selectedRowKeys.value,
-    onChange: (keys) => {
-      selectedRowKeys.value = keys.map((key) => String(key))
+    preserveSelectedRowKeys: true,
+    onChange: (keys: Array<string | number>, selectedRows?: ManualSamplePoolRecord[]) => {
+      const normalizedKeys = keys.map((key) => String(key))
+      selectedRowKeys.value = normalizedKeys
+      const currentRecordsById = new Map(records.value.map((record) => [record.id, record]))
+      const selectedRowsById = new Map(
+        (selectedRows || [])
+          .filter((row): row is ManualSamplePoolRecord => Boolean(row && row.id))
+          .map((row) => [row.id, row]),
+      )
+      const nextMap = new Map<string, ManualSamplePoolRecord>()
+      for (const key of normalizedKeys) {
+        const resolved =
+          currentRecordsById.get(key) ||
+          selectedRowsById.get(key) ||
+          selectedRecordsById.value.get(key)
+        if (resolved) {
+          nextMap.set(key, resolved)
+        }
+      }
+      selectedRecordsById.value = nextMap
     },
   }))
 
@@ -1259,7 +1330,7 @@ export function useCustomerSampleValidationController() {
 
   function runnableRequirementHint(): string {
     if (isLuxian0609Mode.value) {
-      return '泸县0609支持从已关联真实病历直接发起验证；选择质控族/质控点只限定规则范围，不会限制样本池或病历选择。'
+      return '泸县0609需使用已关联、已同步且文书就绪的病历发起验证；选择质控族/质控点只限定规则范围，不会限制样本池或病历选择。'
     }
     if (selectedValidationMode.value === 'formal_fast_screen_full') {
       return '未关联真实病历或尚未同步到本地 PG 的病历不会进入正式质控；若后台 final scope 收集不到，会返回终末病历未同步错误。'
@@ -1272,7 +1343,7 @@ export function useCustomerSampleValidationController() {
 
   function selectedRecordNotRunnableMessage(): string {
     if (isLuxian0609Mode.value) {
-      return '当前选中的病历还未完成病历关联，暂时无法开始0609质控'
+      return '当前选中的病历还未完成病历关联、同步或文书准备，暂时无法开始0609质控'
     }
     if (selectedValidationMode.value === 'formal_fast_screen_full') {
       return '当前选中的病历还未完成匹配或同步，暂时无法发起正式质控 84 条'
@@ -1300,12 +1371,21 @@ export function useCustomerSampleValidationController() {
 
   function clearSelectedRecords() {
     selectedRowKeys.value = []
+    selectedRecordsById.value = new Map()
+  }
+
+  function handleLuxianScopeToggle(event: Event) {
+    const target = event.target as HTMLDetailsElement | null
+    if (!target) return
+    luxianScopeOpen.value = Boolean(target.open)
   }
 
   function scrollToLuxianScope() {
+    luxianScopeOpen.value = true
     const target = document.getElementById('customer-sample-luxian-scope')
     if (!target) return
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    ;(target as HTMLDetailsElement).open = true
+    target.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
   }
 
   function normalizeRuleSetKey(
@@ -1514,11 +1594,15 @@ export function useCustomerSampleValidationController() {
     }
     pools.value = result.data.items
     const queryPoolId = String(route?.query?.poolId || '').trim()
-    if (queryPoolId && pools.value.some((item) => item.id === queryPoolId)) {
-      selectedPoolId.value = queryPoolId
+    if (!initialQueryPoolHandled) {
+      initialQueryPoolHandled = true
+      if (queryPoolId && pools.value.some((item) => item.id === queryPoolId)) {
+        selectedPoolId.value = queryPoolId
+      }
     }
     if (selectedPoolId.value && !pools.value.some((item) => item.id === selectedPoolId.value)) {
       selectedPoolId.value = undefined
+      clearSelectedRecords()
     }
     if (!selectedPoolId.value && pools.value.length > 0) {
       selectedPoolId.value = pools.value[0].id
@@ -1541,28 +1625,44 @@ export function useCustomerSampleValidationController() {
     const poolId = selectedPoolId.value
     if (!poolId) {
       itemLoading.value = false
+      recordsLoadError.value = ''
       records.value = []
       pagination.value.total = 0
       return
     }
+    recordsLoadError.value = ''
     itemLoading.value = true
-    const result = await getManualSamplePoolRecords(poolId, {
-      coverage_type: filters.value.coverageType,
-      match_status: filters.value.matchStatus,
-      include_in_batch_1: isSyncedOnlyValidationMode.value
-        ? undefined
-        : filters.value.includeInBatch,
-      q: filters.value.query || undefined,
-      page: pagination.value.page,
-      page_size: pagination.value.pageSize,
-    }).finally(() => {
+    let result: Awaited<ReturnType<typeof getManualSamplePoolRecords>>
+    try {
+      result = await getManualSamplePoolRecords(poolId, {
+        coverage_type: filters.value.coverageType || undefined,
+        match_status: filters.value.matchStatus || undefined,
+        include_in_batch_1: isSyncedOnlyValidationMode.value
+          ? undefined
+          : filters.value.includeInBatch,
+        q: filters.value.query || undefined,
+        page: pagination.value.page,
+        page_size: pagination.value.pageSize,
+      })
+    } catch (error: any) {
+      if (pageDisposed || requestSequence !== recordsRequestSequence || poolId !== selectedPoolId.value) {
+        return
+      }
+      const errorMessage = error?.message || '获取样本明细失败'
+      recordsLoadError.value = errorMessage
+      message.error(errorMessage)
+      return
+    } finally {
       if (!pageDisposed && requestSequence === recordsRequestSequence) itemLoading.value = false
-    })
+    }
     if (pageDisposed || requestSequence !== recordsRequestSequence || poolId !== selectedPoolId.value) return
     if (!result.success || !result.data) {
-      message.error(result.message || '获取样本明细失败')
+      const errorMessage = result.message || '获取样本明细失败'
+      recordsLoadError.value = errorMessage
+      message.error(errorMessage)
       return
     }
+    recordsLoadError.value = ''
     selectedPool.value = result.data.pool
     const focusedRecordId = String(route?.query?.recordId || '').trim()
     records.value = sortManualSampleRecordsForDisplay(
@@ -1582,9 +1682,30 @@ export function useCustomerSampleValidationController() {
       await loadRecords()
       return
     }
-    selectedRowKeys.value = selectedRowKeys.value.filter((key) =>
-      records.value.some((item) => item.id === key),
-    )
+    if (selectedRowKeys.value.length) {
+      const selectedKeySet = new Set(selectedRowKeys.value)
+      const nextMap = new Map(selectedRecordsById.value)
+      let updated = false
+      for (const record of records.value) {
+        if (selectedKeySet.has(record.id)) {
+          nextMap.set(record.id, record)
+          updated = true
+        }
+      }
+      if (updated) {
+        selectedRecordsById.value = nextMap
+      }
+    }
+  }
+
+  function handleSearchRecords() {
+    pagination.value.page = 1
+    void loadRecords()
+  }
+
+  function handleFilterChange() {
+    pagination.value.page = 1
+    void loadRecords()
   }
 
   async function openInitialQueryJob() {
@@ -1597,8 +1718,20 @@ export function useCustomerSampleValidationController() {
   }
 
   async function handlePoolChange() {
+    initialQueryPoolHandled = true
+    const currentQueryPoolId = String(route?.query?.poolId || '').trim()
+    const nextPoolId = String(selectedPoolId.value || '').trim()
+    if (currentQueryPoolId && currentQueryPoolId !== nextPoolId) {
+      const nextQuery = { ...(route?.query || {}) }
+      if (nextPoolId) {
+        nextQuery.poolId = nextPoolId
+      } else {
+        delete nextQuery.poolId
+      }
+      void Promise.resolve(router?.replace?.({ query: nextQuery })).catch(() => {})
+    }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     selectedPool.value = pools.value.find((item) => item.id === selectedPoolId.value)
     if (importWorkflow.value && importWorkflow.value.poolId !== selectedPoolId.value) {
       importWorkflow.value = null
@@ -1617,6 +1750,7 @@ export function useCustomerSampleValidationController() {
   }
 
   function applyValidationModeEffects(normalizedMode: ManualSampleValidationMode) {
+    const previousMode = selectedValidationMode.value
     selectedValidationMode.value = normalizedMode
     if (normalizedMode === 'programmatic') {
       filters.value.coverageType = 'programmatic'
@@ -1628,6 +1762,9 @@ export function useCustomerSampleValidationController() {
       filters.value.coverageType = 'llm_intrinsic'
       filters.value.includeInBatch = true
     } else {
+      if (previousMode === 'programmatic' || filters.value.coverageType === 'programmatic') {
+        filters.value.coverageType = undefined
+      }
       filters.value.includeInBatch = true
     }
   }
@@ -1697,6 +1834,7 @@ export function useCustomerSampleValidationController() {
     const normalizedRuleIds = normalizeLuxianRuleIds(ruleIds).filter(
       (id) => !acceptanceOnlyRuleIds.value.has(id),
     )
+    if (!normalizedRuleIds.length) return
     const current = new Set(selectedLuxianCustomerRuleIds.value)
     if (normalizedRuleIds.every((ruleId) => current.has(ruleId))) {
       normalizedRuleIds.forEach((ruleId) => current.delete(ruleId))
@@ -1765,7 +1903,7 @@ export function useCustomerSampleValidationController() {
       clearLuxianRuleScope()
     }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     await loadRecords()
   }
 
@@ -1848,6 +1986,10 @@ export function useCustomerSampleValidationController() {
     if (key === 'mode-legacy-customer') {
       selectedRuleSetKey.value = LEGACY_CUSTOMER_RULE_SET_KEY
       await handleRuleSetChange(selectedRuleSetKey.value)
+      return
+    }
+    if (key === 'toggle-internal-diagnostic') {
+      toggleInternalDiagnostic()
     }
   }
 
@@ -1884,7 +2026,7 @@ export function useCustomerSampleValidationController() {
       includeInBatch: !isSyncedOnlyValidationMode.value,
     }
     pagination.value.page = 1
-    selectedRowKeys.value = []
+    clearSelectedRecords()
     loadRecords()
   }
 
@@ -1934,6 +2076,7 @@ export function useCustomerSampleValidationController() {
       message.error(result.message || '导入客户样本模板失败')
       return
     }
+    initialQueryPoolHandled = true
     selectedPoolId.value = result.data.id
     importWorkflow.value = {
       poolId: result.data.id,
@@ -2153,129 +2296,173 @@ export function useCustomerSampleValidationController() {
         : isFormalFastScreenMode.value
           ? '正式84条质控任务已提交，正在准备执行'
           : '正在创建样本验证任务...'
-    message.loading({
+    const hideLoading = message.loading({
       content: creatingMessage,
       key: runKey,
       duration: 0,
     })
-    const runPayload: SamplePoolRunPayload = {
-      max_parallel_records: runOptions.value.maxParallelRecords,
-      validation_mode: selectedValidationMode.value,
-      rule_set_key: selectedRuleSetPayloadKey.value,
-    }
-    if (selectedCount > 0) {
-      runPayload.record_refs = runnableRecordRefs
-      runPayload.sample_item_ids = runnableSampleItemIds
-    }
-    if (isLuxian0609Mode.value && selectedLuxianCustomerRuleIds.value.length) {
-      runPayload.selected_rule_ids = selectedLuxianCustomerRuleIds.value
-    }
-    if (shouldRunLuxianFamiliesInParallel(selectedLuxianCustomerRuleIds.value)) {
-      await runLuxianFamilyScopedJobs({
-        runKey,
-        startedAt: now,
-        basePayload: runPayload,
-      })
-      return
-    }
-    const result = await runManualSamplePool(
-      selectedPoolId.value,
-      runPayload,
-      requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
-    )
-    if (!result.success || !result.data) {
-      if (
-        requiresSelectedRecords.value &&
-        (result.errorType === 'timeout' || result.errorType === 'network')
-      ) {
-        message.info('请求等待较久，正在确认后台任务状态')
-        const recovered = await recoverRunAfterSlowRequest({
-          poolId: selectedPoolId.value,
-          recordRefs: runnableRecordRefs,
-          startedAt: now,
-          previousJobId: selectedPool.value?.latest_job_id,
-          runKey,
-          ruleSetKey: selectedRuleSetPayloadKey.value,
-          selectedRuleIds: isLuxian0609Mode.value ? selectedLuxianCustomerRuleIds.value : [],
-        })
-        runLoading.value = false
-        if (recovered) {
-          return
-        }
-      } else {
-        runLoading.value = false
+    let loadingResolved = false
+    const clearLoadingToast = () => {
+      if (loadingResolved) return
+      loadingResolved = true
+      if (typeof hideLoading === 'function') {
+        hideLoading()
       }
       message.destroy(runKey)
+    }
+    try {
+      const runPayload: SamplePoolRunPayload = {
+        max_parallel_records: runOptions.value.maxParallelRecords,
+        validation_mode: selectedValidationMode.value,
+        rule_set_key: selectedRuleSetPayloadKey.value,
+      }
+      if (selectedCount > 0) {
+        runPayload.record_refs = runnableRecordRefs
+        runPayload.sample_item_ids = runnableSampleItemIds
+      }
+      if (isLuxian0609Mode.value && selectedLuxianCustomerRuleIds.value.length) {
+        runPayload.selected_rule_ids = selectedLuxianCustomerRuleIds.value
+      }
+      if (shouldRunLuxianFamiliesInParallel(selectedLuxianCustomerRuleIds.value)) {
+        const familySucceeded = await runLuxianFamilyScopedJobs({
+          runKey,
+          startedAt: now,
+          basePayload: runPayload,
+          clearLoadingToast,
+        })
+        if (familySucceeded) {
+          loadingResolved = true
+        }
+        return
+      }
+      const result = await runManualSamplePool(
+        selectedPoolId.value,
+        runPayload,
+        requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
+      )
+      if (!result.success || !result.data) {
+        if (
+          requiresSelectedRecords.value &&
+          (result.errorType === 'timeout' || result.errorType === 'network')
+        ) {
+          message.info('请求等待较久，正在确认后台任务状态')
+          const recovered = await recoverRunAfterSlowRequest({
+            poolId: selectedPoolId.value,
+            recordRefs: runnableRecordRefs,
+            startedAt: now,
+            previousJobId: selectedPool.value?.latest_job_id,
+            runKey,
+            ruleSetKey: selectedRuleSetPayloadKey.value,
+            selectedRuleIds: isLuxian0609Mode.value ? selectedLuxianCustomerRuleIds.value : [],
+          })
+          if (recovered) {
+            loadingResolved = true
+            return
+          }
+        }
+        clearLoadingToast()
+        if (lastRunSubmission.value?.key === runKey && !lastRunSubmission.value.jobId) {
+          lastRunSubmission.value = undefined
+        }
+        message.error(result.message || '创建样本验证任务失败')
+        return
+      }
+      runLoading.value = false
+      lastRunSubmission.value = {
+        key: runKey,
+        startedAt: now,
+        jobId: result.data.job_id,
+      }
+      const ruleSetName = String(
+        result.data.rule_set_name || validationModeLabel(selectedValidationMode.value),
+      ).trim()
+      const ruleSetKey = String(result.data.rule_set_key || '').trim()
+      const ruleSetDisplay = ruleSetKey ? `${ruleSetKey} / ${ruleSetName}` : ruleSetName
+      loadingResolved = true
+      message.success({
+        content: `任务已创建，正在打开进度。${ruleSetDisplay}，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
+        key: runKey,
+        duration: 3,
+      })
+      clearSelectedRecords()
+      await trackCurrentQcTask(result.data.job_id)
+      void loadPools()
+    } catch (error: any) {
+      clearLoadingToast()
       if (lastRunSubmission.value?.key === runKey && !lastRunSubmission.value.jobId) {
         lastRunSubmission.value = undefined
       }
-      message.error(result.message || '创建样本验证任务失败')
-      return
+      message.error(error?.message || '创建样本验证任务失败')
+    } finally {
+      runLoading.value = false
+      clearLoadingToast()
     }
-    runLoading.value = false
-    lastRunSubmission.value = {
-      key: runKey,
-      startedAt: now,
-      jobId: result.data.job_id,
-    }
-    const ruleSetName = String(
-      result.data.rule_set_name || validationModeLabel(selectedValidationMode.value),
-    ).trim()
-    const ruleSetKey = String(result.data.rule_set_key || '').trim()
-    const ruleSetDisplay = ruleSetKey ? `${ruleSetKey} / ${ruleSetName}` : ruleSetName
-    message.success({
-      content: `任务已创建，正在打开进度。${ruleSetDisplay}，覆盖 ${result.data.sample_item_count} 条样本 / ${result.data.record_count} 份病历 / ${result.data.rule_count} 条规则，并发 ${runOptions.value.maxParallelRecords} 份病历`,
-      key: runKey,
-      duration: 3,
-    })
-    selectedRowKeys.value = []
-    await trackCurrentQcTask(result.data.job_id)
-    void loadPools()
   }
 
   async function runLuxianFamilyScopedJobs(options: {
     runKey: string
     startedAt: number
     basePayload: SamplePoolRunPayload
-  }) {
-    const familyScopes = buildLuxianFamilyRunScopes(selectedLuxianCustomerRuleIds.value)
-    const scopedPayload: SamplePoolRunPayload = {
-      ...options.basePayload,
-      group_by_luxian_family: true,
-      selected_rule_ids: selectedLuxianCustomerRuleIds.value,
+    clearLoadingToast?: () => void
+  }): Promise<boolean> {
+    const clearToast = () => {
+      if (options.clearLoadingToast) {
+        options.clearLoadingToast()
+      } else {
+        message.destroy(options.runKey)
+      }
     }
-    const result = await runManualSamplePool(
-      selectedPoolId.value,
-      scopedPayload,
-      requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
-    )
-    if (!result.success || !result.data) {
-      runLoading.value = false
-      message.destroy(options.runKey)
-      lastRunSubmission.value = undefined
-      message.error(result.message || '创建泸县0609总任务失败')
-      return
-    }
+    try {
+      const familyScopes = buildLuxianFamilyRunScopes(selectedLuxianCustomerRuleIds.value)
+      const scopedPayload: SamplePoolRunPayload = {
+        ...options.basePayload,
+        group_by_luxian_family: true,
+        selected_rule_ids: selectedLuxianCustomerRuleIds.value,
+      }
+      const result = await runManualSamplePool(
+        selectedPoolId.value,
+        scopedPayload,
+        requiresSelectedRecords.value ? { timeout: SAMPLE_RULE_SET_RUN_TIMEOUT_MS } : undefined,
+      )
+      if (!result.success || !result.data) {
+        clearToast()
+        if (lastRunSubmission.value?.key === options.runKey && !lastRunSubmission.value.jobId) {
+          lastRunSubmission.value = undefined
+        }
+        message.error(result.message || '创建泸县0609总任务失败')
+        return false
+      }
 
-    runLoading.value = false
-    const jobId = String(result.data.job_id || '').trim()
-    const childJobIds = Array.isArray(result.data.child_job_ids)
-      ? result.data.child_job_ids.map((item) => String(item)).filter(Boolean)
-      : []
-    lastRunSubmission.value = {
-      key: options.runKey,
-      startedAt: options.startedAt,
-      jobId,
-      jobIds: [jobId, ...childJobIds],
+      runLoading.value = false
+      const jobId = String(result.data.job_id || '').trim()
+      const childJobIds = Array.isArray(result.data.child_job_ids)
+        ? result.data.child_job_ids.map((item) => String(item)).filter(Boolean)
+        : []
+      lastRunSubmission.value = {
+        key: options.runKey,
+        startedAt: options.startedAt,
+        jobId,
+        jobIds: [jobId, ...childJobIds],
+      }
+      message.success({
+        content: `已创建泸县0609总任务，${familyScopes.length} 个质控族已并发入队`,
+        key: options.runKey,
+        duration: 4,
+      })
+      clearSelectedRecords()
+      await trackCurrentQcTask(jobId)
+      void loadPools()
+      return true
+    } catch (error: any) {
+      clearToast()
+      if (lastRunSubmission.value?.key === options.runKey && !lastRunSubmission.value.jobId) {
+        lastRunSubmission.value = undefined
+      }
+      message.error(error?.message || '创建泸县0609总任务失败')
+      return false
+    } finally {
+      runLoading.value = false
     }
-    message.success({
-      content: `已创建泸县0609总任务，${familyScopes.length} 个质控族已并发入队`,
-      key: options.runKey,
-      duration: 4,
-    })
-    selectedRowKeys.value = []
-    await trackCurrentQcTask(jobId)
-    void loadPools()
   }
 
   function buildRunSubmissionKey(
@@ -2504,9 +2691,11 @@ export function useCustomerSampleValidationController() {
 
   async function trackCurrentQcTask(jobId: string, options: { showError?: boolean } = {}) {
     const normalizedJobId = String(jobId || '').trim()
+    const generation = ++currentQcTaskGeneration
     stopCurrentQcTaskPolling()
     if (!normalizedJobId) {
       currentQcTask.value = null
+      currentQcTaskLoading.value = false
       return
     }
     if (currentQcTask.value?.id !== normalizedJobId) {
@@ -2515,6 +2704,7 @@ export function useCustomerSampleValidationController() {
     currentQcTaskLoading.value = true
     try {
       const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
+      if (pageDisposed || generation !== currentQcTaskGeneration) return
       if (!result.success || !result.data) {
         if (!applyTerminalBatchJobStatus(normalizedJobId, result.jobStatus)) {
           currentQcTask.value = null
@@ -2526,10 +2716,12 @@ export function useCustomerSampleValidationController() {
       }
       currentQcTask.value = result.data
       if (isBatchJobRunning(result.data) && !batchResultOpen.value && !luxianAggregateOpen.value) {
-        startCurrentQcTaskPolling(normalizedJobId)
+        startCurrentQcTaskPolling(normalizedJobId, generation)
       }
     } finally {
-      currentQcTaskLoading.value = false
+      if (!pageDisposed && generation === currentQcTaskGeneration) {
+        currentQcTaskLoading.value = false
+      }
     }
   }
 
@@ -2625,6 +2817,8 @@ export function useCustomerSampleValidationController() {
     parentJobId: string,
     initialRunResult?: ManualSamplePoolRunResult,
   ) {
+    if (pageDisposed) return
+    const generation = ++luxianAggregateGeneration
     stopCurrentQcTaskPolling()
     stopLuxianAggregatePolling()
     luxianAggregateParentJobId.value = parentJobId
@@ -2662,17 +2856,34 @@ export function useCustomerSampleValidationController() {
       })
     }
     luxianAggregateOpen.value = true
-    void refreshLuxianAggregateJobs(parentJobId)
-    startLuxianAggregatePolling()
+    void refreshLuxianAggregateJobs(parentJobId, generation)
+    startLuxianAggregatePolling(generation)
   }
 
-  async function refreshLuxianAggregateJobs(parentJobId?: string) {
+  async function refreshLuxianAggregateJobs(parentJobId?: string, expectedGeneration?: number) {
+    const generation = expectedGeneration ?? luxianAggregateGeneration
     const effectiveParentJobId = parentJobId || luxianAggregateParentJobId.value
-    if (!luxianAggregateJobs.value.length && !effectiveParentJobId) return
+    if (
+      pageDisposed ||
+      generation !== luxianAggregateGeneration ||
+      !luxianAggregateOpen.value ||
+      luxianAggregateRefreshInFlightGeneration === generation ||
+      (!luxianAggregateJobs.value.length && !effectiveParentJobId)
+    ) {
+      return
+    }
+    luxianAggregateRefreshInFlightGeneration = generation
     luxianAggregateLoading.value = true
     try {
       if (effectiveParentJobId) {
         const parentResult = await getSichuanWorkspaceBatchJob(effectiveParentJobId)
+        if (
+          pageDisposed ||
+          generation !== luxianAggregateGeneration ||
+          !luxianAggregateOpen.value
+        ) {
+          return
+        }
         if (parentResult.success && parentResult.data) {
           updateCurrentQcTask(parentResult.data)
           const aggregateJobs = buildLuxianAggregateJobsFromParentJob(parentResult.data)
@@ -2699,26 +2910,48 @@ export function useCustomerSampleValidationController() {
           }
         }),
       )
+      if (
+        pageDisposed ||
+        generation !== luxianAggregateGeneration ||
+        !luxianAggregateOpen.value
+      ) {
+        return
+      }
       luxianAggregateJobs.value = nextJobs
       if (nextJobs.every((item) => !isBatchJobRunning(item.detail || item.status))) {
         stopLuxianAggregatePolling()
         await loadPools()
+        if (pageDisposed) return
         await loadRecords()
       }
     } finally {
-      luxianAggregateLoading.value = false
+      if (luxianAggregateRefreshInFlightGeneration === generation) {
+        luxianAggregateRefreshInFlightGeneration = null
+      }
+      if (!pageDisposed && generation === luxianAggregateGeneration) {
+        luxianAggregateLoading.value = false
+      }
     }
   }
 
-  function startLuxianAggregatePolling() {
+  function startLuxianAggregatePolling(generation = luxianAggregateGeneration) {
     stopLuxianAggregatePolling()
-    luxianAggregatePollTimer = setInterval(() => {
-      if (!luxianAggregateOpen.value) {
-        stopLuxianAggregatePolling()
+    if (pageDisposed || !luxianAggregateOpen.value) return
+    const timer = setInterval(() => {
+      if (
+        pageDisposed ||
+        generation !== luxianAggregateGeneration ||
+        timer !== luxianAggregatePollTimer ||
+        !luxianAggregateOpen.value
+      ) {
+        clearInterval(timer)
+        if (timer === luxianAggregatePollTimer) stopLuxianAggregatePolling()
         return
       }
-      void refreshLuxianAggregateJobs()
+      if (luxianAggregateRefreshInFlightGeneration === generation) return
+      void refreshLuxianAggregateJobs(undefined, generation)
     }, 3000)
+    luxianAggregatePollTimer = timer
   }
 
   function stopLuxianAggregatePolling() {
@@ -2729,10 +2962,12 @@ export function useCustomerSampleValidationController() {
   }
 
   function closeLuxianAggregateDrawer() {
+    luxianAggregateGeneration += 1
     stopLuxianAggregatePolling()
+    luxianAggregateLoading.value = false
     luxianAggregateOpen.value = false
     luxianAggregateParentJobId.value = ''
-    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
+    if (!pageDisposed && currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
       startCurrentQcTaskPolling(currentQcTask.value.id)
     }
   }
@@ -2740,6 +2975,7 @@ export function useCustomerSampleValidationController() {
   async function openLuxianAggregateChildJob(item: LuxianAggregateJob) {
     const jobId = String(item.jobId || '').trim()
     if (!jobId) return
+    luxianAggregateGeneration += 1
     luxianAggregateOpen.value = false
     stopLuxianAggregatePolling()
     await openBatchJob(jobId)
@@ -2811,6 +3047,7 @@ export function useCustomerSampleValidationController() {
     const requestSequence = ++syncRequestSequence
     const poolId = selectedPoolId.value
     if (!poolId) {
+      syncJobGeneration += 1
       syncJobDetail.value = undefined
       stopSyncJobPolling()
       return
@@ -2818,33 +3055,67 @@ export function useCustomerSampleValidationController() {
     const result = await getLatestManualSamplePoolSyncJob(poolId)
     if (pageDisposed || requestSequence !== syncRequestSequence || poolId !== selectedPoolId.value) return
     if (!result.success) return
+    const generation = ++syncJobGeneration
     syncJobDetail.value = result.data || undefined
     if (syncJobDetail.value && isSyncJobRunning(syncJobDetail.value.status)) {
-      startSyncJobPolling(syncJobDetail.value.id)
+      startSyncJobPolling(syncJobDetail.value.id, generation)
     } else {
       stopSyncJobPolling()
     }
   }
 
   async function openSyncJob(jobId: string) {
+    const generation = ++syncJobGeneration
     stopSyncJobPolling()
     const result = await getManualSamplePoolSyncJob(jobId)
+    if (pageDisposed || generation !== syncJobGeneration) return
     if (!result.success || !result.data) {
       message.error(result.message || '获取样本同步任务失败')
       return
     }
     syncJobDetail.value = result.data
     if (isSyncJobRunning(result.data.status)) {
-      startSyncJobPolling(jobId)
+      startSyncJobPolling(jobId, generation)
     } else {
       updateImportWorkflowFromSyncJob(result.data)
       await loadPools()
+      if (pageDisposed) return
       await loadRecords()
     }
   }
 
+  function canOpenSingleRecordComparisonForJob(job: SichuanBatchJob): boolean {
+    const normalizedStatus = String(job.status || '')
+      .trim()
+      .toLowerCase()
+    if (normalizedStatus !== 'completed' || isBatchJobRunning(job)) {
+      return false
+    }
+    if (String(job.summary?.execution_status || '').trim().toLowerCase() === 'failed') {
+      return false
+    }
+    if (String(job.job_kind || '').trim().toLowerCase() === 'parent') {
+      return false
+    }
+    const filters = job.filters && typeof job.filters === 'object' ? job.filters : {}
+    const jobRuleSetKey = String(
+      job.rule_set_key ||
+        (job as unknown as Record<string, unknown>).rule_set_id ||
+        job.summary?.rule_set_key ||
+        filters.rule_set_key ||
+        filters.rule_set_id ||
+        '',
+    )
+      .trim()
+      .toLowerCase()
+    return (
+      jobRuleSetKey === LUXIAN_0609_RULE_SET_KEY || jobRuleSetKey.startsWith('luxian_0609')
+    )
+  }
+
   async function openCurrentTaskResult(jobId: string) {
     const response = await getSichuanWorkspaceBatchJob(jobId)
+    if (pageDisposed) return
     if (!response.success || !response.data) {
       message.error(response.message || '获取任务详情失败')
       return
@@ -2852,8 +3123,9 @@ export function useCustomerSampleValidationController() {
     const job = response.data
     updateCurrentQcTask(job)
     const refs = job.filters?.record_refs
-    // 只用任务冻结的完整身份，不用当前勾选项或仅凭住院号匹配。
-    if (Array.isArray(refs) && refs.length === 1) {
+    // 只用任务冻结的完整身份，不用当前勾选项或仅凭住院号匹配；
+    // 仅对已成功完成的 0609 单病历任务打开对照页，其余状态或规则集统一打开任务抽屉。
+    if (canOpenSingleRecordComparisonForJob(job) && Array.isArray(refs) && refs.length === 1) {
       const ref = refs[0] as Record<string, unknown> | null
       const instituteId = String(ref?.institute_id || '').trim()
       const patientId = String(ref?.patient_id || '').trim()
@@ -2886,6 +3158,7 @@ export function useCustomerSampleValidationController() {
   }
 
   async function openBatchJob(jobId: string) {
+    const generation = ++batchJobGeneration
     stopBatchJobPolling()
     batchJobDebugRequestId += 1
     batchJobDebugLoading.value = false
@@ -2896,6 +3169,7 @@ export function useCustomerSampleValidationController() {
     batchJobDebugSnapshot.value = null
     batchResultOpen.value = true
     const result = await getSichuanWorkspaceBatchJob(jobId)
+    if (pageDisposed || generation !== batchJobGeneration || !batchResultOpen.value) return
     batchJobLoading.value = false
     if (!result.success || !result.data) {
       message.error(result.message || '获取任务详情失败')
@@ -2911,7 +3185,7 @@ export function useCustomerSampleValidationController() {
     batchJobDetail.value = result.data
     void fetchBatchJobDebugSnapshot(jobId)
     if (isBatchJobRunning(result.data)) {
-      startBatchJobPolling(jobId)
+      startBatchJobPolling(jobId, generation)
     }
   }
 
@@ -2920,7 +3194,7 @@ export function useCustomerSampleValidationController() {
     options?: { ruleJobId?: string; itemLimit?: number },
   ) {
     const normalizedJobId = String(jobId || '').trim()
-    if (!normalizedJobId) return null
+    if (!normalizedJobId || pageDisposed) return null
     const requestId = ++batchJobDebugRequestId
     batchJobDebugLoading.value = true
     try {
@@ -2928,7 +3202,9 @@ export function useCustomerSampleValidationController() {
         rule_job_id: options?.ruleJobId,
         item_limit: options?.itemLimit,
       })
-      if (requestId !== batchJobDebugRequestId) return null
+      if (pageDisposed || requestId !== batchJobDebugRequestId || !batchResultOpen.value) {
+        return null
+      }
       if (!result.success || !result.data) {
         message.warning(result.message || '调试信息暂不可用，质控结果仍可正常查看')
         return null
@@ -2936,25 +3212,27 @@ export function useCustomerSampleValidationController() {
       batchJobDebugSnapshot.value = result.data
       return result.data
     } catch (error: any) {
-      if (requestId === batchJobDebugRequestId) {
+      if (!pageDisposed && requestId === batchJobDebugRequestId && batchResultOpen.value) {
         message.warning(error?.message || '调试信息暂不可用，质控结果仍可正常查看')
       }
       return null
     } finally {
-      if (requestId === batchJobDebugRequestId) {
+      if (!pageDisposed && requestId === batchJobDebugRequestId) {
         batchJobDebugLoading.value = false
       }
     }
   }
 
   function closeBatchDrawer() {
+    batchJobGeneration += 1
     stopBatchJobPolling()
     batchJobDebugRequestId += 1
+    batchJobLoading.value = false
     batchResultOpen.value = false
     batchJobDetail.value = null
     batchJobDebugSnapshot.value = null
     batchJobDebugLoading.value = false
-    if (currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
+    if (!pageDisposed && currentQcTask.value && isBatchJobRunning(currentQcTask.value)) {
       startCurrentQcTaskPolling(currentQcTask.value.id)
     }
   }
@@ -2972,31 +3250,56 @@ export function useCustomerSampleValidationController() {
     batchJobPollReadFailures = 0
   }
 
-  function startCurrentQcTaskPolling(jobId: string) {
+  function startCurrentQcTaskPolling(jobId: string, generation = currentQcTaskGeneration) {
     const normalizedJobId = String(jobId || '').trim()
-    if (!normalizedJobId || currentQcTaskPollTimer) return
+    if (pageDisposed || !normalizedJobId || currentQcTaskPollTimer) return
     currentQcTaskPollReadFailures = 0
-    currentQcTaskPollTimer = setInterval(async () => {
+    let tickInFlight = false
+    const timer = setInterval(async () => {
+      if (
+        pageDisposed ||
+        generation !== currentQcTaskGeneration ||
+        timer !== currentQcTaskPollTimer
+      ) {
+        clearInterval(timer)
+        return
+      }
       if (batchResultOpen.value || luxianAggregateOpen.value) {
         stopCurrentQcTaskPolling()
         return
       }
-      const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
-      if (!result.success || !result.data) {
-        applyTerminalBatchJobStatus(normalizedJobId, result.jobStatus)
-        currentQcTaskPollReadFailures += 1
-        if (handleBatchJobReadFailure(normalizedJobId, result, currentQcTaskPollReadFailures)) {
-          stopCurrentQcTaskPolling()
+      if (tickInFlight) return
+      tickInFlight = true
+      try {
+        const result = await getSichuanWorkspaceBatchJob(normalizedJobId)
+        if (
+          pageDisposed ||
+          generation !== currentQcTaskGeneration ||
+          timer !== currentQcTaskPollTimer ||
+          batchResultOpen.value ||
+          luxianAggregateOpen.value
+        ) {
+          return
         }
-        return
-      }
-      currentQcTaskPollReadFailures = 0
-      currentQcTask.value = result.data
-      if (!isBatchJobRunning(result.data)) {
-        stopCurrentQcTaskPolling()
-        await Promise.all([loadPools({ refreshSyncJob: false, loadRecords: false }), loadRecords()])
+        if (!result.success || !result.data) {
+          applyTerminalBatchJobStatus(normalizedJobId, result.jobStatus)
+          currentQcTaskPollReadFailures += 1
+          if (handleBatchJobReadFailure(normalizedJobId, result, currentQcTaskPollReadFailures)) {
+            stopCurrentQcTaskPolling()
+          }
+          return
+        }
+        currentQcTaskPollReadFailures = 0
+        currentQcTask.value = result.data
+        if (!isBatchJobRunning(result.data)) {
+          stopCurrentQcTaskPolling()
+          await Promise.all([loadPools({ refreshSyncJob: false, loadRecords: false }), loadRecords()])
+        }
+      } finally {
+        tickInFlight = false
       }
     }, 5000)
+    currentQcTaskPollTimer = timer
   }
 
   function stopCurrentQcTaskPolling() {
@@ -3004,6 +3307,7 @@ export function useCustomerSampleValidationController() {
       clearInterval(currentQcTaskPollTimer)
       currentQcTaskPollTimer = null
     }
+    currentQcTaskPollReadFailures = 0
   }
 
   function isSyncJobRunning(status?: string) {
@@ -3027,27 +3331,68 @@ export function useCustomerSampleValidationController() {
     )
   }
 
-  function startSyncJobPolling(jobId: string) {
+  function startSyncJobPolling(jobId: string, generation = syncJobGeneration) {
     stopSyncJobPolling()
-    syncJobPollTimer = setInterval(async () => {
-      const result = await getManualSamplePoolSyncJob(jobId)
-      if (!result.success || !result.data) return
-      syncJobDetail.value = result.data
-      if (
-        isSyncJobRunning(result.data.status) &&
-        hasSyncJobReachedPrimaryVisible(result.data) &&
-        !primaryVisibleRefreshedSyncJobs.has(jobId)
-      ) {
-        primaryVisibleRefreshedSyncJobs.add(jobId)
-        await Promise.all([loadPools({ refreshSyncJob: false, loadRecords: false }), loadRecords()])
+    if (pageDisposed || !String(jobId || '').trim()) return
+    let tickInFlight = false
+    let consecutiveFailures = 0
+    const timer = setInterval(async () => {
+      if (pageDisposed || generation !== syncJobGeneration || timer !== syncJobPollTimer) {
+        clearInterval(timer)
+        return
       }
-      if (!isSyncJobRunning(result.data.status)) {
-        stopSyncJobPolling()
-        updateImportWorkflowFromSyncJob(result.data)
-        const failed = String(result.data.status || '').toLowerCase() === 'failed'
-        await loadPools({ refreshSyncJob: false, loadRecords: !failed })
+      if (tickInFlight) return
+      tickInFlight = true
+      try {
+        const result = await getManualSamplePoolSyncJob(jobId)
+        if (pageDisposed || generation !== syncJobGeneration || timer !== syncJobPollTimer) {
+          return
+        }
+        if (!result.success || !result.data) {
+          consecutiveFailures += 1
+          if (consecutiveFailures >= MAX_SYNC_JOB_POLL_FAILURES) {
+            stopSyncJobPolling()
+            message.warning(
+              result.message || '同步任务状态连续获取失败，已暂停自动刷新，请稍后手动刷新',
+            )
+          }
+          return
+        }
+        consecutiveFailures = 0
+        syncJobDetail.value = result.data
+        if (
+          isSyncJobRunning(result.data.status) &&
+          hasSyncJobReachedPrimaryVisible(result.data) &&
+          !primaryVisibleRefreshedSyncJobs.has(jobId)
+        ) {
+          primaryVisibleRefreshedSyncJobs.add(jobId)
+          await Promise.all([loadPools({ refreshSyncJob: false, loadRecords: false }), loadRecords()])
+          if (pageDisposed || generation !== syncJobGeneration || timer !== syncJobPollTimer) {
+            return
+          }
+        }
+        if (!isSyncJobRunning(result.data.status)) {
+          stopSyncJobPolling()
+          updateImportWorkflowFromSyncJob(result.data)
+          const failed = String(result.data.status || '').toLowerCase() === 'failed'
+          await loadPools({ refreshSyncJob: false, loadRecords: !failed })
+        }
+      } catch (error: any) {
+        if (pageDisposed || generation !== syncJobGeneration || timer !== syncJobPollTimer) {
+          return
+        }
+        consecutiveFailures += 1
+        if (consecutiveFailures >= MAX_SYNC_JOB_POLL_FAILURES) {
+          stopSyncJobPolling()
+          message.warning(
+            error?.message || '同步任务状态连续获取失败，已暂停自动刷新，请稍后手动刷新',
+          )
+        }
+      } finally {
+        tickInFlight = false
       }
     }, 3000)
+    syncJobPollTimer = timer
   }
 
   function updateImportWorkflowFromSyncJob(job: ManualSamplePoolSyncJob) {
@@ -3070,18 +3415,34 @@ export function useCustomerSampleValidationController() {
     }
   }
 
-  function startBatchJobPolling(jobId: string) {
+  function startBatchJobPolling(jobId: string, generation = batchJobGeneration) {
     stopBatchJobPolling()
-    batchJobPollTimer = setInterval(async () => {
-      if (batchJobPollInFlight) return
-      if (!batchResultOpen.value) {
-        stopBatchJobPolling()
+    if (pageDisposed || !batchResultOpen.value) return
+    let tickInFlight = false
+    const timer = setInterval(async () => {
+      if (
+        pageDisposed ||
+        generation !== batchJobGeneration ||
+        timer !== batchJobPollTimer ||
+        !batchResultOpen.value
+      ) {
+        clearInterval(timer)
+        if (timer === batchJobPollTimer) stopBatchJobPolling()
         return
       }
-      batchJobPollInFlight = true
+      if (tickInFlight) return
+      tickInFlight = true
       try {
         batchJobPollTick += 1
         const result = await getSichuanWorkspaceBatchJob(jobId)
+        if (
+          pageDisposed ||
+          generation !== batchJobGeneration ||
+          timer !== batchJobPollTimer ||
+          !batchResultOpen.value
+        ) {
+          return
+        }
         if (!result.success || !result.data) {
           applyTerminalBatchJobStatus(jobId, result.jobStatus)
           batchJobPollReadFailures += 1
@@ -3099,12 +3460,14 @@ export function useCustomerSampleValidationController() {
         if (!isBatchJobRunning(result.data)) {
           stopBatchJobPolling()
           await loadPools()
+          if (pageDisposed) return
           await loadRecords()
         }
       } finally {
-        batchJobPollInFlight = false
+        tickInFlight = false
       }
     }, 3000)
+    batchJobPollTimer = timer
   }
 
   async function handleCancelBatchJob(jobId: string) {
@@ -3113,19 +3476,32 @@ export function useCustomerSampleValidationController() {
     cancelBatchJobLoading.value = true
     try {
       const result = await cancelSichuanWorkspaceBatchJob(normalizedJobId)
+      if (pageDisposed) return
       if (!result.success || !result.data) {
         message.error(result.message || '停止质控任务失败')
         return
       }
       stopBatchJobPolling()
-      batchJobDetail.value = result.data
+      stopCurrentQcTaskPolling()
+      if (currentQcTask.value?.id === normalizedJobId) {
+        currentQcTaskGeneration += 1
+      }
+      if (
+        batchResultOpen.value &&
+        (!batchJobDetail.value || batchJobDetail.value.id === normalizedJobId)
+      ) {
+        batchJobDetail.value = result.data
+      }
       updateCurrentQcTask(result.data)
       clearLastRunSubmissionForCanceledJob(normalizedJobId)
       message.success('已停止本次质控任务，已返回结果仍可查看')
       await loadPools()
+      if (pageDisposed) return
       await loadRecords()
     } finally {
-      cancelBatchJobLoading.value = false
+      if (!pageDisposed) {
+        cancelBatchJobLoading.value = false
+      }
     }
   }
 
@@ -3246,8 +3622,14 @@ export function useCustomerSampleValidationController() {
     })
   })
 
-  onUnmounted(() => {
+  function disposePage() {
+    if (pageDisposed) return
     pageDisposed = true
+    currentQcTaskGeneration += 1
+    batchJobGeneration += 1
+    syncJobGeneration += 1
+    luxianAggregateGeneration += 1
+    batchJobDebugRequestId += 1
     window.removeEventListener('resize', updateCustomerSampleTourCardPosition)
     window.removeEventListener('scroll', updateCustomerSampleTourCardPosition, true)
     stopCustomerSampleGuidePositionTimer()
@@ -3256,7 +3638,10 @@ export function useCustomerSampleValidationController() {
     stopLuxianAggregatePolling()
     stopSyncJobPolling()
     stopSyncStatusAutoHideTimer()
-  })
+  }
+
+  onBeforeUnmount(disposePage)
+  onUnmounted(disposePage)
 
   return {
     initialConfigLoading,
@@ -3341,10 +3726,12 @@ export function useCustomerSampleValidationController() {
     handleDownloadTemplate,
     handleExportBatchReport,
     handleExportCurrentTask,
+    handleFilterChange,
     handleHospitalizationSync,
     handleImportFileSelect,
     handleImportPool,
     handleInternalDiagnosticChange,
+    handleLuxianScopeToggle,
     handleMoreActionKey,
     handlePoolChange,
     handlePoolManagementSearch,
@@ -3353,6 +3740,7 @@ export function useCustomerSampleValidationController() {
     handleReviewCurrentTask,
     handleRuleSetChange,
     handleRunPool,
+    handleSearchRecords,
     handleSyncPoolRecords,
     History,
     hospitalizationPreviewMetrics,
@@ -3374,12 +3762,14 @@ export function useCustomerSampleValidationController() {
     importWorkflow,
     importWorkflowSteps,
     InboxOutlined,
+    internalDiagnosticExpanded,
     internalDiagnosticKeys,
     isAllLuxianRulesSelected,
     isEditableCopyDocumentGroupExpanded,
     isEditableOrderDocument,
     isLastCustomerSampleGuideStep,
     isLuxian0609Mode,
+    isLuxianScopeExpanded,
     isSyncedOnlyValidationMode,
     itemColumns,
     itemLoading,
@@ -3398,6 +3788,7 @@ export function useCustomerSampleValidationController() {
     LuxianRuleScopePanel,
     luxianScopeHelperText,
     luxianScopeModeText,
+    luxianScopeOpen,
     mainRuleSets,
     managedPools,
     matchLoading,
@@ -3428,6 +3819,7 @@ export function useCustomerSampleValidationController() {
     recordResultComparisonFocus,
     recordResultComparisonOpen,
     records,
+    recordsLoadError,
     recordScopeHint,
     refreshHospitalizationScopePreview,
     refreshLuxianAggregateJobs,

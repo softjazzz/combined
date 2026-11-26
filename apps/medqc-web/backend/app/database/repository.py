@@ -212,23 +212,66 @@ class SqliteRepository(MedicalRecordRepository):
             session.close()
 
     def save_frontpage(self, data: Dict) -> Dict:
+        from sqlalchemy import inspect as sa_inspect
+        from . import connection as db_connection
         from .models.cdm import MedicalRecordFrontpage
+
+        if not isinstance(data, dict):
+            raise ValueError("病案首页数据格式无效")
+        for required_key in ("institute_id", "patient_id", "visit_id"):
+            if not str(data.get(required_key) or "").strip():
+                raise ValueError(f"缺少必填主键字段: {required_key}")
+
+        protected_fields = frozenset({
+            "institute_id",
+            "patient_id",
+            "visit_id",
+            "update_time",
+            "local_sync_completed_at",
+        })
+        allowed_update_fields = frozenset(
+            col.name for col in MedicalRecordFrontpage.__table__.columns
+        ) - protected_fields
+        allowed_insert_fields = allowed_update_fields | frozenset({
+            "institute_id",
+            "patient_id",
+            "visit_id",
+        })
+
         session = self._session_factory()
         try:
+            schema_mode = str(getattr(db_connection, "DB_SCHEMA_MODE", "single") or "single").strip().lower()
+            target_schema = "cdm" if schema_mode == "split" else None
+            if target_schema and hasattr(session, "get_bind"):
+                bind = session.get_bind()
+                if bind is not None and getattr(getattr(bind, "dialect", None), "name", "") == "sqlite":
+                    if target_schema not in sa_inspect(bind).get_schema_names():
+                        target_schema = None
+
+            owner_opts = {"schema_translate_map": {None: target_schema}} if target_schema else {}
+            if owner_opts and hasattr(session, "connection"):
+                session.connection(execution_options=owner_opts)
+
             keys = {
                 "institute_id": data["institute_id"],
                 "patient_id": data["patient_id"],
                 "visit_id": data["visit_id"],
             }
-            existing = session.query(MedicalRecordFrontpage).filter_by(**keys).first()
+            query = session.query(MedicalRecordFrontpage)
+            if owner_opts:
+                query = query.execution_options(**owner_opts)
+            existing = query.filter_by(**keys).first()
             if existing:
                 for k, v in data.items():
-                    if hasattr(existing, k) and k not in ("institute_id", "patient_id", "visit_id"):
+                    if k in allowed_update_fields:
                         setattr(existing, k, v)
             else:
-                existing = MedicalRecordFrontpage(**data)
+                filtered = {k: v for k, v in data.items() if k in allowed_insert_fields}
+                existing = MedicalRecordFrontpage(**filtered)
                 session.add(existing)
             session.commit()
+            if owner_opts and hasattr(session, "connection"):
+                session.connection(execution_options=owner_opts)
             return self._to_dict(existing)
         except Exception:
             session.rollback()

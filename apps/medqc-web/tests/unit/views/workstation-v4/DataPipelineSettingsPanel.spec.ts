@@ -406,4 +406,81 @@ describe('独立同步控制面板', () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false)
     wrapper.unmount()
   })
+
+  it('非 HTTPS 局域网无 crypto.randomUUID 时仍能生成合规 UUID 提交同步与草稿', async () => {
+    const originalCrypto = globalThis.crypto
+    vi.stubGlobal('crypto', {
+      getRandomValues: (arr: Uint8Array) => {
+        for (let i = 0; i < arr.length; i += 1) arr[i] = (i * 17 + 3) & 0xff
+        return arr
+      },
+    })
+    try {
+      api.configuration.mockResolvedValue(config(true))
+      const wrapper = mountPanel()
+      await readyToSubmit(wrapper)
+      await button(wrapper, '提交预检任务').trigger('click')
+      await flushPromises()
+      expect(api.submit.mock.calls[0]?.[0]?.operation_id).toMatch(
+        /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+      )
+      wrapper.unmount()
+
+      const draftWrapper = mountDraft()
+      await newDraft(draftWrapper)
+      api.saveDraft.mockResolvedValue(draftRow())
+      await button(draftWrapper, '保存禁用草稿').trigger('click')
+      await flushPromises()
+      expect(api.saveDraft.mock.calls[0]?.[0]).toMatch(
+        /^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/,
+      )
+      draftWrapper.unmount()
+    } finally {
+      vi.stubGlobal('crypto', originalCrypto)
+    }
+  })
+
+  it('兼容模式禁用独立同步保存不强行覆盖 default_pipeline，且相同用户角色刷新不误清配置', async () => {
+    api.configuration.mockResolvedValue(config(false))
+    api.save.mockResolvedValue(config(false))
+    const wrapper = mountPanel()
+    await flushPromises()
+
+    auth.userRoles = ['admin']
+    await flushPromises()
+    expect(wrapper.text()).not.toContain('账号权限已变化')
+
+    await button(wrapper, '保存任务入口').trigger('click')
+    await flushPromises()
+    expect(api.save).toHaveBeenCalledWith({
+      version: 1,
+      default_pipeline: 'legacy_pg',
+      independent_enabled: false,
+    })
+    wrapper.unmount()
+  })
+
+  it('SyncJobDetailDrawer 在 unit.error 缺失时不抛异常', async () => {
+    api.detail.mockResolvedValue({
+      ...job,
+      units: [
+        {
+          unit_id: 'no-error-unit',
+          source_date: '2026-11-01',
+          interface_name: 'web.mr',
+          phase: 'extract',
+          status: 'succeeded',
+          execution_attempts: 1,
+        } as unknown as NonNullable<IndependentSyncJob['units']>[number],
+      ],
+    })
+    const wrapper = mount(SyncJobDetailDrawer, {
+      props: { jobId: job.job_id, canRetry: false },
+      global: { stubs },
+    })
+    await flushPromises()
+    expect(wrapper.text()).toContain('web.mr')
+    expect(wrapper.text()).not.toContain('失败原因')
+    wrapper.unmount()
+  })
 })

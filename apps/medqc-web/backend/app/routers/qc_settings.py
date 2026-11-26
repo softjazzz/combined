@@ -6,22 +6,26 @@
 """
 import json
 import logging
+import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 
 logger = logging.getLogger(__name__)
 
 _SYSTEM_CONFIG_ROLES = ("admin", "sync_admin", "super_admin")
+_SETTINGS_LOCK = threading.RLock()
 
 router = APIRouter(
     prefix="/api/v1/qc/settings",
     tags=["QC Settings"],
-    dependencies=[Depends(require_roles(*_SYSTEM_CONFIG_ROLES))],
+    dependencies=[Depends(require_global_system_admin)],
 )
 
 # 配置文件路径
@@ -76,18 +80,41 @@ def _load_settings() -> tuple[QCSettingsModel, str]:
 
 
 def _save_settings(settings: QCSettingsModel) -> None:
-    """保存配置到文件"""
+    """使用同目录临时文件 + os.replace() 原子保存配置，防止并发或崩溃写坏文件。"""
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    CONFIG_PATH.write_text(
-        json.dumps(settings.model_dump(), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    payload = json.dumps(settings.model_dump(), ensure_ascii=False, indent=2)
+    tmp_path: Optional[str] = None
+    with _SETTINGS_LOCK:
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                encoding="utf-8",
+                dir=str(CONFIG_PATH.parent),
+                prefix=f".{CONFIG_PATH.name}.",
+                suffix=".tmp",
+                delete=False,
+            ) as tmp_file:
+                tmp_path = tmp_file.name
+                tmp_file.write(payload)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_path, CONFIG_PATH)
+            tmp_path = None
+        finally:
+            if tmp_path is not None:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
     logger.info(f"质控配置已保存: {CONFIG_PATH}")
 
 
 @router.get("", response_model=QCSettingsResponse)
-async def get_qc_settings():
+async def get_qc_settings(
+    _admin_user: dict = Depends(require_global_system_admin),
+):
     """获取当前质控引擎配置"""
+    del _admin_user
     settings, source = _load_settings()
     return QCSettingsResponse(settings=settings, source=source)
 
@@ -102,28 +129,37 @@ class QCSettingsUpdateRequest(BaseModel):
 
 
 @router.put("", response_model=QCSettingsResponse)
-async def update_qc_settings(req: QCSettingsUpdateRequest):
+async def update_qc_settings(
+    req: QCSettingsUpdateRequest,
+    _admin_user: dict = Depends(require_global_system_admin),
+):
     """更新质控引擎配置（部分更新）"""
-    # 加载当前配置
-    current, _ = _load_settings()
-    current_dict = current.model_dump()
+    del _admin_user
+    with _SETTINGS_LOCK:
+        # 加载当前配置
+        current, _ = _load_settings()
+        current_dict = current.model_dump()
 
-    # 合并更新
-    update_data = req.model_dump(exclude_none=True)
-    current_dict.update(update_data)
+        # 合并更新
+        update_data = req.model_dump(exclude_none=True)
+        current_dict.update(update_data)
 
-    # 验证并保存
-    updated = QCSettingsModel(**current_dict)
-    _save_settings(updated)
+        # 验证并原子保存
+        updated = QCSettingsModel(**current_dict)
+        _save_settings(updated)
 
     logger.info(f"质控配置已更新: {update_data}")
     return QCSettingsResponse(settings=updated, source="file")
 
 
 @router.post("/reset", response_model=QCSettingsResponse)
-async def reset_qc_settings():
+async def reset_qc_settings(
+    _admin_user: dict = Depends(require_global_system_admin),
+):
     """重置质控引擎配置为默认值"""
-    default = QCSettingsModel()
-    _save_settings(default)
+    del _admin_user
+    with _SETTINGS_LOCK:
+        default = QCSettingsModel()
+        _save_settings(default)
     logger.info("质控配置已重置为默认值")
     return QCSettingsResponse(settings=default, source="default")

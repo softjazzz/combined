@@ -15,13 +15,34 @@ os.environ.setdefault("JWT_SECRET", "test-secret")
 
 from app.main import create_app  # noqa: E402
 from app.core.access_control import enforce_default_auth  # noqa: E402
+from app.core.security import get_current_user  # noqa: E402
 from app.routers.frontpage import AutoGenerateFrontPageRequest  # noqa: E402
 
 
 @pytest.fixture()
-def client():
+def client(monkeypatch):
+    class _NoopQueueState:
+        def start_run(self, **_kwargs):
+            return "run-offline-test"
+
+        def finish_success(self, **_kwargs):
+            return None
+
+        def finish_failed(self, **_kwargs):
+            return None
+
+    monkeypatch.setattr(
+        "app.routers.frontpage.default_workflow_queue_state_service",
+        _NoopQueueState(),
+    )
     app = create_app()
     app.dependency_overrides[enforce_default_auth] = lambda: None
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-admin",
+        "username": "admin",
+        "role": "admin",
+        "institute_id": None,
+    }
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
@@ -52,7 +73,13 @@ class _FakeService:
         self.calls.append(("generate_draft_from_visit", visit_id))
         return _FakeDraft(_frontpage_payload("visit"))
 
-    async def _get_medical_text(self, visit_id: str, *, allow_demo_fallback: bool = True):
+    async def _get_medical_text(
+        self,
+        visit_id: str,
+        *,
+        allow_demo_fallback: bool = True,
+        **_kwargs,
+    ):
         self.calls.append(("_get_medical_text", {"visit_id": visit_id, "allow_demo_fallback": allow_demo_fallback}))
         return self.visit_text
 
@@ -132,7 +159,7 @@ def test_auto_generate_visit_id_loads_real_medical_text(client, monkeypatch):
     monkeypatch.setattr("app.routers.frontpage.default_frontpage_service", fake_service)
     monkeypatch.setattr(
         "app.routers.frontpage._resolve_visit_identity",
-        lambda visit_id: {"visit_id": visit_id, "patient_id": "P-002", "institute_id": "H-001"},
+        lambda visit_id, **_kwargs: {"visit_id": visit_id, "patient_id": "P-002", "institute_id": "H-001"},
     )
     monkeypatch.setattr("app.routers.frontpage.save_ai_frontpage_draft", lambda payload: None)
 
@@ -150,3 +177,50 @@ def test_auto_generate_visit_id_loads_real_medical_text(client, monkeypatch):
         ("_get_medical_text", {"visit_id": "V-002", "allow_demo_fallback": False}),
         ("extract_from_text", "【入院记录】入院诊断：高血压病\n【出院记录】出院诊断：高血压病"),
     ]
+
+
+def test_auto_generate_stops_and_never_saves_demo_patient_when_extraction_unavailable(client, monkeypatch):
+    from app.services.frontpage_extraction_service import FrontPageExtractionService
+
+    real_service = FrontPageExtractionService(llm_config={"api_endpoint": "", "api_key": ""})
+
+    async def _no_refresh():
+        real_service._use_llm = False
+
+    async def _real_visit_text(visit_id: str, *, allow_demo_fallback: bool = True, **_kwargs):
+        assert allow_demo_fallback is False
+        return "【入院记录】真实患者王五，因咳嗽入院。"
+
+    saved_payloads = []
+    monkeypatch.setattr(real_service, "_refresh_llm_runtime_from_default", _no_refresh)
+    monkeypatch.setattr(real_service, "_get_medical_text", _real_visit_text)
+    monkeypatch.setattr("app.routers.frontpage.default_frontpage_service", real_service)
+    monkeypatch.setattr(
+        "app.routers.frontpage.save_ai_frontpage_draft",
+        lambda item: saved_payloads.append(item),
+    )
+
+    # 1) documents 路径 LLM 不可用时禁止回退演示患者“张伟”并停止保存
+    doc_resp = client.post(
+        "/api/v1/frontpage/auto-generate-draft",
+        json=AutoGenerateFrontPageRequest(
+            visit_id="V-REAL-1",
+            documents=[{"type": "admission_record", "content": "真实患者王五，入院诊断：肺炎"}],
+        ).model_dump(),
+    )
+    assert doc_resp.status_code == 503
+    assert doc_resp.json()["success"] is False
+    assert doc_resp.json()["code"] == "FRONTPAGE_EXTRACTION_UNAVAILABLE"
+    assert "张伟" not in doc_resp.text
+    assert saved_payloads == []
+
+    # 2) visit_id 路径 LLM 不可用时同样返回 503 且绝不保存演示患者
+    visit_resp = client.post(
+        "/api/v1/frontpage/auto-generate-draft",
+        json=AutoGenerateFrontPageRequest(visit_id="V-REAL-2").model_dump(),
+    )
+    assert visit_resp.status_code == 503
+    assert visit_resp.json()["success"] is False
+    assert visit_resp.json()["code"] == "FRONTPAGE_EXTRACTION_UNAVAILABLE"
+    assert "张伟" not in visit_resp.text
+    assert saved_payloads == []

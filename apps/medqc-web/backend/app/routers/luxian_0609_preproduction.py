@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
+from ..core.roles import effective_roles
 from ..core.security import optional_security, resolve_current_user_from_token
 from ..core.response import get_trace_id
 from ..core.settings import get_settings
@@ -59,12 +60,24 @@ def _settings_dependency() -> Any:
     return get_settings()
 
 
+_ALLOWED_PREPRODUCTION_ROLES = frozenset({"admin", "super_admin", "qc_manager"})
+_GLOBAL_PREPRODUCTION_ROLES = frozenset({"admin", "super_admin", "sync_admin"})
+
+
+def _user_effective_roles(user: dict[str, Any]) -> set[str]:
+    roles = set(effective_roles(user.get("roles")))
+    single = str(user.get("role") or "").strip()
+    if single:
+        roles.update(effective_roles([single]))
+    return roles
+
+
 async def _require_enabled_user(
     request: Request,
     settings: Any = Depends(_settings_dependency),
     credentials: HTTPAuthorizationCredentials | None = Depends(optional_security),
 ) -> tuple[Any, dict[str, Any]]:
-    """先短路关闭开关，开启后才解析用户并访问认证存储。"""
+    """先短路关闭开关，开启后才解析用户并校验角色。"""
 
     if not settings.LUXIAN_0609_PREPRODUCTION_API_ENABLED:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
@@ -75,6 +88,11 @@ async def _require_enabled_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     user = resolve_current_user_from_token(credentials.credentials)
+    if not (_user_effective_roles(user) & _ALLOWED_PREPRODUCTION_ROLES):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足，仅管理员或质控管理员可执行准生产评估",
+        )
     request.state.current_user = user
     return settings, user
 
@@ -91,9 +109,9 @@ async def evaluate_luxian_0609_preproduction(
     request: Request,
     enabled_context: tuple[Any, dict[str, Any]] = Depends(_require_enabled_user),
 ) -> dict[str, Any]:
-    """运行一次无持久化的 LX0609 准生产评估。"""
+    """运行一次无落库的 LX0609 准生产评估。"""
 
-    settings, _current_user = enabled_context
+    settings, current_user = enabled_context
 
     # 在路由内解析并收敛错误，避免全局校验处理器记录含坐标/正文的 input。
     try:
@@ -101,6 +119,14 @@ async def evaluate_luxian_0609_preproduction(
         payload = Luxian0609PreproductionRequest.model_validate(raw_payload)
     except (TypeError, ValueError, ValidationError):
         raise _safe_contract_error() from None
+
+    if not (_user_effective_roles(current_user) & _GLOBAL_PREPRODUCTION_ROLES):
+        user_institute_id = str(current_user.get("institute_id") or "").strip()
+        if not user_institute_id or user_institute_id != payload.institute_id.strip():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="无权评估其他院区的准生产病例包",
+            )
 
     try:
         bundle = load_running_final_bundle(

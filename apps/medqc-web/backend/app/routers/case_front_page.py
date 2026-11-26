@@ -1,55 +1,116 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, List
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
+from ..core.security import require_roles
 from ..services.drg_demo_store import get_demo_drg_store
+from ..services.luxian_0609.llm_prompt_privacy import redact_luxian_0609_patient_privacy
 
 router = APIRouter(prefix="/api/v1/case-front-page", tags=["drg_case_front_page"])
+logger = logging.getLogger(__name__)
+
+_CASE_FRONT_PAGE_ROLES = ("admin", "qc_manager", "qc_staff", "coder", "reviewer")
+
+
+def _owner_user_id(current_user: Any) -> str:
+    if not isinstance(current_user, dict):
+        return ""
+    return str(
+        current_user.get("id")
+        or current_user.get("user_id")
+        or current_user.get("email")
+        or ""
+    ).strip()
+
+
+def _redact_medical_text_for_llm(medical_text: str) -> str:
+    text = str(medical_text or "")
+    if not text:
+        return ""
+    return redact_luxian_0609_patient_privacy(text)
 
 
 @router.get("")
-async def list_case_front_pages(limit: int = Query(100, ge=1, le=500)) -> List[Dict[str, Any]]:
+async def list_case_front_pages(
+    limit: int = Query(100, ge=1, le=500),
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> List[Dict[str, Any]]:
+    owner_id = _owner_user_id(current_user)
+    if not owner_id:
+        return []
     store = get_demo_drg_store()
-    return store.list_cases(limit=limit)
+    items = [
+        item
+        for item in store.list_cases(limit=500)
+        if str(item.get("owner_user_id") or "").strip() == owner_id
+    ]
+    return items[:limit]
 
 
 @router.get("/{admission_id}")
-async def get_case_front_page_detail(admission_id: str) -> Dict[str, Any]:
+async def get_case_front_page_detail(
+    admission_id: str,
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> Dict[str, Any]:
+    owner_id = _owner_user_id(current_user)
     store = get_demo_drg_store()
     item = store.get_case_detail(admission_id)
     if not item:
-        raise HTTPException(status_code=404, detail=f"未找到住院号 {admission_id} 的病案首页")
+        raise HTTPException(status_code=404, detail="未找到指定住院号的病案首页")
+    item_owner = str(item.get("owner_user_id") or "").strip()
+    if not owner_id or not item_owner or item_owner != owner_id:
+        raise HTTPException(status_code=403, detail="无权访问其他账号的病案首页草稿")
     return item
 
 
 @router.post("")
-async def upsert_case_front_page(payload: Dict[str, Any]) -> Dict[str, Any]:
+async def upsert_case_front_page(
+    payload: Dict[str, Any],
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> Dict[str, Any]:
     admission_id = payload.get("admission_id")
     if not admission_id or not isinstance(admission_id, str):
         raise HTTPException(status_code=400, detail="admission_id is required")
 
+    owner_id = _owner_user_id(current_user)
+    if not owner_id:
+        raise HTTPException(status_code=403, detail="缺少可信账号身份")
+
     store = get_demo_drg_store()
-    return store.upsert_case(admission_id=admission_id, patch=payload)
+    if hasattr(store, "get_case_detail"):
+        existing = store.get_case_detail(admission_id)
+        if existing is not None:
+            existing_owner = str(existing.get("owner_user_id") or "").strip()
+            if existing_owner != owner_id:
+                raise HTTPException(status_code=403, detail="无权修改其他账号的病案首页草稿")
 
+    safe_patch = {**payload, "owner_user_id": owner_id}
+    return store.upsert_case(admission_id=admission_id, patch=safe_patch)
 
-from pydantic import BaseModel
 
 class ExtractCodingRequest(BaseModel):
     medical_text: str
     patient_age: int = 0
     patient_gender: str = "M"
 
+
 @router.post("/extract-coding")
-async def extract_coding(payload: ExtractCodingRequest) -> Dict[str, Any]:
+async def extract_coding(
+    payload: ExtractCodingRequest,
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> Dict[str, Any]:
     from ..services.external_coding_service import get_external_coding_service
-    
+
     service = get_external_coding_service()
-    
+    safe_medical_text = _redact_medical_text_for_llm(payload.medical_text)
+
     try:
         result = await service.extract_coding(
-            medical_text=payload.medical_text,
+            medical_text=safe_medical_text,
             patient_context={
                 "age": payload.patient_age,
                 "gender": payload.patient_gender
@@ -59,8 +120,11 @@ async def extract_coding(payload: ExtractCodingRequest) -> Dict[str, Any]:
             "success": True,
             "data": result
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("extract-coding failed: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="编码提取失败，请稍后重试")
 
 
 class ExtractRequest(BaseModel):
@@ -68,20 +132,23 @@ class ExtractRequest(BaseModel):
 
 
 @router.post("/extract")
-async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
+async def extract_frontpage(
+    payload: ExtractRequest,
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> Dict[str, Any]:
     """
     从病历文本中提取首页信息 (诊断、手术等)
     用于事前分析的 AI 智能抽取功能
 
-    流程：LLM 抽取诊断/手术文本 → LLM 建议 ICD 编码 → 本地 ICD 编码库精确匹配
+    流程：PHI 脱敏 → LLM 抽取诊断/手术文本 → LLM 建议 ICD 编码 → 本地 ICD 编码库精确匹配
     """
     from ..services.frontpage_extraction_service import default_frontpage_service
     import uuid
-    import logging
     import re
 
-    logger = logging.getLogger(__name__)
     service = default_frontpage_service
+    owner_id = _owner_user_id(current_user)
+    safe_medical_text = _redact_medical_text_for_llm(payload.medical_text)
 
     def _to_plain_dict(value: Any) -> Dict[str, Any]:
         if isinstance(value, dict):
@@ -217,7 +284,7 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
             return None
 
         planned = re.search(
-            "(?:\u62df\u884c|\u8ba1\u5212\u884c|\u62df\u4e8e)\s*([^\n\uff1b;]+)",
+            r"(?:\u62df\u884c|\u8ba1\u5212\u884c|\u62df\u4e8e)\s*([^\n\uff1b;]+)",
             medical_text,
             re.IGNORECASE,
         )
@@ -227,7 +294,7 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                 return text
 
         surgery_line = re.search(
-            "(?:\u4e3b\u8981\u624b\u672f|\u624b\u672f|\u64cd\u4f5c)\s*[:\uff1a]\s*([^\n]+)",
+            r"(?:\u4e3b\u8981\u624b\u672f|\u624b\u672f|\u64cd\u4f5c)\s*[:\uff1a]\s*([^\n]+)",
             medical_text,
             re.IGNORECASE,
         )
@@ -239,19 +306,18 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
         return None
 
     try:
-        # 1) LLM 抽取诊断/手术文本
-        draft = await service.extract_from_text(payload.medical_text)
+        # 1) LLM 抽取诊断/手术文本（发往 LLM 前已脱敏 PHI）
+        draft = await service.extract_from_text(safe_medical_text)
         result = _to_plain_dict(draft)
 
         # 2) Compatibility for pre-analysis: allow fallback mapping from ED/admission text.
         diagnoses = _to_plain_dict(result.get("diagnoses"))
         procedures = _to_plain_dict(result.get("procedures"))
         logger.info(
-            "extract: diagnoses keys=%s procedures keys=%s",
-            list(diagnoses.keys()),
-            list(procedures.keys()),
+            "extract: diagnoses_keys=%d procedures_keys=%d",
+            len(diagnoses),
+            len(procedures),
         )
-        logger.info("extract: diagnoses snapshot after dump=%s", diagnoses)
 
         if isinstance(diagnoses, dict):
             ed_texts = diagnoses.get("ed_diagnosis_texts") or []
@@ -266,35 +332,34 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                 diagnoses["discharge_other_diagnoses_texts"] = _dedupe_non_empty(
                     [*promoted_others, *existing_others]
                 )
-                logger.info(f"extract: 事前分析兼容 - 将门急诊诊断提升为主诊断: {ed_texts[0]}")
+                logger.info("extract: promoted ed_diagnosis to discharge_main, ed_count=%d", len(ed_texts))
             else:
                 logger.info(
-                    "extract: no promotion needed, main=%s, ed_count=%d",
-                    diagnoses.get("discharge_main_diagnosis_text"),
+                    "extract: no promotion needed, has_main=%s, ed_count=%d",
+                    bool(diagnoses.get("discharge_main_diagnosis_text")),
                     len(ed_texts) if isinstance(ed_texts, list) else 0,
                 )
 
             # Fallback: if LLM gives no discharge main diagnosis, parse from medical_text.
             if _is_placeholder_text(diagnoses.get("discharge_main_diagnosis_text")):
-                parsed_diags = _extract_diagnoses_from_text(payload.medical_text)
+                parsed_diags = _extract_diagnoses_from_text(safe_medical_text)
                 if parsed_diags:
                     diagnoses["discharge_main_diagnosis_text"] = parsed_diags[0]
                     diagnoses["discharge_other_diagnoses_texts"] = parsed_diags[1:]
                     if not diagnoses.get("ed_diagnosis_texts"):
                         diagnoses["ed_diagnosis_texts"] = parsed_diags
                     logger.info(
-                        "extract: fallback text parse filled diagnoses, main=%s, other_count=%d",
-                        parsed_diags[0],
-                        max(len(parsed_diags) - 1, 0),
+                        "extract: fallback text parse filled diagnoses, count=%d",
+                        len(parsed_diags),
                     )
                 else:
                     logger.warning("extract: fallback text parse found no diagnosis candidates")
 
         if isinstance(procedures, dict) and _is_placeholder_text(procedures.get("main_procedure_text")):
-            parsed_proc = _extract_main_procedure_from_text(payload.medical_text)
+            parsed_proc = _extract_main_procedure_from_text(safe_medical_text)
             if parsed_proc:
                 procedures["main_procedure_text"] = parsed_proc
-                logger.info("extract: fallback text parse filled main_procedure_text=%s", parsed_proc)
+                logger.info("extract: fallback text parse filled main_procedure")
 
         # 本地 ICD 码表优先，LLM 编码建议只作为本地未命中的兜底。
         try:
@@ -346,7 +411,7 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
         if not (has_main_llm and has_audit_llm):
             try:
                 merged = await service._build_main_and_audit_llm_evidence(
-                    medical_text=payload.medical_text,
+                    medical_text=safe_medical_text,
                     diagnoses=diagnoses,
                     procedures=procedures,
                     clinician_main_diagnosis=evidence.get("clinician_main_diagnosis"),
@@ -358,18 +423,18 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
                     evidence["main_diagnosis_llm"] = merged.get("main_diagnosis_llm")
                 if not has_audit_llm and isinstance(merged.get("coding_audit_llm"), dict):
                     evidence["coding_audit_llm"] = merged.get("coding_audit_llm")
-            except Exception:
-                logger.exception("extract: build merged llm evidence failed")
+            except Exception as exc:
+                logger.error("extract: build merged llm evidence failed, error_type=%s", type(exc).__name__)
         try:
             evidence["diagnoses"] = service._build_diagnosis_evidence(
-                payload.medical_text,
+                safe_medical_text,
                 diagnoses,
                 procedures,
                 guideline_rule_trace=evidence.get("guideline_rule_trace"),
                 clinician_main_diagnosis=evidence.get("clinician_main_diagnosis"),
             )
-        except Exception:
-            logger.exception("extract: build diagnosis evidence failed")
+        except Exception as exc:
+            logger.error("extract: build diagnosis evidence failed, error_type=%s", type(exc).__name__)
 
         result["diagnoses"] = diagnoses
         result["procedures"] = procedures
@@ -378,10 +443,11 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
         # 生成 admission_id 用于后续 DRG 分组
         admission_id = f"PRE_{uuid.uuid4().hex[:8]}"
 
-        # 保存到 demo store 以便按 admission_id 查询
+        # 按账号隔离保存到 demo store 以便按 admission_id 查询
         store = get_demo_drg_store()
         store.upsert_case(admission_id=admission_id, patch={
             "admission_id": admission_id,
+            "owner_user_id": owner_id,
             "diagnoses": diagnoses,
             "surgeries": procedures,
             "basic_info": result.get("basic_info", {}),
@@ -394,27 +460,29 @@ async def extract_frontpage(payload: ExtractRequest) -> Dict[str, Any]:
             "success": True,
             "data": result
         }
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("extract failed: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="病案首页提取失败，请稍后重试")
 
 
 @router.post("/extract-pre-group")
-async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
+async def extract_for_pre_group(
+    payload: ExtractRequest,
+    current_user: Dict[str, Any] = Depends(require_roles(*_CASE_FRONT_PAGE_ROLES)),
+) -> Dict[str, Any]:
     """
     Pre-group extraction endpoint (admission-oriented).
     This endpoint is designed for DRG pre-grouping and does NOT require discharge diagnosis.
     """
-    from ..services.icd_coding_service import get_icd_coding_service
     import uuid
-    import logging
     import re
     import time
     import asyncio
 
-    logger = logging.getLogger(__name__)
     start = time.perf_counter()
+    owner_id = _owner_user_id(current_user)
 
     def _dedupe_non_empty(values: List[str]) -> List[str]:
         out: List[str] = []
@@ -536,7 +604,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
         return None
 
     try:
-        medical_text = payload.medical_text or ""
+        medical_text = _redact_medical_text_for_llm(payload.medical_text or "")
         basic_info = _extract_basic_info(medical_text)
 
         diagnoses: Dict[str, Any] = {
@@ -558,7 +626,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
             "other_procedure_codes": [],
         }
 
-        # ========== 第一层：LLM 主路抽取 ==========
+        # ========== 第一层：LLM 主路抽取（已脱敏 PHI） ==========
         llm_diags_ok = False
         try:
             from ..services.frontpage_extraction_service import (
@@ -590,13 +658,13 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
                     diagnoses["discharge_other_diagnoses_texts"] = ed_texts[1:]
                     llm_diags_ok = True
                     logger.info(
-                        "extract-pre-group: LLM 诊断抽取成功, main=%s, other_count=%d",
-                        ed_texts[0], len(ed_texts) - 1,
+                        "extract-pre-group: LLM 诊断抽取成功, count=%d",
+                        len(ed_texts),
                     )
         except asyncio.TimeoutError:
             logger.warning("extract-pre-group: LLM 诊断抽取超时(30s)，回退到正则")
-        except Exception:
-            logger.exception("extract-pre-group: LLM 诊断抽取失败，回退到正则")
+        except Exception as exc:
+            logger.warning("extract-pre-group: LLM 诊断抽取失败(%s)，回退到正则", type(exc).__name__)
 
         # ========== 第二层：正则交叉验证 / 兜底 ==========
         parsed_diags = _extract_diag_candidates(medical_text)
@@ -612,7 +680,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
                 diagnoses["ed_diagnosis_texts"].extend(added)
                 diagnoses["admission_other_diagnoses_texts"].extend(added)
                 diagnoses["discharge_other_diagnoses_texts"].extend(added)
-                logger.info("extract-pre-group: 正则交叉补全 %d 条漏掉的诊断: %s", len(added), added)
+                logger.info("extract-pre-group: 正则交叉补全 %d 条诊断", len(added))
         elif not llm_diags_ok and parsed_diags:
             # LLM 失败，完全用正则
             diagnoses["ed_diagnosis_texts"] = parsed_diags
@@ -621,8 +689,8 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
             diagnoses["discharge_main_diagnosis_text"] = parsed_diags[0]
             diagnoses["discharge_other_diagnoses_texts"] = parsed_diags[1:]
             logger.info(
-                "extract-pre-group: 正则兜底诊断成功, main=%s, other_count=%d",
-                parsed_diags[0], max(len(parsed_diags) - 1, 0),
+                "extract-pre-group: 正则兜底诊断成功, count=%d",
+                len(parsed_diags),
             )
         elif not llm_diags_ok:
             logger.warning("extract-pre-group: 正则兜底也未找到诊断")
@@ -633,7 +701,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
             procedures["main_procedure_text"] = parsed_proc
             mapped_proc = _fast_map_procedure_code(parsed_proc)
             procedures["main_procedure_code"] = mapped_proc
-            logger.info("extract-pre-group: fallback procedure filled main=%s", parsed_proc)
+            logger.info("extract-pre-group: fallback procedure candidate found")
         else:
             logger.warning("extract-pre-group: no procedure candidate parsed from text")
 
@@ -646,10 +714,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
                 return ""
             result = lookup_diagnosis_code(text, prefer_insurance=True)
             if result:
-                logger.info("extract-pre-group: 编码库匹配 '%s' -> %s", text, result["code"])
                 return result["code"]
-            # 编码库未匹配时，再尝试 LLM 兜底
-            logger.warning("extract-pre-group: 编码库未匹配 '%s'，尝试 LLM 兜底", text)
             return ""
 
         def _code_proc(text: str) -> str:
@@ -658,9 +723,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
                 return ""
             result = lookup_procedure_code(text)
             if result:
-                logger.info("extract-pre-group: 手术编码匹配 '%s' -> %s", text, result["code"])
                 return result["code"]
-            logger.warning("extract-pre-group: 手术编码库未匹配 '%s'", text)
             return ""
 
         # 编码所有诊断
@@ -684,11 +747,6 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
         if proc_code:
             procedures["main_procedure_code"] = proc_code
 
-        logger.info(
-            "extract-pre-group: 并发编码完成 main_icd=%s other_icds=%s proc_code=%s",
-            main_icd, other_icds, proc_code,
-        )
-
         result = {
             "basic_info": basic_info,
             "diagnoses": diagnoses,
@@ -700,6 +758,7 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
         store = get_demo_drg_store()
         store.upsert_case(admission_id=admission_id, patch={
             "admission_id": admission_id,
+            "owner_user_id": owner_id,
             "diagnoses": diagnoses,
             "surgeries": procedures,
             "basic_info": basic_info,
@@ -708,16 +767,17 @@ async def extract_for_pre_group(payload: ExtractRequest) -> Dict[str, Any]:
         result["admission_id"] = admission_id
         elapsed_ms = int((time.perf_counter() - start) * 1000)
         logger.info(
-            "extract-pre-group: completed elapsed_ms=%d diag_found=%d proc_found=%s main_icd=%s main_proc_code=%s",
+            "extract-pre-group: completed elapsed_ms=%d diag_found=%d proc_found=%s has_main_icd=%s has_proc_code=%s",
             elapsed_ms,
             len(diagnoses.get("ed_diagnosis_texts", [])),
             bool(parsed_proc),
-            diagnoses.get("admission_main_icd"),
-            procedures.get("main_procedure_code"),
+            bool(diagnoses.get("admission_main_icd")),
+            bool(procedures.get("main_procedure_code")),
         )
 
         return {"success": True, "data": result}
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("extract-pre-group failed: error_type=%s", type(exc).__name__)
+        raise HTTPException(status_code=500, detail="事前分组提取失败，请稍后重试")

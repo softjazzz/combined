@@ -1,5 +1,5 @@
 /* eslint-disable vue/one-component-per-file */
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, h, inject, provide } from 'vue'
 import CustomerSampleTaskHistoryView from '@/views/workstation-v4/customer-sample-validation/CustomerSampleTaskHistoryView.vue'
@@ -8,34 +8,52 @@ let latestResultDrawerProps: Record<string, unknown> | null = null
 
 const {
   message,
+  routeQuery,
   routerPush,
+  routerReplace,
   listSichuanWorkspaceBatchJobs,
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
   normalizeBatchExportBlob,
   downloadBlob,
+  confirmedResultsOnlyState,
 } = vi.hoisted(() => ({
   message: {
     success: vi.fn(),
     error: vi.fn(),
     warning: vi.fn(),
   },
+  routeQuery: {} as Record<string, string>,
   routerPush: vi.fn(),
+  routerReplace: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJobDebugSnapshot: vi.fn(),
   reviewSichuanWorkspaceBatchJob: vi.fn(),
+  cancelSichuanWorkspaceBatchJob: vi.fn(),
   exportSichuanWorkspaceBatchJob: vi.fn(),
   normalizeBatchExportBlob: vi.fn(),
   downloadBlob: vi.fn(),
+  confirmedResultsOnlyState: { value: false },
 }))
+
+vi.mock('@/composables/useQcResultVisibility', async () => {
+  const { ref } = await import('vue')
+  return {
+    useQcResultVisibility: () => ({
+      confirmedResultsOnly: ref(confirmedResultsOnlyState.value),
+    }),
+  }
+})
 
 vi.mock('ant-design-vue', () => ({ message }))
 
 vi.mock('vue-router', () => ({
-  useRouter: () => ({ push: routerPush }),
+  useRoute: () => ({ query: routeQuery }),
+  useRouter: () => ({ push: routerPush, replace: routerReplace }),
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
@@ -43,6 +61,7 @@ vi.mock('@/services/sichuan-rule-workspace-service', () => ({
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   reviewSichuanWorkspaceBatchJob,
+  cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
 }))
 
@@ -123,6 +142,15 @@ const SemanticRulesBatchResultDrawerStub = defineComponent({
       type: Function,
       default: undefined,
     },
+    close: {
+      type: Function,
+      default: undefined,
+    },
+    cancelBatchJob: {
+      type: Function,
+      default: undefined,
+    },
+    cancelBatchJobLoading: Boolean,
   },
   setup(props) {
     latestResultDrawerProps = props as unknown as Record<string, unknown>
@@ -189,6 +217,9 @@ async function mountView() {
 describe('CustomerSampleTaskHistoryView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.useRealTimers()
+    confirmedResultsOnlyState.value = false
+    Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     latestResultDrawerProps = null
     const job = buildCompletedJob()
     listSichuanWorkspaceBatchJobs.mockResolvedValue({
@@ -226,11 +257,22 @@ describe('CustomerSampleTaskHistoryView', () => {
         review_report: { summary: { total_findings: 1 } },
       },
     })
+    cancelSichuanWorkspaceBatchJob.mockResolvedValue({
+      success: true,
+      data: {
+        ...job,
+        status: 'canceled',
+      },
+    })
     exportSichuanWorkspaceBatchJob.mockResolvedValue({
       success: true,
       data: new Blob(['report'], { type: 'text/html' }),
     })
     normalizeBatchExportBlob.mockResolvedValue(new Blob(['report'], { type: 'text/html' }))
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('进入页面后加载并展示质控任务列表', async () => {
@@ -349,5 +391,188 @@ describe('CustomerSampleTaskHistoryView', () => {
       'manual-sample-validation-job-history-1.html',
     )
     expect(message.success).toHaveBeenCalledWith('HTML 质控明细已开始下载')
+  })
+
+  it('初始加载失败时展示内联错误态并支持重试恢复', async () => {
+    listSichuanWorkspaceBatchJobs.mockResolvedValueOnce({
+      success: false,
+      message: '后端服务暂不可用',
+    })
+    const wrapper = await mountView()
+
+    expect(wrapper.get('[data-testid="task-history-error"]').text()).toContain('后端服务暂不可用')
+    await wrapper.get('[data-testid="task-history-retry"]').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('[data-testid="task-history-error"]').exists()).toBe(false)
+    expect(wrapper.find('[data-testid="task-history-row-job-history-1"]').exists()).toBe(true)
+  })
+
+  it('从 URL 查询参数恢复筛选，且修改关键词后点刷新会重置为第 1 页', async () => {
+    routeQuery.q = '住院'
+    routeQuery.status = 'failed'
+    routeQuery.page = '3'
+    const wrapper = await mountView()
+
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenCalledWith({
+      view: 'overview',
+      page: 3,
+      page_size: 20,
+      q: '住院',
+      status: 'failed',
+    })
+
+    await wrapper.get('[data-testid="task-history-search"]').setValue('新关键词')
+    await wrapper.get('[data-testid="task-history-refresh"]').trigger('click')
+    await flushPromises()
+
+    expect(listSichuanWorkspaceBatchJobs).toHaveBeenLastCalledWith({
+      view: 'overview',
+      page: 1,
+      page_size: 20,
+      q: '新关键词',
+      status: 'failed',
+    })
+    expect(routerReplace).toHaveBeenCalledWith({
+      query: { q: '新关键词', status: 'failed' },
+    })
+  })
+
+  it('打开任务详情失败时清空旧详情并自动关闭抽屉，快速切换时丢弃过期响应', async () => {
+    const job1 = buildCompletedJob()
+    const job2 = { ...buildCompletedJob(), id: 'job-history-2', rule_name: '第二个任务' }
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: { items: [job1, job2], total: 2, page: 1, page_size: 20 },
+    })
+
+    let resolveFirst!: (val: unknown) => void
+    const firstPromise = new Promise((resolve) => {
+      resolveFirst = resolve
+    })
+    getSichuanWorkspaceBatchJob
+      .mockReturnValueOnce(firstPromise)
+      .mockResolvedValueOnce({ success: true, data: job2 })
+      .mockResolvedValueOnce({ success: false, message: '任务不存在' })
+
+    const wrapper = await mountView()
+    const buttons = wrapper.findAll('[data-testid="task-history-open"]')
+    await buttons[0].trigger('click')
+    await buttons[1].trigger('click')
+    await flushPromises()
+
+    resolveFirst({ success: true, data: job1 })
+    await flushPromises()
+
+    expect((latestResultDrawerProps?.batchJobDetail as { id?: string } | null)?.id).toBe(
+      'job-history-2',
+    )
+
+    // 再次打开失败时清空旧 detail 并关闭抽屉
+    await buttons[0].trigger('click')
+    await flushPromises()
+    expect(latestResultDrawerProps?.open).toBe(false)
+    expect(latestResultDrawerProps?.batchJobDetail).toBeNull()
+  })
+
+  it('运行中任务支持轮询更新、关闭抽屉停止轮询，且向抽屉透传 cancelBatchJob', async () => {
+    vi.useFakeTimers()
+    const runningJob = { ...buildCompletedJob(), id: 'job-running-1', status: 'running' }
+    const doneJob = { ...runningJob, status: 'completed' }
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: { items: [runningJob], total: 1, page: 1, page_size: 20 },
+    })
+    getSichuanWorkspaceBatchJob
+      .mockResolvedValueOnce({ success: true, data: runningJob })
+      .mockResolvedValueOnce({ success: true, data: doneJob })
+
+    const wrapper = await mountView()
+    await wrapper.get('[data-testid="task-history-open"]').trigger('click')
+    await flushPromises()
+
+    expect(latestResultDrawerProps?.cancelBatchJob).toBeTypeOf('function')
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(3100)
+    await flushPromises()
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledTimes(2)
+    expect((latestResultDrawerProps?.batchJobDetail as { status?: string } | null)?.status).toBe(
+      'completed',
+    )
+
+    // 验证取消任务回调
+    const cancelFn = latestResultDrawerProps?.cancelBatchJob as (id: string) => Promise<void>
+    await cancelFn('job-running-1')
+    expect(cancelSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-running-1')
+    wrapper.unmount()
+  })
+
+  it('完全失败任务展示 danger 状态和“查看原因”按钮', async () => {
+    const failedJob = {
+      ...buildCompletedJob(),
+      id: 'job-failed-1',
+      status: 'failed',
+      summary: null,
+      has_results: false,
+    }
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: { items: [failedJob], total: 1, page: 1, page_size: 20 },
+    })
+    const wrapper = await mountView()
+    const row = wrapper.get('[data-testid="task-history-row-job-failed-1"]')
+    expect(row.text()).toContain('执行失败')
+    expect(row.find('.mq-status--danger').exists()).toBe(true)
+    expect(row.get('[data-testid="task-history-open"]').text()).toContain('查看原因')
+  })
+
+  it('confirmedResultsOnly=true 时打开任务不拉取调试快照并隐藏复核菜单', async () => {
+    confirmedResultsOnlyState.value = true
+    const wrapper = await mountView()
+    const menuItems = wrapper.findAll('.a-menu-item-stub')
+    expect(menuItems.some((item) => item.text().includes('复核本次结果'))).toBe(false)
+
+    await wrapper.get('[data-testid="task-history-open"]').trigger('click')
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
+    const fetchFn = latestResultDrawerProps?.fetchBatchJobDebugSnapshot as (
+      jobId: string,
+    ) => Promise<unknown>
+    expect(await fetchFn('job-history-1')).toBeNull()
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('非 LX0609 任务隐藏行菜单「复核本次结果」入口', async () => {
+    const nonLxJob = {
+      ...buildCompletedJob(),
+      id: 'job-sc-1',
+      rule_code: 'SC-BATCH',
+      rule_name: 'SC 全病历批量任务',
+      rule_set_key: 'sichuan_full_v1',
+      filters: { rule_set_key: 'sichuan_full_v1' },
+    }
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: { items: [nonLxJob], total: 1, page: 1, page_size: 20 },
+    })
+    const wrapper = await mountView()
+    const menuItems = wrapper.findAll('.a-menu-item-stub')
+    expect(menuItems.some((item) => item.text().includes('导出质控报告'))).toBe(true)
+    expect(menuItems.some((item) => item.text().includes('复核本次结果'))).toBe(false)
+  })
+
+  it('复核请求抛出异常时捕获错误并提示，不产生未处理拒绝', async () => {
+    reviewSichuanWorkspaceBatchJob.mockRejectedValueOnce(new Error('复核服务超时'))
+    const wrapper = await mountView()
+    const reviewButton = wrapper
+      .findAll('.a-menu-item-stub')
+      .find((button) => button.text().includes('复核本次结果'))
+    expect(reviewButton).toBeTruthy()
+    await reviewButton!.trigger('click')
+    await flushPromises()
+    expect(message.error).toHaveBeenCalledWith('复核服务超时')
   })
 })

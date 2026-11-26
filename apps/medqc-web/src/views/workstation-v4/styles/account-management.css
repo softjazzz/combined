@@ -1,5 +1,6 @@
 .accounts-panel {
   min-width: 0;
+  max-width: 100%;
 }
 .accounts-sections { margin-bottom: 24px; }
 .accounts-head,
@@ -33,40 +34,49 @@
   min-width: 140px;
 }
 .accounts-table {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .accounts-table table {
-  min-width: 1040px;
+  min-width: 820px;
   width: 100%;
   table-layout: fixed;
 }
 .accounts-col-user {
-  width: 180px;
+  width: 20%;
 }
 .accounts-col-login {
-  width: 210px;
+  width: 14%;
 }
 .accounts-col-scope {
-  width: 210px;
+  width: 19%;
 }
 .accounts-col-role {
-  width: 140px;
+  width: 14%;
 }
 .accounts-col-state {
-  width: 70px;
+  width: 8%;
 }
 .accounts-col-time {
-  width: 120px;
+  width: 14%;
 }
 .accounts-col-action {
-  width: 110px;
+  width: 11%;
 }
 .accounts-table th,
 .accounts-table td {
-  padding: 12px;
+  padding: 10px;
 }
 .accounts-table td {
   vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.accounts-table td:last-child {
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .accounts-table small {
   display: block;

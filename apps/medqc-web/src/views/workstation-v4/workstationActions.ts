@@ -3,10 +3,39 @@ import ApiService, { apiClient } from '@/services/apiService'
 
 import type { PatientRecord } from './types'
 
-export async function requestFrontpageDraft(visitId: string) {
+export interface RecordActionIdentity {
+  instituteId?: string | null
+  patientId?: string | null
+}
+
+function normalizeOptionalId(value?: string | null): string | undefined {
+  const trimmed = String(value ?? '').trim()
+  return trimmed ? trimmed : undefined
+}
+
+export async function requestFrontpageDraft(
+  visitIdOrRecord: string | PatientRecord,
+  identity?: RecordActionIdentity,
+) {
+  const visitId =
+    typeof visitIdOrRecord === 'string'
+      ? visitIdOrRecord
+      : visitIdOrRecord.visitId || visitIdOrRecord.id
+  const patientId = normalizeOptionalId(
+    identity?.patientId ??
+      (typeof visitIdOrRecord === 'string' ? undefined : visitIdOrRecord.patientId),
+  )
+  const instituteId = normalizeOptionalId(
+    identity?.instituteId ??
+      (typeof visitIdOrRecord === 'string' ? undefined : visitIdOrRecord.instituteId),
+  )
+  const payload: Record<string, string> = { visit_id: visitId }
+  if (patientId) payload.patient_id = patientId
+  if (instituteId) payload.institute_id = instituteId
+
   const { data } = await apiClient.post(
     '/api/v1/frontpage/auto-generate-draft',
-    { visit_id: visitId },
+    payload,
     { timeout: LONG_REQUEST_TIMEOUT_MS },
   )
   if (data?.success === false) {
@@ -32,7 +61,7 @@ export async function persistBatchFrontpageDraft(
     throw new Error('缺少 patient_id，无法保存参考首页草稿')
   }
   await apiClient.post('/api/medical-records/ai-frontpage-draft', {
-    institute_id: record.instituteId || null,
+    institute_id: normalizeOptionalId(record.instituteId) ?? null,
     patient_id: record.patientId,
     visit_id: record.visitId || record.id,
     draft_json: JSON.stringify(draft),
@@ -43,7 +72,9 @@ export async function requestCodingQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行编码质控')
   }
+  const instituteId = normalizeOptionalId(record.instituteId)
   const { data } = await apiClient.post('/api/v1/qc/coding-qc/check', {
+    ...(instituteId ? { institute_id: instituteId } : {}),
     visit_id: record.visitId || record.id,
     patient_id: record.patientId,
   })
@@ -62,15 +93,19 @@ export async function requestFrontpageQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行首页质控')
   }
+  const visitId = record.visitId || record.id
+  const instituteId = normalizeOptionalId(record.instituteId)
   const { data: frontpage } = await apiClient.get(
-    `/api/medical-records/frontpage-sheet/${record.patientId}/${record.visitId || record.id}`,
+    `/api/medical-records/frontpage-sheet/${encodeURIComponent(record.patientId)}/${encodeURIComponent(visitId)}`,
+    instituteId ? { params: { institute_id: instituteId } } : undefined,
   )
   if (!frontpage) {
     throw new Error('未找到正式首页数据，无法执行首页质控')
   }
   const { data } = await apiClient.post('/api/v1/qc/formal-qc/validate', {
+    ...(instituteId ? { institute_id: instituteId } : {}),
     patient_id: record.patientId,
-    visit_id: record.visitId || record.id,
+    visit_id: visitId,
     frontpage,
   })
   if (data?.success === false) {
@@ -92,8 +127,12 @@ export async function requestSettlementQc(record: PatientRecord) {
   if (!record.patientId) {
     throw new Error('缺少 patient_id，无法执行结算质控')
   }
+  const visitId = record.visitId || record.id
+  const instituteId = normalizeOptionalId(record.instituteId)
   const { data } = await apiClient.post(
-    `/api/medical-records/settlement/${record.patientId}/${record.visitId || record.id}/qc`,
+    `/api/medical-records/settlement/${encodeURIComponent(record.patientId)}/${encodeURIComponent(visitId)}/qc`,
+    undefined,
+    instituteId ? { params: { institute_id: instituteId } } : undefined,
   )
   if (data?.success === false) {
     throw new Error(String(data?.error || data?.message || '结算质控执行失败'))

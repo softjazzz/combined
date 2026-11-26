@@ -7,6 +7,11 @@ const routerPush = vi.hoisted(() => vi.fn())
 const routeState = vi.hoisted(() => ({ query: {} as Record<string, string | undefined> }))
 
 vi.mock('@/services/apiService', () => ({ ApiService: { get: apiGet } }))
+vi.mock('@/stores/auth', () => ({
+  useAuthStore: () => ({
+    user: { is_demo_account: false, roles: ['admin'] },
+  }),
+}))
 vi.mock('vue-router', () => ({
   useRoute: () => ({
     query: routeState.query,
@@ -77,7 +82,11 @@ const payload = {
   data_health: { canonical_invalid_or_missing_total: 2 },
 }
 
-const Stub = defineComponent({ setup: () => () => h('div') })
+const Stub = defineComponent({
+  setup(_, { slots, attrs }) {
+    return () => h('button', attrs, slots.default?.())
+  },
+})
 async function flush() {
   await Promise.resolve()
   await nextTick()
@@ -139,6 +148,7 @@ describe('LuxianQcAnalyticsView', () => {
     expect(apiGet).toHaveBeenCalledWith(
       '/api/v1/workstation/analytics/luxian-0609',
       expect.any(Object),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.get('[data-testid="analytics-data-health"]').text()).toContain('数据状态')
   })
@@ -179,12 +189,13 @@ describe('LuxianQcAnalyticsView', () => {
   })
 
   it('科室报告以科室条件请求同一Canonical统计，并显示返回全院入口', async () => {
+    const validJobId = '11111111-2222-3333-4444-555555555555'
     routeState.query = {
       view: 'department',
       department: 'ICU',
       completed_from: '2026-08-01T00:00:00',
       completed_to: '2026-08-08T23:59:59',
-      job_id: 'job-1',
+      job_id: validJobId,
     }
 
     const wrapper = mountView()
@@ -196,13 +207,41 @@ describe('LuxianQcAnalyticsView', () => {
     expect(wrapper.text()).not.toContain('聚焦本科室已完成任务中可交付的 Canonical 结果')
     expect(wrapper.find('[data-testid="analytics-scope"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="analytics-return-hospital"]').exists()).toBe(true)
-    expect(apiGet).toHaveBeenCalledWith('/api/v1/workstation/analytics/luxian-0609', {
-      completed_from: '2026-08-01T00:00:00',
-      completed_to: '2026-08-08T23:59:59',
-      department: 'ICU',
-      job_id: 'job-1',
-    })
+    expect(apiGet).toHaveBeenCalledWith(
+      '/api/v1/workstation/analytics/luxian-0609',
+      {
+        completed_from: '2026-08-01T00:00:00',
+        completed_to: '2026-08-08T23:59:59',
+        department: 'ICU',
+        job_id: validJobId,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.find('[data-testid="analytics-department-chart"]').exists()).toBe(false)
     expect(wrapper.get('[data-testid="analytics-physician-chart"]').text()).toContain('张医生')
+  })
+
+  it('点击“查询”和错误态“重新加载”按钮均能触发统计请求', async () => {
+    const wrapper = mountView()
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(1)
+
+    const queryButton = wrapper.findAll('button').find((btn) => btn.text().trim() === '查询')
+    expect(queryButton).toBeTruthy()
+    await queryButton!.trigger('click')
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(2)
+
+    apiGet.mockRejectedValueOnce(new Error('network_timeout'))
+    await queryButton!.trigger('click')
+    await flush()
+    expect(wrapper.find('[data-testid="analytics-error"]').exists()).toBe(true)
+
+    const reloadButton = wrapper.findAll('button').find((btn) => btn.text().trim() === '重新加载')
+    expect(reloadButton).toBeTruthy()
+    await reloadButton!.trigger('click')
+    await flush()
+    expect(apiGet).toHaveBeenCalledTimes(4)
+    expect(wrapper.find('[data-testid="analytics-error"]').exists()).toBe(false)
   })
 })

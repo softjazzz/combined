@@ -109,9 +109,24 @@ from .native_package import (
     resolve_selected_customer_rule_ids,
 )
 from ..luxian_0609_trigger_gate import Luxian0609GateDecision
+from ..qc_cancellation import QCJobCancelled, is_cancelled, raise_if_cancelled
 
 
 logger = logging.getLogger(__name__)
+
+
+def _guard_executor_fn(fn: Callable[..., Any]) -> Callable[..., Any]:
+    """在规则族执行器真正启动前检查任务取消信号。"""
+    if inspect.iscoroutinefunction(fn):
+        async def _async_guarded(*args: Any, **kwargs: Any) -> Any:
+            raise_if_cancelled()
+            return await fn(*args, **kwargs)
+        return _async_guarded
+
+    def _sync_guarded(*args: Any, **kwargs: Any) -> Any:
+        raise_if_cancelled()
+        return fn(*args, **kwargs)
+    return _sync_guarded
 
 
 def _family_outcome_decisions(outcome, snapshot, typed_rule_ids):
@@ -275,6 +290,7 @@ async def prepare_luxian_0609_execution(
 ) -> tuple[list[dict[str, Any]], Luxian0609ExecutionContext]:
     """Prepare LX0609 customer package execution without changing caller behavior."""
 
+    raise_if_cancelled()
     enabled = is_luxian_0609_customer_package_enabled(
         rule_set_key=rule_set_key,
         settings=settings,
@@ -418,6 +434,8 @@ async def prepare_luxian_0609_execution(
                     selected_rule_ids=package_plan.executable_rule_ids,
                 )
             )
+        except QCJobCancelled:
+            raise
         except Exception:
             # 旁路必须 fail-open；具体契约错误由独立质量门证伪，禁止回显原始异常。
             logger.error("LX0609 evidence snapshot 构建失败 error_kind=snapshot_build_error")
@@ -518,17 +536,17 @@ async def prepare_luxian_0609_execution(
             malignancy_resolver=MalignancyFactResolver(llm_client),
         )
         functions = LegacyNativeExecutorFunctions(
-            surgery_presence=execute_luxian_0609_native_rules,
-            basic_timeliness=execute_luxian_0609_native_basic_timeliness,
-            exam_lab=execute_luxian_0609_native_exam_lab_rules,
-            consultation_quality=execute_luxian_0609_native_consultation_episode_rules,
-            transfusion=execute_luxian_0609_native_transfusion_rules,
-            tumor_pathology=execute_luxian_0609_native_tumor_pathology_rules,
-            course_quality=execute_luxian_0609_native_course_quality_rules,
-            surgery_gate=execute_luxian_0609_native_surgery_gate_rules,
-            surgery_document=execute_luxian_0609_native_surgery_document_rules,
-            surgery_mdt=execute_luxian_0609_native_mdt_rule,
-            extended_document=execute_luxian_0609_native_extended_document_rules,
+            surgery_presence=_guard_executor_fn(execute_luxian_0609_native_rules),
+            basic_timeliness=_guard_executor_fn(execute_luxian_0609_native_basic_timeliness),
+            exam_lab=_guard_executor_fn(execute_luxian_0609_native_exam_lab_rules),
+            consultation_quality=_guard_executor_fn(execute_luxian_0609_native_consultation_episode_rules),
+            transfusion=_guard_executor_fn(execute_luxian_0609_native_transfusion_rules),
+            tumor_pathology=_guard_executor_fn(execute_luxian_0609_native_tumor_pathology_rules),
+            course_quality=_guard_executor_fn(execute_luxian_0609_native_course_quality_rules),
+            surgery_gate=_guard_executor_fn(execute_luxian_0609_native_surgery_gate_rules),
+            surgery_document=_guard_executor_fn(execute_luxian_0609_native_surgery_document_rules),
+            surgery_mdt=_guard_executor_fn(execute_luxian_0609_native_mdt_rule),
+            extended_document=_guard_executor_fn(execute_luxian_0609_native_extended_document_rules),
         )
         contracts_by_id = {
             item.rule_id: item for item in load_luxian_0609_rule_contracts()
@@ -537,7 +555,7 @@ async def prepare_luxian_0609_execution(
                 if getattr(settings, "LUXIAN_0609_MAINLINE_RULE_DECISION_ENABLED", False) else None)
 
         def publish_family(outcome):
-            if sink is not None:
+            if sink is not None and not is_cancelled():
                 rows = _published_family_results(
                     outcome=outcome, snapshot=evidence_snapshot, materials=evidence_materials,
                     wrapper_rules=wrapper_rules, typed_rule_ids=typed_decision_rule_ids,
@@ -548,6 +566,7 @@ async def prepare_luxian_0609_execution(
                 if rows:
                     sink(outcome.executor_key, rows)
 
+        raise_if_cancelled()
         try:
             engine_report = await Luxian0609ExecutionEngine(
                 registry=build_luxian_0609_legacy_executor_registry(
@@ -569,6 +588,8 @@ async def prepare_luxian_0609_execution(
                 trace_sink=trace_sink,
                 **({"outcome_sink": publish_family} if sink is not None else {}),
             )
+        except QCJobCancelled:
+            raise
         except Exception:
             # 开关开启后禁止重跑冻结旧链：引擎可能已调用过部分模型，回退会造成
             # 重复调用和状态漂移。基础设施异常按选中族逐点安全降级为技术错误；
@@ -589,6 +610,7 @@ async def prepare_luxian_0609_execution(
                 executor_key for executor_key, _ in package_plan.native_executor_batches
             )
         else:
+            raise_if_cancelled()
             unified_engine_used = True
             for outcome in engine_report.outcomes:
                 envelope = outcome.envelope
@@ -657,6 +679,7 @@ async def prepare_luxian_0609_execution(
         EXECUTOR_SURGERY_PRESENCE
     )
     if surgery_presence_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         native_execution = execute_luxian_0609_native_rules(
             rule_ids=surgery_presence_rule_ids,
             visit_id=str(visit_id or ""),
@@ -689,6 +712,7 @@ async def prepare_luxian_0609_execution(
         BASIC_TIMELINESS_EXECUTOR_KEY
     )
     if basic_timeliness_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         basic_execution = execute_luxian_0609_native_basic_timeliness(
             rule_ids=basic_timeliness_rule_ids,
             evidence_payload=evidence_payload,
@@ -725,6 +749,7 @@ async def prepare_luxian_0609_execution(
         ]
     exam_lab_rule_ids = package_plan.native_rule_ids_for_executor(EXAM_LAB_EXECUTOR_KEY)
     if exam_lab_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         exam_lab_execution = await execute_luxian_0609_native_exam_lab_rules(
             rule_ids=exam_lab_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -746,6 +771,7 @@ async def prepare_luxian_0609_execution(
         CONSULTATION_EXECUTOR_KEY
     )
     if consultation_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         consultation_execution = await execute_luxian_0609_native_consultation_episode_rules(
             rule_ids=consultation_rule_ids,
             institute_id=str(institute_id or ""),
@@ -780,6 +806,7 @@ async def prepare_luxian_0609_execution(
         TRANSFUSION_EXECUTOR_KEY
     )
     if transfusion_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         transfusion_execution = await execute_luxian_0609_native_transfusion_rules(
             rule_ids=transfusion_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -805,6 +832,7 @@ async def prepare_luxian_0609_execution(
         TUMOR_PATHOLOGY_EXECUTOR_KEY
     )
     if tumor_pathology_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         tumor_pathology_execution = await execute_luxian_0609_native_tumor_pathology_rules(
             rule_ids=tumor_pathology_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -830,6 +858,7 @@ async def prepare_luxian_0609_execution(
         COURSE_QUALITY_EXECUTOR_KEY
     )
     if course_quality_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         course_quality_execution = await execute_luxian_0609_native_course_quality_rules(
             rule_ids=course_quality_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -855,6 +884,7 @@ async def prepare_luxian_0609_execution(
         SURGERY_GATE_EXECUTOR_KEY
     )
     if surgery_gate_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         surgery_gate_execution = await execute_luxian_0609_native_surgery_gate_rules(
             rule_ids=surgery_gate_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -880,6 +910,7 @@ async def prepare_luxian_0609_execution(
         SURGERY_DOCUMENT_EXECUTOR_KEY
     )
     if surgery_document_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         surgery_document_execution = await execute_luxian_0609_native_surgery_document_rules(
             rule_ids=surgery_document_rule_ids,
             wrapper_rules=wrapper_rules,
@@ -899,6 +930,7 @@ async def prepare_luxian_0609_execution(
         )
     mdt_rule_ids = package_plan.native_rule_ids_for_executor(EXECUTOR_SURGERY_MDT)
     if mdt_rule_ids and not unified_engine_used:
+        raise_if_cancelled()
         native_mdt = await execute_luxian_0609_native_mdt_rule(
             institute_id=str(institute_id or ""),
             patient_id=str(patient_id or ""),
@@ -938,6 +970,7 @@ async def prepare_luxian_0609_execution(
         and evidence_snapshot is not None
         and evidence_materials is not None
     ):
+        raise_if_cancelled()
         extended_document_execution = (
             await execute_luxian_0609_native_extended_document_rules(
                 rule_ids=extended_document_rule_ids,
@@ -999,6 +1032,7 @@ async def prepare_luxian_0609_execution(
     }
     executable_rules = prepared_rules
     if trigger_gate_enabled:
+        raise_if_cancelled()
         generic_decisions = await evaluate_luxian_0609_trigger_gates_with_llm(
             rules=legacy_wrapper_rules,
             visit_id=str(visit_id or ""),
@@ -1029,6 +1063,7 @@ async def prepare_luxian_0609_execution(
     native_api_time = sum(
         item.latency_ms for item in native_usage_attributions
     ) / 1000.0
+    raise_if_cancelled()
     treatment_order_consistency_shadow = await run_luxian_0609_059_shadow(
         enabled=bool(getattr(settings, "LUXIAN_0609_059_SHADOW_ENABLED", False)),
         selected_rule_ids=package_plan.selected_rule_ids,
@@ -1038,6 +1073,7 @@ async def prepare_luxian_0609_execution(
         evidence_materials=evidence_materials,
         llm_client=llm_client,
     )
+    raise_if_cancelled()
     implant_information_shadow = await run_luxian_0609_025_shadow(
         enabled=bool(getattr(settings, "LUXIAN_0609_025_SHADOW_ENABLED", False)),
         selected_rule_ids=package_plan.selected_rule_ids,

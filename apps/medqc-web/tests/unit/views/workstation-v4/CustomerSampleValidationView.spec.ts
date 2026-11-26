@@ -15,6 +15,7 @@ const {
   message,
   Modal,
   listManualSamplePools,
+  deleteManualSamplePool,
   getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
@@ -26,8 +27,10 @@ const {
   listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
+  previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
   syncManualSamplePoolRecords,
+  syncManualSamplePoolRecordsByHospitalization,
   getSichuanWorkspaceBatchJob,
   getSichuanWorkspaceBatchJobDebugSnapshot,
   listSichuanWorkspaceBatchJobs,
@@ -43,6 +46,7 @@ const {
   bookNew,
   aoaToSheet,
   bookAppendSheet,
+  confirmedResultsOnlyState,
 } = vi.hoisted(() => ({
   message: {
     success: vi.fn(),
@@ -56,6 +60,7 @@ const {
     confirm: vi.fn(({ onOk }: { onOk?: () => unknown }) => onOk?.()),
   },
   listManualSamplePools: vi.fn(),
+  deleteManualSamplePool: vi.fn(),
   getSheet2ExactReviewAcceptancePackage: vi.fn(),
   getLatestManualSamplePoolSyncJob: vi.fn(),
   getManualSamplePoolSyncJob: vi.fn(),
@@ -67,8 +72,10 @@ const {
   listLuxian0609CustomerRules: vi.fn(),
   listManualSampleValidationRuleSets: vi.fn(),
   matchManualSamplePool: vi.fn(),
+  previewManualSamplePoolHospitalizationScope: vi.fn(),
   runManualSamplePool: vi.fn(),
   syncManualSamplePoolRecords: vi.fn(),
+  syncManualSamplePoolRecordsByHospitalization: vi.fn(),
   getSichuanWorkspaceBatchJob: vi.fn(),
   getSichuanWorkspaceBatchJobDebugSnapshot: vi.fn(),
   listSichuanWorkspaceBatchJobs: vi.fn(),
@@ -84,7 +91,17 @@ const {
   bookNew: vi.fn(() => ({ sheets: [] })),
   aoaToSheet: vi.fn(() => ({})),
   bookAppendSheet: vi.fn(),
+  confirmedResultsOnlyState: { value: false },
 }))
+
+vi.mock('@/composables/useQcResultVisibility', async () => {
+  const { ref } = await import('vue')
+  return {
+    useQcResultVisibility: () => ({
+      confirmedResultsOnly: ref(confirmedResultsOnlyState.value),
+    }),
+  }
+})
 
 vi.mock('ant-design-vue', () => ({
   message,
@@ -103,6 +120,7 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/services/manual-case-sample-service', () => ({
   listManualSamplePools,
+  deleteManualSamplePool,
   getSheet2ExactReviewAcceptancePackage,
   getLatestManualSamplePoolSyncJob,
   getManualSamplePoolSyncJob,
@@ -114,8 +132,10 @@ vi.mock('@/services/manual-case-sample-service', () => ({
   listLuxian0609CustomerRules,
   listManualSampleValidationRuleSets,
   matchManualSamplePool,
+  previewManualSamplePoolHospitalizationScope,
   runManualSamplePool,
   syncManualSamplePoolRecords,
+  syncManualSamplePoolRecordsByHospitalization,
 }))
 
 vi.mock('@/services/sichuan-rule-workspace-service', () => ({
@@ -436,15 +456,21 @@ const ASwitchStub = defineComponent({
   name: 'ASwitchStub',
   props: {
     checked: Boolean,
+    disabled: Boolean,
   },
-  emits: ['update:checked'],
+  emits: ['update:checked', 'change'],
   setup(props, { emit }) {
     return () =>
       h('input', {
         type: 'checkbox',
+        class: 'a-switch-stub',
         checked: props.checked,
-        onChange: (event: Event) =>
-          emit('update:checked', (event.target as HTMLInputElement).checked),
+        disabled: props.disabled,
+        onChange: (event: Event) => {
+          const next = (event.target as HTMLInputElement).checked
+          emit('update:checked', next)
+          emit('change', next)
+        },
       })
   },
 })
@@ -464,6 +490,10 @@ const ATableStub = defineComponent({
       type: Object,
       default: () => ({}),
     },
+    pagination: {
+      type: Object,
+      default: () => ({}),
+    },
   },
   setup(props, { attrs }) {
     const toggle = (recordId: string, checked: boolean) => {
@@ -480,10 +510,14 @@ const ATableStub = defineComponent({
       const dataSource =
         (props.dataSource as Array<any>) ||
         ((attrs['data-source'] || attrs.dataSource || []) as Array<any>)
-      return h(
-        'div',
-        { class: 'a-table-stub' },
-        dataSource.map((record) =>
+      const pagination = props.pagination as {
+        current?: number
+        pageSize?: number
+        total?: number
+        onChange?: (page: number, pageSize: number) => void
+      }
+      return h('div', { class: 'a-table-stub' }, [
+        ...dataSource.map((record) =>
           h('div', { class: 'record-row', 'data-record-id': record.id }, [
             h('label', [
               h('input', {
@@ -508,8 +542,57 @@ const ATableStub = defineComponent({
             ),
           ]),
         ),
-      )
+        pagination?.onChange
+          ? h(
+              'button',
+              {
+                type: 'button',
+                class: 'table-next-page-stub',
+                onClick: () =>
+                  pagination.onChange?.((pagination.current || 1) + 1, pagination.pageSize || 20),
+              },
+              '下一页',
+            )
+          : null,
+      ])
     }
+  },
+})
+
+const APaginationStub = defineComponent({
+  name: 'APaginationStub',
+  props: {
+    current: {
+      type: Number,
+      default: 1,
+    },
+    pageSize: {
+      type: Number,
+      default: 10,
+    },
+    total: {
+      type: Number,
+      default: 0,
+    },
+  },
+  emits: ['update:current', 'change'],
+  setup(props, { emit }) {
+    return () =>
+      h('div', { class: 'a-pagination-stub' }, [
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'pagination-next-stub',
+            onClick: () => {
+              const next = props.current + 1
+              emit('update:current', next)
+              emit('change', next, props.pageSize)
+            },
+          },
+          '下一页',
+        ),
+      ])
   },
 })
 
@@ -976,8 +1059,9 @@ function expectedCompactLocalTime(value: string): string {
   return `${getPart('year')}-${getPart('month')}-${getPart('day')} ${getPart('hour')}:${getPart('minute')}`
 }
 
-async function mountView() {
+async function mountView(options: { attachTo?: HTMLElement } = {}) {
   const wrapper = mount(CustomerSampleValidationView, {
+    ...(options.attachTo ? { attachTo: options.attachTo } : {}),
     global: {
       stubs: {
         AButton: AButtonStub,
@@ -1036,6 +1120,7 @@ async function mountView() {
         'a-switch': ASwitchStub,
         'a-table': ATableStub,
         'a-modal': AModalStub,
+        'a-pagination': APaginationStub,
         'a-upload-dragger': AUploadDraggerStub,
         'a-drawer': ADrawerStub,
       },
@@ -1163,6 +1248,9 @@ describe('CustomerSampleValidationView', () => {
     listLuxian0609CustomerRules.mockReturnValueOnce(catalog.promise)
     const wrapper = await mountView()
     expect(getManualSamplePoolRecords).toHaveBeenCalled()
+    const recordCheckboxes = wrapper.findAll('input.record-checkbox')
+    await recordCheckboxes[0].setValue(true)
+    await nextTick()
     expect(wrapper.find('[data-customer-guide="run-validation"]').attributes('disabled')).toBeDefined()
     expect(runManualSamplePool).not.toHaveBeenCalled()
     config.resolve({ execution_concurrency: { max_parallel_records: 2 } })
@@ -1231,6 +1319,7 @@ describe('CustomerSampleValidationView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    confirmedResultsOnlyState.value = false
     latestBatchResultDrawerProps = null
     latestRecordResultComparisonDrawerProps = null
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
@@ -1252,6 +1341,10 @@ describe('CustomerSampleValidationView', () => {
     listManualSamplePools.mockResolvedValue({
       success: true,
       data: { items: [buildPool()], total: 1, page: 1, page_size: 50 },
+    })
+    deleteManualSamplePool.mockResolvedValue({
+      success: true,
+      data: { deleted: true, pool_id: 'pool-1', pool_name: '手工问题样本池-首轮验证' },
     })
     getSheet2ExactReviewAcceptancePackage.mockResolvedValue({
       success: true,
@@ -2461,16 +2554,15 @@ describe('CustomerSampleValidationView', () => {
     expect(wrapper.get('.customer-sample-scroll').classes()).toContain('has-work-dock')
   })
 
-  it('客户样本复现模式未选择病历时提示先选择病历', async () => {
+  it('客户样本复现模式未选择病历时禁用主按钮并提示先选择病历', async () => {
     const wrapper = await mountView()
 
     const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
-    expect(runButton!.attributes('disabled')).toBeUndefined()
+    expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
@@ -4453,10 +4545,10 @@ describe('CustomerSampleValidationView', () => {
 
     const runButton = wrapper.findAll('button').find((node) => node.text().includes('请先选择病历'))
     expect(runButton).toBeTruthy()
+    expect(runButton!.attributes('disabled')).toBeDefined()
     await runButton!.trigger('click')
     await flushPromises()
 
-    expect(message.warning).toHaveBeenCalledWith('请先选择要质控的病历')
     expect(runManualSamplePool).not.toHaveBeenCalled()
   })
 
@@ -4906,5 +4998,430 @@ describe('CustomerSampleValidationView', () => {
       expect(wrapper.text()).toContain('共 20 份病历；其中已关联 20 份' + suffix)
       expect(wrapper.text()).not.toContain('本页 20 份中')
     })
+  })
+
+  it('P1-2: 待验收计数说明、族匹配、规则搜索、独立标签及全待验收族禁用', async () => {
+    const rules = buildLuxian0609Rules().map((rule) => ({
+      ...rule,
+      release_scope:
+        rule.rule_id === 'LX0609-01-01-01' ||
+        rule.rule_id.startsWith('LX0609-03-01-')
+          ? ('acceptance_only' as const)
+          : ('default' as const),
+    }))
+    listLuxian0609CustomerRules.mockResolvedValueOnce({
+      success: true,
+      data: {
+        rule_set_key: 'luxian_0609_qc_v1',
+        total_rules: rules.length,
+        rules,
+      },
+    })
+
+    const wrapper = await mountView()
+
+    // 49 total - 5 acceptance_only = 44 default
+    expect(wrapper.text()).toContain('当前将运行：全部 44 个0609质控点（另有 5 个待验收）')
+
+    // 全待验收族（会诊质量 4 条均为 acceptance_only）应禁用“选择本组”
+    const consultGroup = wrapper
+      .findAll('.customer-sample-luxian-rule-group')
+      .find((node) => node.text().includes('会诊质量'))
+    expect(consultGroup).toBeTruthy()
+    const consultSelectButton = consultGroup!.findAll('button')[0]
+    expect(consultSelectButton.attributes('disabled')).toBeDefined()
+    expect(consultSelectButton.text()).toContain('仅支持逐条勾选')
+
+    // 含待验收规则的普通族（基础时限含 LX0609-01-01-01 待验收）选择本组后，selectedRunScopeSummary 仍正确识别为“已选1个规则族”
+    const basicGroup = wrapper
+      .findAll('.customer-sample-luxian-rule-group')
+      .find((node) => node.text().includes('基础时限'))
+    expect(basicGroup).toBeTruthy()
+    await basicGroup!.findAll('button')[0].trigger('click')
+    await wrapper.findAll('input.record-checkbox')[0].setValue(true)
+    await nextTick()
+    expect(wrapper.get('[data-testid="customer-sample-work-dock"]').text()).toContain(
+      '当前范围：已选1个规则族',
+    )
+
+    // 搜索质控点自动展开匹配项，且“待验收”标签渲染在截断的 <em> 之外
+    const searchInput = wrapper.find('input[placeholder="搜索质控点名称或编号"]')
+    expect(searchInput.exists()).toBe(true)
+    await searchInput.setValue('LX0609-01-01-01')
+    await nextTick()
+    const matchedOption = wrapper.find('.customer-sample-luxian-rule-option')
+    expect(matchedOption.exists()).toBe(true)
+    expect(matchedOption.find('em').text()).not.toContain('待验收')
+    expect(matchedOption.find('.customer-sample-luxian-acceptance-tag').text()).toBe('待验收')
+  })
+
+  it('P1-3: 0609 模式就绪与可质控病历使用实际 ready_items 而非 matched_items', async () => {
+    const pool = buildPool({ total_items: 5, matched_items: 5, ready_items: 2 })
+    listManualSamplePools.mockResolvedValueOnce({
+      success: true,
+      data: { items: [pool], total: 1, page: 1, page_size: 50 },
+    })
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: { pool, items: [buildRecord()], total: 5, page: 1, page_size: 20 },
+    })
+
+    const wrapper = await mountView()
+
+    const stepValues = wrapper.findAll('.customer-sample-step').map((node) => node.text())
+    expect(stepValues).toContain('匹配5')
+    expect(stepValues).toContain('就绪2')
+    const metricTexts = wrapper
+      .findAll('.customer-sample-inline-metrics span')
+      .map((node) => node.text())
+    expect(metricTexts).toContain('已匹配病历 5')
+    expect(metricTexts).toContain('可质控病历 2')
+  })
+
+  it('P1-4: 筛选立即生效、查询重置页码、跨页勾选保留及列表加载失败内联重试', async () => {
+    getManualSamplePoolRecords
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool: buildPool({ total_items: 30, matched_items: 30, ready_items: 30 }),
+          items: [
+            buildRecord({
+              id: 'V-P1',
+              matched_visit_id: 'V-P1',
+              patient_name: '第一页患者',
+              sample_item_ids: ['item-p1'],
+            }),
+          ],
+          total: 30,
+          page: 1,
+          page_size: 20,
+        },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: {
+          pool: buildPool({ total_items: 30, matched_items: 30, ready_items: 30 }),
+          items: [
+            buildRecord({
+              id: 'V-P2',
+              matched_visit_id: 'V-P2',
+              patient_name: '第二页患者',
+              sample_item_ids: ['item-p2'],
+            }),
+          ],
+          total: 30,
+          page: 2,
+          page_size: 20,
+        },
+      })
+
+    const wrapper = await mountView()
+
+    // 选中第 1 页病历并翻到第 2 页再选中第 2 页病历 -> 跨页保留
+    await wrapper.findAll('input.record-checkbox')[0].setValue(true)
+    await nextTick()
+    await wrapper.get('.table-next-page-stub').trigger('click')
+    await flushPromises()
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({ page: 2 }),
+    )
+    await wrapper.findAll('input.record-checkbox')[0].setValue(true)
+    await nextTick()
+    expect(wrapper.get('[data-testid="customer-sample-work-dock"]').text()).toContain(
+      '已选择 2 份病历',
+    )
+
+    // 在第 2 页按下回车或点击查询，重置 page=1
+    const searchInput = wrapper.find('input[placeholder="搜索患者、住院号或问题摘要"]')
+    expect(searchInput.attributes('allow-clear')).toBeDefined()
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: { pool: buildPool(), items: [buildRecord()], total: 1, page: 1, page_size: 20 },
+    })
+    await searchInput.setValue('第一页')
+    await searchInput.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({ page: 1, q: '第一页' }),
+    )
+
+    // 切换样本范围 / 病历关联 / 仅首批立即触发查询并重置 page=1
+    getManualSamplePoolRecords.mockResolvedValueOnce({
+      success: true,
+      data: { pool: buildPool(), items: [buildRecord()], total: 1, page: 1, page_size: 20 },
+    })
+    const coverageSelect = wrapper.find('select[data-placeholder="样本范围"]')
+    await coverageSelect.setValue('llm_intrinsic')
+    await flushPromises()
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({ page: 1, coverage_type: 'llm_intrinsic' }),
+    )
+
+    // 加载失败时显示错误条而非空表，点击“重新加载”可恢复
+    getManualSamplePoolRecords
+      .mockResolvedValueOnce({ success: false, message: '数据库查询超时' })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { pool: buildPool(), items: [buildRecord()], total: 1, page: 1, page_size: 20 },
+      })
+    await wrapper.findAll('button').find((node) => node.text() === '查询')!.trigger('click')
+    await flushPromises()
+    const errorBanner = wrapper.find('[data-testid="records-load-error-banner"]')
+    expect(errorBanner.exists()).toBe(true)
+    expect(errorBanner.text()).toContain('数据库查询超时')
+    expect(wrapper.find('.a-table-stub').exists()).toBe(false)
+
+    await errorBanner.find('button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('[data-testid="records-load-error-banner"]').exists()).toBe(false)
+    expect(wrapper.find('.a-table-stub').exists()).toBe(true)
+  })
+
+  it('P1-5: 从程序规则模式切回 0609 时清空 coverageType 筛选', async () => {
+    const wrapper = await mountView()
+
+    const programmaticBtn = wrapper
+      .findAll('button')
+      .find((node) => node.text() === '硬门槛程序规则模式')
+    expect(programmaticBtn).toBeTruthy()
+    await programmaticBtn!.trigger('click')
+    await flushPromises()
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({ coverage_type: 'programmatic' }),
+    )
+
+    await selectRuleSet(wrapper, 'luxian_0609_qc_v1')
+    expect(getManualSamplePoolRecords).toHaveBeenLastCalledWith(
+      'pool-1',
+      expect.objectContaining({ coverage_type: undefined }),
+    )
+  })
+
+  it('P1-6 & P1-7: 内部验收诊断默认隐藏；调整质控范围展开 details 并翻转摘要文案', async () => {
+    const wrapper = await mountView()
+
+    // P1-6: 默认不渲染内部验收诊断面板
+    expect(wrapper.find('.customer-sample-diagnostic-panel').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('客户验收口径与规则增强诊断')
+
+    // 点击“内部覆盖详情”后展示
+    const internalBtn = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('内部覆盖详情'))
+    await internalBtn!.trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.customer-sample-diagnostic-panel').exists()).toBe(true)
+
+    // P1-7: 默认收起文案为“调整范围”；点击底栏“调整质控范围”后展开 details 并翻转为“收起范围”
+    const details = wrapper.get('#customer-sample-luxian-scope')
+    const scrollIntoViewMock = vi.fn()
+    ;(details.element as HTMLElement).scrollIntoView = scrollIntoViewMock
+    expect(wrapper.get('.customer-sample-scope-summary__action').text()).toBe('调整范围')
+
+    await wrapper.findAll('input.record-checkbox')[0].setValue(true)
+    await nextTick()
+    const jumpBtn = wrapper
+      .get('[data-testid="customer-sample-work-dock"]')
+      .findAll('button')
+      .find((node) => node.text() === '调整质控范围')
+    expect(jumpBtn).toBeTruthy()
+    await jumpBtn!.trigger('click')
+    await nextTick()
+
+    expect((details.element as HTMLDetailsElement).open).toBe(true)
+    expect(wrapper.get('.customer-sample-scope-summary__action').text()).toBe('收起范围')
+
+    // 折叠 details 触发 toggle 后翻转回“调整范围”
+    ;(details.element as HTMLDetailsElement).open = false
+    await details.trigger('toggle')
+    await nextTick()
+    expect(wrapper.get('.customer-sample-scope-summary__action').text()).toBe('调整范围')
+  })
+
+  it('P1-8: 删除当前样本池后自动恢复新样本池任务，且删除管理弹窗第2页最后一条后自动回退到第1页', async () => {
+    const pool1 = buildPool({ id: 'pool-1', name: '样本池一', latest_job_id: 'job-pool-1' })
+    const pool2 = buildPool({ id: 'pool-2', name: '样本池二', latest_job_id: 'job-pool-2' })
+    listManualSamplePools
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [pool1, pool2], total: 11, page: 1, page_size: 100 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [pool1, pool2], total: 11, page: 1, page_size: 10 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [pool1], total: 11, page: 2, page_size: 10 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [pool2], total: 10, page: 1, page_size: 10 },
+      })
+      .mockResolvedValueOnce({
+        success: true,
+        data: { items: [pool2], total: 10, page: 1, page_size: 100 },
+      })
+    getManualSamplePoolRecords.mockImplementation(async (poolId: string) => ({
+      success: true,
+      data: {
+        pool: poolId === 'pool-2' ? pool2 : pool1,
+        items: [buildRecord()],
+        total: 1,
+        page: 1,
+        page_size: 20,
+      },
+    }))
+
+    const wrapper = await mountView()
+    getSichuanWorkspaceBatchJob.mockClear()
+
+    // 打开样本池管理弹窗并切到第 2 页（仅剩当前激活的 pool1）
+    await wrapper.get('.customer-sample-pool-manage-button').trigger('click')
+    await flushPromises()
+    await wrapper.get('.pagination-next-stub').trigger('click')
+    await flushPromises()
+    listManualSamplePools.mockClear()
+
+    const deleteBtn = wrapper.get('.pool-management-delete')
+    await deleteBtn.trigger('click')
+    await flushPromises()
+
+    expect(deleteManualSamplePool).toHaveBeenCalledWith('pool-1')
+    // 删除第 2 页最后一条后回退到第 1 页重新拉取
+    expect(listManualSamplePools).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, page_size: 10 }),
+    )
+    // 删除激活样本池并自动选中 pool2 后，恢复 pool2 的最近质控任务
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-pool-2')
+  })
+
+  it('Batch3: 范围提示 pill 带 title tooltip，且验收工件/内置目录提示徽章使用中性描边样式', async () => {
+    listManualSampleValidationRuleSets.mockResolvedValueOnce({
+      success: false,
+      message: 'fallback',
+    })
+    const wrapper = await mountView()
+
+    const scopePill = wrapper.get('.customer-sample-scope-pill')
+    expect(scopePill.attributes('title')).toBe(scopePill.text())
+
+    const fallbackBadge = wrapper.get('.customer-sample-subtle-notice-badge')
+    expect(fallbackBadge.text()).toBe('内置目录')
+    expect(fallbackBadge.classes()).not.toContain('bg-amber-50')
+  })
+
+  it('Batch3: 非 0609 模式下导览自动跳过缺失的 lx0609-scope 步骤，并支持 Escape 关闭', async () => {
+    const wrapper = await mountView({ attachTo: document.body })
+
+    const switchTo0916 = wrapper.get('button[data-rule-set-key="luxian_0916_qc_v1"]')
+    await switchTo0916.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    expect(document.querySelector('[data-customer-guide="lx0609-scope"]')).toBeNull()
+
+    const guideButton = wrapper.findAll('button').find((node) => node.text().includes('功能导览'))
+    expect(guideButton).toBeTruthy()
+    await guideButton!.trigger('click')
+    await nextTick()
+
+    expect(wrapper.get('.customer-sample-tour-count').text()).toBe('1 / 5')
+    expect(wrapper.text()).toContain('先选择样本池')
+
+    const nextButton = wrapper.get('.customer-sample-guide-next')
+    await nextButton.trigger('click')
+    await nextTick()
+    expect(wrapper.text()).toContain('确认验证规则集')
+
+    await nextButton.trigger('click')
+    await nextTick()
+    expect(wrapper.text()).not.toContain('限定 LX0609 质控点范围')
+    expect(wrapper.text()).toContain('创建测试病历')
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await nextTick()
+    expect(wrapper.find('.customer-sample-tour-layer').exists()).toBe(false)
+  })
+
+  it('Batch3: 住院范围同步切换样本池重置科室、校验出院日期顺序，并在期间出院模式使用两列布局', async () => {
+    const { ref: vueRef } = await import('vue')
+    const { useCustomerSampleHospitalizationSync } = await import(
+      '@/views/workstation-v4/customer-sample-validation/useCustomerSampleHospitalizationSync'
+    )
+
+    previewManualSamplePoolHospitalizationScope.mockResolvedValue({
+      success: true,
+      data: {
+        counts: { active: 2, discharged: 3, deduplicated: 4, existing_in_pool: 1, new_to_pool: 3 },
+        departments: [{ name: '普外科', total_count: 4 }],
+        warnings: [],
+      },
+    })
+    syncManualSamplePoolRecordsByHospitalization.mockResolvedValue({
+      success: true,
+      data: { job_id: 'sync-job-1' },
+    })
+
+    const selectedPoolId = vueRef<string | undefined>('pool-1')
+    const openSyncJob = vi.fn().mockResolvedValue(undefined)
+    const sync = useCustomerSampleHospitalizationSync({ selectedPoolId, openSyncJob })
+
+    await sync.openHospitalizationSyncModal()
+    sync.hospitalizationSyncForm.value.departments = ['普外科']
+
+    selectedPoolId.value = 'pool-2'
+    await nextTick()
+    expect(sync.hospitalizationSyncForm.value.departments).toEqual([])
+    expect(sync.hospitalizationSyncPreview.value).toBeNull()
+
+    sync.hospitalizationSyncForm.value.scopeMode = 'discharged'
+    sync.hospitalizationSyncForm.value.dischargeStartDate = '2026-06-20'
+    sync.hospitalizationSyncForm.value.dischargeEndDate = '2026-06-10'
+    await sync.refreshHospitalizationScopePreview()
+    expect(sync.hospitalizationSyncPreviewError.value).toContain('出院开始日期不能晚于出院结束日期')
+    expect(sync.hospitalizationSyncCanSubmit.value).toBe(false)
+
+    syncManualSamplePoolRecordsByHospitalization.mockClear()
+    await sync.handleHospitalizationSync()
+    expect(syncManualSamplePoolRecordsByHospitalization).not.toHaveBeenCalled()
+    expect(message.warning).toHaveBeenCalledWith('出院开始日期不能晚于出院结束日期')
+
+    // 同时验证页面弹窗在期间出院模式下使用 sm:grid-cols-2 而非 sm:grid-cols-3
+    const wrapper = await mountView()
+    const syncMenuBtn = wrapper
+      .findAll('button')
+      .find((node) => node.text().includes('按住院范围同步'))
+    expect(syncMenuBtn).toBeTruthy()
+    await syncMenuBtn!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const dischargedBtn = wrapper
+      .findAll('.a-segmented-stub button')
+      .find((node) => node.text().trim() === '期间出院')
+    expect(dischargedBtn).toBeTruthy()
+    await dischargedBtn!.trigger('click')
+    await flushPromises()
+    await nextTick()
+
+    const dateGrid = wrapper
+      .findAll('.a-modal-stub .grid')
+      .find((node) => node.text().includes('出院开始日期'))
+    expect(dateGrid).toBeTruthy()
+    expect(dateGrid!.classes()).toContain('sm:grid-cols-2')
+    expect(dateGrid!.classes()).not.toContain('sm:grid-cols-3')
+  })
+
+  it('confirmedResultsOnly=true 时隐藏内部覆盖详情与展开内部验收诊断入口', async () => {
+    confirmedResultsOnlyState.value = true
+    const wrapper = await mountView()
+    expect(wrapper.text()).not.toContain('内部覆盖详情')
+    expect(wrapper.text()).not.toContain('展开内部验收诊断')
+    expect(wrapper.find('.customer-sample-diagnostic-panel').exists()).toBe(false)
   })
 })

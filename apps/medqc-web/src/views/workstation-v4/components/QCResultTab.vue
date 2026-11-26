@@ -224,7 +224,7 @@
 <script setup lang="ts">
 import { CODING_QC_FALLBACK_TIMEOUT_MS, STANDARD_REQUEST_TIMEOUT_MS } from '@/config/requestTimeouts'
 import { useWorkstationConfirmation } from '@/components/layout/workstationConfirmation'
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { message } from 'ant-design-vue'
 import {
   CheckCircleOutlined,
@@ -302,6 +302,25 @@ const formAnalyzed = ref(false)
 const codingAnalyzed = ref(false)
 const costAnalyzed = ref(false)
 const resultStale = ref(false)
+
+let patientContextSeq = 0
+let formRequestSeq = 0
+let codingRequestSeq = 0
+let costRequestSeq = 0
+
+interface PatientRunTarget {
+  patientId: string
+  visitId: string
+  frontpage: Record<string, any> | null
+}
+
+function captureRunTarget(): PatientRunTarget {
+  return {
+    patientId: String(props.patientId || '').trim(),
+    visitId: String(props.visitId || '').trim(),
+    frontpage: props.frontpage || null,
+  }
+}
 
 const qcTabs = [
   {
@@ -546,16 +565,19 @@ function getCodingIssueGroup(issue: Record<string, any>, source: 'rule' | 'llm')
 }
 
 async function handleDefectAction(action: string, issue: QCIssue) {
+  const contextSeq = patientContextSeq
   try {
     switch (action) {
       case 'urge': {
         const res = await urgeDefect(issue.id, { message: `请尽快处理：${issue.description}` })
+        if (contextSeq !== patientContextSeq) return
         if (res.success) message.success('催办成功')
         else message.error(res.message || '催办失败')
         break
       }
       case 'mark_remediated': {
         const res = await markDefectRemediated(issue.id, { remediation_note: '已整改' })
+        if (contextSeq !== patientContextSeq) return
         if (res.success) {
           issue.dismissed = true
           emit('issues-change', issues.value.slice())
@@ -567,6 +589,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
       }
       case 'approve': {
         const res = await approveDefect(issue.id, '审核通过')
+        if (contextSeq !== patientContextSeq) return
         if (res.success) {
           issue.dismissed = true
           emit('issues-change', issues.value.slice())
@@ -585,6 +608,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
           okType: 'danger',
           async onOk() {
             const res = await rejectDefect(issue.id, { reason: '审核存疑，需进一步确认' })
+            if (contextSeq !== patientContextSeq) return
             if (res.success) message.success('已标记为存疑')
             else message.error(res.message || '操作失败')
           },
@@ -593,6 +617,7 @@ async function handleDefectAction(action: string, issue: QCIssue) {
       }
     }
   } catch (err: any) {
+    if (contextSeq !== patientContextSeq) return
     message.error(err?.message || '操作失败')
   }
 }
@@ -613,17 +638,20 @@ async function handleExportDefects() {
   }
 }
 
-async function fetchCodingQCFromBackend() {
-  const useVisitIdMode = !!props.visitId
-  const fp = props.frontpage
+async function fetchCodingQCFromBackend(
+  target: PatientRunTarget,
+  isCurrent: () => boolean,
+) {
+  const useVisitIdMode = !!target.visitId
+  const fp = target.frontpage
 
-  if (!useVisitIdMode && !fp) return { issues: [], persistence: null }
+  if (!useVisitIdMode && !fp) return { issues: [], persistence: null, degraded: false }
 
   let payload: any
   if (useVisitIdMode) {
     payload = {
-      visit_id: props.visitId,
-      patient_id: props.patientId || '',
+      visit_id: target.visitId,
+      patient_id: target.patientId,
     }
   } else {
     const diagnoses = fp!.diagnoses || {}
@@ -713,6 +741,9 @@ async function fetchCodingQCFromBackend() {
   try {
     return await executeRequest(payload)
   } catch (err: any) {
+    if (!isCurrent()) {
+      return { issues: [], persistence: null, degraded: false }
+    }
     const maybeTimeout =
       err?.code === 'ECONNABORTED' ||
       String(err?.message || '')
@@ -721,10 +752,14 @@ async function fetchCodingQCFromBackend() {
     if (maybeTimeout) {
       try {
         const degradedResult = await executeRequest({ ...payload, skip_llm: true }, CODING_QC_FALLBACK_TIMEOUT_MS)
-        message.info('编码质控已降级为规则层执行，结果仍会保存并更新消息')
+        if (isCurrent()) {
+          message.info('编码质控已降级为规则层执行，结果仍会保存并更新消息')
+        }
         return degradedResult
       } catch (retryErr) {
-        console.error('后端编码质控降级调用失败', retryErr)
+        if (isCurrent()) {
+          console.error('后端编码质控降级调用失败', retryErr)
+        }
         return { issues: [], persistence: null, degraded: false }
       }
     }
@@ -733,10 +768,13 @@ async function fetchCodingQCFromBackend() {
   }
 }
 
-async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
+async function fetchFrontpageQCFromBackend(
+  frontpage: Record<string, any>,
+  target: PatientRunTarget,
+) {
   const payload = {
-    patient_id: props.patientId || '',
-    visit_id: props.visitId || '',
+    patient_id: target.patientId,
+    visit_id: target.visitId,
     frontpage,
   }
   const resp = await apiClient.post('/api/v1/qc/formal-qc/validate', payload, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
@@ -762,18 +800,24 @@ async function fetchFrontpageQCFromBackend(frontpage: Record<string, any>) {
   }
 }
 
-async function fetchCostQCFromBackend() {
-  if (!props.visitId || !props.patientId) {
+async function fetchCostQCFromBackend(
+  target: PatientRunTarget,
+  isCurrent: () => boolean,
+) {
+  if (!target.visitId || !target.patientId) {
     return { issues: [], persistence: null, passed: 0, total: 0 }
   }
 
   const urls = [
-    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/qc`,
-    `/api/medical-records/settlement/${props.patientId}/${props.visitId}/generate/qc`,
+    `/api/medical-records/settlement/${target.patientId}/${target.visitId}/qc`,
+    `/api/medical-records/settlement/${target.patientId}/${target.visitId}/generate/qc`,
   ]
 
   let lastError: unknown = null
   for (const url of urls) {
+    if (!isCurrent()) {
+      return { issues: [], persistence: null, passed: 0, total: 0 }
+    }
     try {
       const resp = await apiClient.post(url, undefined, { timeout: STANDARD_REQUEST_TIMEOUT_MS })
       const data = resp.data
@@ -797,17 +841,20 @@ async function fetchCostQCFromBackend() {
       }
     } catch (err: any) {
       lastError = err
+      if (!isCurrent()) {
+        return { issues: [], persistence: null, passed: 0, total: 0 }
+      }
       if (err?.response?.status !== 404) break
     }
   }
   throw lastError
 }
 
-async function loadFrontpageData(): Promise<Record<string, any> | null> {
-  if (props.visitId && props.patientId) {
+async function loadFrontpageData(target: PatientRunTarget): Promise<Record<string, any> | null> {
+  if (target.visitId && target.patientId) {
     try {
       const resp = await apiClient.get(
-        `/api/medical-records/frontpage-sheet/${props.patientId}/${props.visitId}`,
+        `/api/medical-records/frontpage-sheet/${target.patientId}/${target.visitId}`,
       )
       if (resp.data) return resp.data
     } catch (err: any) {
@@ -816,16 +863,25 @@ async function loadFrontpageData(): Promise<Record<string, any> | null> {
       }
     }
   }
-  return props.frontpage || null
+  return target.frontpage
 }
 
 async function runFormQC() {
-  const fpData = await loadFrontpageData()
-  if (!fpData) return
+  const contextSeq = patientContextSeq
+  const reqSeq = ++formRequestSeq
+  const target = captureRunTarget()
+  const isCurrent = () => contextSeq === patientContextSeq && reqSeq === formRequestSeq
 
   formQCLoading.value = true
+  let didEvaluate = false
   try {
-    const result = await fetchFrontpageQCFromBackend(fpData)
+    const fpData = await loadFrontpageData(target)
+    if (!isCurrent() || !fpData) return
+
+    didEvaluate = true
+    const result = await fetchFrontpageQCFromBackend(fpData, target)
+    if (!isCurrent()) return
+
     const kept = issues.value.filter((i) => i.category !== 'form')
     kept.push(...result.issues)
     issues.value = kept
@@ -833,68 +889,104 @@ async function runFormQC() {
     message.success(buildPersistenceMessage('form', result.persistence))
     notifyPersistence('form', result.persistence)
   } catch (err) {
+    if (!isCurrent()) return
     console.error('首页质控引擎异常', err)
     message.error('首页质控执行失败')
   } finally {
-    formQCLoading.value = false
-    formAnalyzed.value = true
+    if (isCurrent()) {
+      formQCLoading.value = false
+      if (didEvaluate) formAnalyzed.value = true
+    }
   }
 }
 
 async function runCodingQC() {
+  const contextSeq = patientContextSeq
+  const reqSeq = ++codingRequestSeq
+  const target = captureRunTarget()
+  const isCurrent = () => contextSeq === patientContextSeq && reqSeq === codingRequestSeq
+
   codingQCLoading.value = true
   try {
+    const result = await fetchCodingQCFromBackend(target, isCurrent)
+    if (!isCurrent()) return
+
     const kept = issues.value.filter((i) => i.category !== 'coding')
-    const result = await fetchCodingQCFromBackend()
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('coding', result.persistence))
     notifyPersistence('coding', result.persistence)
   } catch (err) {
+    if (!isCurrent()) return
     console.error('编码质控异常', err)
     message.error('编码质控执行失败')
   } finally {
-    codingQCLoading.value = false
-    codingAnalyzed.value = true
+    if (isCurrent()) {
+      codingQCLoading.value = false
+      codingAnalyzed.value = true
+    }
   }
 }
 
 async function runCostQC() {
+  const contextSeq = patientContextSeq
+  const reqSeq = ++costRequestSeq
+  const target = captureRunTarget()
+  const isCurrent = () => contextSeq === patientContextSeq && reqSeq === costRequestSeq
+
   costQCLoading.value = true
   try {
+    const result = await fetchCostQCFromBackend(target, isCurrent)
+    if (!isCurrent()) return
+
     const kept = issues.value.filter((i) => i.category !== 'cost')
-    const result = await fetchCostQCFromBackend()
     kept.push(...result.issues)
     issues.value = kept
     emit('issues-change', kept.slice())
     message.success(buildPersistenceMessage('cost', result.persistence))
     notifyPersistence('cost', result.persistence)
   } catch (err) {
+    if (!isCurrent()) return
     console.error('控费监测异常', err)
     message.error('控费监测执行失败')
   } finally {
-    costQCLoading.value = false
-    costAnalyzed.value = true
+    if (isCurrent()) {
+      costQCLoading.value = false
+      costAnalyzed.value = true
+    }
   }
 }
 
 async function runAllQC() {
+  const contextSeq = patientContextSeq
+  const fSeq = ++formRequestSeq
+  const cSeq = ++codingRequestSeq
+  const kSeq = ++costRequestSeq
+  const target = captureRunTarget()
+  const isCurrentAll = () =>
+    contextSeq === patientContextSeq &&
+    fSeq === formRequestSeq &&
+    cSeq === codingRequestSeq &&
+    kSeq === costRequestSeq
+
   formQCLoading.value = true
   codingQCLoading.value = true
   costQCLoading.value = true
   try {
-    const fpData = await loadFrontpageData()
+    const fpData = await loadFrontpageData(target)
+    if (!isCurrentAll()) return
     if (!fpData) {
       issues.value = []
       emit('issues-change', [])
       return
     }
     const [formResult, codingResult, costResult] = await Promise.all([
-      fetchFrontpageQCFromBackend(fpData),
-      fetchCodingQCFromBackend(),
-      fetchCostQCFromBackend(),
+      fetchFrontpageQCFromBackend(fpData, target),
+      fetchCodingQCFromBackend(target, isCurrentAll),
+      fetchCostQCFromBackend(target, isCurrentAll),
     ])
+    if (!isCurrentAll()) return
     const newIssues: QCIssue[] = [
       ...formResult.issues,
       ...codingResult.issues,
@@ -907,17 +999,24 @@ async function runAllQC() {
     notifyPersistence('cost', costResult.persistence)
     message.success('全部质控执行完成，结果已保存')
   } catch (error) {
+    if (!isCurrentAll()) return
     console.error('质控引擎执行异常', error)
     issues.value = []
     emit('issues-change', [])
     message.error('全部质控执行失败')
   } finally {
-    formQCLoading.value = false
-    codingQCLoading.value = false
-    costQCLoading.value = false
-    formAnalyzed.value = true
-    codingAnalyzed.value = true
-    costAnalyzed.value = true
+    if (contextSeq === patientContextSeq && fSeq === formRequestSeq) {
+      formQCLoading.value = false
+      formAnalyzed.value = true
+    }
+    if (contextSeq === patientContextSeq && cSeq === codingRequestSeq) {
+      codingQCLoading.value = false
+      codingAnalyzed.value = true
+    }
+    if (contextSeq === patientContextSeq && kSeq === costRequestSeq) {
+      costQCLoading.value = false
+      costAnalyzed.value = true
+    }
   }
 }
 
@@ -947,8 +1046,15 @@ watch(
 )
 
 watch(
-  () => props.visitId,
+  () => [props.patientId, props.visitId],
   () => {
+    patientContextSeq += 1
+    formRequestSeq += 1
+    codingRequestSeq += 1
+    costRequestSeq += 1
+    formQCLoading.value = false
+    codingQCLoading.value = false
+    costQCLoading.value = false
     formAnalyzed.value = false
     codingAnalyzed.value = false
     costAnalyzed.value = false
@@ -957,6 +1063,10 @@ watch(
     emit('issues-change', [])
   },
 )
+
+onBeforeUnmount(() => {
+  patientContextSeq += 1
+})
 
 watch(
   () => props.snapshotState,

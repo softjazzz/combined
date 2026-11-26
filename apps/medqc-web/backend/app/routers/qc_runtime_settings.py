@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, StrictBool
 
 from ..core.audit import audit_event
-from ..core.security import require_roles
+from ..core.security import require_global_system_admin
 from ..core.settings import get_settings
 from ..services.qc_dispatch.control import (
     DispatchControlConflict, DispatchControlError, load_control, save_control,
@@ -14,10 +14,9 @@ from ..services.qc_dispatch.readiness import check_readiness, readiness_snapshot
 from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 
 router = APIRouter(prefix='/api/v1/system/qc-runtime', tags=['QC Runtime Settings'])
-_require_manager = require_roles('admin', 'sync_admin', 'super_admin')
 
 
-async def require_runtime_manager(user: dict = Depends(_require_manager)) -> dict:
+async def require_runtime_manager(user: dict = Depends(require_global_system_admin)) -> dict:
     # 演示账号不能修改全局调度，即使历史角色数组包含admin。
     is_demo = user.get('is_demo_account') is True or str(user.get('email') or '').strip().lower() in DEFAULT_DEMO_USER_EMAILS
     if is_demo and not set(user.get('roles') or []).intersection({'sync_admin', 'super_admin'}):

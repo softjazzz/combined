@@ -264,7 +264,7 @@ async def test_mapping_suggest_route_scopes_uncached_call_to_file_id(
     monkeypatch,
     tmp_path,
 ):
-    file_id = "file-root-123"
+    file_id = "a1b2c3d4"
     file_dir = tmp_path / file_id
     file_dir.mkdir()
     pd.DataFrame([{"患者编号": "P001"}]).to_excel(
@@ -292,7 +292,8 @@ async def test_mapping_suggest_route_scopes_uncached_call_to_file_id(
     )
 
     await smart_upload_router.suggest_mapping(
-        smart_upload_router.MappingSuggestRequest(file_id=file_id)
+        smart_upload_router.MappingSuggestRequest(file_id=file_id),
+        current_user={"id": "u-global-admin", "roles": ["admin"]},
     )
 
     context = captured["context"]

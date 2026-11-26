@@ -50,7 +50,9 @@ describe('api-envelope', () => {
 
   it('提取错误消息优先级 detail > error > message > fallback', () => {
     expect(extractApiErrorMessage({ detail: 'd' }, 'f')).toBe('d')
+    expect(extractApiErrorMessage({ detail: { code: 'x', message: 'obj_d' } }, 'f')).toBe('obj_d')
     expect(extractApiErrorMessage({ error: 'e' }, 'f')).toBe('e')
+    expect(extractApiErrorMessage({ success: false, error: { code: 'x', message: 'obj_e' } }, 'f')).toBe('obj_e')
     expect(extractApiErrorMessage({ message: 'm' }, 'f')).toBe('m')
     expect(extractApiErrorMessage({}, 'f')).toBe('f')
   })

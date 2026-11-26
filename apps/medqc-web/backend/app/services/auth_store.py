@@ -13,7 +13,7 @@ from sqlalchemy import MetaData, column, func, inspect, or_, select
 from ..database.connection import SessionLocal
 from ..database.models.qc import SysUser
 from ..database.models.account_registration import registration_is_approved
-from ..storage.memory import users_db
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS, users_db
 from .user_scope_owner import resolve_user_owner_schema, user_owner_options
 
 
@@ -89,6 +89,10 @@ def _supports_persistent_auth(session) -> bool:
     return _REQUIRED_AUTH_COLUMNS.issubset(columns)
 
 
+def _is_demo_email(email: Any) -> bool:
+    return str(email or "").strip().lower() in DEFAULT_DEMO_USER_EMAILS
+
+
 def _normalize_memory_user(user: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(user)
     normalized["username"] = str(normalized.get("username") or "").strip() or _derive_username(
@@ -101,6 +105,8 @@ def _normalize_memory_user(user: dict[str, Any]) -> dict[str, Any]:
     normalized.setdefault("avatar", "")
     normalized.setdefault("bio", "")
     normalized.setdefault("phone", None)
+    if not isinstance(normalized.get("is_demo_account"), bool):
+        normalized["is_demo_account"] = _is_demo_email(normalized.get("email"))
     return normalized
 
 
@@ -117,10 +123,11 @@ def _orm_user_to_dict(user: SysUser, *, session) -> dict[str, Any]:
         institute_id = session.execute(
             select(column("institute_id")).select_from(table).where(table.c.id == user.id)
         ).scalar_one()
+    normalized_email = str(user.email or "").strip().lower()
     return {
         "id": user.id,
         "username": username,
-        "email": str(user.email or "").strip().lower(),
+        "email": normalized_email,
         "display_name": str(user.display_name or "").strip(),
         "institute_id": str(institute_id or "").strip(),
         "department": str(user.department or "").strip(),
@@ -133,6 +140,7 @@ def _orm_user_to_dict(user: SysUser, *, session) -> dict[str, Any]:
         "last_login": _iso_or_none(user.last_login_at),
         "password_hash": str(user.password_hash or ""),
         "is_active": bool(user.is_active),
+        "is_demo_account": _is_demo_email(normalized_email),
     }
 
 
@@ -147,6 +155,11 @@ def _sync_memory_user(user: dict[str, Any]) -> None:
         "display_name": user.get("display_name") or "",
         "institute_id": user.get("institute_id") or "",
         "is_active": bool(user.get("is_active", True)),
+        "is_demo_account": (
+            user["is_demo_account"]
+            if isinstance(user.get("is_demo_account"), bool)
+            else _is_demo_email(email)
+        ),
         "department": user.get("department") or "",
         "roles": list(user.get("roles") or ["doctor"]),
         "password_hash": user.get("password_hash") or "",
@@ -346,11 +359,15 @@ def create_user(
         "last_login": None,
         "password_hash": password_hash,
         "is_active": True,
+        "is_demo_account": _is_demo_email(normalized_email),
     }
 
     if SessionLocal is not None and persistent_auth_ready:
         session = SessionLocal()
         try:
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.connection(execution_options=owner_opts)
             orm_user = SysUser(
                 id=payload["id"],
                 username=payload["username"],
@@ -365,6 +382,8 @@ def create_user(
             )
             session.add(orm_user)
             session.commit()
+            if owner_opts:
+                session.connection(execution_options=owner_opts)
             session.refresh(orm_user)
             payload = _orm_user_to_dict(orm_user, session=session)
             payload["bio"] = bio or ""
@@ -386,10 +405,19 @@ def touch_last_login(user_id: str) -> dict[str, Any] | None:
         try:
             if not _supports_persistent_auth(session):
                 return None
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 user.last_login_at = datetime.utcnow()
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 payload = _orm_user_to_dict(user, session=session)
                 _sync_memory_user(payload)
@@ -425,12 +453,20 @@ def update_user_profile(
             persistent_auth_ready = _supports_persistent_auth(session)
             if not persistent_auth_ready:
                 raise RuntimeError("sys_users persistent auth schema is not ready")
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 normalized_phone = str(phone or "").strip() or None
                 if normalized_phone and normalized_phone != str(user.phone or "").strip():
                     duplicate = session.execute(
-                        select(SysUser.id).where(SysUser.phone == normalized_phone, SysUser.id != user_id).limit(1)
+                        select(SysUser.id).where(SysUser.phone == normalized_phone, SysUser.id != user_id).limit(1),
+                        execution_options=owner_opts,
                     ).scalar_one_or_none()
                     if duplicate is not None:
                         raise ValueError("手机号已被占用")
@@ -440,6 +476,8 @@ def update_user_profile(
                 if department is not None:
                     user.department = department
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user, session=session)
         except ValueError:
@@ -490,10 +528,19 @@ def update_user_password(*, user_id: str, password_hash: str) -> dict[str, Any] 
             persistent_auth_ready = _supports_persistent_auth(session)
             if not persistent_auth_ready:
                 return None
-            user = session.execute(select(SysUser).where(SysUser.id == user_id).limit(1)).scalar_one_or_none()
+            owner_opts = user_owner_options(session)
+            if owner_opts:
+                session.rollback()
+                session.connection(execution_options=owner_opts)
+            user = session.execute(
+                select(SysUser).where(SysUser.id == user_id).limit(1),
+                execution_options=owner_opts,
+            ).scalar_one_or_none()
             if user is not None:
                 user.password_hash = password_hash
                 session.commit()
+                if owner_opts:
+                    session.connection(execution_options=owner_opts)
                 session.refresh(user)
                 updated_payload = _orm_user_to_dict(user, session=session)
         except Exception:

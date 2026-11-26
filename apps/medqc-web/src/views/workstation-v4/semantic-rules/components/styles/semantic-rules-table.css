@@ -86,43 +86,35 @@
 .rule-set-picker {
   display: inline-flex;
   align-items: center;
+  gap: 8px;
 }
 
-/* 标签只给读屏，视觉上由“切换”胶囊承担 */
 .rule-set-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: var(--mq-font-12);
+  font-weight: 600;
   white-space: nowrap;
 }
 
 .rule-set-select {
-  width: 104px;
+  min-width: 148px;
+  max-width: 240px;
 }
 
 .rule-set-select :deep(.ant-select-selector) {
   height: 28px !important;
-  padding: 0 10px !important;
+  padding: 0 12px !important;
   border: 1px solid rgba(255, 255, 255, 0.4) !important;
   border-radius: 999px !important;
   background: rgba(255, 255, 255, 0.2) !important;
   box-shadow: none !important;
 }
 
-/* 下拉框本身只显示“切换”，当前规则集名已在标题展示 */
 .rule-set-select :deep(.ant-select-selection-item) {
-  color: transparent;
-  font-size: 0;
-  line-height: 26px !important;
-}
-
-.rule-set-select :deep(.ant-select-selection-item)::before {
   color: #ffffff;
   font-size: var(--mq-font-12);
   font-weight: 600;
-  content: '切换规则集';
+  line-height: 26px !important;
 }
 
 .rule-set-select :deep(.ant-select-arrow) {
@@ -205,11 +197,15 @@
 }
 
 .query-input {
-  width: 320px;
+  flex: 1 1 220px;
+  width: 280px;
+  min-width: 200px;
+  max-width: 320px;
 }
 
 .query-select {
-  width: 160px;
+  flex: 0 1 140px;
+  width: 140px;
 }
 
 .table-shell :deep(.ant-input-affix-wrapper),
@@ -407,6 +403,32 @@
   background: rgba(255, 255, 255, 0.8);
   box-shadow: 0 2px 8px rgba(10, 55, 115, 0.08);
   color: var(--mq-text-primary);
+}
+
+@media (max-width: 1360px) {
+  .query-input {
+    flex: 1 1 200px;
+    width: 220px;
+    max-width: 260px;
+  }
+
+  .query-select {
+    flex: 0 1 124px;
+    width: 124px;
+  }
+
+  .rule-main {
+    gap: 10px;
+  }
+
+  .rule-inline-actions :deep(.ant-btn) {
+    padding: 0 10px;
+  }
+
+  .table-shell-body :deep(.ant-table-thead > tr > th),
+  .table-shell-body :deep(.ant-table-tbody > tr > td) {
+    padding-inline: 10px;
+  }
 }
 
 @media (max-width: 1180px) {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from enum import Enum
 import logging
@@ -68,9 +69,11 @@ class BatchConsumer:
         *,
         repository: DispatchRepository,
         execute_job: Callable[[BatchDispatchEnvelope], Awaitable[None]],
+        recover_failed_job: Callable[[str], Any] | None = None,
     ) -> None:
         self._repository = repository
         self._execute_job = execute_job
+        self._recover_failed_job = recover_failed_job
 
     async def run(self, transport: Any) -> None:
         async for delivery in transport.iter_deliveries(target="main"):
@@ -191,13 +194,13 @@ class BatchConsumer:
         await delivery.ack()
         return ConsumerDecision.ACK_FAILED_RECORDED
 
-    async def _settle_failed_delivery(
+    async def _settle_classified_failed_delivery(
         self,
         *,
         delivery: Delivery,
         envelope: BatchDispatchEnvelope,
         dispatch: Any,
-    ) -> ConsumerDecision:
+    ) -> ConsumerDecision | None:
         recovery_kind = str(getattr(dispatch, "recovery_kind", "") or "")
         if recovery_kind == "manual_scope_required":
             return await self._record_failure_then_ack(
@@ -212,6 +215,48 @@ class BatchConsumer:
             # last_failure_code 与 dead Outbox 由 record_terminal_failure 同事务提交。
             await delivery.ack()
             return ConsumerDecision.ACK_FAILED_RECORDED
+        return None
+
+    async def _settle_failed_delivery(
+        self,
+        *,
+        delivery: Delivery,
+        envelope: BatchDispatchEnvelope,
+        dispatch: Any,
+    ) -> ConsumerDecision:
+        settled = await self._settle_classified_failed_delivery(
+            delivery=delivery,
+            envelope=envelope,
+            dispatch=dispatch,
+        )
+        if settled is not None:
+            return settled
+        if self._recover_failed_job is not None:
+            # 常规失败结算前即时执行单任务恢复分类，避免无条件抛 DeliveryDeferred 引发断连风暴。
+            await asyncio.to_thread(self._recover_failed_job, envelope.job_id)
+            refreshed = await asyncio.to_thread(
+                self._repository.get_dispatch,
+                envelope.job_id,
+            )
+            if refreshed is None or str(getattr(refreshed, "mode", "")) != "rabbitmq":
+                raise DispatchPersistenceError(
+                    "QC dispatch disappeared during failure recovery"
+                )
+            current_generation = int(getattr(refreshed, "generation", 0) or 0)
+            if current_generation > envelope.generation:
+                await delivery.ack()
+                return ConsumerDecision.ACK_RETRY_SCHEDULED
+            if current_generation != envelope.generation:
+                raise DispatchPersistenceError(
+                    "QC dispatch generation changed unexpectedly"
+                )
+            settled = await self._settle_classified_failed_delivery(
+                delivery=delivery,
+                envelope=envelope,
+                dispatch=refreshed,
+            )
+            if settled is not None:
+                return settled
         # stale fencing 与恢复分类是两个持久步骤。分类 owner 尚未登记前绝不能
         # 抢先写 worker_failed 并 ACK，否则会让可恢复任务永久离开候选集合。
         raise DeliveryDeferred("failed QC attempt is awaiting durable recovery classification")

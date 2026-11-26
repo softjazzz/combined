@@ -1,36 +1,88 @@
 """病案数据 - 查询子域。"""
 
+import inspect
 import json
 from datetime import date, datetime
 from typing import Annotated, Any, Dict, Literal, Optional
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StrictStr
 
 from ..core.pagination import HEAVY_MAX_PAGE_SIZE, page_param, page_size_param
-from ..core.security import get_current_user
+from ..core.security import require_global_system_admin, require_roles
 from ..services.case_identity import CaseRef
 from ..services.doctor_case_scope import get_doctor_case_scope
+from ..services.medical_records.detail_service import (
+    InstituteCaseScope,
+    inspect_institute_scope,
+    list_departments_for_institute,
+)
 from ..services.medical_records.query_service import (
+    _validate_analytics_filters,
     get_departments,
     get_stats,
     get_workstation_data,
     list_medical_records,
+    parse_analytics_result_statuses,
+    sanitize_analytics_result_statuses_for_demo,
 )
 from ..services.medical_records.hospitalization_status_service import (
     default_hospitalization_status_service,
 )
+from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
 from .medical_records_common import raise_medical_records_http_error
 
 router = APIRouter(tags=["病案数据-查询"])
+_DEMO_PRIVILEGED_ROLES = frozenset({"sync_admin", "super_admin", "developer"})
+
+_VERIFY_HOSPITALIZATION_STATUS_ROLES = (
+    "admin",
+    "super_admin",
+    "qc_manager",
+    "sync_admin",
+)
+_MEDICAL_RECORDS_READ_ROLES = (
+    "admin",
+    "super_admin",
+    "qc_manager",
+    "qc_staff",
+    "sync_admin",
+    "doctor",
+    "coder",
+)
+
+
+def _effective_case_scope(request: Request, current_user: Optional[Dict[str, Any]]):
+    doctor_scope = get_doctor_case_scope(request)
+    if doctor_scope is not None:
+        return doctor_scope
+    resolved = inspect_institute_scope(current_user)
+    if resolved.kind == "global":
+        return None
+    if resolved.kind == "institute" and resolved.institute_id:
+        return InstituteCaseScope(resolved.institute_id)
+    raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
 
 
 @router.post("/workstation/hospitalization-status/verify")
-async def verify_workstation_hospitalization_status(
-    current_user: Dict[str, Any] = Depends(get_current_user),
+def verify_workstation_hospitalization_status(
+    current_user: Dict[str, Any] = Depends(require_global_system_admin),
 ):
     """轻量核验病历池病例当前是否仍在院，不同步病历文书。"""
+    from ..database import clinical_connection
+    from ..services.clinical_source_policy import fixed_cdm
+
+    selection = clinical_connection.current_selection()
+    if (
+        (selection is not None and selection.get("id") == "independent_cdm")
+        or clinical_connection.configured()
+        or fixed_cdm()
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="hospitalization_status_verify_disabled_in_independent_cdm",
+        )
 
     try:
         return default_hospitalization_status_service.verify_current_statuses()
@@ -39,7 +91,7 @@ async def verify_workstation_hospitalization_status(
 
 
 @router.get("/list")
-async def list_medical_records_api(
+def list_medical_records_api(
     request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     keyword: Optional[str] = Query(None, description="患者姓名/病案号搜索"),
@@ -47,6 +99,7 @@ async def list_medical_records_api(
     end_date: Optional[date] = Query(None, description="出院截止日期"),
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(description="每页条数"),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     try:
         return list_medical_records(
@@ -56,29 +109,46 @@ async def list_medical_records_api(
             end_date=end_date,
             page=page,
             page_size=page_size,
-            case_scope=get_doctor_case_scope(request),
+            case_scope=_effective_case_scope(request, current_user),
         )
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
 
 @router.get("/stats")
-async def get_stats_api(
+def get_stats_api(
     request: Request,
     dept: Optional[str] = Query(None, description="科室筛选"),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     try:
-        return get_stats(dept=dept, start_date=start_date, end_date=end_date, case_scope=get_doctor_case_scope(request))
+        return get_stats(
+            dept=dept,
+            start_date=start_date,
+            end_date=end_date,
+            case_scope=_effective_case_scope(request, current_user),
+        )
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
 
 @router.get("/departments")
-async def get_departments_api(request: Request):
+def get_departments_api(
+    request: Request,
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
+):
     try:
-        return get_departments(case_scope=get_doctor_case_scope(request))
+        doctor_scope = get_doctor_case_scope(request)
+        if doctor_scope is not None:
+            return get_departments(case_scope=doctor_scope)
+        resolved = inspect_institute_scope(current_user)
+        if resolved.kind == "global":
+            return get_departments(case_scope=None)
+        if resolved.kind == "institute" and resolved.institute_id:
+            return list_departments_for_institute(resolved.institute_id)
+        raise HTTPException(status_code=403, detail="账号缺少可信机构范围")
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
@@ -106,19 +176,19 @@ def _workstation_filters(
     analytics_completed_from: Optional[datetime] = Query(None, description="统计下钻完成时间起点"),
     analytics_completed_to: Optional[datetime] = Query(None, description="统计下钻完成时间终点"),
     analytics_rule_id: Optional[str] = Query(None, description="统计下钻规则 ID"),
-    analytics_result_status: Optional[
-        Literal[
-            "non_compliant",
-            "data_gap",
-            "uncertain",
-            "compliant",
-            "not_applicable",
-            "not_executed",
-            "technical_error",
-        ]
-    ] = Query(None, description="统计下钻 Canonical 结果状态"),
+    analytics_result_status: Optional[str] = Query(
+        None,
+        description="统计下钻 Canonical 结果状态（支持逗号分隔多值）",
+    ),
     analytics_scope: Optional[Literal["final"]] = Query(None, description="统计下钻资料范围"),
 ) -> dict[str, Any]:
+    normalized_analytics_result_status: Optional[str] = None
+    if analytics_result_status is not None:
+        try:
+            parsed_statuses = parse_analytics_result_statuses(analytics_result_status)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from None
+        normalized_analytics_result_status = ",".join(parsed_statuses) if parsed_statuses else None
     return dict(
         dept=dept,
         doctor=doctor,
@@ -133,15 +203,106 @@ def _workstation_filters(
         analytics_completed_from=analytics_completed_from,
         analytics_completed_to=analytics_completed_to,
         analytics_rule_id=analytics_rule_id,
-        analytics_result_status=analytics_result_status,
+        analytics_result_status=normalized_analytics_result_status,
         analytics_scope=analytics_scope,
     )
 
 
-def _query_workstation(request: Request, **parameters: Any):
+def _is_restricted_demo_account(current_user: Optional[Dict[str, Any]]) -> bool:
+    if not isinstance(current_user, dict):
+        return False
+    roles = {
+        str(role).strip().lower()
+        for role in (current_user.get("roles") or [])
+        if isinstance(role, str) and role.strip()
+    }
+    single_role = current_user.get("role")
+    if isinstance(single_role, str) and single_role.strip():
+        roles.add(single_role.strip().lower())
+    if roles & _DEMO_PRIVILEGED_ROLES:
+        return False
+    explicit_flag = current_user.get("is_demo_account")
+    if explicit_flag is False:
+        return False
+    if explicit_flag is True:
+        return True
+    email = str(current_user.get("email") or "").strip().lower()
+    return bool(email and email in DEFAULT_DEMO_USER_EMAILS)
+
+
+def _empty_demo_workstation_payload(parameters: Dict[str, Any]) -> Dict[str, Any]:
+    empty_qc_summary = {
+        "total_records": 0,
+        "ready_records": 0,
+        "not_run_records": 0,
+        "technical_error_records": 0,
+        "status_counts": {},
+        "running_state": "unknown",
+    }
+    if parameters.get("qc_summary_mode") == "only":
+        return {
+            **(
+                {"qc_summary": empty_qc_summary}
+                if parameters.get("qc_summary_include_totals", True)
+                else {}
+            ),
+            "records": [],
+        }
+    return {
+        "departments": [{"name": "全部科室", "total": 0, "warningCount": 0}],
+        "doctors": [{"name": "全部主管医师", "total": 0}],
+        "records": [],
+        "total": 0,
+        "page": int(parameters.get("page") or 1),
+        "pageSize": int(parameters.get("page_size") or 50),
+        "totalPages": 0,
+        **(
+            {}
+            if parameters.get("qc_summary_mode") == "deferred"
+            else {"qc_summary": empty_qc_summary}
+        ),
+    }
+
+
+def _query_workstation(
+    request: Request,
+    current_user: Optional[Dict[str, Any]] = None,
+    **parameters: Any,
+):
     # CDM 和业务摘要使用同步数据库调用，交由 FastAPI 在线程池执行。
     try:
-        return get_workstation_data(case_scope=get_doctor_case_scope(request), **parameters)
+        case_scope = _effective_case_scope(request, current_user)
+        call_params = dict(parameters)
+        is_demo = _is_restricted_demo_account(current_user)
+        raw_status = call_params.get("analytics_result_status")
+        if is_demo and raw_status:
+            parsed_statuses, _ = _validate_analytics_filters(
+                analytics_completed_from=call_params.get("analytics_completed_from"),
+                analytics_completed_to=call_params.get("analytics_completed_to"),
+                analytics_result_status=raw_status,
+                analytics_scope=call_params.get("analytics_scope"),
+            )
+            allowed_statuses, emptied_by_demo = sanitize_analytics_result_statuses_for_demo(
+                parsed_statuses,
+                is_demo_account=True,
+            )
+            if emptied_by_demo:
+                return _empty_demo_workstation_payload(call_params)
+            call_params["analytics_result_status"] = ",".join(allowed_statuses)
+        if is_demo:
+            try:
+                sig_params = inspect.signature(get_workstation_data).parameters
+                has_var_kw = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD for p in sig_params.values()
+                )
+                if "is_demo_account" in sig_params or has_var_kw:
+                    call_params["is_demo_account"] = True
+            except (TypeError, ValueError):
+                pass
+        return get_workstation_data(
+            case_scope=case_scope,
+            **call_params,
+        )
     except Exception as exc:
         raise_medical_records_http_error(exc)
 
@@ -153,10 +314,15 @@ def get_workstation_data_api(
     page: int = page_param(description="页码"),
     page_size: int = page_size_param(default=50, max_value=HEAVY_MAX_PAGE_SIZE, description="每页条数"),
     qc_summary_mode: Literal["inline", "deferred", "only"] = Query("inline"),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
     return _query_workstation(
-        request, **filters, page=page, page_size=page_size, qc_summary_mode=qc_summary_mode,
+        request,
+        current_user=current_user,
+        **filters,
+        page=page,
+        page_size=page_size,
+        qc_summary_mode=qc_summary_mode,
     )
 
 
@@ -169,6 +335,7 @@ class WorkstationQcSummaryRequest(BaseModel):
     record_keys: list[Annotated[StrictStr, Field(max_length=3 * 6 * _RECORD_COORDINATE_MAX_LENGTH + 10)]] = Field(
         max_length=HEAVY_MAX_PAGE_SIZE,
     )
+    include_totals: StrictBool = True
 
     def identities(self) -> tuple[CaseRef, ...]:
         identities: dict[CaseRef, None] = {}
@@ -195,9 +362,14 @@ def get_workstation_qc_summary_api(
     request: Request,
     body: WorkstationQcSummaryRequest,
     filters: dict[str, Any] = Depends(_workstation_filters),
-    current_user: Dict[str, Any] = Depends(get_current_user),
+    current_user: Dict[str, Any] = Depends(require_roles(*_MEDICAL_RECORDS_READ_ROLES)),
 ):
-    """按已显示的病历取行摘要，并按相同筛选取全集统计。"""
+    """按已显示的病历取行摘要，可同时按相同筛选取全集统计。"""
     return _query_workstation(
-        request, **filters, qc_summary_mode="only", qc_summary_identities=body.identities(),
+        request,
+        current_user=current_user,
+        **filters,
+        qc_summary_mode="only",
+        qc_summary_identities=body.identities(),
+        qc_summary_include_totals=body.include_totals,
     )

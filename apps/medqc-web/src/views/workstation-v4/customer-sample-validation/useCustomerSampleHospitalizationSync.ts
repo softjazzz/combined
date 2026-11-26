@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import { message } from 'ant-design-vue'
 import type {
   HospitalizationScopeMode,
@@ -42,6 +42,15 @@ export function useCustomerSampleHospitalizationSync(
   const hospitalizationScopeNeedsDischargeRange = computed(() =>
     ['discharged', 'active_and_discharged'].includes(hospitalizationSyncForm.value.scopeMode),
   )
+  const hospitalizationDischargeRangeInvalid = computed(() => {
+    const form = hospitalizationSyncForm.value
+    return Boolean(
+      hospitalizationScopeNeedsDischargeRange.value &&
+        form.dischargeStartDate &&
+        form.dischargeEndDate &&
+        form.dischargeStartDate > form.dischargeEndDate,
+    )
+  })
   const hospitalizationSyncDepartmentOptions = computed(() =>
     (hospitalizationSyncPreview.value?.departments || []).map((department) => ({
       label: `${department.name}（${department.total_count}）`,
@@ -60,6 +69,7 @@ export function useCustomerSampleHospitalizationSync(
   })
   const hospitalizationSyncCanSubmit = computed(
     () =>
+      !hospitalizationDischargeRangeInvalid.value &&
       !hospitalizationSyncPreviewLoading.value &&
       !hospitalizationSyncPreviewError.value &&
       Number(hospitalizationSyncPreview.value?.counts?.deduplicated || 0) > 0,
@@ -67,6 +77,14 @@ export function useCustomerSampleHospitalizationSync(
   const hospitalizationSyncOkText = computed(() => {
     const count = Number(hospitalizationSyncPreview.value?.counts?.deduplicated || 0)
     return count > 0 ? `同步 ${count} 份病历` : '开始同步'
+  })
+
+  watch(selectedPoolId, () => {
+    hospitalizationSyncForm.value.departments = []
+    hospitalizationSyncPreview.value = null
+    hospitalizationSyncPreviewError.value = ''
+    hospitalizationSyncPreviewLoading.value = false
+    hospitalizationSyncPreviewRequestSequence.value += 1
   })
 
   function currentLocalDate(): string {
@@ -80,7 +98,9 @@ export function useCustomerSampleHospitalizationSync(
     if (!form.asOfDate) return null
     if (
       hospitalizationScopeNeedsDischargeRange.value &&
-      (!form.dischargeStartDate || !form.dischargeEndDate)
+      (!form.dischargeStartDate ||
+        !form.dischargeEndDate ||
+        form.dischargeStartDate > form.dischargeEndDate)
     ) {
       return null
     }
@@ -99,6 +119,13 @@ export function useCustomerSampleHospitalizationSync(
 
   async function refreshHospitalizationScopePreview() {
     const poolId = selectedPoolId.value
+    if (hospitalizationDischargeRangeInvalid.value) {
+      hospitalizationSyncPreviewRequestSequence.value += 1
+      hospitalizationSyncPreviewLoading.value = false
+      hospitalizationSyncPreview.value = null
+      hospitalizationSyncPreviewError.value = '出院开始日期不能晚于出院结束日期'
+      return
+    }
     const payload = buildHospitalizationScopePayload()
     if (!poolId || !payload) return
     const requestSequence = ++hospitalizationSyncPreviewRequestSequence.value
@@ -137,11 +164,15 @@ export function useCustomerSampleHospitalizationSync(
 
   async function handleHospitalizationSync() {
     const poolId = selectedPoolId.value
-    const payload = buildHospitalizationScopePayload()
     if (!poolId) {
       message.warning('请先选择样本池')
       return
     }
+    if (hospitalizationDischargeRangeInvalid.value) {
+      message.warning('出院开始日期不能晚于出院结束日期')
+      return
+    }
+    const payload = buildHospitalizationScopePayload()
     if (!payload) {
       message.warning('请完整填写住院范围日期')
       return

@@ -171,19 +171,52 @@ def test_classified_failed_terminal_row_can_archive_but_status_mismatch_cannot(s
 
 
 @pytest.mark.parametrize("field,value", [
-    ("recovery_kind", "delivery"),
-    ("recovery_scope_json", "{}"),
+    ("recovery_kind", "unstarted"),
+    ("recovery_kind", "failed_scope"),
+    ("recovery_kind", "manual_scope_required"),
     ("recovery_reason_code", "lease_expired"),
-    ("recovery_registered_at", NOW),
 ])
-def test_any_persisted_recovery_marker_blocks_archive(store, field, value):
+def test_unsettled_failed_recovery_markers_block_archive(store, field, value):
     _engine, sessions, repo, maintenance = store
-    row = add(store)
+    row = add(store, job_status="failed")
     with sessions.begin() as session:
         session.execute(update(repo.dispatch_table).where(
             repo.dispatch_table.c.job_id == row["job_id"]
         ).values(**{field: value}))
     assert maintenance.archive(apply=True, now=NOW)["archived_rows"] == 0
+
+
+def test_settled_recovered_or_reconciled_terminal_rows_can_archive(store):
+    _engine, sessions, repo, maintenance = store
+    reconciled = add(store, job_status="completed")
+    successor = add(store, job_status="failed")
+    manual_dead = add(store, job_status="failed")
+    with sessions.begin() as session:
+        session.execute(update(repo.dispatch_table).where(
+            repo.dispatch_table.c.job_id == reconciled["job_id"]
+        ).values(
+            recovery_kind="delivery",
+            recovery_reason_code="startup_queued_reconcile",
+            recovery_registered_at=NOW - timedelta(days=31),
+        ))
+        session.execute(update(repo.dispatch_table).where(
+            repo.dispatch_table.c.job_id == successor["job_id"]
+        ).values(
+            recovery_kind="failed_scope",
+            recovery_reason_code="retry_successor_created",
+            recovery_scope_json=json.dumps({"retry_job_id": "next-job"}),
+            recovery_registered_at=NOW - timedelta(days=31),
+        ))
+        session.execute(update(repo.dispatch_table).where(
+            repo.dispatch_table.c.job_id == manual_dead["job_id"]
+        ).values(
+            recovery_kind="manual_scope_required",
+            recovery_reason_code="saved_results_without_provable_scope",
+            recovery_registered_at=NOW - timedelta(days=31),
+            last_failure_code="manual_scope_required",
+        ))
+    result = maintenance.archive(apply=True, now=NOW)
+    assert result["archived_rows"] == 3
 
 
 def test_capacity_thresholds_load_from_environment_and_reject_malformed_values():

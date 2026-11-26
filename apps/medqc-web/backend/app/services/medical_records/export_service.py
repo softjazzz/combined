@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from fastapi import HTTPException
 from sqlalchemy import MetaData, func, select, text
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,85 @@ from ..clinical_read import clinical_query, clinical_read_table, clinical_table_
 from ...database.connection import Base, engine
 from ...database.models.cdm import MedicalRecordFrontpage, Diagnosis, MrSurgery, MrCost
 from .errors import MedicalRecordsNotFoundError
+
+
+# 仅允许通过通用数据检视接口访问临床 CDM 与质控结果业务表，严禁访问用户/认证/凭据/token 等系统表。
+ALLOWED_TABLE_DATA_TABLES: frozenset[str] = frozenset({
+    "patient_information",
+    "inpat_registration",
+    "mr",
+    "hospitalization_status_projection",
+    "mr_surgery",
+    "mr_cost",
+    "diagnosis",
+    "admission_record",
+    "discharge_record",
+    "qc_result",
+    "first_course_record",
+    "daily_course_record",
+    "senior_course_record",
+    "postsurg_firstcourse_record",
+    "consultation_record",
+    "rescue_record",
+    "transfer_in_record",
+    "transfer_out_record",
+    "surgery_record",
+    "labtest_item_report",
+    "exam_master",
+    "exam_item_report",
+    "diffcase_discussion_record",
+    "death_discussion",
+    "death_record",
+    "handoff_record",
+    "handover_record",
+    "summary_record",
+    "presurg_summary",
+    "presurg_discussion",
+    "surgery_safecheck_record",
+    "surgery_risk_assessment",
+    "anesthesia_record",
+    "newborn_record",
+    "bloodtrans_record",
+    "nursing_record",
+    "medical_insurance_settlement",
+    "medical_insurance_settlement_cost",
+    "inpat_drug_order",
+    "inpat_nondrug_order",
+    "inpat_bill_item",
+    "labtest_master",
+    "labtest_item",
+    "mr_bloodtrans",
+    "mr_icu",
+    "mr_customize",
+    "medinsur_receipt",
+    "pathology_exam_master",
+    "pathology_exam_report",
+    "epidemic_record",
+    "outpat_record",
+    "surgery_application",
+    "docpat_commu_record",
+    "daily_admission_record",
+    "daily_death_record",
+    "preane_surveil_record",
+    "postane_surveil_record",
+    "surgery_inform_consent",
+    "crisis_value_record",
+    "blood_application",
+    "surgery_inventory_record",
+    "ai_frontpage_draft",
+})
+
+_SENSITIVE_TABLE_KEYWORDS = (
+    "user",
+    "auth",
+    "token",
+    "secret",
+    "password",
+    "credential",
+    "session",
+    "llm_config",
+    "api_key",
+)
 
 
 def _session_factory() -> Session:
@@ -34,6 +114,8 @@ def get_schema(metadata: MetaData | None = None) -> dict[str, Any]:
 
     tables = []
     for table_name, table_obj in metadata.tables.items():
+        if table_name not in ALLOWED_TABLE_DATA_TABLES:
+            continue
         col_list = []
         for col in table_obj.columns:
             col_list.append({
@@ -53,28 +135,88 @@ def get_schema(metadata: MetaData | None = None) -> dict[str, Any]:
     return {"tables": tables, "total_tables": len(tables)}
 
 
+def _resolve_table_order_columns(table_obj: Any) -> list[Any]:
+    pk_cols = list(table_obj.primary_key.columns)
+    if pk_cols:
+        return pk_cols
+    for col_name in ("id", "visit_id", "patient_id"):
+        if col_name in table_obj.c:
+            return [table_obj.c[col_name]]
+    first_col = next(iter(table_obj.columns), None)
+    return [first_col] if first_col is not None else []
+
+
 def get_table_data(
     table_name: str,
     page: int = 1,
     page_size: int = 20,
     metadata: MetaData | None = None,
     session_factory: Callable[[], Any] | None = None,
+    *,
+    patient_id: str | None = None,
+    visit_id: str | None = None,
+    institute_id: str | None = None,
+    require_institute_scope: bool = False,
 ) -> dict[str, Any]:
     metadata = metadata or Base.metadata
-    allowed = set(metadata.tables.keys())
-    if table_name not in allowed:
-        raise MedicalRecordsNotFoundError(f"表不存在: {table_name}")
+    normalized_name = str(table_name or "").strip()
+    lowered_name = normalized_name.lower()
+    if normalized_name not in ALLOWED_TABLE_DATA_TABLES:
+        if normalized_name in metadata.tables or any(
+            kw in lowered_name for kw in _SENSITIVE_TABLE_KEYWORDS
+        ):
+            raise HTTPException(status_code=403, detail=f"表不允许访问: {normalized_name}")
+        raise MedicalRecordsNotFoundError(f"表不存在: {normalized_name}")
+    if normalized_name not in metadata.tables:
+        raise MedicalRecordsNotFoundError(f"表不存在: {normalized_name}")
+
+    from ...database import clinical_connection
+
+    if clinical_connection.configured():
+        raise HTTPException(
+            status_code=409,
+            detail="legacy_table_data_disabled_in_independent_cdm",
+        )
 
     session_factory = session_factory or _session_factory
-    table_obj = metadata.tables[table_name]
-    # 通用查表也包含QC/系统表，只限定同步目录中的临床表。
+    table_obj = metadata.tables[normalized_name]
+    # 通用查表仅允许白名单内的业务表，同步临床表限定到 cdm schema。
     if is_synced_clinical_table(table_obj.name):
         table_obj = clinical_read_table(table_obj)
 
+    scope_institute = str(institute_id).strip() if institute_id is not None else ""
+    if require_institute_scope and not scope_institute:
+        raise HTTPException(status_code=403, detail="非全局用户缺少可信机构范围")
+
+    count_stmt = select(func.count()).select_from(table_obj)
+    data_stmt = select(table_obj)
+    if require_institute_scope or scope_institute:
+        if "institute_id" not in table_obj.c:
+            raise HTTPException(
+                status_code=403,
+                detail=f"表 {normalized_name} 不支持机构级隔离查询",
+            )
+        count_stmt = count_stmt.where(table_obj.c.institute_id == scope_institute)
+        data_stmt = data_stmt.where(table_obj.c.institute_id == scope_institute)
+
+    filter_patient = str(patient_id).strip() if patient_id is not None else ""
+    if filter_patient and "patient_id" in table_obj.c:
+        count_stmt = count_stmt.where(table_obj.c.patient_id == filter_patient)
+        data_stmt = data_stmt.where(table_obj.c.patient_id == filter_patient)
+
+    filter_visit = str(visit_id).strip() if visit_id is not None else ""
+    if filter_visit and "visit_id" in table_obj.c:
+        count_stmt = count_stmt.where(table_obj.c.visit_id == filter_visit)
+        data_stmt = data_stmt.where(table_obj.c.visit_id == filter_visit)
+
+    order_cols = _resolve_table_order_columns(table_obj)
+    if order_cols:
+        data_stmt = data_stmt.order_by(*order_cols)
+
     with session_factory() as session:
-        total = session.execute(select(func.count()).select_from(table_obj)).scalar() or 0
+        total = session.execute(count_stmt).scalar() or 0
         offset = (page - 1) * page_size
-        rows = session.execute(select(table_obj).limit(page_size).offset(offset)).fetchall()
+        rows = session.execute(data_stmt.limit(page_size).offset(offset)).fetchall()
         columns = [col.name for col in table_obj.columns]
 
         items = []
@@ -88,7 +230,7 @@ def get_table_data(
             items.append(item)
 
     return {
-        "table_name": table_name,
+        "table_name": normalized_name,
         "total": total,
         "page": page,
         "page_size": page_size,
@@ -178,11 +320,39 @@ def get_frontpage_sheet(
         identity = {"patient_id": patient_id, "visit_id": visit_id}
         if institute_id is not None:
             identity["institute_id"] = institute_id
-        fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
-            **identity
-        ).first()
-        if not fp:
-            raise MedicalRecordsNotFoundError("未找到病案首页数据")
+            fp = clinical_query(session, MedicalRecordFrontpage).filter_by(
+                **identity
+            ).first()
+            if not fp:
+                raise MedicalRecordsNotFoundError("未找到病案首页数据")
+        else:
+            fp_rows = clinical_query(session, MedicalRecordFrontpage).filter_by(
+                **identity
+            ).limit(2).all()
+            if not fp_rows:
+                raise MedicalRecordsNotFoundError("未找到病案首页数据")
+            matched_institutes = {
+                str(getattr(row, "institute_id", None) or "").strip()
+                for row in fp_rows
+            }
+            visit_institutes = {
+                str(inst or "").strip()
+                for (inst,) in clinical_query(
+                    session, MedicalRecordFrontpage.institute_id
+                ).filter(
+                    MedicalRecordFrontpage.visit_id == visit_id
+                ).distinct().limit(2).all()
+            }
+            if len(matched_institutes) > 1 or len(visit_institutes) > 1:
+                raise HTTPException(
+                    status_code=409,
+                    detail="同一就诊号存在多院区冲突，请指定 institute_id",
+                )
+            fp = fp_rows[0]
+            resolved_institute = getattr(fp, "institute_id", None)
+            if resolved_institute is not None and str(resolved_institute).strip():
+                institute_id = str(resolved_institute)
+                identity["institute_id"] = institute_id
 
         basic = {}
         for col in MedicalRecordFrontpage.__table__.columns:

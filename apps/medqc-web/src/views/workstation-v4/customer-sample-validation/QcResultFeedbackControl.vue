@@ -39,7 +39,7 @@
 
     <template v-else>
       <div class="feedback-prompt">
-        <span>这个质控结果准确吗？</span>
+        <span>{{ editing ? '反馈结论' : '这个质控结果准确吗？' }}</span>
         <div
           class="feedback-actions"
           role="group"
@@ -48,15 +48,19 @@
           <button
             type="button"
             class="feedback-action is-correct"
+            :class="{ 'is-selected': editing && selectedType === 'correct' }"
+            :aria-pressed="editing && selectedType === 'correct'"
             data-testid="qc-result-feedback-correct"
             :disabled="saving"
-            @click="submitCorrect"
+            @click="handleCorrectClick"
           >
             准确
           </button>
           <button
             type="button"
             class="feedback-action is-incorrect"
+            :class="{ 'is-selected': editing && selectedType === 'incorrect' }"
+            :aria-pressed="editing && selectedType === 'incorrect'"
             data-testid="qc-result-feedback-incorrect"
             :disabled="saving"
             @click="startIncorrectEditing"
@@ -66,6 +70,8 @@
           <button
             type="button"
             class="feedback-action is-note"
+            :class="{ 'is-selected': editing && selectedType === 'note' }"
+            :aria-pressed="editing && selectedType === 'note'"
             data-testid="qc-result-feedback-note"
             :disabled="saving"
             @click="startNoteEditing"
@@ -82,7 +88,7 @@
         @submit.prevent="submit"
       >
         <div class="feedback-form-title">
-          <strong>{{ selectedType === 'note' ? '补充说明' : '指出结果问题' }}</strong>
+          <strong>{{ formTitle }}</strong>
           <span>仅用于演示反馈，不会修改本次质控结果。</span>
         </div>
 
@@ -127,12 +133,12 @@
         </label>
 
         <label class="feedback-field">
-          <span>{{ selectedType === 'note' ? '说明' : '补充说明' }}</span>
+          <span>{{ commentLabel }}</span>
           <textarea
             v-model="comment"
             maxlength="500"
             rows="3"
-            :placeholder="selectedType === 'note' ? '请填写需要补充的情况' : '请说明结果哪里不准确'"
+            :placeholder="commentPlaceholder"
             data-testid="qc-result-feedback-comment"
           />
         </label>
@@ -225,11 +231,29 @@ const errorCategoryOptions: Array<{ value: QcResultFeedbackErrorCategory; label:
   { value: 'other', label: '其他' },
 ]
 
+const formTitle = computed(() => {
+  if (selectedType.value === 'correct') return '修改反馈备注'
+  if (selectedType.value === 'note') return '补充说明'
+  return '指出结果问题'
+})
+
+const commentLabel = computed(() => {
+  if (selectedType.value === 'correct') return '备注说明（可选）'
+  if (selectedType.value === 'note') return '说明'
+  return '补充说明'
+})
+
+const commentPlaceholder = computed(() => {
+  if (selectedType.value === 'correct') return '可选：补充说明为何认为本次质控结果准确'
+  if (selectedType.value === 'note') return '请填写需要补充的情况'
+  return '请说明结果哪里不准确'
+})
+
 const canSubmit = computed(() => {
   if (selectedType.value === 'correct') return true
   if (!comment.value.trim()) return false
   if (selectedType.value === 'note') return true
-  return Boolean(expectedStatus.value && errorCategory.value)
+  return selectedType.value === 'incorrect' && Boolean(expectedStatus.value && errorCategory.value)
 })
 
 function feedbackTypeLabel(type: QcResultFeedbackType) {
@@ -257,11 +281,28 @@ function startEditingFromButton() {
   startEditing()
 }
 
+function handleCorrectClick() {
+  if (props.saving) return
+  if (editing.value) {
+    selectedType.value = 'correct'
+    return
+  }
+  submitCorrect()
+}
+
 function startIncorrectEditing() {
+  if (editing.value) {
+    selectedType.value = 'incorrect'
+    return
+  }
   startEditing('incorrect')
 }
 
 function startNoteEditing() {
+  if (editing.value) {
+    selectedType.value = 'note'
+    return
+  }
   startEditing('note')
 }
 
@@ -280,8 +321,10 @@ function submit() {
   const input: SaveQcResultFeedbackInput = {
     feedback_type: selectedType.value,
   }
-  if (expectedStatus.value) input.expected_status = expectedStatus.value
-  if (errorCategory.value) input.error_category = errorCategory.value
+  if (selectedType.value === 'incorrect') {
+    if (expectedStatus.value) input.expected_status = expectedStatus.value
+    if (errorCategory.value) input.error_category = errorCategory.value
+  }
   if (comment.value.trim()) input.comment = comment.value.trim()
   emit('submit', input)
 }
@@ -301,9 +344,10 @@ watch(
 
 <style scoped>
 .qc-result-feedback {
-  margin-top: 16px;
-  padding: 12px 0 0;
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  container-type: inline-size;
+  margin: 0;
+  padding: 0;
+  border-top: 0;
   color: rgba(29, 29, 31, 0.72);
   font-size: 12px;
   line-height: 18px;
@@ -369,12 +413,33 @@ watch(
   color: #087443;
 }
 
+.feedback-action.is-correct.is-selected {
+  border-color: rgba(8, 116, 67, 0.45);
+  background: rgba(8, 116, 67, 0.1);
+  color: #087443;
+  box-shadow: 0 0 0 2px rgba(8, 116, 67, 0.12);
+}
+
 .feedback-action.is-incorrect {
   color: #c24136;
 }
 
+.feedback-action.is-incorrect.is-selected {
+  border-color: rgba(194, 65, 54, 0.45);
+  background: rgba(194, 65, 54, 0.1);
+  color: #c24136;
+  box-shadow: 0 0 0 2px rgba(194, 65, 54, 0.12);
+}
+
 .feedback-action.is-note {
   color: #7c5a00;
+}
+
+.feedback-action.is-note.is-selected {
+  border-color: rgba(124, 90, 0, 0.45);
+  background: rgba(124, 90, 0, 0.1);
+  color: #7c5a00;
+  box-shadow: 0 0 0 2px rgba(124, 90, 0, 0.12);
 }
 
 .feedback-action:disabled,
@@ -501,7 +566,7 @@ watch(
   line-height: 17px;
 }
 
-@media (max-width: 520px) {
+@container (max-width: 520px) {
   .feedback-prompt,
   .feedback-submitted {
     align-items: flex-start;

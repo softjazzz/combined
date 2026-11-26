@@ -6,7 +6,7 @@
     :footer="null"
     centered
     class="semantic-modal"
-    @update:open="emit('update:open', $event)"
+    @update:open="handleOpenChange"
   >
     <div
       v-if="rule"
@@ -161,7 +161,11 @@
           </div>
         </div>
 
-        <div class="luxian-section">
+        <div
+          v-if="!confirmedResultsOnly"
+          class="luxian-section"
+          data-testid="rule-execution-mapping"
+        >
           <h4>执行映射（实现信息）</h4>
           <div class="rule-chip-list">
             <span
@@ -180,9 +184,19 @@
         </div>
       </div>
 
+      <a-alert
+        v-if="isLuxianRule && !confirmedResultsOnly"
+        type="info"
+        show-icon
+        data-testid="lx0609-test-guide"
+        message="LX0609 规则不支持纯文本单条测试"
+        description="该规则依赖完整病历多文书结构与时序信息，请前往「规则验收」使用结构化测试病例进行验证。"
+      />
+
       <div
-        v-if="isAdmin && !isLuxianRule"
+        v-if="isAdmin && !isLuxianRule && !confirmedResultsOnly"
         class="prompt-panel"
+        data-testid="rule-prompt-panel"
       >
         <div class="prompt-header">
           <div>
@@ -195,6 +209,7 @@
               v-if="!isEditingPrompt"
               type="link"
               size="small"
+              :disabled="promptLoading || Boolean(promptError)"
               @click="emit('startEditPrompt')"
             >
               编辑
@@ -218,8 +233,16 @@
           </div>
         </div>
 
+        <a-alert
+          v-if="promptError"
+          type="error"
+          show-icon
+          class="prompt-error-alert"
+          data-testid="prompt-load-error"
+          :message="promptError"
+        />
         <div
-          v-if="!isEditingPrompt"
+          v-else-if="!isEditingPrompt"
           class="prompt-content"
         >
           {{ currentPrompt || '// 暂无检查模板，使用系统默认逻辑' }}
@@ -237,14 +260,30 @@
       <div class="detail-footer">
         <a-button
           class="detail-secondary-btn"
-          @click="emit('update:open', false)"
+          @click="requestClose"
         >
           关闭
         </a-button>
+        <router-link
+          v-if="isLuxianRule && !confirmedResultsOnly"
+          class="ant-btn ant-btn-primary detail-primary-btn detail-validation-link"
+          data-testid="detail-go-rule-validation"
+          :to="{
+            name: 'WorkstationV4RuleValidationDetail',
+            params: { ruleId: rule.rule_id },
+          }"
+          @click="emit('update:open', false)"
+        >
+          前往规则验收
+        </router-link>
         <a-button
+          v-if="!confirmedResultsOnly"
           type="primary"
           class="detail-primary-btn"
-          @click="emit('startTest')"
+          data-testid="detail-start-test"
+          :disabled="isLuxianRule"
+          :title="isLuxianRule ? 'LX0609 规则请前往规则验收使用结构化病例验证' : undefined"
+          @click="handleStartTest"
         >
           开始测试
         </a-button>
@@ -255,6 +294,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
+import { Modal } from 'ant-design-vue'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import type {
   SemanticRuleEngineJudgmentDetail,
   SemanticRuleEngineJudgmentWithheld,
@@ -268,6 +309,7 @@ const props = defineProps<{
   rule: SemanticRuleItem | null
   isAdmin: boolean
   promptLoading: boolean
+  promptError?: string
   isEditingPrompt: boolean
   currentPrompt: string
   editingPrompt: string
@@ -282,7 +324,55 @@ const emit = defineEmits<{
   startTest: []
 }>()
 
+const { confirmedResultsOnly } = useQcResultVisibility()
+
 const isLuxianRule = computed(() => props.rule?.rule_id.startsWith('LX0609-') || false)
+const hasUnsavedPrompt = computed(
+  () => props.isEditingPrompt && props.editingPrompt !== props.currentPrompt,
+)
+
+function requestClose() {
+  if (!hasUnsavedPrompt.value) {
+    emit('update:open', false)
+    return
+  }
+  Modal.confirm({
+    title: '放弃未保存的检查模板修改？',
+    content: '当前检查模板仍有未保存的编辑内容，关闭后将丢失。',
+    okText: '放弃并关闭',
+    cancelText: '继续编辑',
+    onOk: () => {
+      emit('cancelEditPrompt')
+      emit('update:open', false)
+    },
+  })
+}
+
+function handleOpenChange(value: boolean) {
+  if (!value) {
+    requestClose()
+    return
+  }
+  emit('update:open', true)
+}
+
+function handleStartTest() {
+  if (confirmedResultsOnly.value || isLuxianRule.value) return
+  if (!hasUnsavedPrompt.value) {
+    emit('startTest')
+    return
+  }
+  Modal.confirm({
+    title: '放弃未保存的检查模板修改？',
+    content: '当前检查模板尚未保存，切换到测试窗口将放弃未保存内容。',
+    okText: '放弃并继续',
+    cancelText: '继续编辑',
+    onOk: () => {
+      emit('cancelEditPrompt')
+      emit('startTest')
+    },
+  })
+}
 
 const customerPolicy = computed(() =>
   isLuxianRule.value ? props.rule?.customer_policy : undefined,
@@ -379,7 +469,7 @@ function formatPolicySource(value: string): string {
   max-height: min(78vh, 760px);
   overflow-y: auto;
   padding: 18px 22px 20px;
-  background: #f5f5f7;
+  background: var(--mq-bg-page);
 }
 
 .detail-wrap {
@@ -458,7 +548,7 @@ function formatPolicySource(value: string): string {
 }
 
 .detail-descriptions :deep(.ant-descriptions-item-label) {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -541,7 +631,7 @@ function formatPolicySource(value: string): string {
 
 .luxian-section .muted {
   margin-top: 4px;
-  color: rgba(29, 29, 31, 0.38);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -565,7 +655,7 @@ function formatPolicySource(value: string): string {
 }
 
 .engine-label {
-  color: rgba(29, 29, 31, 0.5);
+  color: var(--mq-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -692,7 +782,7 @@ function formatPolicySource(value: string): string {
 }
 
 .mapping-empty {
-  color: rgba(29, 29, 31, 0.46);
+  color: var(--mq-text-tertiary);
   font-size: 12px;
 }
 
@@ -739,6 +829,18 @@ function formatPolicySource(value: string): string {
 
 .prompt-editor {
   margin-top: 10px;
+}
+
+.prompt-error-alert {
+  margin-top: 10px;
+}
+
+.detail-validation-link {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  color: #fff;
+  text-decoration: none;
 }
 
 .detail-footer {

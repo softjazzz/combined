@@ -33,7 +33,6 @@ _DEFERRED_ROUTE_AUTH_PATH = "/api/v1/qc/luxian-0609/preproduction/evaluate"
 PUBLIC_PREFIX_PATHS = {
     "/docs/",
     "/redoc/",
-    "/api/v1/demo/",
 }
 
 

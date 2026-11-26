@@ -7,9 +7,14 @@ import QCRecordCompareWorkbench from '@/views/workstation-v4/semantic-rules/comp
 import SingleRecordQcResultPanel from '@/views/workstation-v4/customer-sample-validation/SingleRecordQcResultPanel.vue'
 import type { QCRecordCompareIssue } from '@/views/workstation-v4/semantic-rules/types'
 
-const { getDocumentsMock, getDocumentMock } = vi.hoisted(() => ({
+import { defineComponent, h, ref } from 'vue'
+import { useQcResultFeedback } from '@/views/workstation-v4/customer-sample-validation/useQcResultFeedback'
+
+const { getDocumentsMock, getDocumentMock, getFeedbackMock, saveFeedbackMock } = vi.hoisted(() => ({
   getDocumentsMock: vi.fn(),
   getDocumentMock: vi.fn(),
+  getFeedbackMock: vi.fn(async () => ({ success: true, data: {} })),
+  saveFeedbackMock: vi.fn(async () => ({ success: true })),
 }))
 
 vi.mock('@/services/manual-case-sample-service', () => ({
@@ -18,9 +23,9 @@ vi.mock('@/services/manual-case-sample-service', () => ({
 }))
 
 vi.mock('@/api/qc-result-feedback-demo', () => ({
-  getQcResultFeedbackDemo: vi.fn(async () => ({ success: true, data: [] })),
+  getQcResultFeedbackDemo: getFeedbackMock,
   listQcResultFeedbackDemo: vi.fn(async () => ({ success: true, data: [] })),
-  saveQcResultFeedbackDemo: vi.fn(async () => ({ success: true })),
+  saveQcResultFeedbackDemo: saveFeedbackMock,
 }))
 
 const issues: QCRecordCompareIssue[] = [
@@ -62,6 +67,10 @@ const issues: QCRecordCompareIssue[] = [
 // 原有完整视图用例固定为开发身份；演示身份在专项用例中显式切换。
 beforeEach(async () => {
   setActivePinia(createPinia())
+  getFeedbackMock.mockReset()
+  saveFeedbackMock.mockReset()
+  getFeedbackMock.mockResolvedValue({ success: true, data: {} })
+  saveFeedbackMock.mockResolvedValue({ success: true })
   vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
   vi.spyOn(ApiService, 'getCurrentUser').mockResolvedValue({
     success: true,
@@ -328,7 +337,9 @@ describe('QCRecordCompareWorkbench', () => {
     expect(wrapper.find('.record-compare-mobile-tabs').exists()).toBe(false)
     expect(wrapper.find('.record-location-chip').exists()).toBe(false)
     await wrapper.find('[data-testid="record-document-filter-order"]').trigger('click')
-    await wrapper.find('[data-testid="record-document-group-toggle-order"]').trigger('click')
+    expect(
+      wrapper.get('[data-testid="record-document-group-toggle-order"]').attributes('aria-expanded'),
+    ).toBe('true')
     await wrapper.find('.record-document-item').trigger('click')
     expect(wrapper.find('.record-content-column').text()).toContain('观察生命体征')
 
@@ -1591,4 +1602,379 @@ it('当前病历与历史任务快照参数互斥', async () => {
   await flushPromises()
   expect(getDocumentsMock).toHaveBeenLastCalledWith('V', expect.objectContaining({ job_id: 'HISTORICAL' }))
   wrapper.unmount()
+})
+
+describe('P1-14/15/16 robustness regressions', () => {
+  it('P1-14: 目录、正文和医嘱请求 reject 时清理加载态并允许重试', async () => {
+    getDocumentsMock.mockRejectedValueOnce(new Error('network down'))
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-reject',
+        jobId: 'job-reject',
+        issues: [],
+        lazyResultDocuments: true,
+      },
+    })
+    await flushPromises()
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
+    expect(wrapper.text()).toContain('读取病历文书失败')
+
+    // 重试目录成功，但正文请求 reject
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        documents: [
+          {
+            key: 'doc-1',
+            source_document_id: 'doc-1',
+            document_type: 'first_course_record',
+            execution_domain: 'course',
+            title: '首次病程记录',
+            has_content: true,
+            content_loaded: false,
+            content: '',
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockRejectedValueOnce(new Error('doc timeout'))
+    await wrapper.get('.readonly-medical-document-state.is-error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.hospital-loading').exists()).toBe(false)
+    expect(wrapper.text()).toContain('当前文书读取失败')
+
+    // 重试正文成功（documentRequests 已清理）
+    getDocumentMock.mockResolvedValueOnce({
+      success: true,
+      data: { key: 'doc-1', content: '重试后的正文', content_loaded: true },
+    })
+    await wrapper.get('.record-content-retry').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('重试后的正文')
+
+    // 医嘱加载 reject 后进入 failed，可点击重试恢复
+    getDocumentsMock.mockRejectedValueOnce(new Error('orders timeout'))
+    await wrapper.get('[data-testid="record-document-filter-order"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('医嘱读取失败')
+
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        documents: [
+          {
+            key: 'order-1',
+            document_type: 'inpat_drug_order',
+            source_document_id: 'order-1',
+            title: '临时医嘱',
+            order_item: '生理盐水',
+            has_content: true,
+            content: '',
+          },
+        ],
+      },
+    })
+    await wrapper.get('.readonly-medical-document-state.is-error button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('医嘱（1条）')
+    wrapper.unmount()
+  })
+
+  it('P1-14: useQcResultFeedback 在网络异常、跨病历切换、按规则隔离错误和延迟 sync_admin 角色下保持一致', async () => {
+    setActivePinia(createPinia())
+    let resolveCurrentUser!: (value: unknown) => void
+    vi.spyOn(ApiService, 'isAuthenticated').mockReturnValue(true)
+    vi.spyOn(ApiService, 'getCurrentUser').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveCurrentUser = resolve
+        }) as ReturnType<typeof ApiService.getCurrentUser>,
+    )
+    const authStore = useAuthStore()
+    const initPromise = authStore.initialize()
+    const jobId = ref('job-1')
+    const recordRef = ref('rec-1')
+    let api!: ReturnType<typeof useQcResultFeedback>
+    const Harness = defineComponent({
+      setup() {
+        api = useQcResultFeedback(jobId, recordRef)
+        return () => h('div', api.isEnabled.value ? 'on' : 'off')
+      },
+    })
+
+    // 1. 延迟水合 sync_admin 角色后自动触发加载，且 load reject 不会永久卡住 loading
+    getFeedbackMock.mockRejectedValueOnce(new Error('load failed'))
+    const wrapper = mount(Harness)
+    await flushPromises()
+    expect(api.isEnabled.value).toBe(false)
+    expect(getFeedbackMock).not.toHaveBeenCalled()
+
+    resolveCurrentUser({
+      success: true,
+      data: { id: 'sync-late', email: 'sync@example.com', roles: ['sync_admin'], is_demo_account: false },
+    })
+    await initPromise
+    await flushPromises()
+    expect(api.isEnabled.value).toBe(true)
+    expect(getFeedbackMock).toHaveBeenCalledTimes(1)
+    expect(api.loading.value).toBe(false)
+    expect(api.error.value).toContain('反馈暂时无法使用')
+
+    // 2. save reject 不会永久卡住 savingRuleId，且错误按规则隔离
+    saveFeedbackMock.mockRejectedValueOnce(new Error('save failed'))
+    const failedSave = await api.save('LX0609-01-01-01', { feedback_type: 'correct' })
+    expect(failedSave.success).toBe(false)
+    expect(api.savingRuleId.value).toBe('')
+    expect(api.errorByRule.value['LX0609-01-01-01']).toContain('反馈暂时无法保存')
+    expect(api.errorByRule.value['LX0609-01-01-02']).toBeUndefined()
+
+    // 3. save 进行中切换病历时，旧病历的迟到成功响应不会污染新病历
+    let resolveStaleSave!: (value: unknown) => void
+    saveFeedbackMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveStaleSave = resolve
+        }),
+    )
+    const pendingSave = api.save('LX0609-01-01-01', { feedback_type: 'correct' })
+    expect(api.savingRuleId.value).toBe('LX0609-01-01-01')
+
+    getFeedbackMock.mockResolvedValueOnce({ success: true, data: {} })
+    recordRef.value = 'rec-2'
+    await flushPromises()
+    expect(api.savingRuleId.value).toBe('')
+
+    resolveStaleSave({
+      success: true,
+      data: {
+        rule_id: 'LX0609-01-01-01',
+        original_status: 'non_compliant',
+        feedback_type: 'correct',
+      },
+    })
+    await pendingSave
+    expect(api.feedbackByRule.value['LX0609-01-01-01']).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('P1-15: 章节视图未渲染出高亮片段时降级状态；report_items 无正文时渲染结构化报告；医嘱定位滚动高亮行', async () => {
+    const scrollIntoViewMock = vi.fn()
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoViewMock
+    try {
+      getDocumentsMock.mockResolvedValueOnce({
+        success: true,
+        data: {
+          visit_id: 'visit-p15',
+          documents: [
+            {
+              key: 'admission-cross',
+              source_document_id: 'admission-cross',
+              source_ref: 'src_admission_cross',
+              document_type: 'admission_record',
+              title: '入院记录',
+              content: '腹痛3天\n伴恶心呕吐2天',
+              sections: [
+                { key: 'chief_complaint', label: '主诉', text: '腹痛3天', source_field: 'chief_complaint' },
+                { key: 'hpi', label: '现病史', text: '伴恶心呕吐2天', source_field: 'hpi' },
+              ],
+            },
+            {
+              key: 'lab-structured',
+              source_document_id: 'lab-structured',
+              source_ref: 'src_lab_structured',
+              document_type: 'labtest_item_report',
+              title: '血常规检验报告',
+              content: '',
+              sections: [],
+              report_items: [
+                {
+                  item_id: 'wbc',
+                  item_name: '白细胞计数',
+                  result: '12.5',
+                  unit: '10^9/L',
+                  reference_range: '3.5-9.5',
+                  abnormal_indicator: '↑',
+                },
+              ],
+            },
+            {
+              key: 'order-target',
+              source_document_id: 'order-target',
+              source_ref: 'src_order_target',
+              source_table: 'inpat_drug_order',
+              document_type: 'inpat_drug_order',
+              title: '临时医嘱',
+              order_item: '头孢曲松钠',
+              order_start_time: '2026-07-24 10:00:00',
+              content: '临时医嘱：头孢曲松钠',
+            },
+          ],
+        },
+      })
+      const wrapper = mount(QCRecordCompareWorkbench, {
+        props: {
+          visitId: 'visit-p15',
+          issues: [
+            {
+              ...issues[1]!,
+              key: 'issue-cross-section',
+              evidences: [
+                {
+                  key: 'ev-cross',
+                  source_ref: 'src_admission_cross',
+                  source_document_type: 'admission_record',
+                  section_field_path: 'chief_complaint',
+                  quote: '腹痛3天\n伴恶心呕吐2天',
+                },
+              ],
+            },
+            {
+              ...issues[1]!,
+              key: 'issue-order',
+              evidences: [
+                {
+                  key: 'ev-order',
+                  source_ref: 'src_order_target',
+                  source_document_type: 'inpat_drug_order',
+                  quote: '临时医嘱：头孢曲松钠',
+                },
+              ],
+            },
+          ],
+        },
+      })
+      await flushPromises()
+
+      // 跨章节 quote 在任一单节都无法渲染 <mark>，不能显示“已定位到证据段落”，应降级到章节定位
+      expect(wrapper.find('mark').exists()).toBe(false)
+      expect(wrapper.find('.record-location-chip').text()).toBe('已定位到主诉章节')
+      expect(wrapper.find('.record-location-chip').classes()).not.toContain('is-matched')
+
+      // 切换到仅含 report_items 的检验报告应渲染 ReadonlyMedicalDocumentContent 而非空白 <pre>
+      await wrapper.get('.record-document-select select').setValue('lab-structured')
+      await flushPromises()
+      expect(wrapper.find('[data-testid="readonly-medical-document-content"]').exists()).toBe(true)
+      expect(wrapper.text()).toContain('白细胞计数')
+      expect(wrapper.text()).toContain('12.5')
+
+      // 定位到医嘱证据时，滚动激活的医嘱行进入视野
+      scrollIntoViewMock.mockClear()
+      await wrapper.findAll('.record-result-item')[1]!.trigger('click')
+      await flushPromises()
+      expect(wrapper.find('.editable-copy-order-table-wrap tbody tr.is-active').exists()).toBe(true)
+      expect(scrollIntoViewMock).toHaveBeenCalled()
+      wrapper.unmount()
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView
+    }
+  })
+
+  it('P1-15: locateSelectedIssue 在异步读取期间被新点击打断时不会回写过期定位状态', async () => {
+    let resolveSlowDoc!: (value: unknown) => void
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: {
+        documents: [
+          {
+            key: 'doc-slow',
+            source_document_id: 'doc-slow',
+            source_ref: 'src_slow',
+            document_type: 'first_course_record',
+            execution_domain: 'course',
+            title: '首次病程记录',
+            has_content: true,
+            content_loaded: false,
+            content: '',
+          },
+          {
+            key: 'doc-fast',
+            source_document_id: 'doc-fast',
+            source_ref: 'src_fast',
+            document_type: 'daily_course_record',
+            execution_domain: 'course',
+            title: '日常病程记录',
+            has_content: true,
+            content_loaded: true,
+            content: '手动切换的日常病程正文',
+          },
+        ],
+      },
+    })
+    getDocumentMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveSlowDoc = resolve
+        }),
+    )
+
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-race',
+        issues: [
+          {
+            ...issues[1]!,
+            key: 'issue-slow',
+            evidences: [
+              {
+                key: 'ev-slow',
+                source_ref: 'src_slow',
+                source_document_type: 'first_course_record',
+                quote: '慢文书证据片段',
+              },
+            ],
+          },
+        ],
+      },
+    })
+    await flushPromises()
+
+    // 在 doc-slow 仍在加载时，用户手动切换到 doc-fast
+    await wrapper.get('.record-document-select select').setValue('doc-fast')
+    await flushPromises()
+    expect(wrapper.text()).toContain('手动切换的日常病程正文')
+
+    // doc-slow 迟到失败返回，不能覆盖当前 doc-fast 的定位状态为 missing
+    resolveSlowDoc({ success: false, message: 'slow failed' })
+    await flushPromises()
+    expect((wrapper.get('.record-document-select select').element as HTMLSelectElement).value).toBe('doc-fast')
+    expect(wrapper.find('.record-location-chip').text()).not.toContain('未找到对应文书')
+    wrapper.unmount()
+  })
+
+  it('P1-16: lazyResultDocuments 模式缺少入院记录时回退加载首篇文书', async () => {
+    const firstCourse = {
+      key: 'first_course_record::fc-1',
+      source_document_id: 'fc-1',
+      document_type: 'first_course_record',
+      title: '首次病程记录',
+      execution_domain: 'course',
+      has_content: true,
+      content_loaded: false,
+      content: '',
+    }
+    getDocumentsMock.mockResolvedValueOnce({
+      success: true,
+      data: { visit_id: 'visit-no-adm', documents: [firstCourse] },
+    })
+    getDocumentMock.mockResolvedValueOnce({
+      success: true,
+      data: { ...firstCourse, content: '无入院记录时的首篇文书正文', content_loaded: true },
+    })
+
+    const wrapper = mount(QCRecordCompareWorkbench, {
+      props: {
+        visitId: 'visit-no-adm',
+        jobId: 'job-no-adm',
+        issues: [],
+        lazyResultDocuments: true,
+      },
+    })
+    await flushPromises()
+
+    expect(getDocumentMock).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('无入院记录时的首篇文书正文')
+    expect(wrapper.text()).not.toContain('请选择文书查看原文')
+    wrapper.unmount()
+  })
 })

@@ -54,7 +54,8 @@ def test_refresh_contract_accepts_json_and_returns_stable_shape(client):
 @pytest.mark.unit
 @pytest.mark.api
 def test_sync_pg_config_contract_read_write(client, monkeypatch):
-    access_token, _ = _login(client, "admin@medqc.com", "admin888")
+    access_token, _ = _login(client, "sync_admin@medqc.com", "sync888")
+    monkeypatch.setenv("SYNC_PG_HOST_ALLOWLIST", "10.8.8.8")
 
     base_cfg = {
         "remote_host": "127.0.0.1",
@@ -154,7 +155,7 @@ def test_sichuan_history_contract_returns_success_shell(client):
 @pytest.mark.unit
 @pytest.mark.api
 def test_legacy_system_read_contract_returns_success_shell(client, monkeypatch):
-    access_token, _ = _login(client, "admin@medqc.com", "admin888")
+    access_token, _ = _login(client, "sync_admin@medqc.com", "sync888")
 
     monkeypatch.setattr("app.services.etl_sync.test_local_connection", lambda: {"connected": True, "tables": 12})
     monkeypatch.setattr("app.services.etl_sync.test_remote_connection", lambda: {"connected": True, "error": ""})

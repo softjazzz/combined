@@ -438,7 +438,66 @@ def test_system_config_roles_can_manage_custom_models(client, monkeypatch, tmp_p
         assert deleted.status_code == 200
 
 
-def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, monkeypatch, tmp_path):
+def test_custom_models_lock_held_across_read_modify_write(monkeypatch, tmp_path):
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    import time
+    from starlette.requests import Request
+    from app.routers import llm_info
+
+    model_file = tmp_path / "llm_custom_models.json"
+    monkeypatch.setattr(llm_info, "CUSTOM_MODELS_FILE", model_file)
+    orig_load = llm_info._load_custom_models
+
+    def _slow_load():
+        data = orig_load()
+        # 放大读改写窗口：若未在外层持有 _CUSTOM_MODELS_LOCK，并发线程必然丢更新
+        time.sleep(0.02)
+        return data
+
+    monkeypatch.setattr(llm_info, "_load_custom_models", _slow_load)
+
+    def _fake_request() -> Request:
+        return Request({"type": "http", "method": "POST", "path": "/api/v1/llm/models/custom", "headers": []})
+
+    def _add(idx: int):
+        asyncio.run(
+            llm_info.add_custom_model(
+                _fake_request(),
+                llm_info.CustomModelPayload(
+                    provider_code="alibaba",
+                    model_code=f"concurrent-model-{idx}",
+                    model_name=f"concurrent-model-{idx}",
+                ),
+                admin_user={"id": "u-admin", "roles": ["super_admin"]},
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(_add, range(8)))
+
+    stored = orig_load()
+    saved_codes = {item["model_code"] for item in stored.get("alibaba", [])}
+    assert saved_codes == {f"concurrent-model-{idx}" for idx in range(8)}
+
+    def _delete(idx: int):
+        asyncio.run(
+            llm_info.delete_custom_model(
+                _fake_request(),
+                provider_code="alibaba",
+                model_code=f"concurrent-model-{idx}",
+                admin_user={"id": "u-admin", "roles": ["super_admin"]},
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(_delete, range(4)))
+
+    remaining = {item["model_code"] for item in orig_load().get("alibaba", [])}
+    assert remaining == {f"concurrent-model-{idx}" for idx in range(4, 8)}
+
+
+def test_qc_manager_cannot_manage_llm_or_write_global_frontpage_settings(client, monkeypatch, tmp_path):
     _override_user(client, ["qc_manager"])
     monkeypatch.setattr(
         "app.services.frontpage_settings.CONFIG_PATH",
@@ -452,6 +511,13 @@ def test_qc_manager_cannot_manage_llm_but_can_manage_frontpage_settings(client, 
             "model_code": "forbidden-qc-manager",
         },
     ).status_code == 403
+    assert client.get("/api/v1/frontpage/settings").status_code == 200
+    assert client.put(
+        "/api/v1/frontpage/settings",
+        json={"demo_hide_threshold": 2},
+    ).status_code == 403
+
+    _override_user(client, ["sync_admin"])
     assert client.put(
         "/api/v1/frontpage/settings",
         json={"demo_hide_threshold": 2},
@@ -491,3 +557,96 @@ def test_llm_connection_failure_does_not_leak_endpoint_or_exception(client, monk
     assert "SECRET_REASON" not in caplog.text
     assert "secret.example" not in caplog.text
     assert "SECRET" not in caplog.text
+
+
+def test_default_summary_and_reset_gracefully_handle_disabled_default_provider(
+    client,
+    monkeypatch,
+    tmp_path,
+):
+    from app.core.settings import Settings
+    from app.services import llm_config_loader as loader
+    from app.services import llm_endpoint_settings as endpoint_store
+
+    _override_user(client, ["sync_admin"])
+    monkeypatch.setenv("LLM_ENDPOINT_CONFIG_DIR", str(tmp_path / "endpoints"))
+    monkeypatch.setattr("app.routers.llm_configs.get_supabase", lambda: None)
+    monkeypatch.setattr("app.services.llm_config_loader.get_supabase", lambda: None)
+    cfg = Settings(
+        _env_file=None,
+        JWT_SECRET="test-only",
+        LLM_DEFAULT_PROVIDER="alibaba",
+        LLM_VISIBLE_PROVIDERS=["alibaba", "deepseek"],
+        LLM_DISPATCH_MODE="direct",
+        DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        DASHSCOPE_API_KEY="synthetic-dashscope-secret",
+        DEEPSEEK_API_ENDPOINT="https://api.deepseek.com",
+        DEEPSEEK_API_KEY="synthetic-deepseek-secret",
+    )
+    monkeypatch.setattr(loader, "get_settings", lambda: cfg)
+    monkeypatch.setattr("app.core.settings.get_settings", lambda: cfg)
+
+    llm_configs["default-row"] = {
+        "id": "default-row",
+        "user_id": None,
+        "config_name": "default",
+        "provider_code": "alibaba",
+        "model_code": "qwen3.8-flash",
+        "custom_parameters": {"temperature": 0.3, "max_tokens": 6000},
+        "is_active": True,
+        "updated_at": "2026-11-26T00:00:00Z",
+    }
+
+    # 禁用当前默认推理服务 alibaba（保留 deepseek 启用）
+    endpoint_store.save(
+        "alibaba",
+        endpoint_store.EndpointUpdate(
+            version=0,
+            enabled=False,
+            endpoint="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            clear_key=False,
+        ),
+        "synthetic-super",
+        cfg,
+    )
+
+    # 1. GET /configs/default/summary 返回 200 降级摘要，不 500 锁死页面，也不泄漏密钥
+    summary_resp = client.get("/api/v1/llm/configs/default/summary")
+    assert summary_resp.status_code == 200
+    summary = summary_resp.json()["data"]
+    assert summary["provider_unavailable"] is True
+    assert summary["provider_unavailable_reason"]
+    assert summary["provider_code"] == "alibaba"
+    assert summary["model_code"] == "qwen3.8-flash"
+    assert summary["api_key_configured"] is True
+    assert summary["custom_parameters"]["max_tokens"] == 6000
+    assert summary["readonly"] is False
+    assert "synthetic-dashscope-secret" not in summary_resp.text
+
+    # 2. POST /configs/default/reset 同样优雅降级返回 200，不 500
+    reset_resp = client.post("/api/v1/llm/configs/default/reset")
+    assert reset_resp.status_code == 200
+    reset_data = reset_resp.json()["data"]
+    assert reset_data["provider_unavailable"] is True
+    assert reset_data["provider_unavailable_reason"]
+    assert reset_data["provider_code"] == "alibaba"
+    assert "synthetic-dashscope-secret" not in reset_resp.text
+
+    # 3. 超级管理员可在页面切换到已启用的 deepseek 并成功保存恢复
+    switch_resp = client.post(
+        "/api/v1/llm/configs",
+        json={
+            "config_name": "default",
+            "provider_code": "deepseek",
+            "model_code": "deepseek-chat",
+        },
+    )
+    assert switch_resp.status_code == 200
+
+    recovered_resp = client.get("/api/v1/llm/configs/default/summary")
+    assert recovered_resp.status_code == 200
+    recovered = recovered_resp.json()["data"]
+    assert recovered["provider_unavailable"] is False
+    assert recovered["provider_unavailable_reason"] is None
+    assert recovered["provider_code"] == "deepseek"
+    assert recovered["model_code"] == "deepseek-chat"

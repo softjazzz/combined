@@ -198,6 +198,7 @@
 /* 详情页 */
 .rv-steps {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
   padding: 18px 24px;
@@ -437,6 +438,27 @@
   color: var(--mq-text-secondary);
 }
 
+@media (max-width: 1360px) {
+  .rv-steps {
+    flex-wrap: wrap;
+    row-gap: 14px;
+  }
+
+  .rv-step,
+  .rv-step:last-child {
+    flex: 1 1 calc(50% - 12px);
+    min-width: 220px;
+  }
+
+  .rv-step__line {
+    display: none;
+  }
+
+  .rv-step__copy {
+    white-space: normal;
+  }
+}
+
 @media (max-width: 1180px) {
   .rv-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -445,10 +467,6 @@
   .rv-grid-2,
   .rv-conclusion {
     grid-template-columns: minmax(0, 1fr);
-  }
-
-  .rv-steps {
-    flex-wrap: wrap;
   }
 }
 

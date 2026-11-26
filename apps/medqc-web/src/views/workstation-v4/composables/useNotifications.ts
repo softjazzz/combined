@@ -70,6 +70,9 @@ export function useNotifications(
 ) {
   const auth = useAuthStore()
   let generation = 0
+  let overviewRequestSeq = 0
+  let markingAllRead = false
+  let handlingOverviewClick = false
   const assistNotifications = ref<NotificationVM[]>([])
   const notificationUnreadCount = ref(0)
   const notificationLoading = ref(false)
@@ -190,22 +193,20 @@ export function useNotifications(
 
   async function fetchAssistNotificationOverview() {
     const token = generation
+    const requestSeq = ++overviewRequestSeq
     if (!ApiService.isAuthenticated()) {
       notificationOverviewItems.value = []
+      overviewLoading.value = false
       return
     }
 
     overviewLoading.value = true
     try {
-      const now = new Date()
-      const dateKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      // 缺省日期由服务端按东八区（Asia/Shanghai）确定，避免客户端本地时区跨日偏移
       const res = await ApiService.get<NotificationOverviewResponse>(
         '/api/v1/notifications/overview',
-        {
-          date: dateKey,
-        },
       )
-      if (token !== generation) return
+      if (token !== generation || requestSeq !== overviewRequestSeq) return
       if (!res.success) {
         notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
         return
@@ -216,13 +217,13 @@ export function useNotifications(
         .map((item, index) => normalizeOverviewItem(item, index))
         .filter((item) => !isBatchSummaryType(item.type))
     } catch (err) {
-      if (token !== generation) return
+      if (token !== generation || requestSeq !== overviewRequestSeq) return
       if (!isAuthError(err)) {
         console.error('加载当天问题概览失败:', err)
       }
       notificationOverviewItems.value = buildLocalOverview(assistNotifications.value)
     } finally {
-      if (token === generation) overviewLoading.value = false
+      if (token === generation && requestSeq === overviewRequestSeq) overviewLoading.value = false
     }
   }
 
@@ -292,14 +293,16 @@ export function useNotifications(
   }
 
   async function markAllAssistNotificationsRead() {
+    if (markingAllRead || !ApiService.isAuthenticated()) return
     const token = generation
-    if (!ApiService.isAuthenticated()) return
+    markingAllRead = true
 
     try {
       const res = await ApiService.put('/api/v1/notifications/read-all')
       if (token !== generation) return
       if (!res.success) return
       await fetchAssistNotifications()
+      if (token !== generation) return
       message.success('已全部标记为已读')
     } catch (err) {
       if (token !== generation) return
@@ -307,6 +310,8 @@ export function useNotifications(
         console.error('全部已读失败:', err)
         message.error('全部已读失败')
       }
+    } finally {
+      if (token === generation) markingAllRead = false
     }
   }
 
@@ -347,66 +352,76 @@ export function useNotifications(
   }
 
   async function handleAssistOverviewClick(item: NotificationOverviewItem) {
-    if (item.interaction_target) {
-      const token = generation
-      try {
-        for (const id of item.source_notification_ids) {
-          const response = await ApiService.put(
-            `/api/v1/notifications/${encodeURIComponent(id)}/read`,
-          )
+    if (handlingOverviewClick) return
+    const token = generation
+    handlingOverviewClick = true
+    try {
+      if (item.interaction_target) {
+        try {
+          for (const id of item.source_notification_ids) {
+            const response = await ApiService.put(
+              `/api/v1/notifications/${encodeURIComponent(id)}/read`,
+            )
+            if (token !== generation) return
+            if (!response.success) {
+              message.error('消息状态未核实，请刷新核对')
+              return
+            }
+          }
+        } catch {
+          if (token === generation) message.error('消息状态未核实，请刷新核对')
+          return
+        }
+        if (!openInteraction) {
+          message.warning('当前入口不能打开该处理对象')
+          return
+        }
+        await openInteraction(item.interaction_target)
+        return
+      }
+      if (item.source_notification_ids.length > 0) {
+        for (const notifId of item.source_notification_ids) {
           if (token !== generation) return
-          if (!response.success) {
-            message.error('消息状态未核实，请刷新核对')
-            return
+          const target = assistNotifications.value.find((notif) => notif.id === notifId)
+          if (!target) continue
+          if (!target.is_read) {
+            await markAssistNotificationRead(target)
           }
         }
-      } catch {
-        if (token === generation) message.error('消息状态未核实，请刷新核对')
-        return
       }
-      if (!openInteraction) {
-        message.warning('当前入口不能打开该处理对象')
-        return
-      }
-      await openInteraction(item.interaction_target)
-      return
-    }
-    if (item.source_notification_ids.length > 0) {
-      for (const notifId of item.source_notification_ids) {
-        const target = assistNotifications.value.find((notif) => notif.id === notifId)
-        if (!target) continue
-        if (!target.is_read) {
-          await markAssistNotificationRead(target)
+      if (token !== generation) return
+
+      if (item.record_id) {
+        const pseudoNotification: NotificationVM = {
+          id: item.source_notification_ids[0] || item.overview_id,
+          record_id: item.record_id,
+          title: item.title,
+          content: item.summary,
+          message: item.summary,
+          created_at: item.latest_created_at,
+          is_read: item.unread_count <= 0,
+          level: item.severity,
+          type: item.type,
         }
+        await handleAssistNotificationClick(pseudoNotification)
+      } else {
+        assistPanelVisible.value = true
+        assistTab.value = 'form'
+        frontpageTab.value = 'fields'
+        message.info('该问题集中点未绑定具体病历，已进入质控页')
       }
-    }
+      if (token !== generation) return
 
-    if (item.record_id) {
-      const pseudoNotification: NotificationVM = {
-        id: item.source_notification_ids[0] || item.overview_id,
-        record_id: item.record_id,
-        title: item.title,
-        content: item.summary,
-        message: item.summary,
-        created_at: item.latest_created_at,
-        is_read: item.unread_count <= 0,
-        level: item.severity,
-        type: item.type,
-      }
-      await handleAssistNotificationClick(pseudoNotification)
-    } else {
-      assistPanelVisible.value = true
-      assistTab.value = 'form'
-      frontpageTab.value = 'fields'
-      message.info('该问题集中点未绑定具体病历，已进入质控页')
+      await fetchAssistNotificationOverview()
+    } finally {
+      if (token === generation) handlingOverviewClick = false
     }
-
-    await fetchAssistNotificationOverview()
   }
 
-  function formatRelativeTime(iso?: string | null, type?: string) {
+  function formatRelativeTime(iso?: string | null, _type?: string) {
+    void _type
     if (!iso) return ''
-    const date = type === 'qc_result_ready' ? parseQcTaskTime(iso) : new Date(iso)
+    const date = parseQcTaskTime(iso)
     if (!date || Number.isNaN(date.getTime())) return ''
     const now = new Date()
     const diff = Math.floor((now.getTime() - date.getTime()) / 1000)
@@ -420,6 +435,9 @@ export function useNotifications(
     () => [auth.user?.id, auth.userRoles],
     () => {
       ++generation
+      ++overviewRequestSeq
+      markingAllRead = false
+      handlingOverviewClick = false
       assistNotifications.value = []
       notificationOverviewItems.value = []
       notificationUnreadCount.value = 0
