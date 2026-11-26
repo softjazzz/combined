@@ -143,14 +143,14 @@ async def test_two_real_family_children_enforce_accepted_settings(monkeypatch, c
         with pytest.raises(HTTPException) as error:
             await qc_sample_pools.run_sample_pool_intrinsic_validation(
                 request=_build_request(), pool_id="pool-1",
-                payload=payload, current_user={"id": "tester"},
+                payload=payload, current_user={"id": "tester", "role": "super_admin"},
             )
         assert error.value.status_code == 422
         assert not planning_workspace.create_batch_job_calls
         return
     response = await qc_sample_pools.run_sample_pool_intrinsic_validation(
         request=_build_request(), pool_id="pool-1",
-        payload=payload, current_user={"id": "tester"},
+        payload=payload, current_user={"id": "tester", "role": "super_admin"},
     )
     assert response["data"]["job_kind"] == "parent"
     parent, *children = planning_workspace.create_batch_job_calls

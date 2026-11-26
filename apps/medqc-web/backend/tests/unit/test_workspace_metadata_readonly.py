@@ -51,7 +51,7 @@ def metadata_client(monkeypatch, overview_store):  # noqa: F811
     )
     monkeypatch.setattr(
         access_control, "resolve_current_user_from_token",
-        lambda token: {"id": token, "roles": ["sync_admin"]},
+        lambda token: {"id": token, "roles": ["qc_manager"]},
     )
 
     def forbidden(*args, **kwargs):

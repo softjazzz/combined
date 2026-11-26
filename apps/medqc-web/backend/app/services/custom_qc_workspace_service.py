@@ -297,7 +297,8 @@ def _now_utc() -> datetime:
 
 
 def _now_utc_aware() -> datetime:
-    return datetime.now(timezone.utc)
+    current = _now_utc()
+    return current if current.tzinfo is not None else current.replace(tzinfo=timezone.utc)
 
 
 _SPREADSHEET_FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -5511,9 +5512,53 @@ class CustomQCWorkspaceService:
                         continue
                 uncached_selected.append((identity, job, selected_row, env_cache_key))
 
+            inline_body_selected = [
+                item for item in uncached_selected if "envelope_json" in item[2]
+            ]
+            db_body_selected = [
+                item for item in uncached_selected if "envelope_json" not in item[2]
+            ]
+
+            def _record_body_summary(
+                identity: tuple[str, str, str],
+                job: Dict[str, Any],
+                selected_row: Dict[str, Any],
+                env_cache_key: Optional[tuple[Any, ...]],
+                body: Dict[str, Any],
+            ) -> None:
+                nonlocal result_parse_seconds
+                parse_started = monotonic()
+                summary = self._summarize_completed_record_result_envelope(
+                    envelope_row=body,
+                    completed_at=job.get("finished_at"),
+                    include_items=include_items,
+                    rule_set_key=normalized_rule_set_key,
+                )
+                result_parse_seconds += monotonic() - parse_started
+                if env_cache_key is not None:
+                    _lru_cache_put(
+                        _ENVELOPE_SUMMARY_CACHE,
+                        env_cache_key,
+                        summary,
+                        _ENVELOPE_SUMMARY_CACHE_MAX,
+                    )
+                if include_rule_set_context and summary.get("status") == "ready":
+                    summary.update({
+                        "root_job_id": _safe_text(job.get("id")),
+                        "envelope_id": _safe_text(selected_row.get("id")),
+                        "rule_set_key": normalized_rule_set_key,
+                        "rule_set_version": _rule_set_value(job, "rule_set_version"),
+                        "result_rule_scope": list(job.get("result_rule_scope") or []),
+                        "result_scope_kind": job.get("result_scope_kind", "unknown"),
+                    })
+                projections[identity] = summary
+
+            for identity, job, selected_row, env_cache_key in inline_body_selected:
+                _record_body_summary(identity, job, selected_row, env_cache_key, selected_row)
+
             batch_size = 500
-            for offset in range(0, len(uncached_selected), batch_size):
-                selected_batch = uncached_selected[offset:offset + batch_size]
+            for offset in range(0, len(db_body_selected), batch_size):
+                selected_batch = db_body_selected[offset:offset + batch_size]
                 query_started = monotonic()
                 rows = session.execute(select(
                     *envelope_selection_columns, envelope_columns.envelope_json,
@@ -5524,31 +5569,7 @@ class CustomQCWorkspaceService:
                     body = bodies_by_id.get(selected_row["id"])
                     if body is None or any(body[key] != value for key, value in selected_row.items()):
                         continue
-                    parse_started = monotonic()
-                    summary = self._summarize_completed_record_result_envelope(
-                        envelope_row=body,
-                        completed_at=job.get("finished_at"),
-                        include_items=include_items,
-                        rule_set_key=normalized_rule_set_key,
-                    )
-                    result_parse_seconds += monotonic() - parse_started
-                    if env_cache_key is not None:
-                        _lru_cache_put(
-                            _ENVELOPE_SUMMARY_CACHE,
-                            env_cache_key,
-                            summary,
-                            _ENVELOPE_SUMMARY_CACHE_MAX,
-                        )
-                    if include_rule_set_context and summary.get("status") == "ready":
-                        summary.update({
-                            "root_job_id": _safe_text(job.get("id")),
-                            "envelope_id": _safe_text(selected_row.get("id")),
-                            "rule_set_key": normalized_rule_set_key,
-                            "rule_set_version": _rule_set_value(job, "rule_set_version"),
-                            "result_rule_scope": list(job.get("result_rule_scope") or []),
-                            "result_scope_kind": job.get("result_scope_kind", "unknown"),
-                        })
-                    projections[identity] = summary
+                    _record_body_summary(identity, job, selected_row, env_cache_key, body)
             if watermark_bucket_key is not None:
                 _watermark_bucket_merge(watermark_bucket_key, projections)
             if cached_watermark_hits:

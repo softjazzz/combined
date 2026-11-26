@@ -198,10 +198,12 @@ async def test_creation_uses_same_admission_as_candidates_and_freezes_reason(sou
     monkeypatch.setattr(qc_sichuan, "get_settings", _luxian_native_settings)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args: pytest.fail("测试不得启动worker"))
     monkeypatch.setattr(qc_sichuan, "_dispatch_sichuan_workspace_batch_job", lambda **kwargs: None, raising=False)
+    from app.services import saved_result_access
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     args = dict(request=SimpleNamespace(state=SimpleNamespace()),
         payload=qc_sichuan.SichuanWorkspaceBatchJobCreateRequest(
             rule_set_key=qc_sichuan.LUXIAN_0609_RULE_SET_KEY, scope=scope, record_refs=[REF.as_dict()]),
-        qc_service=_ServiceStub(), current_user={"id": "synthetic-user"})
+        qc_service=_ServiceStub(), current_user={"id": "synthetic-user", "role": "super_admin"})
     if allowed:
         # 只验证创建投影，创建之后的派发替身不执行规则。
         monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *args: None)
