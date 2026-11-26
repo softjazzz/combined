@@ -679,3 +679,218 @@ def test_store_failure_maps_to_stable_503_without_exception_or_sql_text():
     assert "password" not in serialized
     assert "SELECT" not in serialized
     assert "psycopg2" not in serialized
+
+
+def test_sql_pushdown_overview_records_and_calls_on_sqlite(monkeypatch):
+    import sqlalchemy as sa
+    from sqlalchemy.pool import StaticPool
+
+    engine = sa.create_engine(
+        "sqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
+    with engine.begin() as conn:
+        conn.execute(
+            sa.text(
+                """
+                CREATE TABLE llm_call_events (
+                    event_id TEXT PRIMARY KEY,
+                    logical_call_id TEXT NOT NULL,
+                    attempt_no INTEGER NOT NULL,
+                    started_at TEXT NOT NULL,
+                    finished_at TEXT NULL,
+                    business_scene TEXT NOT NULL,
+                    root_job_id TEXT NULL,
+                    record_key_hash TEXT NULL,
+                    rule_set_key TEXT NULL,
+                    rule_set_version TEXT NULL,
+                    executor_key TEXT NULL,
+                    provider_code TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    model_role TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    safe_error_kind TEXT NULL,
+                    usage_state TEXT NOT NULL,
+                    input_tokens INTEGER NULL,
+                    cached_input_tokens INTEGER NULL,
+                    output_tokens INTEGER NULL,
+                    total_tokens INTEGER NULL,
+                    latency_ms INTEGER NULL,
+                    worker_id TEXT NOT NULL
+                )
+                """
+            )
+        )
+        rows = [
+            (
+                "e1", "l1", 1, "2026-08-09T16:30:00Z", "2026-08-09T16:30:02Z",
+                "luxian_0609_qc", "job-1", "rec-1", "rs", "v1", "exec-1",
+                "alibaba", "qwen3.8-flash", "qc_fact_extractor", "success", None,
+                "known", 100, 40, 20, 120, 100, "w1",
+            ),
+            (
+                "e2", "l1", 2, "2026-08-09T16:30:01Z", "2026-08-09T16:30:03Z",
+                "luxian_0609_qc", "job-1", "rec-1", "rs", "v1", "exec-1",
+                "alibaba", "qwen3.8-flash", "qc_fact_extractor", "timeout", "timeout",
+                "unknown", None, None, None, None, 200, "w1",
+            ),
+            (
+                "e3", "l2", 1, "2026-08-10T01:00:00Z", "2026-08-10T01:00:01Z",
+                "coding_qc", "job-2", "rec-2", "rs", "v1", "exec-2",
+                "openai", "gpt-5-mini", "coding", "success", None,
+                "known", 50, None, 10, 60, 300, "w1",
+            ),
+            (
+                "e4", "l3", 1, "2000-01-01T00:00:00Z", None,
+                "llm_config_probe", None, None, None, None, None,
+                "alibaba", "qwen3.8-flash", "general", "running", None,
+                "unknown", None, None, None, None, None, "w1",
+            ),
+        ]
+        for row in rows:
+            conn.execute(
+                sa.text(
+                    """
+                    INSERT INTO llm_call_events VALUES (
+                        :p0,:p1,:p2,:p3,:p4,:p5,:p6,:p7,:p8,:p9,:p10,:p11,:p12,:p13,
+                        :p14,:p15,:p16,:p17,:p18,:p19,:p20,:p21,:p22
+                    )
+                    """
+                ),
+                {f"p{i}": val for i, val in enumerate(row)},
+            )
+
+    monkeypatch.setattr(
+        "app.services.llm_observability_read.database_connection.engine",
+        engine,
+    )
+    reader = PostgresLLMCallEventReader()
+
+    def _forbid_fetch_events(**_kwargs):
+        raise AssertionError("SQL pushdown must not call unbounded fetch_events")
+
+    monkeypatch.setattr(reader, "fetch_events", _forbid_fetch_events)
+
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-sql",
+        "email": "super@hospital.local",
+        "roles": ["super_admin"],
+    }
+    app.dependency_overrides[get_llm_observability_read_service] = lambda: (
+        LLMObservabilityReadService(reader=reader)
+    )
+
+    try:
+        with TestClient(app) as client:
+            overview_resp = client.get(
+                "/api/v1/system/llm-observability/overview",
+                params={"page": 1, "page_size": 1},
+            )
+            assert overview_resp.status_code == 200, overview_resp.text
+            overview = overview_resp.json()["data"]
+            assert overview["kpis"] == {
+                "logical_calls": 3,
+                "http_attempts": 4,
+                "record_count": 2,
+                "unbound_record_attempts": 1,
+                "input_tokens": 150,
+                "cached_input_tokens": 40,
+                "output_tokens": 30,
+                "total_tokens": 180,
+                "avg_latency_ms": 200.0,
+                "p95_latency_ms": 300,
+                "peak_concurrency": 2,
+                "retry_attempts": 1,
+                "successful_attempts": 2,
+                "failed_attempts": 2,
+                "unknown_usage_attempts": 2,
+                "unknown_cache_usage_attempts": 1,
+            }
+            assert [t["bucket"] for t in overview["trends"]] == ["2000-01-01", "2026-08-10"]
+            assert overview["safe_errors"] == [
+                {"status": "abandoned", "safe_error_kind": "stale_running", "count": 1},
+                {"status": "timeout", "safe_error_kind": "timeout", "count": 1},
+            ]
+            assert overview["records"]["total"] == 2
+            assert len(overview["records"]["items"]) == 1
+            assert overview["records"]["items"][0]["record_key_hash"] == "rec-2"
+
+            page2_resp = client.get(
+                "/api/v1/system/llm-observability/records",
+                params={"page": 2, "page_size": 1},
+            )
+            assert page2_resp.status_code == 200
+            page2 = page2_resp.json()["data"]
+            assert page2["total"] == 2
+            assert page2["items"][0]["record_key_hash"] == "rec-1"
+            assert page2["items"][0]["status"] == "partial_failure"
+            assert page2["items"][0]["peak_concurrency"] == 2
+
+            calls_resp = client.get(
+                "/api/v1/system/llm-observability/records/rec-1/calls",
+                params={"page": 1, "page_size": 1},
+            )
+            assert calls_resp.status_code == 200
+            calls_data = calls_resp.json()["data"]
+            assert calls_data["total"] == 2
+            assert len(calls_data["items"]) == 1
+            assert calls_data["items"][0]["attempt_no"] == 2
+    finally:
+        engine.dispose()
+
+
+def test_postgres_sql_records_page_uses_group_by_and_limit_offset(monkeypatch):
+    statements: list[str] = []
+
+    class _Result:
+        def __init__(self, scalar_val=0):
+            self._scalar = scalar_val
+
+        def scalar(self):
+            return self._scalar
+
+        def mappings(self):
+            return self
+
+        def all(self):
+            return []
+
+    class _Connection:
+        def execute(self, statement, params):
+            sql = str(statement)
+            statements.append(sql)
+            if "COUNT(DISTINCT" in sql:
+                return _Result(scalar_val=1)
+            return _Result()
+
+    class _Ctx:
+        def __enter__(self):
+            return _Connection()
+
+        def __exit__(self, *_args):
+            return None
+
+    class _Engine:
+        def connect(self):
+            return _Ctx()
+
+    monkeypatch.setattr(
+        "app.services.llm_observability_read.database_connection.engine",
+        _Engine(),
+    )
+    from app.services.llm_observability_read import LLMObservabilityFilters
+
+    items, total = asyncio.run(
+        PostgresLLMCallEventReader().fetch_records_page(
+            filters=LLMObservabilityFilters(business_scene="luxian_0609_qc"),
+            page=2,
+            page_size=20,
+        )
+    )
+    assert total == 1
+    assert items == []
+    assert any("FROM sys.llm_call_events" in s and "GROUP BY" in s and "LIMIT :page_limit OFFSET :page_offset" in s for s in statements)
+    assert any("percentile_disc(0.95)" in s for s in statements)

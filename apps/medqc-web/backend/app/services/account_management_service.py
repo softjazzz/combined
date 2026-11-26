@@ -16,7 +16,7 @@ from .defect_rectification_service import RectificationError, _persistent_roles,
 from .user_scope_owner import resolve_user_owner_schema
 
 logger = logging.getLogger(__name__)
-ROLES = {"admin", "qc_manager", "qc_staff", "doctor"}
+ROLES = {"admin", "qc_manager", "qc_staff", "coder", "doctor"}
 
 
 def _iso(value):
@@ -227,21 +227,27 @@ class AccountManagementService:
             if not registration_is_approved(session, table, user_id):
                 raise RectificationError("待审或驳回账号必须通过注册审批开通，不能直接启用", 409)
             self._scope(actor, row["institute_id"])
-            self._scope(actor, data["institute_id"])
-            if _persistent_roles(row["role"], row["roles_json"]) - ROLES:
+            old_roles = _persistent_roles(row["role"], row["roles_json"])
+            if old_roles - ROLES:
                 raise RectificationError("专用角色由原权限系统维护，不在此覆盖", 409)
+            roles = sorted(set(data["roles"]))
+            if not roles or set(roles) - ROLES:
+                raise RectificationError("账号角色无效")
+            old_inst = (row["institute_id"] or "").strip() or None
+            new_inst = (data.get("institute_id") or "").strip() or None
+            is_unbound_global_admin = old_inst is None and "admin" in old_roles
+            if new_inst is None and not (is_unbound_global_admin and "admin" in roles):
+                raise RectificationError("机构 ID 不能为空", 422)
+            self._scope(actor, new_inst)
             expected = data["expected_updated_at"]
             if expected is not None and expected.tzinfo is not None:
                 expected = expected.astimezone(timezone.utc).replace(tzinfo=None)
             if expected != row["updated_at"]:
                 raise RectificationError("账号已被修改，请刷新后再操作", 409)
-            roles = sorted(set(data["roles"]))
-            if not roles or set(roles) - ROLES:
-                raise RectificationError("账号角色无效")
             if user_id == actor_id and (
                 not data["is_active"]
-                or set(roles) != _persistent_roles(row["role"], row["roles_json"])
-                or data["institute_id"] != row["institute_id"]
+                or set(roles) != old_roles
+                or new_inst != old_inst
                 or data["department"] != row["department"]
             ):
                 raise RectificationError("不能变更自身授权范围、角色或停用自身", 409)
@@ -251,10 +257,9 @@ class AccountManagementService:
             remains_active_admin_in_same_institute = (
                 bool(data["is_active"])
                 and ("admin" in roles)
-                and (data["institute_id"] == row["institute_id"])
+                and (new_inst == old_inst)
             )
             if was_active_admin and not remains_active_admin_in_same_institute:
-                old_inst = row["institute_id"]
                 inst_filter = (
                     table.c.institute_id == old_inst
                     if old_inst
@@ -279,7 +284,7 @@ class AccountManagementService:
                 .where(table.c.id == user_id)
                 .values(
                     display_name=data["display_name"],
-                    institute_id=data["institute_id"],
+                    institute_id=new_inst,
                     department=data["department"],
                     role=roles[0],
                     roles_json=json.dumps(roles),
@@ -298,5 +303,58 @@ class AccountManagementService:
             user_id,
             data["is_active"],
             roles,
+        )
+        return result
+
+    def reset_password(self, actor_id, user_id, password, *, expected_updated_at=None):
+        if (
+            not isinstance(password, str)
+            or len(password) < 12
+            or len(password.encode("utf-8")) > 72
+        ):
+            raise RectificationError("口令至少12个字符，UTF-8长度不得超过72字节", 422)
+        with self.sessions() as session, session.begin():
+            self._write_lock(session)
+            table = self._table(session)
+            actor = self._admin(session, table, actor_id)
+            row = (
+                session.execute(
+                    select(table).where(table.c.id == user_id).with_for_update()
+                )
+                .mappings()
+                .one_or_none()
+            )
+            if row is None:
+                raise RectificationError("账号不存在", 404)
+            if not registration_is_approved(session, table, user_id):
+                raise RectificationError("待审或驳回账号必须通过注册审批开通，不能重置密码", 409)
+            self._scope(actor, row["institute_id"])
+            if _persistent_roles(row["role"], row["roles_json"]) - ROLES:
+                raise RectificationError("专用角色由原权限系统维护，不在此重置密码", 409)
+            if user_id == actor_id:
+                raise RectificationError("不能在此重置自身密码，请前往个人设置修改密码", 409)
+            if expected_updated_at is not None:
+                expected = expected_updated_at
+                if expected.tzinfo is not None:
+                    expected = expected.astimezone(timezone.utc).replace(tzinfo=None)
+                if expected != row["updated_at"]:
+                    raise RectificationError("账号已被修改，请刷新后再操作", 409)
+            session.execute(
+                table.update()
+                .where(table.c.id == user_id)
+                .values(
+                    password_hash=get_password_hash(password),
+                    updated_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                )
+            )
+            result = _view(
+                session.execute(select(table).where(table.c.id == user_id))
+                .mappings()
+                .one()
+            )
+        logger.info(
+            "account.reset_password actor_id=%s target_id=%s",
+            actor_id,
+            user_id,
         )
         return result

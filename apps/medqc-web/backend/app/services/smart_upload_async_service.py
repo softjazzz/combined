@@ -34,6 +34,22 @@ SMART_UPLOAD_TEMP_TTL_SECONDS = int(os.getenv("SMART_UPLOAD_TEMP_TTL_SECONDS", "
 _SAFE_GENERIC_ERROR = "文件处理失败，请检查文件格式后重试"
 
 
+_CSV_DECODE_ENCODINGS: tuple[str, ...] = ("utf-8-sig", "gb18030", "gbk")
+
+
+def _read_csv_with_fallback(file_path: str) -> pd.DataFrame:
+    last_decode_error: UnicodeDecodeError | None = None
+    for encoding in _CSV_DECODE_ENCODINGS:
+        try:
+            return pd.read_csv(file_path, encoding=encoding)
+        except UnicodeDecodeError as exc:
+            last_decode_error = exc
+            continue
+    if last_decode_error is not None:
+        raise last_decode_error
+    raise ValueError("无法识别 CSV 文件编码")
+
+
 def _utc_now_iso() -> str:
     return datetime.utcnow().isoformat()
 
@@ -690,7 +706,7 @@ class SmartUploadAsyncService:
 
         if ext == ".csv":
             try:
-                df_csv = pd.read_csv(record.file_path, encoding="utf-8-sig")
+                df_csv = _read_csv_with_fallback(record.file_path)
             except Exception:
                 logger.warning("[SmartUpload] CSV parse failed for task=%s", record.task_id, exc_info=True)
                 raise HTTPException(status_code=400, detail="CSV 文件解析失败，请检查文件编码与格式") from None

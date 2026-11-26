@@ -305,3 +305,46 @@ def test_core_defect_distribution_counts_points_not_cases_and_exports_same_scope
     unknown = service.report("admin")
     assert unknown["summary"]["unknown_defects"] == 1
     assert unknown["systems"][0]["defect_total"] == 1
+
+
+def test_sync_admin_and_super_admin_with_bound_institute_can_filter_department(env):
+    service, _, _, _, loader, _, sessions = env
+    with sessions.begin() as session:
+        session.add_all(
+            [
+                SysUser(
+                    id="sync-bound",
+                    username="sync-bound",
+                    display_name="绑定院区同步管理员",
+                    password_hash="synthetic",
+                    role="sync_admin",
+                    roles_json='["sync_admin", "super_admin", "admin"]',
+                    institute_id="H1",
+                    is_active=True,
+                ),
+                SysUser(
+                    id="super-bound",
+                    username="super-bound",
+                    display_name="绑定院区超管",
+                    password_hash="synthetic",
+                    role="super_admin",
+                    roles_json='["super_admin"]',
+                    institute_id="H1",
+                    is_active=True,
+                ),
+            ]
+        )
+    # 绑定院区的 sync_admin / super_admin 按科室筛选不再 422，默认收敛至绑定院区 H1
+    data_sync = service.report("sync-bound", department="内科")
+    assert data_sync["total"] == 1
+    assert data_sync["items"][0]["institute_id"] == "H1"
+
+    data_super = service.report("super-bound", department="内科")
+    assert data_super["total"] == 1
+    assert data_super["items"][0]["institute_id"] == "H1"
+
+    # sync_admin 仍可显式切换至其他院区 H2
+    data_h2 = service.report("sync-bound", institute_id="H2", department="内科")
+    assert data_h2["total"] == 1
+    assert data_h2["items"][0]["institute_id"] == "H2"
+    assert loader.call_count == 3

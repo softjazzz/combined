@@ -98,7 +98,7 @@
     </section>
 
     <a-spin
-      v-else
+      v-if="overview || !errorMessage"
       :spinning="loading"
     >
       <section
@@ -255,7 +255,7 @@
             >
               <div
                 v-for="item in overview.safe_errors"
-                :key="item.safe_error_kind"
+                :key="safeErrorKey(item)"
                 class="llm-observability__error-row"
               >
                 <div>
@@ -293,71 +293,81 @@
             <span>{{ formatInteger(overview.records.total) }} 份</span>
           </div>
 
-          <div class="llm-observability__table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>病历标识</th>
-                  <th>逻辑调用</th>
-                  <th>HTTP 尝试</th>
-                  <th>
-                    {{
-                      aggregateTokenLabel(
-                        overview.kpis.unknown_usage_attempts,
-                        overview.kpis.total_tokens,
-                      )
-                    }}
-                  </th>
-                  <th>P95 响应</th>
-                  <th>估算费用</th>
-                  <th>最近调用</th>
-                  <th>状态</th>
-                  <th>操作</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr
-                  v-for="record in overview.records.items"
-                  :key="record.record_key_hash"
-                >
-                  <td>
-                    <strong>{{ shortRecordRef(record.record_key_hash) }}</strong>
-                  </td>
-                  <td>{{ formatInteger(record.logical_calls) }}</td>
-                  <td>{{ formatInteger(record.http_attempts) }}</td>
-                  <td>{{ formatNullableInteger(record.total_tokens) }}</td>
-                  <td>{{ formatNullableDuration(record.p95_latency_ms) }}</td>
-                  <td>
-                    {{
-                      recordCostLabel(
-                        record.input_tokens,
-                        record.cached_input_tokens,
-                        record.output_tokens,
-                        record.unknown_usage_attempts,
-                        record.unknown_cache_usage_attempts,
-                      )
-                    }}
-                  </td>
-                  <td>{{ formatDateTime(record.last_called_at) }}</td>
-                  <td>
-                    <span :class="['llm-observability__status', statusTone(record.status)]">
-                      {{ recordStatusLabel(record.status) }}
-                    </span>
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      class="llm-observability__link"
-                      data-testid="view-record-calls"
-                      @click="openRecordCalls(record.record_key_hash)"
-                    >
-                      查看明细
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <p
+            v-if="recordsError"
+            class="llm-observability__inline-empty"
+            role="alert"
+          >
+            {{ recordsError }}
+          </p>
+
+          <a-spin :spinning="recordsLoading">
+            <div class="llm-observability__table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    <th>病历标识</th>
+                    <th>逻辑调用</th>
+                    <th>HTTP 尝试</th>
+                    <th>
+                      {{
+                        aggregateTokenLabel(
+                          overview.kpis.unknown_usage_attempts,
+                          overview.kpis.total_tokens,
+                        )
+                      }}
+                    </th>
+                    <th>P95 响应</th>
+                    <th>估算费用</th>
+                    <th>最近调用</th>
+                    <th>状态</th>
+                    <th>操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr
+                    v-for="record in overview.records.items"
+                    :key="record.record_key_hash"
+                  >
+                    <td>
+                      <strong>{{ shortRecordRef(record.record_key_hash) }}</strong>
+                    </td>
+                    <td>{{ formatInteger(record.logical_calls) }}</td>
+                    <td>{{ formatInteger(record.http_attempts) }}</td>
+                    <td>{{ formatNullableInteger(record.total_tokens) }}</td>
+                    <td>{{ formatNullableDuration(record.p95_latency_ms) }}</td>
+                    <td>
+                      {{
+                        recordCostLabel(
+                          record.input_tokens,
+                          record.cached_input_tokens,
+                          record.output_tokens,
+                          record.unknown_usage_attempts,
+                          record.unknown_cache_usage_attempts,
+                        )
+                      }}
+                    </td>
+                    <td>{{ formatDateTime(record.last_called_at) }}</td>
+                    <td>
+                      <span :class="['llm-observability__status', statusTone(record.status)]">
+                        {{ recordStatusLabel(record.status) }}
+                      </span>
+                    </td>
+                    <td>
+                      <button
+                        type="button"
+                        class="llm-observability__link"
+                        data-testid="view-record-calls"
+                        @click="openRecordCalls(record.record_key_hash)"
+                      >
+                        查看明细
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </a-spin>
 
           <a-pagination
             v-if="overview.records.total > overview.records.page_size"
@@ -504,18 +514,23 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { BarChart, LineChart } from 'echarts/charts'
 import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
 import VChart from 'vue-echarts'
 import { Activity, CircleAlert, CircleCheck, Clock3, RefreshCw, ShieldCheck } from 'lucide-vue-next'
-import { getLlmObservabilityOverview, getLlmRecordCallAttempts } from '@/services/llmObservability'
+import {
+  getLlmObservabilityOverview,
+  getLlmObservabilityRecords,
+  getLlmRecordCallAttempts,
+} from '@/services/llmObservability'
 import type {
   LlmObservabilityModelSummary,
   LlmObservabilityOverview,
   LlmObservabilityQuery,
+  LlmObservabilitySafeError,
   LlmRecordCallAttempts,
 } from '@/types/llmObservability'
 
@@ -536,13 +551,16 @@ const overview = ref<LlmObservabilityOverview | null>(null)
 const activeOverviewQuery = ref<LlmObservabilityQuery | null>(null)
 const knownModelOptions = ref<Array<{ provider_code: string; model: string }>>([])
 const loading = ref(false)
+const recordsLoading = ref(false)
 const errorMessage = ref('')
+const recordsError = ref('')
 const drawerOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref(false)
 const selectedRecordHash = ref('')
 const recordCalls = ref<LlmRecordCallAttempts | null>(null)
 let overviewRequestSequence = 0
+let recordsRequestSequence = 0
 let detailRequestSequence = 0
 
 const rangeOptions = [
@@ -830,6 +848,9 @@ function buildOverviewQuery(page = 1): LlmObservabilityQuery {
 
 async function loadOverview(page = 1) {
   const requestSequence = ++overviewRequestSequence
+  recordsRequestSequence += 1
+  recordsLoading.value = false
+  recordsError.value = ''
   const query = buildOverviewQuery(page)
   loading.value = true
   errorMessage.value = ''
@@ -841,11 +862,51 @@ async function loadOverview(page = 1) {
     overview.value = nextOverview
   } catch {
     if (requestSequence !== overviewRequestSequence) return
-    overview.value = null
     errorMessage.value = '模型性能数据暂不可用'
   } finally {
     if (requestSequence === overviewRequestSequence) {
       loading.value = false
+    }
+  }
+}
+
+async function loadRecordsPage(page: number) {
+  const sourceQuery = activeOverviewQuery.value
+  if (!sourceQuery || !overview.value) {
+    await loadOverview(page)
+    return
+  }
+  const requestSequence = ++recordsRequestSequence
+  const frozenQuery: LlmObservabilityQuery = {
+    start_at: sourceQuery.start_at,
+    end_at: sourceQuery.end_at,
+    provider_code: sourceQuery.provider_code,
+    model: sourceQuery.model,
+    business_scene: sourceQuery.business_scene,
+    page,
+    page_size: sourceQuery.page_size ?? 20,
+  }
+  recordsLoading.value = true
+  recordsError.value = ''
+  try {
+    const nextPage = await getLlmObservabilityRecords(frozenQuery)
+    if (requestSequence !== recordsRequestSequence || !overview.value) return
+    activeOverviewQuery.value = frozenQuery
+    overview.value = {
+      ...overview.value,
+      records: {
+        items: nextPage.items,
+        total: nextPage.total,
+        page: nextPage.page,
+        page_size: nextPage.page_size,
+      },
+    }
+  } catch {
+    if (requestSequence !== recordsRequestSequence) return
+    recordsError.value = '单病历列表翻页失败，当前展示仍为上一页数据，请稍后重试。'
+  } finally {
+    if (requestSequence === recordsRequestSequence) {
+      recordsLoading.value = false
     }
   }
 }
@@ -874,7 +935,7 @@ function handleProviderChange() {
 }
 
 function handleRecordPageChange(page: number) {
-  void loadOverview(page)
+  void loadRecordsPage(page)
 }
 
 async function openRecordCalls(recordKeyHash: string) {
@@ -1050,6 +1111,10 @@ function modelKey(item: LlmObservabilityModelSummary): string {
   return `${item.provider_code}:${item.model}:${item.model_role}`
 }
 
+function safeErrorKey(item: LlmObservabilitySafeError & { status?: string }): string {
+  return `${item.status ?? ''}:${item.safe_error_kind}`
+}
+
 function modelRoleLabel(value: string): string {
   const labels: Record<string, string> = {
     first_pass: '初审模型',
@@ -1118,6 +1183,7 @@ function attemptStatusLabel(value: string): string {
     transport_error: '连接失败',
     upstream_429: '上游限流',
     upstream_5xx: '上游异常',
+    upstream_4xx: '上游请求被拒绝',
     configuration_error: '配置异常',
     cancelled: '已取消',
     abandoned: '未正常结束',
@@ -1128,6 +1194,12 @@ function attemptStatusLabel(value: string): string {
 
 onMounted(() => {
   void loadOverview()
+})
+
+onBeforeUnmount(() => {
+  overviewRequestSequence += 1
+  recordsRequestSequence += 1
+  detailRequestSequence += 1
 })
 </script>
 

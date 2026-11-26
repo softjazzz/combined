@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/v1/account-management", tags=["account-managemen
 service = AccountManagementService()
 registration_service = AccountRegistrationService()
 logger = logging.getLogger(__name__)
-Role = Literal["admin", "qc_manager", "qc_staff", "doctor"]
+Role = Literal["admin", "qc_manager", "qc_staff", "coder", "doctor"]
 
 
 class Binding(BaseModel):
@@ -32,7 +32,7 @@ class Binding(BaseModel):
     display_name: str = Field(min_length=1, max_length=100)
     institute_id: str = Field(min_length=1, max_length=128)
     department: str = Field(min_length=1, max_length=100)
-    roles: list[Role] = Field(min_length=1, max_length=4)
+    roles: list[Role] = Field(min_length=1, max_length=5)
 
 
 class Create(Binding):
@@ -53,8 +53,24 @@ class Create(Binding):
 
 
 class Update(Binding):
+    institute_id: str | None = Field(default=None, max_length=128)
     is_active: bool = Field(strict=True)
     expected_updated_at: datetime | None
+
+
+class ResetPassword(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    password: Annotated[
+        str, StringConstraints(strip_whitespace=False, min_length=12, max_length=72)
+    ] = Field(repr=False)
+    expected_updated_at: datetime | None = None
+
+    @field_validator("password")
+    @classmethod
+    def password_bytes(cls, value):
+        if len(value.encode("utf-8")) > 72:
+            raise ValueError("口令 UTF-8 长度不得超过72字节")
+        return value
 
 
 def _call(user, method, *args, **kwargs):
@@ -100,6 +116,19 @@ def create(body: Create, user=Depends(get_current_user)):
 @router.put("/{user_id}")
 def update(user_id: str, body: Update, user=Depends(get_current_user)):
     return _call(user, service.update, user_id, body.model_dump())
+
+
+@router.post("/{account_id}/reset-password")
+def reset_password(
+    account_id: str, body: ResetPassword, user=Depends(get_current_user)
+):
+    return _call(
+        user,
+        service.reset_password,
+        account_id,
+        body.password,
+        expected_updated_at=body.expected_updated_at,
+    )
 
 
 @router.get("/registrations/list")

@@ -1,7 +1,7 @@
 import { ApiService } from '@/services/apiService'
 import { extractApiErrorMessageFromError, unwrapApiEnvelope } from '@/utils/api-envelope'
 
-export type AccountRole = 'admin' | 'qc_manager' | 'qc_staff' | 'doctor'
+export type AccountRole = 'admin' | 'qc_manager' | 'qc_staff' | 'coder' | 'doctor'
 export interface ManagedAccount {
   id: string
   username: string
@@ -34,9 +34,14 @@ export interface AccountCreate extends AccountBinding {
   email: string
   password: string
 }
-export interface AccountUpdate extends AccountBinding {
+export interface AccountUpdate extends Omit<AccountBinding, 'institute_id'> {
+  institute_id: string | null
   is_active: boolean
   expected_updated_at: string | null
+}
+export interface AccountPasswordReset {
+  password: string
+  expected_updated_at?: string | null
 }
 async function request<T>(config: Parameters<typeof ApiService.requestRaw>[0]): Promise<T> {
   try {
@@ -58,3 +63,9 @@ export const createManagedAccount = (data: AccountCreate) =>
   request<ManagedAccount>({ url: base, method: 'POST', data })
 export const updateManagedAccount = (id: string, data: AccountUpdate) =>
   request<ManagedAccount>({ url: `${base}/${encodeURIComponent(id)}`, method: 'PUT', data })
+export const resetManagedAccountPassword = (id: string, data: AccountPasswordReset) =>
+  request<ManagedAccount>({
+    url: `${base}/${encodeURIComponent(id)}/reset-password`,
+    method: 'POST',
+    data,
+  })

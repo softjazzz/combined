@@ -117,4 +117,61 @@ describe('质控运行设置', () => {
     wrapper.unmount()
     expect(api.save).not.toHaveBeenCalled()
   })
+
+  it('检查配套服务不覆盖未保存的开关，未检查不标红，409冲突刷新就绪状态', async () => {
+    const wrapper = mount(Panel)
+    await flushPromises()
+
+    const uncheckedSpan = wrapper.findAll('li span').find((el) => el.text() === '未检查')
+    expect(uncheckedSpan).toBeTruthy()
+    expect(uncheckedSpan?.classes()).not.toContain('runtime-error')
+
+    await wrapper.get('input').setValue(true)
+    api.check.mockResolvedValueOnce({
+      ...config(false),
+      readiness: {
+        ready: false,
+        gateway_checked: true,
+        checks: {
+          broker_config: true,
+          gateway_config: true,
+          publisher: true,
+          worker: false,
+          gateway: true,
+        },
+      },
+    })
+    await button(wrapper, '检查配套服务').trigger('click')
+    await flushPromises()
+    expect((wrapper.get('input').element as HTMLInputElement).checked).toBe(true)
+
+    api.save.mockRejectedValueOnce({
+      isAxiosError: true,
+      response: {
+        status: 409,
+        data: {
+          detail: {
+            message: '配套服务未就绪',
+            readiness: {
+              ready: false,
+              gateway_checked: true,
+              checks: {
+                broker_config: true,
+                gateway_config: true,
+                publisher: true,
+                worker: true,
+                gateway: false,
+              },
+            },
+          },
+        },
+      },
+    })
+    await button(wrapper, '保存设置').trigger('click')
+    await flushPromises()
+    expect(wrapper.get('[role="alert"]').text()).toContain('未保存')
+    const gatewayItem = wrapper.findAll('li').find((li) => li.text().includes('Gateway 健康及授权'))
+    expect(gatewayItem?.text()).toContain('未就绪')
+    wrapper.unmount()
+  })
 })

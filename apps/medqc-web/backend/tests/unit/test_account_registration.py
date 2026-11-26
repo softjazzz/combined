@@ -545,3 +545,94 @@ def test_status_is_not_a_business_login_and_is_rate_limited(registration):
         )
     assert status(client).status_code == 429
     assert client.get("/api/v1/notifications").status_code == 401
+
+
+def test_recipients_include_super_admin_and_exclude_unapproved_admins(registration):
+    from datetime import datetime
+
+    client, sessions, _, requests, _ = registration
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with sessions.begin() as session:
+        # 停用原有本机构与全局普通管理员，仅保留：
+        # 1) 绑定到其他机构 HQ 的 super_admin（应接收全部机构注册通知）
+        # 2) 本机构 A 但注册状态为 pending 的未核准管理员（必须被排除）
+        for uid in ("admin", "global"):
+            session.get(SysUser, uid).is_active = False
+        session.add(
+            SysUser(
+                id="super_hq",
+                username="super_hq",
+                email="super_hq@example.com",
+                display_name="总部超管",
+                password_hash=get_password_hash("synthetic-registration-only!"),
+                institute_id="HQ",
+                department="信息科",
+                role="super_admin",
+                roles_json='["super_admin"]',
+                is_active=True,
+            )
+        )
+        session.add(
+            SysUser(
+                id="unapproved_admin",
+                username="unapproved_admin",
+                email="unapproved-admin@example.com",
+                display_name="未审管理员",
+                password_hash=get_password_hash("synthetic-registration-only!"),
+                institute_id="A",
+                department="信息科",
+                role="admin",
+                roles_json='["admin"]',
+                is_active=True,
+            )
+        )
+        session.execute(
+            requests.insert().values(
+                user_id="unapproved_admin",
+                status="pending",
+                requested_institute_id="A",
+                requested_department="信息科",
+                version=1,
+                submitted_at=now,
+                updated_at=now,
+            )
+        )
+
+    row = submit(client)
+    with sessions() as session:
+        recipients = {
+            n.recipient_id
+            for n in session.query(Notification)
+            .filter(Notification.related_id == row["user_id"])
+            .all()
+        }
+    assert recipients == {"super_hq"}
+    assert "unapproved_admin" not in recipients
+    queue = client.get(
+        "/api/v1/account-management/registrations/list", headers=headers("super_hq")
+    ).json()["data"]
+    assert row["user_id"] in {item["user_id"] for item in queue["items"]}
+
+    # 若连 super_hq 也停用，仅剩未审管理员时必须拒绝提交（409）
+    with sessions.begin() as session:
+        session.get(SysUser, "super_hq").is_active = False
+    assert (
+        client.post(
+            "/api/v1/auth/register",
+            json=application(
+                username="doctor_no_recipient", email="no-rec@example.com"
+            ),
+        ).status_code
+        == 409
+    )
+
+
+def test_pending_registration_cannot_reset_password(registration):
+    client, _, _, _, _ = registration
+    row = submit(client)
+    res = client.post(
+        f"/api/v1/account-management/{row['user_id']}/reset-password",
+        headers=headers("admin"),
+        json={"password": "synthetic-new-password!"},
+    )
+    assert res.status_code == 409

@@ -840,3 +840,95 @@ def test_fixed_cdm_options_override_management_legacy_context(environment, monke
             assert result["departments"] == ["CDM-dept"]
             assert service.options(store, "manager", scope="running")["institutes"] == []
         assert clinical.current_selection()["id"] == "legacy_pg"
+
+
+def test_super_and_sync_admin_can_manage_and_delete_across_owners_while_admin_is_scoped(
+    client, environment, monkeypatch
+):
+    store, sessions, _ = environment
+    with sessions() as session, session.begin():
+        session.add(
+            SysUser(
+                id="super-admin-u",
+                username="super-admin-u",
+                display_name="超管",
+                institute_id=None,
+                role="super_admin",
+                roles_json='["super_admin"]',
+                is_active=True,
+            )
+        )
+    client.app.dependency_overrides[enforce_default_auth] = lambda: None
+    user = {"id": "other", "roles": ["admin"]}
+    client.app.dependency_overrides[get_current_user] = lambda: user
+    client.app.dependency_overrides[api.store_dependency] = lambda: store
+    monkeypatch.setattr(
+        api.service, "validate_definition", lambda store, actor, data: data.model_dump()
+    )
+
+    # manager 创建一条计划并写一条触发记录
+    plan_id = add_plan(store, name="管理员计划")
+    claimed = store.claim(NOW + timedelta(minutes=5))
+    store.prepare(claimed, NOW + timedelta(minutes=5))
+    store.release(claimed)
+
+    # 普通 admin(other) 仅见自己名下计划，无权编辑/删除 manager 的计划
+    assert client.get("/api/v1/qc/daily-schedules").json()["data"]["items"] == []
+    assert (
+        client.put(
+            f"/api/v1/qc/daily-schedules/{plan_id}",
+            json={"revision": 1, "definition": definition(name="越权改")},
+        ).status_code
+        == 409
+    )
+    assert client.delete(f"/api/v1/qc/daily-schedules/{plan_id}").status_code == 404
+
+    # super_admin 可跨 owner 查看、查看历史、编辑并删除
+    user.update(id="super-admin-u", roles=["super_admin"])
+    listed = client.get("/api/v1/qc/daily-schedules").json()["data"]["items"]
+    assert [item["id"] for item in listed] == [plan_id]
+    assert client.get(f"/api/v1/qc/daily-schedules/{plan_id}/runs").status_code == 200
+    edited = client.put(
+        f"/api/v1/qc/daily-schedules/{plan_id}",
+        json={"revision": 1, "definition": definition(name="超管已改", enabled=False)},
+    )
+    assert edited.status_code == 200, edited.text
+    assert edited.json()["data"]["name"] == "超管已改"
+
+    deleted = client.delete(f"/api/v1/qc/daily-schedules/{plan_id}")
+    assert deleted.status_code == 200, deleted.text
+    assert deleted.json()["data"] == {"id": plan_id, "deleted": True}
+    assert store.current(plan_id) is None
+    assert client.delete(f"/api/v1/qc/daily-schedules/{plan_id}").status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_startup_starts_daily_qc_when_background_disabled_but_not_in_acceptance(monkeypatch):
+    from app.main import create_app
+    from app.core import acceptance_startup, server_startup
+    from app.database import repository as db_repository
+    from app.services.daily_qc import runner as daily_qc_runner
+
+    started_apps = []
+    monkeypatch.setattr(db_repository, "validate_data_source", lambda: None)
+    monkeypatch.setattr(server_startup, "validate_server_schema", lambda _engine: None)
+    monkeypatch.setattr(
+        acceptance_startup, "validate_acceptance_schema", lambda _engine, **_kw: None
+    )
+    monkeypatch.setattr(daily_qc_runner, "start", lambda app: started_apps.append(app))
+
+    # 1. MEDQC_STARTUP_BACKGROUND_ENABLED=false 时仍调用 start_daily_qc(app)
+    monkeypatch.setenv("MEDQC_STARTUP_MODE", "normal")
+    monkeypatch.setenv("MEDQC_STARTUP_BACKGROUND_ENABLED", "false")
+    app = create_app()
+    for handler in app.router.on_startup:
+        await handler()
+    assert len(started_apps) == 1
+
+    # 2. acceptance 模式下不启动 daily_qc
+    started_apps.clear()
+    monkeypatch.setenv("MEDQC_STARTUP_MODE", "acceptance")
+    app_acc = create_app()
+    for handler in app_acc.router.on_startup:
+        await handler()
+    assert started_apps == []

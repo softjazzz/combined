@@ -146,4 +146,31 @@ describe('V5注册审批', () => {
     expect(wrapper.text()).toContain('仅持久系统管理员可审批')
     wrapper.unmount()
   })
+  it('审批失败后修改任意表单字段可清除错误并重新启用提交按钮', async () => {
+    const wrapper = make('request-id')
+    await flushPromises()
+    await wrapper.get('textarea').setValue('初审意见')
+    api.review.mockRejectedValueOnce(new Error('服务暂不可用，请重试'))
+    await wrapper.get('.registration-review').trigger('submit')
+    await flushPromises()
+    const submitBtn = wrapper.get('.registration-review button[type="submit"]')
+    expect(wrapper.get('aside').text()).toContain('服务暂不可用，请重试')
+    expect(submitBtn.attributes('disabled')).toBeDefined()
+
+    // 修改核定科室后错误清除且提交按钮恢复可用
+    await wrapper.get('input[aria-label="核定科室"]').setValue('心内科')
+    await flushPromises()
+    expect(wrapper.get('aside').text()).not.toContain('服务暂不可用，请重试')
+    expect(submitBtn.attributes('disabled')).toBeUndefined()
+
+    // 再次失败后切换审批决定也能清除错误
+    api.review.mockRejectedValueOnce(new Error('核定参数冲突'))
+    await wrapper.get('.registration-review').trigger('submit')
+    await flushPromises()
+    expect(submitBtn.attributes('disabled')).toBeDefined()
+    await wrapper.get('select[aria-label="审批决定"]').setValue('reject')
+    await flushPromises()
+    expect(submitBtn.attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
 })

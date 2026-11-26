@@ -37,12 +37,10 @@
     />
     <a-alert
       v-else
-      :type="status.scheduler_enabled ? 'info' : 'warning'"
+      :type="schedulerBanner.type"
       show-icon
-      :message="status.scheduler_enabled ? '后台调度开关已启用' : '后台自动触发未启用'"
-      :description="status.scheduler_enabled
-        ? '进程在线状态需结合部署监控核对；停机超过60分钟的周期记为错过，不批量追补。'
-        : '计划默认关闭。部署需显式开启 QC_DAILY_SCHEDULER_ENABLED；不开启不会自动创建任务。'"
+      :message="schedulerBanner.message"
+      :description="schedulerBanner.description"
       class="schedule-note"
     />
     <p class="mq-card__desc">
@@ -71,13 +69,21 @@
       </div>
       <a-space wrap>
         <a-button
-          :disabled="!canManage || saving"
+          :disabled="!canManage || saving || deleting"
           @click="openEditor(plan)"
         >
           编辑／启停
         </a-button>
         <a-button @click="showHistory(plan)">
           触发记录
+        </a-button>
+        <a-button
+          danger
+          :disabled="!canManage || saving || deleting"
+          :data-testid="`delete-schedule-${plan.id}`"
+          @click="requestDelete(plan)"
+        >
+          删除
         </a-button>
       </a-space>
     </div>
@@ -195,6 +201,25 @@
         />
       </a-form>
     </a-modal>
+    <a-modal
+      :open="Boolean(deleteTarget)"
+      title="确认删除每日质控计划"
+      ok-text="确认删除"
+      cancel-text="取消"
+      :confirm-loading="deleting"
+      :ok-button-props="{ danger: true, disabled: !canManage || deleting }"
+      @ok="confirmDelete"
+      @cancel="cancelDelete"
+    >
+      <p v-if="deleteTarget">
+        确定删除计划「{{ deleteTarget.name }}」吗？删除后将一并清除该计划的触发记录，已创建的质控任务不受影响。
+      </p>
+      <a-alert
+        v-if="deleteError"
+        type="error"
+        :message="deleteError"
+      />
+    </a-modal>
     <a-drawer
       v-model:open="historyOpen"
       title="定时质控触发记录"
@@ -234,6 +259,7 @@
 
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { isAxiosError } from 'axios'
 import { message } from 'ant-design-vue'
 import { useAuthStore } from '@/stores/auth'
 import { canManageSystemConfig } from '@/utils/systemConfigAccess'
@@ -243,11 +269,14 @@ const auth = useAuthStore()
 const canManage = computed(() => canManageSystemConfig(auth.userRoles))
 const loading = ref(false)
 const saving = ref(false)
+const deleting = ref(false)
 const error = ref('')
 const optionsError = ref('')
 const submitError = ref('')
+const deleteError = ref('')
 const editing = ref(false)
 const current = ref<DailyQcPlan>()
+const deleteTarget = ref<DailyQcPlan | null>(null)
 const status = ref<DailyQcList>({ items: [], scheduler_enabled: false, local_process_active: false })
 const options = ref<DailyQcOptions>({ institutes: [], departments: [], rule_sets: [] })
 const optionsLoading = ref(false)
@@ -266,8 +295,46 @@ const form = reactive<DailyQcDefinition>(defaults())
 const sceneOptions = [{ value: 'running', label: '运行病历' }, { value: 'final', label: '终末病历' }]
 const timezoneOptions = [...new Set(['Asia/Shanghai', Intl.DateTimeFormat().resolvedOptions().timeZone, 'America/Chicago', 'UTC'])].map(value => ({ value, label: value }))
 const ruleOptions = computed(() => options.value.rule_sets.filter(item => item.key === 'luxian_0609_qc_v1' || ['all', form.scope].includes(item.scope)).map(item => ({ value: item.key, label: item.name })))
-const valid = computed(() => Boolean(form.name.trim() && form.institute_id && form.rule_set_key && /^([01]\d|2[0-3]):[0-5]\d$/.test(form.time_of_day)))
-const rangeHint = computed(() => `按${form.date_field === 'admission' ? '入院' : '出院'}日期，结束于执行日之前${form.end_offset_days}天，向前覆盖${form.lookback_days}天`)
+const schedulerBanner = computed(() => {
+  if (!status.value.scheduler_enabled) {
+    return {
+      type: 'warning' as const,
+      message: '后台自动触发未启用',
+      description: '计划默认关闭。部署需显式开启 QC_DAILY_SCHEDULER_ENABLED；不开启不会自动创建任务。',
+    }
+  }
+  if (!status.value.local_process_active) {
+    return {
+      type: 'warning' as const,
+      message: '后台调度开关已启用，但当前进程调度器未运行',
+      description: '当前 Web 进程未检测到活跃的每日定时调度循环；若未部署独立调度进程，请核对后端启动日志与部署配置。停机超过60分钟的周期记为错过，不批量追补。',
+    }
+  }
+  return {
+    type: 'info' as const,
+    message: '后台调度已启用（当前进程调度器运行中）',
+    description: '当前 Web 进程调度循环在线；多进程部署仍需结合部署监控核对。停机超过60分钟的周期记为错过，不批量追补。',
+  }
+})
+function isIntegerInRange(value: unknown, min: number, max: number): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
+}
+const valid = computed(() =>
+  Boolean(
+    form.name.trim() &&
+      form.institute_id &&
+      form.rule_set_key &&
+      /^([01]\d|2[0-3]):[0-5]\d$/.test(form.time_of_day) &&
+      isIntegerInRange(form.end_offset_days, 0, 365) &&
+      isIntegerInRange(form.lookback_days, 1, 365) &&
+      isIntegerInRange(form.max_records, 1, 1000),
+  ),
+)
+const rangeHint = computed(() => {
+  const endOffset = isIntegerInRange(form.end_offset_days, 0, 365) ? `${form.end_offset_days}` : '未填写'
+  const lookback = isIntegerInRange(form.lookback_days, 1, 365) ? `${form.lookback_days}` : '未填写'
+  return `按${form.date_field === 'admission' ? '入院' : '出院'}日期，结束于执行日之前${endOffset}天，向前覆盖${lookback}天`
+})
 
 watch(
   form,
@@ -345,15 +412,81 @@ function changeScene() {
   form.rule_set_key = 'luxian_0609_qc_v1'
   void refreshOptions()
 }
+function resolveSaveError(cause: unknown): string {
+  if (isAxiosError(cause)) {
+    const httpStatus = cause.response?.status
+    const detail = (cause.response?.data as { detail?: unknown } | undefined)?.detail
+    if (httpStatus === 422) {
+      if (typeof detail === 'string' && detail.trim()) {
+        return `保存失败（参数校验未通过）：${detail.trim()}`
+      }
+      return '保存失败（参数校验未通过）：请检查计划名称、天数范围、病历上限和规则集。'
+    }
+    if (httpStatus === 409) {
+      if (typeof detail === 'string' && detail.trim()) {
+        return `保存失败（版本或上限冲突）：${detail.trim()}`
+      }
+      return '保存失败：计划已被其他操作修改或数量已达上限，请刷新后重试。'
+    }
+    if (httpStatus === 403) {
+      return '保存失败：当前账号无权配置该机构的定时质控计划。'
+    }
+  }
+  return '保存失败；计划可能已被修改，请刷新并核对选项后重试。'
+}
+
 async function save() {
   if (!canManage.value || !valid.value || optionsLoading.value || saving.value || optionsError.value) return
   saving.value = true
   submitError.value = ''
   try {
-    await dailyQcScheduleService.save({ ...form, rule_ids: [...form.rule_ids] }, current.value)
+    await dailyQcScheduleService.save(
+      {
+        ...form,
+        name: form.name.trim(),
+        rule_ids: [...form.rule_ids],
+      },
+      current.value,
+    )
     if (active) { editing.value = false; message.success('计划已保存'); await load() }
-  } catch { if (active) submitError.value = '保存失败；计划可能已被修改，请刷新并核对选项后重试。' }
+  } catch (cause) { if (active) submitError.value = resolveSaveError(cause) }
   finally { if (active) saving.value = false }
+}
+
+function requestDelete(plan: DailyQcPlan) {
+  if (!canManage.value || saving.value || deleting.value) return
+  deleteError.value = ''
+  deleteTarget.value = plan
+}
+
+function cancelDelete() {
+  if (deleting.value) return
+  deleteError.value = ''
+  deleteTarget.value = null
+}
+
+async function confirmDelete() {
+  if (!canManage.value || !deleteTarget.value || deleting.value) return
+  deleting.value = true
+  deleteError.value = ''
+  try {
+    await dailyQcScheduleService.remove(deleteTarget.value.id)
+    if (active) {
+      deleteTarget.value = null
+      message.success('计划已删除')
+      await load()
+    }
+  } catch (cause) {
+    if (active) {
+      const httpStatus = isAxiosError(cause) ? cause.response?.status : undefined
+      deleteError.value =
+        httpStatus === 404
+          ? '计划不存在或已被其他管理员删除，请刷新列表。'
+          : '删除失败，请稍后重试。'
+    }
+  } finally {
+    if (active) deleting.value = false
+  }
 }
 async function showHistory(plan: DailyQcPlan) {
   const version = ++historyVersion

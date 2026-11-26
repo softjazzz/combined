@@ -354,3 +354,209 @@ def test_validation_log_and_response_never_echo_initial_password(caplog):
     response = asyncio.run(handler(request, error))
     assert secret not in caplog.text
     assert secret.encode() not in response.body
+
+
+def test_edit_unbound_global_admin_without_forced_demotion(accounts):
+    service, sessions, client, actor = accounts
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    with sessions.begin() as session:
+        session.add(
+            SysUser(
+                id="super",
+                username="super_op",
+                email="super@example.com",
+                display_name="超级管理员",
+                institute_id="HQ",
+                department="信息科",
+                role="super_admin",
+                roles_json='["super_admin"]',
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+        session.add(
+            SysUser(
+                id="global_admin",
+                username="global_admin",
+                email="global-admin@example.com",
+                display_name="全局管理员",
+                institute_id=None,
+                department="信息科",
+                role="admin",
+                roles_json='["admin"]',
+                is_active=True,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+    # 机构内管理员无权编辑未绑定全局管理员
+    row = next(r for r in service.list("super")["items"] if r["id"] == "global_admin")
+    assert (
+        client.put(
+            "/api/v1/account-management/global_admin",
+            json=edit(row, display_name="越权改名", institute_id=None),
+        ).status_code
+        == 403
+    )
+    # 超级管理员可更新未绑定全局管理员并保持 institute_id 为空（支持 None 与 ""）
+    actor.update(id="super", roles=["super_admin"])
+    res = client.put(
+        "/api/v1/account-management/global_admin",
+        json=edit(row, display_name="全局管理员新名", institute_id=""),
+    )
+    assert res.status_code == 200, res.text
+    updated = res.json()["data"]
+    assert updated["institute_id"] is None
+    assert updated["roles"] == ["admin"]
+    assert updated["display_name"] == "全局管理员新名"
+
+    # 全局管理员自身也可更新姓名而不因 None/"" 差异误判变更授权范围
+    actor.update(id="global_admin", roles=["admin"])
+    self_res = client.put(
+        "/api/v1/account-management/global_admin",
+        json=edit(updated, display_name="全局管理员自改", institute_id=None),
+    )
+    assert self_res.status_code == 200, self_res.text
+    assert self_res.json()["data"]["institute_id"] is None
+
+    # 降权为非 admin 或清空已绑定机构账号的 institute_id 必须拒绝（422）
+    actor.update(id="super", roles=["super_admin"])
+    latest = self_res.json()["data"]
+    assert (
+        client.put(
+            "/api/v1/account-management/global_admin",
+            json=edit(latest, roles=["doctor"], institute_id=None),
+        ).status_code
+        == 422
+    )
+    doc_row = next(r for r in service.list("super")["items"] if r["id"] == "doc")
+    assert (
+        client.put(
+            "/api/v1/account-management/doc",
+            json=edit(doc_row, institute_id=""),
+        ).status_code
+        == 422
+    )
+
+
+def test_coder_role_create_list_and_update(accounts):
+    service, _, client, _ = accounts
+    created = client.post(
+        "/api/v1/account-management",
+        json=payload(
+            username="coder_user",
+            email="coder@example.com",
+            display_name="合成编码员",
+            roles=["coder"],
+        ),
+    )
+    assert created.status_code == 200, created.text
+    row = created.json()["data"]
+    assert row["roles"] == ["coder"]
+
+    listed = client.get("/api/v1/account-management", params={"role": "coder"})
+    assert listed.status_code == 200, listed.text
+    assert listed.json()["data"]["total"] == 1
+    assert listed.json()["data"]["items"][0]["id"] == row["id"]
+
+    updated = client.put(
+        f"/api/v1/account-management/{row['id']}",
+        json=edit(row, roles=["coder", "qc_staff"]),
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["data"]["roles"] == ["coder", "qc_staff"]
+
+
+def test_admin_reset_password_policy_guards_and_no_secret_echo(accounts, caplog):
+    service, sessions, client, actor = accounts
+    caplog.set_level("INFO")
+    created = client.post("/api/v1/account-management", json=payload()).json()["data"]
+    target_id = created["id"]
+    new_secret = "  reset-only-secret-2026!  "
+
+    # 校验口令长度策略（12..72 字符且 UTF-8 <= 72 字节）
+    for bad in ("short-pass", "中" * 30):
+        assert (
+            client.post(
+                f"/api/v1/account-management/{target_id}/reset-password",
+                json={"password": bad},
+            ).status_code
+            == 422
+        )
+
+    # 过期并发版本拒绝
+    stale_res = client.post(
+        f"/api/v1/account-management/{target_id}/reset-password",
+        json={
+            "password": new_secret,
+            "expected_updated_at": "2020-01-01T00:00:00+00:00",
+        },
+    )
+    assert stale_res.status_code == 409
+
+    # 正常重置密码
+    res = client.post(
+        f"/api/v1/account-management/{target_id}/reset-password",
+        json={
+            "password": new_secret,
+            "expected_updated_at": created["updated_at"],
+        },
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()["data"]
+    assert "password" not in body and "password_hash" not in body
+    assert new_secret not in res.text
+    assert new_secret not in caplog.text
+    with sessions() as session:
+        stored = session.get(SysUser, target_id)
+        assert verify_password(new_secret, stored.password_hash)
+        assert not verify_password(payload()["password"], stored.password_hash)
+
+    # 禁止重置自身密码
+    assert (
+        client.post(
+            "/api/v1/account-management/admin/reset-password",
+            json={"password": new_secret},
+        ).status_code
+        == 409
+    )
+
+    # 禁止跨机构重置
+    assert (
+        client.post(
+            "/api/v1/account-management/foreign/reset-password",
+            json={"password": new_secret},
+        ).status_code
+        == 403
+    )
+
+    # 禁止重置专用角色账号
+    with sessions.begin() as session:
+        session.get(SysUser, "doc").roles_json = '["doctor", "sync_admin"]'
+    assert (
+        client.post(
+            "/api/v1/account-management/doc/reset-password",
+            json={"password": new_secret},
+        ).status_code
+        == 409
+    )
+
+    # 不存在账号返回 404
+    assert (
+        client.post(
+            "/api/v1/account-management/missing-id/reset-password",
+            json={"password": new_secret},
+        ).status_code
+        == 404
+    )
+
+    # 非管理员调用返回 403
+    actor.update(id="qc", roles=["admin"])
+    assert (
+        client.post(
+            f"/api/v1/account-management/{target_id}/reset-password",
+            json={"password": new_secret},
+        ).status_code
+        == 403
+    )

@@ -413,9 +413,18 @@ async function save() {
     if (token === detailGeneration) saving.value = false
   }
 }
-watch([comment, () => binding.roles.join(',')], () => {
-  if (detailError.value === '请填写审核意见并核定授权角色') detailError.value = ''
-})
+watch(
+  [
+    decision,
+    comment,
+    () => binding.institute_id,
+    () => binding.department,
+    () => binding.roles.join(','),
+  ],
+  () => {
+    if (detail.value && detailError.value) detailError.value = ''
+  },
+)
 watch(
   () => [auth.user?.id, auth.userRoles.join(',')],
   () => {

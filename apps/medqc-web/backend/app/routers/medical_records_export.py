@@ -67,15 +67,27 @@ def get_table_data_api(
     table_name: str,
     page: int = page_param(),
     page_size: int = page_size_param(),
+    patient_id: str | None = None,
+    visit_id: str | None = None,
+    institute_id: str | None = None,
     current_user: dict = Depends(require_roles(*_TABLE_DATA_ROLES)),
 ):
     try:
-        institute_id, require_institute_scope = _resolve_table_data_scope(current_user)
+        scoped_institute_id, require_institute_scope = _resolve_table_data_scope(current_user)
+        requested_institute = str(institute_id).strip() if institute_id is not None else ""
+        if require_institute_scope:
+            if requested_institute and requested_institute != scoped_institute_id:
+                raise HTTPException(status_code=403, detail="无权访问其他机构的病案表数据")
+            effective_institute_id = scoped_institute_id
+        else:
+            effective_institute_id = requested_institute or None
         return get_table_data(
             table_name,
             page=page,
             page_size=page_size,
-            institute_id=institute_id,
+            patient_id=patient_id,
+            visit_id=visit_id,
+            institute_id=effective_institute_id,
             require_institute_scope=require_institute_scope,
         )
     except Exception as exc:

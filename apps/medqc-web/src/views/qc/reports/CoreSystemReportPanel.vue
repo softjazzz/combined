@@ -96,7 +96,7 @@
         </div>
         <div v-if="!confirmedResultsOnly" class="core-metric core-metric--action mq-card">
           <span class="core-metric__label">结果不可用</span>
-          <button class="mq-btn" type="button" @click="drill('unknown')">
+          <button class="mq-btn" type="button" @click="drill('unknown', '', false)">
             结果不可用 {{ report.summary.unavailable_records }} / 未知覆盖
           </button>
         </div>
@@ -548,12 +548,13 @@ function reset() {
 function openSystem(id: string) {
   selectedSystem.value = id
 }
-function drill(id: string, rule = '', problemsOnly = applied.problems_only) {
+function drill(id: string, rule = '', problemsOnly = id === 'unknown' ? false : applied.problems_only) {
+  const nextProblemsOnly = id === 'unknown' ? false : (problemsOnly ?? false)
   draft.value.system_id = id
   draft.value.rule_id = rule
-  draft.value.problems_only = problemsOnly ?? false
+  draft.value.problems_only = nextProblemsOnly
   selectedSystem.value = ''
-  applied = { ...applied, system_id: id, rule_id: rule || undefined, problems_only: problemsOnly }
+  applied = { ...applied, system_id: id, rule_id: rule || undefined, problems_only: nextProblemsOnly }
   void load()
 }
 async function download() {

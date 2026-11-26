@@ -122,3 +122,40 @@ it('某张规则表无权限时不报告预检成功，也不保存或启用配�
   expect(mocks.save).not.toHaveBeenCalled()
   wrapper.unmount()
 })
+
+it('兼容模式保存保留 default_source 与 legacy_enabled，并准确展示 publication_ready 状态', async () => {
+  const wrapper = mount(ClinicalSourceSettingsPanel)
+  await flushPromises()
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  expect(mocks.save).toHaveBeenCalledWith(
+    expect.objectContaining({
+      default_source: 'legacy_pg',
+      legacy_enabled: true,
+    }),
+  )
+
+  mocks.check.mockResolvedValueOnce({
+    connected: true,
+    read_only: true,
+    ok: true,
+    dependencies: [],
+    publication_ready: true,
+  })
+  const checkBtn = wrapper.findAll('button').find((item) => item.text() === '只读检查 CDM')
+  await checkBtn?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('同步发布已就绪')
+
+  mocks.check.mockResolvedValueOnce({
+    connected: true,
+    read_only: true,
+    ok: true,
+    dependencies: [],
+    publication_ready: false,
+  })
+  await checkBtn?.trigger('click')
+  await flushPromises()
+  expect(wrapper.text()).toContain('同步发布尚未就绪')
+  wrapper.unmount()
+})

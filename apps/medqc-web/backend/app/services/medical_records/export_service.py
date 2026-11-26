@@ -135,6 +135,17 @@ def get_schema(metadata: MetaData | None = None) -> dict[str, Any]:
     return {"tables": tables, "total_tables": len(tables)}
 
 
+def _resolve_table_order_columns(table_obj: Any) -> list[Any]:
+    pk_cols = list(table_obj.primary_key.columns)
+    if pk_cols:
+        return pk_cols
+    for col_name in ("id", "visit_id", "patient_id"):
+        if col_name in table_obj.c:
+            return [table_obj.c[col_name]]
+    first_col = next(iter(table_obj.columns), None)
+    return [first_col] if first_col is not None else []
+
+
 def get_table_data(
     table_name: str,
     page: int = 1,
@@ -142,6 +153,8 @@ def get_table_data(
     metadata: MetaData | None = None,
     session_factory: Callable[[], Any] | None = None,
     *,
+    patient_id: str | None = None,
+    visit_id: str | None = None,
     institute_id: str | None = None,
     require_institute_scope: bool = False,
 ) -> dict[str, Any]:
@@ -185,6 +198,20 @@ def get_table_data(
             )
         count_stmt = count_stmt.where(table_obj.c.institute_id == scope_institute)
         data_stmt = data_stmt.where(table_obj.c.institute_id == scope_institute)
+
+    filter_patient = str(patient_id).strip() if patient_id is not None else ""
+    if filter_patient and "patient_id" in table_obj.c:
+        count_stmt = count_stmt.where(table_obj.c.patient_id == filter_patient)
+        data_stmt = data_stmt.where(table_obj.c.patient_id == filter_patient)
+
+    filter_visit = str(visit_id).strip() if visit_id is not None else ""
+    if filter_visit and "visit_id" in table_obj.c:
+        count_stmt = count_stmt.where(table_obj.c.visit_id == filter_visit)
+        data_stmt = data_stmt.where(table_obj.c.visit_id == filter_visit)
+
+    order_cols = _resolve_table_order_columns(table_obj)
+    if order_cols:
+        data_stmt = data_stmt.order_by(*order_cols)
 
     with session_factory() as session:
         total = session.execute(count_stmt).scalar() or 0

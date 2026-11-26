@@ -8,7 +8,11 @@ from pathlib import Path
 
 from ..database.connection import SessionLocal
 from .defect_rectification_service import RectificationError, _person
-from .report_institute_scope import authorized_institute
+from .report_institute_scope import (
+    _trusted_bound_institute,
+    authorized_institute,
+    authorized_report_institute,
+)
 from .medical_core_system_catalog import CORE_SYSTEM_IDS, CORE_SYSTEMS
 from .record_quality_report_service import (
     MAX_REPORT_CASES,
@@ -94,12 +98,26 @@ class CoreSystemReportService:
         end = _as_utc(completed_to) if completed_to else None
         if start and end and start > end:
             raise RecordQualityReportInvalid("完成时间起不能晚于止")
+        institute_id = (
+            institute_id.strip()
+            if isinstance(institute_id, str) and institute_id.strip()
+            else None
+        )
+        if self.session_factory is None:
+            raise RuntimeError("账号范围来源暂不可用")
         with self.session_factory() as session:
             allowed_institute = authorized_institute(session, actor_id)
-        if allowed_institute is not None:
-            if institute_id and institute_id != allowed_institute:
-                raise RectificationError("无权读取其他机构", 403)
-            institute_id = allowed_institute
+            if allowed_institute is not None:
+                if institute_id and institute_id != allowed_institute:
+                    raise RectificationError("无权读取其他机构", 403)
+                institute_id = allowed_institute
+            elif not institute_id:
+                if self.session_factory is SessionLocal:
+                    institute_id = authorized_report_institute(actor_id)
+                else:
+                    person = _person(session, actor_id.strip())
+                    if person["roles"] & {"sync_admin", "super_admin"}:
+                        institute_id = _trusted_bound_institute(person)
         if department and not institute_id:
             raise RecordQualityReportInvalid("科室筛选须同时指定机构")
         records = self.scope_loader(

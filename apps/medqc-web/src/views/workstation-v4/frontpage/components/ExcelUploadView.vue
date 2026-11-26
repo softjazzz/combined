@@ -115,6 +115,7 @@
             <button
               class="upload-refresh-btn"
               type="button"
+              data-testid="refresh-batches-btn"
               aria-label="刷新历史批次"
               title="刷新历史批次"
               @click="() => loadBatches()"
@@ -135,6 +136,7 @@
               v-for="batch in batches"
               v-else
               :key="batch.batch_id"
+              data-testid="upload-history-item"
               :class="[
                 'upload-history-item',
                 { 'upload-history-item--selected': selectedBatchId === batch.batch_id },
@@ -147,7 +149,7 @@
               @keydown.space.prevent="selectBatch(batch)"
             >
               <div class="upload-history-item-top">
-                <span>{{ batch.batch_id.substring(6, 21) }}</span>
+                <span>{{ formatBatchLabel(batch) }}</span>
                 <em>{{ batch.count }} 条</em>
               </div>
               <div class="upload-history-cost">费用: ¥{{ formatNumber(batch.total_cost) }}</div>
@@ -201,12 +203,25 @@ import { message } from 'ant-design-vue'
 import { getAccessToken } from '@/utils/auth-token'
 import FieldMappingStep from './FieldMappingStep.vue'
 
+interface SmartAnalysisSnapshot {
+  charts: any
+  aiInsights: string[]
+  analysisResults: any
+}
+
 interface BatchInfo {
   batch_id: string
   count: number
   created_at: string
   total_cost: number
+  session_id?: string
+  label?: string
+  smart_analysis?: SmartAnalysisSnapshot
 }
+
+const UPLOAD_SESSION_STORAGE_KEY = 'medqc:drg-upload-session-id'
+const SMART_UPLOAD_BATCHES_STORAGE_KEY = 'medqc:smart-upload-batches'
+const MAX_STORED_SMART_BATCHES = 10
 
 const POLL_INTERVAL_MS = 800
 const MAX_POLL_ATTEMPTS = 240
@@ -323,6 +338,70 @@ function waitWithSignal(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
+function readStoredSessionId(): string | null {
+  try {
+    const sid = window.sessionStorage?.getItem(UPLOAD_SESSION_STORAGE_KEY)?.trim()
+    return sid || null
+  } catch {
+    return null
+  }
+}
+
+function persistSessionId(sessionId: string | null) {
+  const normalized = sessionId?.trim() || null
+  currentSessionId.value = normalized
+  try {
+    if (normalized) {
+      window.sessionStorage?.setItem(UPLOAD_SESSION_STORAGE_KEY, normalized)
+    } else {
+      window.sessionStorage?.removeItem(UPLOAD_SESSION_STORAGE_KEY)
+    }
+  } catch {
+    // 忽略存储异常
+  }
+}
+
+function readStoredSmartBatches(): BatchInfo[] {
+  try {
+    const raw = window.sessionStorage?.getItem(SMART_UPLOAD_BATCHES_STORAGE_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.batch_id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function saveStoredSmartBatches(items: BatchInfo[]) {
+  try {
+    window.sessionStorage?.setItem(
+      SMART_UPLOAD_BATCHES_STORAGE_KEY,
+      JSON.stringify(items.slice(0, MAX_STORED_SMART_BATCHES)),
+    )
+  } catch {
+    // 忽略存储配额限制
+  }
+}
+
+function mergeWithSmartBatches(remoteBatches: BatchInfo[]): BatchInfo[] {
+  const seen = new Set<string>()
+  const merged: BatchInfo[] = []
+  for (const item of [...remoteBatches, ...readStoredSmartBatches()]) {
+    if (!item?.batch_id || seen.has(item.batch_id)) continue
+    seen.add(item.batch_id)
+    merged.push(item)
+  }
+  return merged
+}
+
+function formatBatchLabel(batch: BatchInfo): string {
+  if (batch.label && batch.label.trim()) return batch.label.trim()
+  if (batch.batch_id.startsWith('batch_') && batch.batch_id.length > 6) {
+    return batch.batch_id.substring(6, 21)
+  }
+  return batch.batch_id
+}
+
 function applyParsedUploadResult(resultData: any) {
   const parsedRowCount = Number(resultData?.row_count)
   const safeRowCount = Number.isFinite(parsedRowCount) && parsedRowCount >= 0 ? parsedRowCount : 0
@@ -334,6 +413,13 @@ function applyParsedUploadResult(resultData: any) {
   uploadedRowCount.value = safeRowCount
   uploadedColumns.value = Array.isArray(resultData?.columns) ? resultData.columns : []
   uploadedSampleData.value = Array.isArray(resultData?.sample_data) ? resultData.sample_data : []
+
+  const returnedSessionId =
+    typeof resultData?.session_id === 'string' ? resultData.session_id.trim() : ''
+  if (returnedSessionId) {
+    persistSessionId(returnedSessionId)
+    void loadBatches(returnedSessionId)
+  }
 
   message.success(`文件上传成功！共 ${safeRowCount} 行数据，${safeFileCount} 个文件`)
 
@@ -625,13 +711,45 @@ const handleMappingConfirmed = (data: {
   analysisResults: any
   charts: any
   aiInsights: string[]
+  sessionId?: string
 }) => {
+  const rowCount = Number(data.analysisResults?.overview?.total_cases || uploadedRowCount.value || 0)
+  const totalCost = Number(data.analysisResults?.overview?.total_cost || 0)
+  const returnedSessionId = String(
+    data.sessionId || data.analysisResults?.session_id || '',
+  ).trim()
+  if (returnedSessionId) {
+    persistSessionId(returnedSessionId)
+  }
+
   analysisResult.value = {
     charts: data.charts,
     aiInsights: data.aiInsights,
     analysisResults: data.analysisResults,
-    row_count: data.analysisResults?.overview?.total_cases || 0,
+    row_count: rowCount,
   }
+
+  const batchEntry: BatchInfo = {
+    batch_id: data.fileId || `smart_${Date.now()}`,
+    label: uploadedFileName.value || data.fileId || '智能上传批次',
+    count: rowCount,
+    total_cost: Number.isFinite(totalCost) ? totalCost : 0,
+    created_at: new Date().toISOString(),
+    session_id: currentSessionId.value || undefined,
+    smart_analysis: {
+      charts: data.charts || {},
+      aiInsights: Array.isArray(data.aiInsights) ? [...data.aiInsights] : [],
+      analysisResults: data.analysisResults || {},
+    },
+  }
+  const nextSmartBatches = [
+    batchEntry,
+    ...readStoredSmartBatches().filter((item) => item.batch_id !== batchEntry.batch_id),
+  ]
+  saveStoredSmartBatches(nextSmartBatches)
+  batches.value = mergeWithSmartBatches(
+    batches.value.filter((item) => !item.smart_analysis),
+  )
 
   // 通知父组件分析结果已就绪
   emit('analysisReady', {
@@ -657,25 +775,65 @@ const goToAnalysis = () => {
 
 // 历史批次
 const loadBatches = async (sessionId?: string) => {
-  const sid = sessionId || currentSessionId.value
-  if (!sid) {
-    batches.value = []
-    return
-  }
+  const sid = (sessionId || currentSessionId.value || readStoredSessionId() || '').trim()
   batchesAbortController?.abort()
   const controller = new AbortController()
   batchesAbortController = controller
   loadingBatches.value = true
   try {
-    const response = await fetch(`${API_BASE}/batches?session_id=${encodeURIComponent(sid)}`, {
+    if (sid) {
+      persistSessionId(sid)
+      const response = await fetch(`${API_BASE}/batches?session_id=${encodeURIComponent(sid)}`, {
+        headers: getAuthHeaders(),
+        signal: controller.signal,
+      })
+      if (!response.ok) return
+      const data = await response.json()
+      if (!disposed && !controller.signal.aborted && data.success && Array.isArray(data.data)) {
+        const remoteBatches: BatchInfo[] = data.data.map((item: any) => ({
+          ...item,
+          session_id: String(item.session_id || sid),
+        }))
+        batches.value = mergeWithSmartBatches(remoteBatches)
+      }
+      return
+    }
+
+    // 未绑定 session 时，拉取最近上传的批任务列表并回填 session_id
+    const tasksResp = await fetch(`${API_BASE}/batch-tasks?limit=20`, {
       headers: getAuthHeaders(),
       signal: controller.signal,
     })
-    if (!response.ok) return
-    const data = await response.json()
-    if (!disposed && !controller.signal.aborted && data.success) {
-      batches.value = data.data
+    if (!tasksResp.ok) {
+      batches.value = mergeWithSmartBatches([])
+      return
     }
+    const tasksBody = await tasksResp.json()
+    if (disposed || controller.signal.aborted) return
+    const taskList = Array.isArray(tasksBody?.data) ? tasksBody.data : []
+    const validTasks = taskList.filter(
+      (task: any) =>
+        task &&
+        String(task.status || '').toLowerCase() !== 'failed' &&
+        (task.batch_id || task.session_id),
+    )
+    const firstSession = validTasks.find(
+      (task: any) => typeof task.session_id === 'string' && task.session_id.trim(),
+    )?.session_id
+    if (firstSession) {
+      persistSessionId(String(firstSession))
+    }
+    const taskBatches: BatchInfo[] = validTasks
+      .filter((task: any) => task.batch_id)
+      .map((task: any) => ({
+        batch_id: String(task.batch_id),
+        session_id: task.session_id ? String(task.session_id) : undefined,
+        label: typeof task.filename === 'string' && task.filename.trim() ? task.filename.trim() : undefined,
+        count: Number(task.total_records ?? task.success_count ?? 0) || 0,
+        total_cost: Number(task.result_summary?.total_cost ?? 0) || 0,
+        created_at: String(task.created_at || ''),
+      }))
+    batches.value = mergeWithSmartBatches(taskBatches)
   } catch (err) {
     if (!isAbortError(err)) {
       console.error('加载批次列表失败:', err)
@@ -689,9 +847,16 @@ const loadBatches = async (sessionId?: string) => {
 }
 
 const selectBatch = (batch: BatchInfo) => {
-  if (!currentSessionId.value) return
   selectedBatchId.value = batch.batch_id
-  emit('go-analysis', currentSessionId.value, batch.batch_id)
+  if (batch.smart_analysis) {
+    emit('analysisReady', batch.smart_analysis)
+    return
+  }
+  const sid = batch.session_id || currentSessionId.value
+  if (!sid) return
+  persistSessionId(sid)
+  emit('go-analysis', sid, batch.batch_id)
+  emit('goAnalysis', sid, batch.batch_id)
 }
 
 // 工具函数
@@ -718,7 +883,15 @@ const formatDate = (dateStr: string): string => {
 
 // 生命周期
 onMounted(() => {
-  // 无需在 mount 时加载批次，因为没有 session
+  const storedSmart = readStoredSmartBatches()
+  if (storedSmart.length > 0) {
+    batches.value = storedSmart
+  }
+  const savedSid = readStoredSessionId()
+  if (savedSid) {
+    currentSessionId.value = savedSid
+    void loadBatches(savedSid)
+  }
 })
 
 onUnmounted(() => {

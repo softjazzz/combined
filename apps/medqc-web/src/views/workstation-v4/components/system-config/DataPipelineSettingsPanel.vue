@@ -335,10 +335,28 @@ const dateScopeValid = computed(() => {
     (end - start) / 86400000 < catalog.value.session.max_manual_days && endDate.value <= catalog.value.session.last_complete_date
 })
 
+function createSafeUuid(): string {
+  const cryptoObj = typeof globalThis !== 'undefined' ? globalThis.crypto : undefined
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    return cryptoObj.randomUUID()
+  }
+  const bytes = new Uint8Array(16)
+  if (cryptoObj && typeof cryptoObj.getRandomValues === 'function') {
+    cryptoObj.getRandomValues(bytes)
+  } else {
+    for (let i = 0; i < bytes.length; i += 1) {
+      bytes[i] = Math.floor(Math.random() * 256)
+    }
+  }
+  bytes[6] = (bytes[6] & 0x0f) | 0x40
+  bytes[8] = (bytes[8] & 0x3f) | 0x80
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
+}
+
 function select(value: DataPipeline) {
   if (value !== 'independent_cdm') return
   selected.value = value
-  draft.default_pipeline = value
   saved.value = false
   emit('selection', value)
 }
@@ -370,7 +388,16 @@ async function save() {
   error.value = ''
   saved.value = false
   try {
-    const data = await dataPipelinesApi.save({ ...draft })
+    const loadedFixedCdmDisabled =
+      configuration.value?.settings.default_pipeline === 'independent_cdm' &&
+      !configuration.value?.settings.independent_enabled
+    const payload = {
+      ...draft,
+      default_pipeline: (draft.independent_enabled || loadedFixedCdmDisabled
+        ? 'independent_cdm'
+        : 'legacy_pg') as DataPipeline,
+    }
+    const data = await dataPipelinesApi.save(payload)
     if (generation !== epoch) return
     configuration.value = data
     Object.assign(draft, data.settings)
@@ -424,7 +451,7 @@ async function submit() {
   const generation = epoch
   // 未确认应答时保留原始请求与ID；不能因网络重试另建一个同步任务。
   const payload = unresolvedOperation.value || {
-    operation_id: crypto.randomUUID(),
+    operation_id: createSafeUuid(),
     start_date: startDate.value,
     end_date: endDate.value,
     interfaces: [...interfaces.value],
@@ -475,7 +502,7 @@ watch(
   { deep: true },
 )
 watch(
-  () => [auth.user?.id, ...auth.userRoles],
+  () => `${auth.user?.id ?? ''}:${[...auth.userRoles].sort().join(',')}`,
   () => {
     epoch++
     configuration.value = null

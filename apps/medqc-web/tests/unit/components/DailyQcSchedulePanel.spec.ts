@@ -5,7 +5,7 @@ import DailyQcSchedulePanel from '@/views/workstation-v4/components/system-confi
 import type { DailyQcDefinition, DailyQcPlan } from '@/services/dailyQcScheduleService'
 
 const { service, auth } = vi.hoisted(() => ({
-  service: { list: vi.fn(), options: vi.fn(), save: vi.fn(), history: vi.fn() },
+  service: { list: vi.fn(), options: vi.fn(), save: vi.fn(), remove: vi.fn(), history: vi.fn() },
   auth: { userRoles: ['sync_admin'] },
 }))
 vi.mock('@/services/dailyQcScheduleService', () => ({ dailyQcScheduleService: service }))
@@ -25,8 +25,21 @@ const Input = defineComponent({
   props: { value: { type: String, default: '' } }, emits: ['update:value'],
   setup: (props, { emit }) => () => h('input', { value: props.value, onInput: (event: Event) => emit('update:value', (event.target as HTMLInputElement).value) }),
 })
+const InputNumber = defineComponent({
+  props: { value: { type: Number as PropType<number | null>, default: null } },
+  emits: ['update:value'],
+  setup: (props, { emit }) => () =>
+    h('input', {
+      type: 'number',
+      value: props.value ?? '',
+      onInput: (event: Event) => {
+        const raw = (event.target as HTMLInputElement).value
+        emit('update:value', raw === '' ? null : Number(raw))
+      },
+    }),
+})
 const Modal = defineComponent({
-  props: { open: Boolean, okButtonProps: { type: Object, default: () => ({}) } }, emits: ['ok'],
+  props: { open: Boolean, okButtonProps: { type: Object, default: () => ({}) } }, emits: ['ok', 'cancel'],
   setup: (props, { slots, emit }) => () => props.open ? h('div', { 'data-testid': 'editor' }, [slots.default?.(), h('button', { 'data-testid': 'save', disabled: props.okButtonProps.disabled, onClick: () => emit('ok') }, '保存')]) : null,
 })
 const Alert = defineComponent({ props: { message: { type: String, default: '' }, description: { type: String, default: '' } }, setup: props => () => h('div', { role: 'alert' }, `${props.message} ${props.description}`) })
@@ -39,7 +52,7 @@ function plan(id = 'synthetic-plan'): DailyQcPlan {
 }
 async function render() {
   const wrapper = mount(DailyQcSchedulePanel, { global: { stubs: {
-    'a-space': Slot, 'a-tag': Slot, 'a-form': Slot, 'a-form-item': Slot, 'a-input-number': true,
+    'a-space': Slot, 'a-tag': Slot, 'a-form': Slot, 'a-form-item': Slot, 'a-input-number': InputNumber,
     'a-button': Button, 'a-modal': Modal, 'a-select': Select, 'a-input': Input, 'a-switch': true,
     'a-alert': Alert, 'a-drawer': { props: ['open'], template: '<div v-if="open"><slot /></div>' },
     'a-empty': { props: ['description'], template: '<p>{{ description }}</p>' },
@@ -53,6 +66,7 @@ beforeEach(() => {
   service.list.mockResolvedValue({ items: [], scheduler_enabled: false, local_process_active: false })
   service.options.mockResolvedValue({ institutes: ['A'], departments: ['ICU'], rule_sets: [{ key: 'luxian_0609_qc_v1', name: '正式规则', scope: 'all' }] })
   service.save.mockResolvedValue(plan())
+  service.remove.mockResolvedValue({ id: 'synthetic-plan', deleted: true })
   service.history.mockResolvedValue([])
 })
 
@@ -119,6 +133,60 @@ describe('每日定时质控配置', () => {
     const wrapper = await render()
     expect(service.list).not.toHaveBeenCalled()
     expect(wrapper.findAll('button').find(item => item.text() === '新增计划')?.element.disabled).toBe(true)
+    wrapper.unmount()
+  })
+
+  it('横幅准确区分 scheduler_enabled 与 local_process_active 状态', async () => {
+    service.list.mockResolvedValueOnce({ items: [], scheduler_enabled: true, local_process_active: false })
+    const wrapper = await render()
+    expect(wrapper.text()).toContain('当前进程调度器未运行')
+    wrapper.unmount()
+
+    service.list.mockResolvedValueOnce({ items: [], scheduler_enabled: true, local_process_active: true })
+    const activeWrapper = await render()
+    expect(activeWrapper.text()).toContain('当前进程调度器运行中')
+    activeWrapper.unmount()
+  })
+
+  it('保存前裁剪计划名称、拦截清空数字框并区分 422 与 409 错误', async () => {
+    const wrapper = await render()
+    await wrapper.findAll('button').find(item => item.text() === '新增计划')?.trigger('click')
+    await flushPromises()
+    await wrapper.get('input[data-testid="schedule-name"]').setValue('  每日终末  ')
+    const numberInputs = wrapper.findAll('input[type="number"]')
+    await numberInputs[0].setValue('')
+    expect(wrapper.get('[data-testid="save"]').attributes('disabled')).toBeDefined()
+    await numberInputs[0].setValue('1')
+    expect(wrapper.get('[data-testid="save"]').attributes('disabled')).toBeUndefined()
+
+    service.save.mockRejectedValueOnce({ isAxiosError: true, response: { status: 422, data: { detail: '所选科室不在当前机构和场景中' } } })
+    await wrapper.get('[data-testid="save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('参数校验未通过')
+    expect(wrapper.text()).toContain('所选科室不在当前机构和场景中')
+    expect((service.save.mock.calls[0][0] as DailyQcDefinition).name).toBe('每日终末')
+
+    service.save.mockRejectedValueOnce({ isAxiosError: true, response: { status: 409, data: { detail: '计划已变化' } } })
+    await wrapper.get('[data-testid="save"]').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('版本或上限冲突')
+    wrapper.unmount()
+  })
+
+  it('点击删除需二次确认后调用 remove 接口并刷新列表', async () => {
+    const item = plan()
+    service.list
+      .mockResolvedValueOnce({ items: [item], scheduler_enabled: true, local_process_active: true })
+      .mockResolvedValueOnce({ items: [], scheduler_enabled: true, local_process_active: true })
+    const wrapper = await render()
+    await wrapper.get(`[data-testid="delete-schedule-${item.id}"]`).trigger('click')
+    await flushPromises()
+    expect(service.remove).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('确定删除计划')
+    await wrapper.get('[data-testid="save"]').trigger('click')
+    await flushPromises()
+    expect(service.remove).toHaveBeenCalledWith(item.id)
+    expect(wrapper.find(`[data-testid="schedule-${item.id}"]`).exists()).toBe(false)
     wrapper.unmount()
   })
 })

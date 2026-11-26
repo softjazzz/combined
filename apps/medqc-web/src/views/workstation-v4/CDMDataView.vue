@@ -904,17 +904,25 @@ async function openRecordModal(pt: any) {
         const data = await resp.json()
         const rawItems = Array.isArray(data?.items) ? data.items : []
         const columns = Array.isArray(data?.columns) ? data.columns : []
-        // 过滤出这个患者的数据
+        // 过滤出这个患者的数据（兼容后端已按三坐标筛选与类型差异）
+        const expectedPatient = pt.patient_id != null ? String(pt.patient_id).trim() : ''
+        const expectedVisit = pt.visit_id != null ? String(pt.visit_id).trim() : ''
+        const expectedInstitute = pt.institute_id != null ? String(pt.institute_id).trim() : ''
         const patientItems = rawItems.filter((item: any) => {
+          if (expectedPatient && String(item.patient_id ?? '').trim() !== expectedPatient) {
+            return false
+          }
+          if (expectedInstitute && item.institute_id != null && String(item.institute_id).trim() !== expectedInstitute) {
+            return false
+          }
           // patient_information 只有 patient_id（无 visit_id）
           if (t.name === 'patient_information') {
-            return item.patient_id === pt.patient_id && item.institute_id === pt.institute_id
+            return true
           }
-          return (
-            item.patient_id === pt.patient_id &&
-            item.visit_id === pt.visit_id &&
-            item.institute_id === pt.institute_id
-          )
+          if (expectedVisit && String(item.visit_id ?? '').trim() !== expectedVisit) {
+            return false
+          }
+          return true
         })
         return {
           name: t.name,

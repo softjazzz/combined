@@ -55,6 +55,9 @@ export const dailyQcScheduleService = {
       ? (await apiClient.put(`${root}/${current.id}`, { revision: current.revision, definition })).data.data
       : (await apiClient.post(root, definition)).data.data
   },
+  async remove(id: string): Promise<{ id: string; deleted: boolean }> {
+    return (await apiClient.delete(`${root}/${id}`)).data.data
+  },
   async history(id: string): Promise<DailyQcRun[]> {
     return (await apiClient.get(`${root}/${id}/runs`)).data.data.items
   },

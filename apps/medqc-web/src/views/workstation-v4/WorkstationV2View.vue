@@ -329,6 +329,7 @@
         <PostEventAnalysisView
           :session-id="selectedSessionId || undefined"
           :batch-id="selectedBatchId || undefined"
+          :uploaded-analysis="uploadedAnalysis"
         />
       </div>
 

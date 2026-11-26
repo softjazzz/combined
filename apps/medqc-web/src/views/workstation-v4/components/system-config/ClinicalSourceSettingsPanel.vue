@@ -152,7 +152,10 @@ async function save() {
   activeController = controller
   busy.value = true
   try {
-    const saved = await clinicalSourcesApi.save({ ...settings.value, default_source: 'independent_cdm', legacy_enabled: false })
+    const saved = await clinicalSourcesApi.save({
+      ...settings.value,
+      cdm: { ...settings.value.cdm },
+    })
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     settings.value = saved
     resetClinicalSourceOptionsCache()
@@ -187,7 +190,13 @@ async function check() {
       return
     }
     noticeTone.value = 'status'
-    notice.value = 'CDM完整依赖只读检查通过；发布就绪仍待确认，未保存配置'
+    const publicationNote =
+      report.publication_ready === true
+        ? '同步发布已就绪'
+        : report.publication_ready === false
+          ? '同步发布尚未就绪'
+          : '发布就绪仍待确认'
+    notice.value = `CDM完整依赖只读检查通过；${publicationNote}，未保存配置`
   } catch {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     noticeTone.value = 'error'

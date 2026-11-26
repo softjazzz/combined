@@ -1,10 +1,16 @@
 import type {
   LlmObservabilityOverview,
   LlmObservabilityQuery,
+  LlmObservabilityRange,
+  LlmObservabilityRecordPage,
   LlmRecordCallAttempts,
   LlmRecordCallsQuery,
 } from '@/types/llmObservability'
 import { authFetch } from '@/utils/auth-fetch'
+
+export interface LlmObservabilityRecordsResponse extends LlmObservabilityRecordPage {
+  range?: LlmObservabilityRange
+}
 
 const UNAVAILABLE_MESSAGE = '模型性能数据暂不可用'
 
@@ -50,6 +56,15 @@ export function getLlmObservabilityOverview(
 ): Promise<LlmObservabilityOverview> {
   const search = buildSearchParams({ ...query })
   return readJson<LlmObservabilityOverview>(`/api/v1/system/llm-observability/overview${search}`)
+}
+
+export function getLlmObservabilityRecords(
+  query: LlmObservabilityQuery = {},
+): Promise<LlmObservabilityRecordsResponse> {
+  const search = buildSearchParams({ ...query })
+  return readJson<LlmObservabilityRecordsResponse>(
+    `/api/v1/system/llm-observability/records${search}`,
+  )
 }
 
 export function getLlmRecordCallAttempts(

@@ -107,8 +107,8 @@
         <h3 class="section-title">
           <SwapOutlined class="text-[#0a6cff]" />
           字段映射
-          <span class="mapped-count">
-            {{ mappedCount }} / {{ Object.keys(localMappings).length }} 已映射
+          <span class="mapped-count" data-testid="mapped-count">
+            {{ mappedCount }} / {{ props.columns.length }} 已映射
           </span>
         </h3>
 
@@ -335,7 +335,7 @@ let confirmAbortController: AbortController | null = null
 
 // 计算属性
 const mappedCount = computed(() => {
-  return Object.values(localMappings.value).filter((v) => !!v).length
+  return props.columns.filter((col) => Boolean(localMappings.value[col])).length
 })
 
 const missingRequired = computed(() => {

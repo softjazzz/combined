@@ -429,6 +429,9 @@ def create_app() -> FastAPI:
             validate_server_schema(engine)
             app.state.startup_mode = "normal"
             logger.info("服务器必要结构只读校验通过；启动预热和后台恢复已关闭")
+            from .services.daily_qc.runner import start as start_daily_qc
+
+            start_daily_qc(app)
             return
 
         try:

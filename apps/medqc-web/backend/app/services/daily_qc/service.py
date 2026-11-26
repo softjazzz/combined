@@ -42,6 +42,11 @@ def _scoped_institute(person) -> str | None:
     return inst or None
 
 
+def can_manage_all_owners(person) -> bool:
+    roles = set(person.get("roles") or [])
+    return bool(roles & {"super_admin", "sync_admin"}) and _scoped_institute(person) is None
+
+
 def assert_plan_institute_scope(store, actor_id, institute_id: str) -> dict:
     person = require_manager(store, actor_id)
     scoped_inst = _scoped_institute(person)
