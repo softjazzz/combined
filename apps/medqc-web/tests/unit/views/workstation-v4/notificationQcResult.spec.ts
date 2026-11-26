@@ -17,9 +17,10 @@ const mocks = vi.hoisted(() => ({
   download: vi.fn(),
   normalize: vi.fn(),
   error: vi.fn(),
+  success: vi.fn(),
 }))
 vi.mock('@/stores/auth', () => ({ useAuthStore: () => mocks.auth }))
-vi.mock('ant-design-vue', () => ({ message: { error: mocks.error } }))
+vi.mock('ant-design-vue', () => ({ message: { error: mocks.error, success: mocks.success } }))
 vi.mock('@/views/workstation-v4/customer-sample-validation/batchExport', () => ({
   downloadBlob: mocks.download,
   normalizeBatchExportBlob: mocks.normalize,
@@ -147,13 +148,58 @@ describe('结果就绪通知的精确V5下钻', () => {
     await flushPromises()
     await wrapper.get(`[data-testid="${operation}"]`).trigger('click')
     await flushPromises()
-    if (operation === 'review') expect(wrapper.text()).toContain('reviewed-root')
+    if (operation === 'review') {
+      expect(wrapper.text()).toContain('reviewed-root')
+      expect(mocks.success).toHaveBeenCalledTimes(1)
+    }
     if (operation === 'debug')
       expect(wrapper.get('[data-testid="debug-result"]').text()).toBe('saved-root')
     if (operation === 'export')
       expect(mocks.download).toHaveBeenCalledWith(expect.any(Blob), 'qc-saved-root.html')
+    // 复用已加载 job_id，不重复触发通知接口读取
+    expect(mocks.get).toHaveBeenCalledTimes(1)
     expect(mocks.error).not.toHaveBeenCalled()
     wrapper.unmount()
+  })
+
+  it('非受限账号打开时自动预加载调试快照；受限演示账号不自动拉取调试快照', async () => {
+    mocks.auth.user = {
+      id: 'super-1',
+      institute_id: 'A',
+      department: 'D',
+      is_active: true,
+      is_demo_account: false,
+      roles: ['super_admin'],
+    } as typeof mocks.auth.user
+    mocks.auth.userRoles = ['super_admin']
+    mocks.get.mockResolvedValue({ success: true, data: { id: 'saved-root' } })
+    mocks.debug.mockResolvedValue({ success: true, data: { job_id: 'saved-root' } })
+    const wrapper = render()
+    await flushPromises()
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    expect(mocks.debug).toHaveBeenCalledWith('saved-root', {
+      rule_job_id: undefined,
+      item_limit: undefined,
+    })
+    expect(wrapper.get('[data-testid="debug-result"]').text()).toBe('saved-root')
+    wrapper.unmount()
+
+    vi.clearAllMocks()
+    mocks.auth.user = {
+      id: 'demo-1',
+      institute_id: 'A',
+      department: 'D',
+      is_active: true,
+      is_demo_account: true,
+      roles: ['admin'],
+    } as typeof mocks.auth.user
+    mocks.auth.userRoles = ['admin']
+    mocks.get.mockResolvedValue({ success: true, data: { id: 'saved-root' } })
+    const demoWrapper = render()
+    await flushPromises()
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    expect(mocks.debug).not.toHaveBeenCalled()
+    demoWrapper.unmount()
   })
 
   it.each(['review', 'debug', 'export'] as const)(

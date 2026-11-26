@@ -122,10 +122,12 @@
                         <a-menu-item @click="handleMoreActionKey('mode-legacy-customer')">
                           历史客户包
                         </a-menu-item>
-                        <a-menu-divider />
-                        <a-menu-item @click="handleMoreActionKey('toggle-internal-diagnostic')">
-                          {{ internalDiagnosticExpanded ? '隐藏内部验收诊断' : '展开内部验收诊断' }}
-                        </a-menu-item>
+                        <template v-if="!confirmedResultsOnly">
+                          <a-menu-divider />
+                          <a-menu-item @click="handleMoreActionKey('toggle-internal-diagnostic')">
+                            {{ internalDiagnosticExpanded ? '隐藏内部验收诊断' : '展开内部验收诊断' }}
+                          </a-menu-item>
+                        </template>
                       </a-sub-menu>
                     </a-menu>
                   </template>
@@ -236,7 +238,7 @@
                     质控记录
                   </button>
                   <button
-                    v-if="selectedRuleSetCoverageChips.length"
+                    v-if="!confirmedResultsOnly && selectedRuleSetCoverageChips.length"
                     type="button"
                     class="customer-sample-internal-toggle"
                     @click="toggleInternalDiagnostic"
@@ -358,7 +360,7 @@
             </section>
 
             <section
-              v-if="internalDiagnosticExpanded"
+              v-if="!confirmedResultsOnly && internalDiagnosticExpanded"
               class="customer-sample-diagnostic-panel"
             >
               <a-collapse
@@ -1862,9 +1864,12 @@ const QCRecordCompareWorkbench = deferredComponent(() => import('./semantic-rule
 import MedicalOrderFilterBar from './customer-sample-validation/MedicalOrderFilterBar.vue'
 import HospitalLoading from '@/components/qc/HospitalLoading.vue'
 import { useMinimumLoading } from '@/composables/useMinimumLoading'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import RecordViewCloseIcon from './components/RecordViewCloseIcon.vue'
 import ReadonlyMedicalRecordHeader from './components/ReadonlyMedicalRecordHeader.vue'
 import { useCustomerSampleValidationController } from './customer-sample-validation/useCustomerSampleValidationController'
+
+const { confirmedResultsOnly } = useQcResultVisibility()
 
 const {
   initialConfigLoading,

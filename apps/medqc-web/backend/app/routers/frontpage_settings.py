@@ -68,5 +68,5 @@ async def post_frontpage_settings_reset(
     _admin_user: dict = Depends(require_global_system_admin),
 ):
     del _admin_user
-    settings = reset_frontpage_settings()
-    return FrontpageSettingsResponse(settings=settings, source="default")
+    settings, source = reset_frontpage_settings()
+    return FrontpageSettingsResponse(settings=settings, source=source)

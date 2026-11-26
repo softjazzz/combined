@@ -1,52 +1,16 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { computed, reactive, ref } from 'vue'
+import { defineComponent, reactive, ref } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import DataSyncConfigPage from '@/views/workstation-v4/DataSyncConfigPage.vue'
 
-const {
-  mockRunPreflight,
-  mockMessageWarning,
-  mockLoadDepartments,
-  mockInitialize,
-  mockStopPolling,
-  mockResetState,
-} = vi.hoisted(() => ({
-  mockRunPreflight: vi.fn(),
-  mockMessageWarning: vi.fn(),
-  mockLoadDepartments: vi.fn(),
-  mockInitialize: vi.fn(),
-  mockStopPolling: vi.fn(),
-  mockResetState: vi.fn(),
+const { mockRouterReplace, mockUseDataSync, mockConfirmDiscardChanges } = vi.hoisted(() => ({
+  mockRouterReplace: vi.fn(),
+  mockUseDataSync: vi.fn(),
+  mockConfirmDiscardChanges: vi.fn(),
 }))
 
-const mockState = reactive({
-  pgSyncState: {} as Record<string, any>,
-  preflightResult: null as Record<string, any> | null,
-  isSyncing: false,
-  isTestingAll: false,
-  isPreflighting: false,
-  isSavingPolicy: false,
-  departmentsLoading: false,
-  departmentsError: null as string | null,
-  availableDepartments: ['神经内科', '普通外科'],
-  stats: { connectedCount: 0, lastSyncTime: '' },
-  pgSyncTables: [],
-  selectedTableGroups: [],
-  pgTableGroups: [],
-  policyForm: {
-    scope: 'final',
-    start_date: '2026-06-01',
-    end_date: '2026-06-30',
-    target_departments: ['*'],
-  },
-  currentRunLog: [],
-  runHistory: [],
-  loadErrors: {},
-  connectionTesting: {},
-  templateApplying: false,
-})
-
 let mockUserRoles = ['admin', 'qc_manager']
+const mockLlmHasUnsavedChanges = ref(false)
 
 const mockAuthStore = {
   get userRoles() {
@@ -65,73 +29,43 @@ vi.mock('@/views/workstation-v4/components/system-config/ClinicalSourceSettingsP
 
 vi.mock('vue-router', () => ({
   useRoute: () => mockRoute,
-}))
-
-vi.mock('ant-design-vue', () => ({
-  message: {
-    success: vi.fn(),
-    error: vi.fn(),
-    warning: mockMessageWarning,
-    info: vi.fn(),
-  },
-  Modal: {
-    confirm: vi.fn(),
-  },
+  useRouter: () => ({
+    replace: mockRouterReplace,
+  }),
 }))
 
 vi.mock('@/views/workstation-v4/composables/useDataSync', () => ({
-  useDataSync: () => ({
-    state: mockState,
-    isReadonly: ref(false),
-    hasPreflightPass: computed(() => Boolean(mockState.preflightResult?.executable)),
-    initialize: mockInitialize,
-    loadDepartments: mockLoadDepartments,
-    resetState: mockResetState,
-    stopPolling: mockStopPolling,
-    testAllConnections: vi.fn(),
-    runPreflight: mockRunPreflight,
-    executeSync: vi.fn(),
-    savePolicy: vi.fn(),
-  }),
+  useDataSync: mockUseDataSync,
 }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => mockAuthStore,
 }))
 
-function mountPage() {
+const LLMApiConfigStub = defineComponent({
+  name: 'LLMApiConfig',
+  setup(_, { expose }) {
+    expose({
+      hasUnsavedChanges: mockLlmHasUnsavedChanges,
+      confirmDiscardChanges: mockConfirmDiscardChanges,
+    })
+    return () => null
+  },
+  template: '<div data-testid="llm-config-panel" />',
+})
+
+function mountPage(options?: { attachTo?: HTMLElement }) {
   return mount(DataSyncConfigPage, {
+    attachTo: options?.attachTo,
     global: {
       stubs: {
-        'a-tabs': {
-          props: ['activeKey'],
-          template:
-            '<div data-testid="system-config-tabs" :data-active-key="activeKey"><slot /></div>',
+        FrontpageExtractionSettingsPanel: {
+          template: '<div data-testid="frontpage-extraction-panel" />',
         },
-        'a-tab-pane': { template: '<section><slot /></section>' },
-        'a-tooltip': { template: '<span><slot /></span>' },
-        'a-button': { template: '<button><slot /></button>' },
-        'a-tag': { template: '<span><slot /></span>' },
-        'a-progress': { template: '<div class="progress-stub" />' },
-        'a-modal': { template: '<div><slot /></div>' },
-        'a-select': {
-          props: ['value', 'options', 'disabled'],
-          template: '<div class="select-stub"><slot /></div>',
+        LLMApiConfig: LLMApiConfigStub,
+        LlmPerformanceObservabilityPanel: {
+          template: '<div data-testid="llm-observability-panel" />',
         },
-        'a-option': { template: '<option><slot /></option>' },
-        'a-input': { template: '<input />' },
-        'a-input-password': { template: '<input />' },
-        'a-date-picker': {
-          props: ['locale', 'placeholder'],
-          template:
-            '<input class="date-picker-stub" :data-locale="locale?.lang?.placeholder" :placeholder="placeholder" />',
-        },
-        'a-empty': { template: '<div />' },
-        ConnectionStudio: { template: '<div />' },
-        SyncRunPanel: { template: '<div />' },
-        FrontpageExtractionSettingsPanel: { template: '<div />' },
-        LLMApiConfig: { template: '<div />' },
-        LlmPerformanceObservabilityPanel: { template: '<div />' },
         AccountManagementPanel: { template: '<div data-testid="real-accounts-panel" />' },
         QcRuntimeSettingsPanel: { template: '<div data-testid="qc-runtime-panel" />' },
         DataPipelineSettingsPanel: {
@@ -140,7 +74,8 @@ function mountPage() {
             this.$emit('selection', 'legacy_pg')
             this.$emit('ready', true)
           },
-          template: '<div data-testid="pipeline-settings-panel"><button data-testid="choose-independent" @click="$emit(\'selection\', \'independent_cdm\')">独立链路</button><button data-testid="pipeline-load-failed" @click="$emit(\'ready\', false)">配置失败</button></div>',
+          template:
+            '<div data-testid="pipeline-settings-panel"><button data-testid="choose-independent" @click="$emit(\'selection\', \'independent_cdm\')">独立链路</button><button data-testid="pipeline-load-failed" @click="$emit(\'ready\', false)">配置失败</button></div>',
         },
         DailyQcSchedulePanel: { template: '<div data-testid="daily-schedule-panel" />' },
       },
@@ -148,7 +83,18 @@ function mountPage() {
   })
 }
 
-describe('DataSyncConfigPage visit progress', () => {
+describe('DataSyncConfigPage', () => {
+  beforeEach(() => {
+    mockRouterReplace.mockReset()
+    mockUseDataSync.mockReset()
+    mockConfirmDiscardChanges.mockReset()
+    mockConfirmDiscardChanges.mockResolvedValue(true)
+    mockLlmHasUnsavedChanges.value = false
+    mockUserRoles = ['admin', 'qc_manager']
+    mockAuthStore.user.is_demo_account = false
+    mockRoute.query = {}
+  })
+
   it('系统管理员可直接进入质控运行设置', async () => {
     mockUserRoles = ['sync_admin']
     mockRoute.query = { tab: 'qcRuntime' }
@@ -170,39 +116,42 @@ describe('DataSyncConfigPage visit progress', () => {
     wrapper.unmount()
   })
 
-  it('独立链路隐藏旧PG执行与诊断入口，配置失败也不误显示旧默认', async () => {
+  it('旧PG同步向导已彻底移除，不会调用 useDataSync 或渲染旧同步界面', async () => {
     mockUserRoles = ['sync_admin']
     const wrapper = mountPage()
     await flushPromises()
+    expect(mockUseDataSync).not.toHaveBeenCalled()
+    expect(wrapper.find('[data-testid="clinical-source-settings"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="pipeline-settings-panel"]').exists()).toBe(true)
+    expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain('病历数据同步设置')
     expect(wrapper.text()).not.toContain('高级设置与运行记录')
     await wrapper.get('[data-testid="choose-independent"]').trigger('click')
-    expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('高级设置与运行记录')
     await wrapper.get('[data-testid="pipeline-load-failed"]').trigger('click')
     expect(wrapper.text()).not.toContain('病历数据同步设置')
+    expect(mockUseDataSync).not.toHaveBeenCalled()
     wrapper.unmount()
   })
 
-  it('每日质控页签可直达且不初始化数据同步，非管理员不能直达', async () => {
-    mockInitialize.mockClear()
+  it('每日质控页签可直达且非管理员不能直达', async () => {
     mockUserRoles = ['sync_admin']
     mockRoute.query = { tab: 'dailyQc' }
     const wrapper = mountPage()
     await flushPromises()
     expect(wrapper.find('[data-testid="daily-schedule-panel"]').exists()).toBe(true)
-    expect(mockInitialize).not.toHaveBeenCalled()
     wrapper.unmount()
+
     mockUserRoles = ['doctor']
     const denied = mountPage()
     await flushPromises()
     expect(denied.find('[data-testid="daily-schedule-panel"]').exists()).toBe(false)
     denied.unmount()
   })
+
   it('管理员可在V5系统配置进入真实账号管理，不跳旧版页面', async () => {
     mockUserRoles = ['admin']
     mockRoute.query = { tab: 'accounts' }
     const wrapper = mountPage()
-    await flushPromises()
     await flushPromises()
     expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(true)
     expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(true)
@@ -214,78 +163,75 @@ describe('DataSyncConfigPage visit progress', () => {
     mockRoute.query = { tab: 'accounts' }
     const wrapper = mountPage()
     await flushPromises()
-    await flushPromises()
     expect(wrapper.find('[data-testid="account-management-tab"]').exists()).toBe(false)
     expect(wrapper.find('[data-testid="real-accounts-panel"]').exists()).toBe(false)
     wrapper.unmount()
   })
-  beforeEach(() => {
-    mockInitialize.mockReset()
-    mockRunPreflight.mockReset()
-    mockMessageWarning.mockReset()
-    mockLoadDepartments.mockReset()
-    mockStopPolling.mockReset()
-    mockResetState.mockReset()
-    mockState.departmentsLoading = false
-    mockState.departmentsError = null
-    mockUserRoles = ['admin', 'qc_manager']
-    mockAuthStore.user.is_demo_account = false
-    mockRoute.query = {}
-    mockState.policyForm.scope = 'final'
-    mockState.isSyncing = false
-    mockState.preflightResult = { estimated_impact: 20 }
-    mockState.pgSyncState = {
-      is_running: false,
-      last_sync_status: 'partial',
-      progress: {
-        status: 'partial',
-        stage: 'completed',
-        tables_total: 8,
-        tables_done: 8,
-        rows_pulled_total: 120,
-        rows_upserted_total: 100,
-        eligible_visit_count: 20,
-        visit_progress: {
-          total: 20,
-          completed: 3,
-          remaining: 17,
-          missing_mr: 17,
-          detail_only: 2,
-          basis: 'mr_visible',
-          label: '病历池可见进度',
-        },
-      },
-    }
-  })
 
-  it('旧PG同步被固定停用，后台科室和旧任务状态不能触发初始化', async () => {
-    mockState.departmentsLoading = true
-    const wrapper = mountPage()
+  it('super_admin 完整显示全部 7 个活动页签并支持键盘导航切换', async () => {
+    mockUserRoles = ['super_admin']
+    const wrapper = mountPage({ attachTo: document.body })
     await flushPromises()
-    expect(wrapper.find('[data-testid="check-record-scope-action"]').exists()).toBe(false)
-    expect(wrapper.text()).not.toContain('病历数据同步设置')
-    expect(wrapper.text()).not.toContain('高级设置与运行记录')
-    expect(mockInitialize).not.toHaveBeenCalled()
-    expect(mockLoadDepartments).not.toHaveBeenCalled()
-    expect(mockRunPreflight).not.toHaveBeenCalled()
+
+    const tabs = wrapper.findAll('[role="tab"]')
+    expect(tabs.map((tab) => tab.text())).toEqual([
+      '数据同步',
+      '质控运行',
+      '定时质控',
+      '首页抽取设置',
+      '模型性能',
+      '模型配置',
+      '账号管理',
+    ])
+
+    await tabs[0].trigger('keydown', { key: 'End' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'accounts',
+    )
+
+    await tabs[6].trigger('keydown', { key: 'Home' })
+    await flushPromises()
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'dataSync',
+    )
     wrapper.unmount()
   })
 
-  it('切离数据同步页签及页面卸载时主动停止轮询并清理状态', async () => {
-    mockUserRoles = ['admin']
-    mockRoute.query = {}
+  it('程序或浏览器变更 ?tab= 时同样遵守 llmConfig 未保存修改拦截', async () => {
+    mockUserRoles = ['super_admin']
+    mockRoute.query = { tab: 'llmConfig' }
     const wrapper = mountPage()
     await flushPromises()
-    mockStopPolling.mockClear()
-    mockResetState.mockClear()
 
-    await wrapper.get('[data-testid="account-management-tab"]').trigger('click')
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'llmConfig',
+    )
+
+    // 有未保存修改且用户取消离开 -> 停留在 llmConfig 并回写路由查询参数
+    mockLlmHasUnsavedChanges.value = true
+    mockConfirmDiscardChanges.mockResolvedValueOnce(false)
+    mockRoute.query = { tab: 'accounts' }
     await flushPromises()
-    expect(mockStopPolling).toHaveBeenCalled()
 
-    mockStopPolling.mockClear()
+    expect(mockConfirmDiscardChanges).toHaveBeenCalledTimes(1)
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'llmConfig',
+    )
+    expect(mockRouterReplace).toHaveBeenCalledWith({ query: { tab: 'llmConfig' } })
+
+    // 模拟回写后再次切换且用户确认放弃 -> 成功切换到 dailyQc
+    mockRoute.query = { tab: 'llmConfig' }
+    await flushPromises()
+    mockConfirmDiscardChanges.mockResolvedValueOnce(true)
+    mockRoute.query = { tab: 'dailyQc' }
+    await flushPromises()
+
+    expect(mockConfirmDiscardChanges).toHaveBeenCalledTimes(2)
+    expect(wrapper.get('[data-testid="system-config-tabs"]').attributes('data-active-key')).toBe(
+      'dailyQc',
+    )
+    expect(wrapper.find('[data-testid="daily-schedule-panel"]').exists()).toBe(true)
     wrapper.unmount()
-    expect(mockStopPolling).toHaveBeenCalledTimes(1)
-    expect(mockResetState).toHaveBeenCalledTimes(1)
   })
 })

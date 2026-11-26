@@ -2,8 +2,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises, mount } from '@vue/test-utils'
 import { defineComponent, ref } from 'vue'
 
+const { visibilityState } = vi.hoisted(() => ({
+  visibilityState: { confirmedResultsOnly: false },
+}))
+
 vi.mock('@/composables/useQcResultVisibility', () => ({
-  useQcResultVisibility: () => ({ confirmedResultsOnly: ref(false) }),
+  useQcResultVisibility: () => ({
+    confirmedResultsOnly: ref(visibilityState.confirmedResultsOnly),
+  }),
 }))
 
 import * as api from '@/services/rule-validation-service'
@@ -16,6 +22,7 @@ import type {
 import RuleValidationListView from '@/views/workstation-v4/rule-validation/RuleValidationListView.vue'
 import RuleValidationDetailView from '@/views/workstation-v4/rule-validation/RuleValidationDetailView.vue'
 import CaseReviewDrawer from '@/views/workstation-v4/rule-validation/CaseReviewDrawer.vue'
+import ApprovalModal from '@/views/workstation-v4/rule-validation/ApprovalModal.vue'
 import { expectedStatuses, formatTime, statusLabel } from '@/views/workstation-v4/rule-validation/presentation'
 
 vi.mock('@/services/rule-validation-service', () => ({
@@ -179,6 +186,7 @@ const button = (wrapper: ReturnType<typeof mount>, text: string) =>
 
 beforeEach(() => {
   vi.resetAllMocks()
+  visibilityState.confirmedResultsOnly = false
 })
 
 describe('规则验收列表', () => {
@@ -488,4 +496,56 @@ it('逐例核对保留公开事实中的全部事件值', () => {
   })
   expect(wrapper.text()).toContain('结构化判定事实')
   for (const value of ['手术指征', '麻醉方式', '27', '31']) expect(wrapper.text()).toContain(value)
+})
+
+describe('受限演示账号只读门禁与驳回后状态复位', () => {
+  it('confirmedResultsOnly=true 时隐藏规则详情「核对证据」按钮与抽屉提交控件', async () => {
+    visibilityState.confirmedResultsOnly = true
+    vi.mocked(api.getValidationRule).mockResolvedValue({ success: true, data: detail() })
+    const detailWrapper = mount(RuleValidationDetailView, { global: { stubs } })
+    await flushPromises()
+    expect(detailWrapper.findAll('button').some((b) => b.text().includes('核对证据'))).toBe(false)
+    detailWrapper.unmount()
+
+    const drawerWrapper = mount(CaseReviewDrawer, {
+      props: { runId: 'run-1', runTime: '09-29 14:20', rows, index: 0, reviews: [] },
+      global: { stubs },
+    })
+    expect(drawerWrapper.text()).toContain('病程已记录检查目的')
+    expect(drawerWrapper.find('textarea[aria-label="核对意见"]').exists()).toBe(false)
+    expect(drawerWrapper.find('[data-testid="confirm-case"]').exists()).toBe(false)
+    expect(drawerWrapper.findAll('button').some((b) => b.text().includes('记录问题'))).toBe(false)
+    drawerWrapper.unmount()
+  })
+
+  it('ApprovalModal 驳回成功后重置意见并触发 done 与 close 关闭弹窗', async () => {
+    vi.mocked(api.approveRule).mockResolvedValue({ success: true, data: {} as never })
+    const wrapper = mount(ApprovalModal, {
+      props: {
+        open: true,
+        detail: detail({ stage: 'pending_approval' }),
+        approval: null,
+      },
+      global: {
+        stubs: {
+          ...stubs,
+          AModal: { props: ['open'], template: '<div v-if="open"><slot /></div>' },
+        },
+      },
+    })
+    const noteInput = wrapper.get('textarea[aria-label="批准意见"]')
+    await noteInput.setValue('覆盖场景不足，退回补充')
+    await button(wrapper, '驳回').trigger('click')
+    await flushPromises()
+
+    expect(api.approveRule).toHaveBeenCalledWith(
+      'LX0609-06-01-01',
+      'rejected',
+      '覆盖场景不足，退回补充',
+    )
+    expect(wrapper.emitted('done')).toHaveLength(1)
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    expect((noteInput.element as HTMLTextAreaElement).value).toBe('')
+    wrapper.unmount()
+  })
 })

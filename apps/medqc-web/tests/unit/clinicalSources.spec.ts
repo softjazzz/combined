@@ -133,6 +133,7 @@ it('兼容模式保存保留 default_source 与 legacy_enabled，并准确展示
       default_source: 'legacy_pg',
       legacy_enabled: true,
     }),
+    expect.objectContaining({ signal: expect.any(AbortSignal) }),
   )
 
   mocks.check.mockResolvedValueOnce({
@@ -157,5 +158,58 @@ it('兼容模式保存保留 default_source 与 legacy_enabled，并准确展示
   await checkBtn?.trigger('click')
   await flushPromises()
   expect(wrapper.text()).toContain('同步发布尚未就绪')
+  wrapper.unmount()
+})
+
+it('映射已知后端安全错误码为明确中文提示，并在卸载时中止在途请求', async () => {
+  let capturedLoadSignal: AbortSignal | undefined
+  mocks.configuration.mockImplementationOnce((opts?: { signal?: AbortSignal }) => {
+    capturedLoadSignal = opts?.signal
+    return new Promise(() => {})
+  })
+  const pendingWrapper = mount(ClinicalSourceSettingsPanel)
+  expect(capturedLoadSignal).toBeInstanceOf(AbortSignal)
+  expect(capturedLoadSignal?.aborted).toBe(false)
+  pendingWrapper.unmount()
+  expect(capturedLoadSignal?.aborted).toBe(true)
+
+  const wrapper = mount(ClinicalSourceSettingsPanel)
+  await flushPromises()
+
+  mocks.save.mockRejectedValueOnce({
+    response: { status: 503, data: { error: 'clinical_source_credentials_unavailable' } },
+  })
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('CDM_PGPASSFILE')
+
+  mocks.save.mockRejectedValueOnce({
+    response: { status: 422, data: { error: 'clinical_source_host_not_allowed' } },
+  })
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('允许列表')
+
+  mocks.save.mockRejectedValueOnce({
+    response: { status: 422, data: { error: 'at_least_one_clinical_source_required' } },
+  })
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('至少需要保留一个已启用的临床数据源')
+
+  mocks.save.mockRejectedValueOnce({
+    response: { status: 409, data: { error: 'clinical_source_configuration_changed' } },
+  })
+  await wrapper.find('form').trigger('submit')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('版本冲突')
+
+  mocks.check.mockRejectedValueOnce({
+    response: { status: 422, data: { detail: 'clinical_source_host_not_allowed' } },
+  })
+  const checkBtn = wrapper.findAll('button').find((item) => item.text() === '只读检查 CDM')
+  await checkBtn?.trigger('click')
+  await flushPromises()
+  expect(wrapper.get('[role="alert"]').text()).toContain('允许列表')
   wrapper.unmount()
 })

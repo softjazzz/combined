@@ -43,30 +43,42 @@ function unwrap<T>(value: Envelope<T>): T {
   if (value.success !== true || value.data == null) throw new Error('数据源接口未返回有效结果')
   return value.data
 }
+export interface ClinicalSourcesRequestOptions {
+  signal?: AbortSignal
+}
 const base = '/api/v1/clinical-sources'
 export const clinicalSourcesApi = {
-  async options() {
-    return unwrap((await http.get<Envelope<ClinicalSourceOptions>>(`${base}/options`)).data)
+  async options(requestOptions?: ClinicalSourcesRequestOptions) {
+    const config = requestOptions?.signal ? { signal: requestOptions.signal } : undefined
+    const response = config
+      ? await http.get<Envelope<ClinicalSourceOptions>>(`${base}/options`, config)
+      : await http.get<Envelope<ClinicalSourceOptions>>(`${base}/options`)
+    return unwrap(response.data)
   },
-  async configuration() {
-    return unwrap((await http.get<Envelope<ClinicalSourceSettings>>(base)).data)
+  async configuration(requestOptions?: ClinicalSourcesRequestOptions) {
+    const config = requestOptions?.signal ? { signal: requestOptions.signal } : undefined
+    const response = config
+      ? await http.get<Envelope<ClinicalSourceSettings>>(base, config)
+      : await http.get<Envelope<ClinicalSourceSettings>>(base)
+    return unwrap(response.data)
   },
-  async save(value: ClinicalSourceSettings) {
-    const saved = unwrap((await http.put<Envelope<ClinicalSourceSettings>>(base, value)).data)
+  async save(value: ClinicalSourceSettings, requestOptions?: ClinicalSourcesRequestOptions) {
+    const config = requestOptions?.signal ? { signal: requestOptions.signal } : undefined
+    const response = config
+      ? await http.put<Envelope<ClinicalSourceSettings>>(base, value, config)
+      : await http.put<Envelope<ClinicalSourceSettings>>(base, value)
+    const saved = unwrap(response.data)
     if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
       window.dispatchEvent(new Event('medqc:clinical-sources-saved'))
     }
     return saved
   },
-  async check(value: ClinicalSourceSettings) {
-    return unwrap(
-      (
-        await http.post<Envelope<ClinicalSourceCheck>>(
-          `${base}/check`,
-          value,
-        )
-      ).data,
-    )
+  async check(value: ClinicalSourceSettings, requestOptions?: ClinicalSourcesRequestOptions) {
+    const config = requestOptions?.signal ? { signal: requestOptions.signal } : undefined
+    const response = config
+      ? await http.post<Envelope<ClinicalSourceCheck>>(`${base}/check`, value, config)
+      : await http.post<Envelope<ClinicalSourceCheck>>(`${base}/check`, value)
+    return unwrap(response.data)
   },
 }
 

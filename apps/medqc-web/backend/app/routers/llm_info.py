@@ -268,22 +268,23 @@ async def add_custom_model(
     if any(str(item.get("model_code") or "").strip() == model_code for item in builtin):
         raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
 
-    raw = _load_custom_models()
-    provider_items = list(raw.get(provider_code) or [])
-    if any(str(item.get("model_code") or "").strip() == model_code for item in provider_items):
-        raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
+    with _CUSTOM_MODELS_LOCK:
+        raw = _load_custom_models()
+        provider_items = list(raw.get(provider_code) or [])
+        if any(str(item.get("model_code") or "").strip() == model_code for item in provider_items):
+            raise HTTPException(status_code=409, detail=f"模型已存在: {model_code}")
 
-    provider_items.append(
-        {
-            "provider": provider_code,
-            "id": model_code,
-            "model_code": model_code,
-            "model_name": model_name,
-            "is_custom": True,
-        }
-    )
-    raw[provider_code] = provider_items
-    _save_custom_models(raw)
+        provider_items.append(
+            {
+                "provider": provider_code,
+                "id": model_code,
+                "model_code": model_code,
+                "model_name": model_name,
+                "is_custom": True,
+            }
+        )
+        raw[provider_code] = provider_items
+        _save_custom_models(raw)
 
     return success_response(
         data={"provider_code": provider_code, "model_code": model_code, "model_name": model_name},
@@ -307,22 +308,23 @@ async def delete_custom_model(
     if not m:
         raise HTTPException(status_code=400, detail="model_code 不能为空")
 
-    raw = _load_custom_models()
-    provider_items = list(raw.get(p) or [])
-    original_size = len(provider_items)
-    provider_items = [
-        item
-        for item in provider_items
-        if str(item.get("model_code") or "").strip() != m
-    ]
-    if len(provider_items) == original_size:
-        raise HTTPException(status_code=404, detail=f"未找到自定义模型: {m}")
+    with _CUSTOM_MODELS_LOCK:
+        raw = _load_custom_models()
+        provider_items = list(raw.get(p) or [])
+        original_size = len(provider_items)
+        provider_items = [
+            item
+            for item in provider_items
+            if str(item.get("model_code") or "").strip() != m
+        ]
+        if len(provider_items) == original_size:
+            raise HTTPException(status_code=404, detail=f"未找到自定义模型: {m}")
 
-    if provider_items:
-        raw[p] = provider_items
-    else:
-        raw.pop(p, None)
-    _save_custom_models(raw)
+        if provider_items:
+            raw[p] = provider_items
+        else:
+            raw.pop(p, None)
+        _save_custom_models(raw)
 
     return success_response(
         data={"provider_code": p, "model_code": m},

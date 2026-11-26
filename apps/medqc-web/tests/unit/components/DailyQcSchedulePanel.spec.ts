@@ -81,7 +81,11 @@ describe('每日定时质控配置', () => {
     await flushPromises()
     const saved = service.save.mock.calls[0][0] as DailyQcDefinition
     expect(saved).toMatchObject({ name: '每日终末', enabled: false, institute_id: 'A', end_offset_days: 1, lookback_days: 1 })
-    expect(service.options).toHaveBeenCalledWith('A', 'final')
+    expect(service.options).toHaveBeenCalledWith(
+      'A',
+      'final',
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(Object.keys(service)).not.toContain('run')
     wrapper.unmount()
   })
@@ -188,5 +192,36 @@ describe('每日定时质控配置', () => {
     expect(service.remove).toHaveBeenCalledWith(item.id)
     expect(wrapper.find(`[data-testid="schedule-${item.id}"]`).exists()).toBe(false)
     wrapper.unmount()
+  })
+
+  it('向 list/options/history 透传 AbortSignal，并在重复触发或卸载时真正中止前序信号', async () => {
+    const signals: AbortSignal[] = []
+    service.list.mockImplementationOnce((opts?: { signal?: AbortSignal }) => {
+      if (opts?.signal) signals.push(opts.signal)
+      return new Promise(() => {})
+    })
+    const wrapper = mount(DailyQcSchedulePanel, {
+      global: {
+        stubs: {
+          'a-space': Slot,
+          'a-tag': Slot,
+          'a-form': Slot,
+          'a-form-item': Slot,
+          'a-input-number': InputNumber,
+          'a-button': Button,
+          'a-modal': Modal,
+          'a-select': Select,
+          'a-input': Input,
+          'a-switch': true,
+          'a-alert': Alert,
+          'a-drawer': { props: ['open'], template: '<div v-if="open"><slot /></div>' },
+          'a-empty': { props: ['description'], template: '<p>{{ description }}</p>' },
+        },
+      },
+    })
+    expect(signals).toHaveLength(1)
+    expect(signals[0].aborted).toBe(false)
+    wrapper.unmount()
+    expect(signals[0].aborted).toBe(true)
   })
 })

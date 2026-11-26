@@ -564,8 +564,8 @@ class DoctorNotificationService:
                 applications.c.user_id == Notification.related_id,
                 applications.c.requested_institute_id == Notification.institute_id,
             ))
-            reviewer = "admin" in actor["roles"]
-            if reviewer and actor["institute_id"] and "sync_admin" not in actor["roles"]:
+            reviewer = bool(actor["roles"] & {"admin", "sync_admin", "super_admin"})
+            if reviewer and actor["institute_id"] and not (actor["roles"] & {"sync_admin", "super_admin"}):
                 reviewer = Notification.institute_id == actor["institute_id"]
             registration = and_(
                 Notification.source_key == REGISTRATION_SOURCE,

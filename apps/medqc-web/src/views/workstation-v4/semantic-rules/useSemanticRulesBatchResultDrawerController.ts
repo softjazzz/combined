@@ -351,7 +351,14 @@ export function useSemanticRulesBatchResultDrawerController(
 
   const issueColumns = computed(() => {
     const columns: Array<Record<string, any>> = [
-      { title: '规则编码', dataIndex: 'rule_code', key: 'rule_code', width: 96 },
+      {
+        title: '规则编码',
+        dataIndex: 'rule_code',
+        key: 'rule_code',
+        width: 96,
+        customRender: ({ record }: { record: SichuanBatchIssueItem }) =>
+          record.rule_code || record.rule_id || '-',
+      },
       {
         title: isLuxian0609BatchJob.value ? '病历引用' : '病历号',
         dataIndex: isLuxian0609BatchJob.value ? 'record_ref' : 'record_id',
@@ -961,8 +968,65 @@ export function useSemanticRulesBatchResultDrawerController(
     ]
   })
 
+  const cachedDebugRuleOptionsState = ref<{
+    jobId: string
+    options: Array<{ label: string; value: string }>
+  }>({
+    jobId: '',
+    options: [],
+  })
+
+  watch(
+    () => batchJobDebugSnapshot.value,
+    (snapshot) => {
+      const jobId = String(snapshot?.job_id || '').trim()
+      if (!snapshot || !jobId) {
+        cachedDebugRuleOptionsState.value = { jobId: '', options: [] }
+        return
+      }
+      const incoming = (snapshot.rules || [])
+        .filter((rule) => Boolean(String(rule.rule_job_id || '').trim()))
+        .map((rule) => ({
+          label: `${rule.rule_code} · ${rule.rule_name}`,
+          value: rule.rule_job_id,
+        }))
+      const isFiltered =
+        Boolean(selectedDebugRuleJobId.value) ||
+        (typeof snapshot.rule_count === 'number' &&
+          typeof snapshot.filtered_rule_count === 'number' &&
+          snapshot.filtered_rule_count < snapshot.rule_count)
+      if (cachedDebugRuleOptionsState.value.jobId !== jobId || !isFiltered) {
+        cachedDebugRuleOptionsState.value = { jobId, options: incoming }
+        return
+      }
+      if (!incoming.length) return
+      const merged = [...cachedDebugRuleOptionsState.value.options]
+      const indexByValue = new Map(merged.map((item, idx) => [item.value, idx]))
+      for (const option of incoming) {
+        const existingIndex = indexByValue.get(option.value)
+        if (existingIndex === undefined) {
+          indexByValue.set(option.value, merged.length)
+          merged.push(option)
+        } else {
+          merged[existingIndex] = option
+        }
+      }
+      cachedDebugRuleOptionsState.value = { jobId, options: merged }
+    },
+    { immediate: true },
+  )
+
   const debugRuleOptions = computed(() => {
-    return (batchJobDebugSnapshot.value?.rules || []).map((rule) => ({
+    const snapshot = batchJobDebugSnapshot.value
+    const snapshotJobId = String(snapshot?.job_id || '').trim()
+    if (
+      snapshotJobId &&
+      cachedDebugRuleOptionsState.value.jobId === snapshotJobId &&
+      cachedDebugRuleOptionsState.value.options.length
+    ) {
+      return cachedDebugRuleOptionsState.value.options
+    }
+    return (snapshot?.rules || []).map((rule) => ({
       label: `${rule.rule_code} · ${rule.rule_name}`,
       value: rule.rule_job_id,
     }))
@@ -1006,8 +1070,11 @@ export function useSemanticRulesBatchResultDrawerController(
     const matched = (batchJobDebugSnapshot.value?.rules || []).find(
       (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
     )
-    if (!matched) return ''
-    return `${matched.rule_code} · ${matched.rule_name}`
+    if (matched) return `${matched.rule_code} · ${matched.rule_name}`
+    return (
+      debugRuleOptions.value.find((option) => option.value === selectedDebugRuleJobId.value)
+        ?.label || ''
+    )
   })
 
   const selectedCluster = computed(() => {
@@ -2758,9 +2825,11 @@ export function useSemanticRulesBatchResultDrawerController(
         return
       }
       if (!selectedDebugRuleJobId.value) return
-      const hasSelected = (batchJobDebugSnapshot.value.rules || []).some(
-        (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
-      )
+      const hasSelected =
+        (batchJobDebugSnapshot.value.rules || []).some(
+          (rule) => rule.rule_job_id === selectedDebugRuleJobId.value,
+        ) ||
+        debugRuleOptions.value.some((option) => option.value === selectedDebugRuleJobId.value)
       if (!hasSelected) {
         selectedDebugRuleJobId.value = ''
       }

@@ -166,4 +166,18 @@ describe('llmObservability service', () => {
     expect(requestedUrl).toContain('page=2')
     expect(result.total).toBe(42)
   })
+
+  it('透传 AbortSignal 到 authFetch 且中止时原样抛出 AbortError', async () => {
+    const controller = new AbortController()
+    const abortError = new DOMException('Aborted', 'AbortError')
+    authFetch.mockImplementationOnce((_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBe(controller.signal)
+      return Promise.reject(abortError)
+    })
+
+    controller.abort()
+    await expect(getLlmObservabilityOverview({}, { signal: controller.signal })).rejects.toBe(
+      abortError,
+    )
+  })
 })

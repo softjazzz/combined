@@ -418,10 +418,11 @@
                   </td>
                   <td class="rv-right">
                     <button
+                      v-if="!confirmedResultsOnly"
                       type="button"
                       class="mq-btn"
                       :disabled="row.comparison === 'pending'"
-                      @click="reviewIndex = i"
+                      @click="openCaseReview(i)"
                     >
                       核对证据
                     </button>
@@ -990,6 +991,17 @@ function openAnswer(item: ValidationCase | null) {
   answerTarget.value = item
   answerOpen.value = true
 }
+function openCaseReview(index: number) {
+  if (confirmedResultsOnly.value) return
+  reviewIndex.value = index
+}
+watch(confirmedResultsOnly, (restricted) => {
+  if (restricted) {
+    reviewIndex.value = -1
+    answerOpen.value = false
+    approvalOpen.value = false
+  }
+})
 async function onAnswerSaved() {
   const generation = activeGeneration
   const targetRuleId = ruleId.value

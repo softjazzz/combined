@@ -110,6 +110,19 @@ describe('主管独立消息中心', () => {
     wrapper.unmount()
   })
 
+  it('已读回执保存成功后，后台列表刷新失败或挂起不阻塞下钻导航', async () => {
+    const { state, wrapper } = await setup()
+    mocks.get.mockRejectedValueOnce(new Error('后台刷新超时'))
+    await state.open(state.items.value[0])
+    expect(mocks.put).toHaveBeenCalledWith('/api/v1/notifications/N/read')
+    expect(mocks.push).toHaveBeenCalledWith({
+      path: '/workstation-v5/qc-result',
+      query: { notification_id: 'N' },
+    })
+    expect(mocks.error).not.toHaveBeenCalled()
+    wrapper.unmount()
+  })
+
   it('状态和类型过滤交给服务端，切换时回第一页', async () => {
     const { state, wrapper } = await setup()
     state.page.value = 3

@@ -40,6 +40,8 @@ vi.mock('@/views/test/ApiTestView.vue', () => ({ default: { template: '<div />' 
 vi.mock('@/views/test/TestThreeColumn.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/test/ThreeColumnValidation.vue', () => ({ default: { template: '<div />' } }))
 vi.mock('@/views/test/LLMConfigTest.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/debug/ApiTestView.vue', () => ({ default: { template: '<div />' } }))
+vi.mock('@/views/workstation-v4/DataSyncConfigPage.vue', () => ({ default: { template: '<div />' } }))
 
 vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({
@@ -405,6 +407,59 @@ describe('生产构建关闭匿名 demo 旁路与 /dashboard/test/* 路由', () 
     } finally {
       auth.authenticated = true
       vi.unstubAllEnvs()
+    }
+  })
+})
+
+describe('旧设置页下线、调试路由收敛与 V5 super_admin/sync_admin 权限一致性', () => {
+  it('/dashboard/settings 不再挂载旧 mock 设置页，统一重定向到 /workstation-v5/system-config', async () => {
+    const settingsRoute = router.getRoutes().find((item) => item.name === 'Settings')
+    expect(settingsRoute?.redirect).toBe('/workstation-v5/system-config')
+    expect(settingsRoute?.components).toBeUndefined()
+
+    auth.roles.splice(0, auth.roles.length, 'super_admin')
+    try {
+      await router.push('/dashboard/settings')
+      expect(router.currentRoute.value.path).toBe('/workstation-v5/system-config')
+    } finally {
+      auth.roles.splice(0, auth.roles.length, 'admin')
+    }
+  })
+
+  it('/dashboard/debug/api-test 仅允许 admin / super_admin / sync_admin 访问', async () => {
+    expect(router.resolve('/dashboard/debug/api-test').meta.permission).toEqual([
+      'admin',
+      'super_admin',
+      'sync_admin',
+    ])
+
+    for (const deniedRole of ['doctor', 'qc_staff', 'qc_manager']) {
+      auth.roles.splice(0, auth.roles.length, deniedRole)
+      await router.push('/dashboard/debug/api-test')
+      expect(router.currentRoute.value.path).not.toBe('/dashboard/debug/api-test')
+    }
+
+    for (const allowedRole of ['admin', 'super_admin', 'sync_admin']) {
+      auth.roles.splice(0, auth.roles.length, allowedRole)
+      await router.push('/dashboard/debug/api-test')
+      expect(router.currentRoute.value.path).toBe('/dashboard/debug/api-test')
+    }
+
+    auth.roles.splice(0, auth.roles.length, 'admin')
+  })
+
+  it('/workstation-v5 下所有声明 admin 或 sync_admin 的路由均一致声明 super_admin 与 sync_admin', () => {
+    const v5Routes = router
+      .getRoutes()
+      .filter((item) => item.path.startsWith('/workstation-v5') && Array.isArray(item.meta.permission))
+
+    expect(v5Routes.length).toBeGreaterThan(20)
+    for (const item of v5Routes) {
+      const permission = item.meta.permission as string[]
+      if (permission.includes('admin') || permission.includes('sync_admin')) {
+        expect(permission, `route ${item.path} should include sync_admin`).toContain('sync_admin')
+        expect(permission, `route ${item.path} should include super_admin`).toContain('super_admin')
+      }
     }
   })
 })

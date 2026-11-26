@@ -127,7 +127,13 @@
                 <template #overlay>
                   <a-menu @click="handleRowMenu(row.id, $event)">
                     <a-menu-item key="export" data-menu-key="export"> 导出质控报告 </a-menu-item>
-                    <a-menu-item key="review" data-menu-key="review"> 复核本次结果 </a-menu-item>
+                    <a-menu-item
+                      v-if="!confirmedResultsOnly && isLuxian0609Job(jobById(row.id))"
+                      key="review"
+                      data-menu-key="review"
+                    >
+                      复核本次结果
+                    </a-menu-item>
                   </a-menu>
                 </template>
               </a-dropdown>
@@ -173,6 +179,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { message } from 'ant-design-vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import {
   cancelSichuanWorkspaceBatchJob,
   exportSichuanWorkspaceBatchJob,
@@ -201,9 +208,11 @@ import {
 } from './taskHistoryPresentation'
 
 const JOB_POLL_INTERVAL_MS = 3000
+const LUXIAN_0609_RULE_SET_KEY = 'luxian_0609_qc_v1'
 
 const router = useRouter()
 const route = typeof useRoute === 'function' ? useRoute() : null
+const { confirmedResultsOnly } = useQcResultVisibility()
 const loading = ref(false)
 const loaded = ref(false)
 const loadError = ref('')
@@ -311,7 +320,7 @@ async function pollActiveJob(jobId: string, seq: number) {
       syncJobInList(result.data)
       if (isBatchJobPollingActive(result.data)) {
         startJobPolling(jobId, seq)
-      } else {
+      } else if (!confirmedResultsOnly.value) {
         void fetchJobDebugSnapshot(jobId)
       }
       return
@@ -334,6 +343,18 @@ async function pollActiveJob(jobId: string, seq: number) {
 
 function jobById(id: string) {
   return jobs.value.find((job) => job.id === id) as SichuanBatchJob
+}
+
+function isLuxian0609Job(job: SichuanBatchJob | undefined | null): boolean {
+  if (!job) return false
+  const filters =
+    job.filters && typeof job.filters === 'object' ? (job.filters as Record<string, unknown>) : {}
+  const ruleSetKey = String(
+    job.rule_set_key || job.summary?.rule_set_key || filters.rule_set_key || '',
+  )
+    .trim()
+    .toLowerCase()
+  return ruleSetKey === LUXIAN_0609_RULE_SET_KEY
 }
 
 function statusClass(tone: TaskHistoryTone) {
@@ -444,7 +465,9 @@ async function openJob(job: SichuanBatchJob) {
     }
     jobDetail.value = result.data
     syncJobInList(result.data)
-    void fetchJobDebugSnapshot(job.id)
+    if (!confirmedResultsOnly.value) {
+      void fetchJobDebugSnapshot(job.id)
+    }
     if (isBatchJobPollingActive(result.data)) {
       startJobPolling(result.data.id, seq)
     }
@@ -463,6 +486,7 @@ async function fetchJobDebugSnapshot(
   jobId: string,
   options?: { ruleJobId?: string; itemLimit?: number },
 ) {
+  if (confirmedResultsOnly.value) return null
   const normalizedJobId = String(jobId || '').trim()
   if (!normalizedJobId) return null
   const requestId = ++jobDebugRequestId
@@ -553,6 +577,7 @@ async function exportCurrentJob(format: 'xlsx' | 'csv' | 'html' = 'html') {
 }
 
 async function reviewJob(job: SichuanBatchJob): Promise<SichuanBatchJob | null> {
+  if (confirmedResultsOnly.value || !isLuxian0609Job(job)) return null
   reviewingJobId.value = job.id
   try {
     const result = await reviewSichuanWorkspaceBatchJob(job.id)
@@ -566,6 +591,9 @@ async function reviewJob(job: SichuanBatchJob): Promise<SichuanBatchJob | null> 
     const count = Number(result.data.review_report?.summary?.total_findings || 0)
     message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
     return updatedJob
+  } catch (error: any) {
+    message.error(error?.message || '复核本次结果失败')
+    return null
   } finally {
     reviewingJobId.value = ''
   }

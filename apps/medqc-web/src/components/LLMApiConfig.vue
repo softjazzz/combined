@@ -253,6 +253,7 @@
             :local-providers="localProviders"
             :default-provider="draft.provider_code"
             :disabled="isReadonly || loading || saving"
+            :catalog-refresh="roleCatalogRefresh"
           />
           <a-alert
             v-if="rolesIncomplete"
@@ -521,7 +522,15 @@ let disposed = false
 let modelRequestVersion = 0
 let reloadRequestVersion = 0
 let reloadController: AbortController | null = null
+let modelController: AbortController | null = null
 let mutationController: AbortController | null = null
+let roleCatalogRefreshSeq = 0
+const roleCatalogRefresh = ref<{ provider: string; version: number } | null>(null)
+
+function notifyRoleCatalogChanged(providerCode: string) {
+  if (!providerCode || isLocalProvider(providerCode)) return
+  roleCatalogRefresh.value = { provider: providerCode, version: ++roleCatalogRefreshSeq }
+}
 
 type LLMConfigSummaryWithStatus = LLMConfigSummary & {
   provider_unavailable?: boolean
@@ -736,15 +745,18 @@ function buildExecutionConcurrency(): LLMExecutionConcurrency {
   }
 }
 
-async function loadProviders() {
-  providers.value = await llmConfigService.getProviders()
+async function loadProviders(signal?: AbortSignal) {
+  providers.value = await llmConfigService.getProviders(signal ? { signal } : undefined)
+  if (disposed || signal?.aborted) return
   // 本地目录包含未启用的服务，但不改变服务端的运行准入。
   try {
-    await refreshLocalProviders()
-  } catch {
+    await refreshLocalProviders(signal)
+  } catch (error) {
+    if (disposed || signal?.aborted) throw error
     localProviders.value = []
     localOptionsError.value = '本地模型选项读取失败，请刷新重试。云端配置仍可使用。'
   }
+  if (disposed || signal?.aborted) return
   for (const item of localProviders.value) {
     if (!providers.value.some((provider) => provider.provider_code === item.provider_code)) {
       providers.value.push({ provider_code: item.provider_code, provider_name: item.provider_name })
@@ -752,13 +764,28 @@ async function loadProviders() {
   }
 }
 
-async function refreshLocalProviders() {
-  localProviders.value = await llmConfigService.getLocalModelOptions()
+async function refreshLocalProviders(signal?: AbortSignal) {
+  localProviders.value = await llmConfigService.getLocalModelOptions(signal ? { signal } : undefined)
   localOptionsError.value = ''
 }
 
-async function loadModelsByProvider(providerCode: string, preferredModelCode?: string) {
+async function loadModelsByProvider(
+  providerCode: string,
+  preferredModelCode?: string,
+  signal?: AbortSignal,
+) {
   const requestVersion = ++modelRequestVersion
+  modelController?.abort()
+  const controller = new AbortController()
+  modelController = controller
+  const onOuterAbort = () => controller.abort(signal?.reason)
+  if (signal) {
+    if (signal.aborted) {
+      controller.abort(signal.reason)
+    } else {
+      signal.addEventListener('abort', onOuterAbort, { once: true })
+    }
+  }
   const requestedModel = preferredModelCode || draft.model_code
   loadingModels.value = true
   models.value = []
@@ -766,8 +793,15 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
   try {
     const loaded = isLocalProvider(providerCode)
       ? localProviders.value.find((item) => item.provider_code === providerCode)?.models || []
-      : await llmConfigService.getModelsByProvider(providerCode)
-    if (requestVersion !== modelRequestVersion || draft.provider_code !== providerCode) return
+      : await llmConfigService.getModelsByProvider(providerCode, { signal: controller.signal })
+    if (
+      disposed ||
+      requestVersion !== modelRequestVersion ||
+      controller.signal.aborted ||
+      draft.provider_code !== providerCode
+    ) {
+      return
+    }
     models.value = loaded
     if (!models.value.length) {
       draft.model_code = ''
@@ -778,9 +812,20 @@ async function loadModelsByProvider(providerCode: string, preferredModelCode?: s
       models.value[0].model_code
     draft.model_code = String(next || '')
   } catch (error) {
-    if (requestVersion === modelRequestVersion && draft.provider_code === providerCode) throw error
+    if (
+      !disposed &&
+      !controller.signal.aborted &&
+      requestVersion === modelRequestVersion &&
+      draft.provider_code === providerCode
+    ) {
+      throw error
+    }
   } finally {
-    if (requestVersion === modelRequestVersion) loadingModels.value = false
+    signal?.removeEventListener('abort', onOuterAbort)
+    if (modelController === controller) {
+      modelController = null
+    }
+    if (!disposed && requestVersion === modelRequestVersion) loadingModels.value = false
   }
 }
 
@@ -791,19 +836,19 @@ async function reloadAll() {
   reloadController = controller
   loading.value = true
   try {
-    const summary = await llmConfigService.getDefaultSummary()
+    const summary = await llmConfigService.getDefaultSummary({ signal: controller.signal })
     if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     source.value = summary.source || 'unknown'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
 
-    await loadProviders()
+    await loadProviders(controller.signal)
     if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     if (!draft.provider_code && providers.value.length) {
       draft.provider_code = providers.value[0].provider_code
     }
-    await loadModelsByProvider(draft.provider_code, draft.model_code)
+    await loadModelsByProvider(draft.provider_code, draft.model_code, controller.signal)
   } catch (error) {
     if (disposed || version !== reloadRequestVersion || controller.signal.aborted) return
     const text = error instanceof Error ? error.message : String(error)
@@ -845,7 +890,11 @@ async function addCustomModel() {
   addingModel.value = true
   try {
     await llmConfigService.addCustomModel(providerCode, modelCode, modelCode)
-    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (isLocalProvider(providerCode)) {
+      await refreshLocalProviders()
+    } else {
+      notifyRoleCatalogChanged(providerCode)
+    }
     if (draft.provider_code === providerCode) {
       await loadModelsByProvider(providerCode, modelCode)
       newModelCode.value = ''
@@ -866,7 +915,23 @@ async function removeCustomModel(model: LLMModel) {
   deletingModelCode.value = modelCode
   try {
     await llmConfigService.deleteCustomModel(providerCode, modelCode)
-    if (isLocalProvider(providerCode)) await refreshLocalProviders()
+    if (isLocalProvider(providerCode)) {
+      await refreshLocalProviders()
+    } else {
+      notifyRoleCatalogChanged(providerCode)
+    }
+    const nextRoles = cloneRoles(taskRoles.value)
+    let roleCleared = false
+    for (const key of Object.keys(nextRoles) as Array<keyof LLMTaskRoleModels>) {
+      const spec = nextRoles[key]
+      if (spec && spec.provider_code === providerCode && spec.model_code === modelCode) {
+        nextRoles[key] = { ...spec, model_code: '' }
+        roleCleared = true
+      }
+    }
+    if (roleCleared) {
+      taskRoles.value = nextRoles
+    }
     if (draft.provider_code === providerCode) {
       const preferred = draft.model_code === modelCode ? '' : draft.model_code
       await loadModelsByProvider(providerCode, preferred)
@@ -925,7 +990,7 @@ async function saveDraft() {
       execution_concurrency: buildExecutionConcurrency(),
       is_active: true,
     }
-    const saved = await llmConfigService.saveConfig(payload)
+    const saved = await llmConfigService.saveConfig(payload, { signal: saveController.signal })
     if (disposed || saveController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
@@ -997,16 +1062,18 @@ async function resetDefault() {
   mutationController = resetController
   resetting.value = true
   try {
-    const summary = (await llmConfigService.resetDefaultSummary()) as LLMConfigSummaryWithStatus
+    const summary = (await llmConfigService.resetDefaultSummary({
+      signal: resetController.signal,
+    })) as LLMConfigSummaryWithStatus
     if (disposed || resetController.signal.aborted) return
     source.value = summary.source || 'database+env'
     backendReadonly.value = Boolean(summary.readonly)
     serverSnapshot.value = summary
     patchDraftFromSummary(summary)
     if (summary.provider_unavailable) {
-      await loadProviders()
+      await loadProviders(resetController.signal)
       if (disposed || resetController.signal.aborted) return
-      await loadModelsByProvider(draft.provider_code, draft.model_code)
+      await loadModelsByProvider(draft.provider_code, draft.model_code, resetController.signal)
       if (disposed || resetController.signal.aborted) return
       const warnText = '默认推理服务当前不可用，请先重新启用或切换到其他已启用的推理服务'
       if (typeof message.warning === 'function') {
@@ -1016,7 +1083,7 @@ async function resetDefault() {
       }
       return
     }
-    await loadModelsByProvider(draft.provider_code, draft.model_code)
+    await loadModelsByProvider(draft.provider_code, draft.model_code, resetController.signal)
     if (disposed || resetController.signal.aborted) return
 
     const reloadResponse = await authFetch('/api/v1/qc/sichuan/reload-config', {
@@ -1110,6 +1177,8 @@ onBeforeUnmount(() => {
   ++reloadRequestVersion
   reloadController?.abort()
   reloadController = null
+  modelController?.abort()
+  modelController = null
   mutationController?.abort()
   mutationController = null
   if (typeof window !== 'undefined') {

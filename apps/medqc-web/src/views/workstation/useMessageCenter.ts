@@ -292,7 +292,7 @@ export function useMessageCenter() {
     mobileReading.value = true
   }
 
-  async function markRead(item: NotificationVM) {
+  async function markRead(item: NotificationVM, options: { awaitReload?: boolean } = {}) {
     if (busy.value || loading.value || error.value) return false
     if (item.is_read) return true
     const owner = identity
@@ -303,7 +303,11 @@ export function useMessageCenter() {
       )
       if (owner !== identity) return false
       if (!result.success) throw new Error('已读回执保存失败，请重试')
-      await load()
+      if (options.awaitReload === false) {
+        void load().catch(() => {})
+      } else {
+        await load().catch(() => {})
+      }
       return owner === identity
     } catch (cause) {
       if (owner === identity)
@@ -315,7 +319,7 @@ export function useMessageCenter() {
   }
 
   async function open(item: NotificationVM) {
-    if (!item.interaction_target || !(await markRead(item))) return
+    if (!item.interaction_target || !(await markRead(item, { awaitReload: false }))) return
     await router.push(notificationLocation(item.interaction_target))
   }
 

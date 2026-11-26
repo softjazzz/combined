@@ -12,6 +12,10 @@ export interface LlmObservabilityRecordsResponse extends LlmObservabilityRecordP
   range?: LlmObservabilityRange
 }
 
+export interface LlmObservabilityRequestOptions {
+  signal?: AbortSignal
+}
+
 const UNAVAILABLE_MESSAGE = '模型性能数据暂不可用'
 
 function buildSearchParams(query: Record<string, string | number | undefined>): string {
@@ -24,11 +28,17 @@ function buildSearchParams(query: Record<string, string | number | undefined>): 
   return serialized ? `?${serialized}` : ''
 }
 
-async function readJson<T>(url: string): Promise<T> {
+async function readJson<T>(url: string, options?: LlmObservabilityRequestOptions): Promise<T> {
   let response: Response
   try {
-    response = await authFetch(url, { method: 'GET' })
-  } catch {
+    response = await authFetch(
+      url,
+      options?.signal ? { method: 'GET', signal: options.signal } : { method: 'GET' },
+    )
+  } catch (error) {
+    if (options?.signal?.aborted || (error instanceof Error && error.name === 'AbortError')) {
+      throw error
+    }
     throw new Error(UNAVAILABLE_MESSAGE)
   }
 
@@ -53,26 +63,34 @@ async function readJson<T>(url: string): Promise<T> {
 
 export function getLlmObservabilityOverview(
   query: LlmObservabilityQuery = {},
+  options?: LlmObservabilityRequestOptions,
 ): Promise<LlmObservabilityOverview> {
   const search = buildSearchParams({ ...query })
-  return readJson<LlmObservabilityOverview>(`/api/v1/system/llm-observability/overview${search}`)
+  return readJson<LlmObservabilityOverview>(
+    `/api/v1/system/llm-observability/overview${search}`,
+    options,
+  )
 }
 
 export function getLlmObservabilityRecords(
   query: LlmObservabilityQuery = {},
+  options?: LlmObservabilityRequestOptions,
 ): Promise<LlmObservabilityRecordsResponse> {
   const search = buildSearchParams({ ...query })
   return readJson<LlmObservabilityRecordsResponse>(
     `/api/v1/system/llm-observability/records${search}`,
+    options,
   )
 }
 
 export function getLlmRecordCallAttempts(
   recordKeyHash: string,
   query: LlmRecordCallsQuery = {},
+  options?: LlmObservabilityRequestOptions,
 ): Promise<LlmRecordCallAttempts> {
   const search = buildSearchParams({ ...query })
   return readJson<LlmRecordCallAttempts>(
     `/api/v1/system/llm-observability/records/${encodeURIComponent(recordKeyHash)}/calls${search}`,
+    options,
   )
 }

@@ -19,6 +19,7 @@ const {
   exportSichuanWorkspaceBatchJob,
   normalizeBatchExportBlob,
   downloadBlob,
+  confirmedResultsOnlyState,
 } = vi.hoisted(() => ({
   message: {
     success: vi.fn(),
@@ -36,7 +37,17 @@ const {
   exportSichuanWorkspaceBatchJob: vi.fn(),
   normalizeBatchExportBlob: vi.fn(),
   downloadBlob: vi.fn(),
+  confirmedResultsOnlyState: { value: false },
 }))
+
+vi.mock('@/composables/useQcResultVisibility', async () => {
+  const { ref } = await import('vue')
+  return {
+    useQcResultVisibility: () => ({
+      confirmedResultsOnly: ref(confirmedResultsOnlyState.value),
+    }),
+  }
+})
 
 vi.mock('ant-design-vue', () => ({ message }))
 
@@ -207,6 +218,7 @@ describe('CustomerSampleTaskHistoryView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useRealTimers()
+    confirmedResultsOnlyState.value = false
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
     latestResultDrawerProps = null
     const job = buildCompletedJob()
@@ -513,5 +525,54 @@ describe('CustomerSampleTaskHistoryView', () => {
     expect(row.text()).toContain('执行失败')
     expect(row.find('.mq-status--danger').exists()).toBe(true)
     expect(row.get('[data-testid="task-history-open"]').text()).toContain('查看原因')
+  })
+
+  it('confirmedResultsOnly=true 时打开任务不拉取调试快照并隐藏复核菜单', async () => {
+    confirmedResultsOnlyState.value = true
+    const wrapper = await mountView()
+    const menuItems = wrapper.findAll('.a-menu-item-stub')
+    expect(menuItems.some((item) => item.text().includes('复核本次结果'))).toBe(false)
+
+    await wrapper.get('[data-testid="task-history-open"]').trigger('click')
+    await flushPromises()
+
+    expect(getSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-history-1')
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
+    const fetchFn = latestResultDrawerProps?.fetchBatchJobDebugSnapshot as (
+      jobId: string,
+    ) => Promise<unknown>
+    expect(await fetchFn('job-history-1')).toBeNull()
+    expect(getSichuanWorkspaceBatchJobDebugSnapshot).not.toHaveBeenCalled()
+  })
+
+  it('非 LX0609 任务隐藏行菜单「复核本次结果」入口', async () => {
+    const nonLxJob = {
+      ...buildCompletedJob(),
+      id: 'job-sc-1',
+      rule_code: 'SC-BATCH',
+      rule_name: 'SC 全病历批量任务',
+      rule_set_key: 'sichuan_full_v1',
+      filters: { rule_set_key: 'sichuan_full_v1' },
+    }
+    listSichuanWorkspaceBatchJobs.mockResolvedValue({
+      success: true,
+      data: { items: [nonLxJob], total: 1, page: 1, page_size: 20 },
+    })
+    const wrapper = await mountView()
+    const menuItems = wrapper.findAll('.a-menu-item-stub')
+    expect(menuItems.some((item) => item.text().includes('导出质控报告'))).toBe(true)
+    expect(menuItems.some((item) => item.text().includes('复核本次结果'))).toBe(false)
+  })
+
+  it('复核请求抛出异常时捕获错误并提示，不产生未处理拒绝', async () => {
+    reviewSichuanWorkspaceBatchJob.mockRejectedValueOnce(new Error('复核服务超时'))
+    const wrapper = await mountView()
+    const reviewButton = wrapper
+      .findAll('.a-menu-item-stub')
+      .find((button) => button.text().includes('复核本次结果'))
+    expect(reviewButton).toBeTruthy()
+    await reviewButton!.trigger('click')
+    await flushPromises()
+    expect(message.error).toHaveBeenCalledWith('复核服务超时')
   })
 })

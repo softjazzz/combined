@@ -2097,3 +2097,73 @@ describe('演示账号的批量结果', () => {
     expect(mixed).toHaveLength(6)
   })
 })
+
+describe('调试快照规则下拉保留完整列表与表格规则编码兜底', () => {
+  it('按单条 rule_job_id 筛选调试快照时保留完整规则下拉选项，切换任务时重置', async () => {
+    const props = buildProps()
+    const wrapper = mount(SemanticRulesBatchResultDrawer, {
+      props,
+      global: { stubs: drawerStubs },
+    })
+    await flushPromises()
+
+    const vm = wrapper.vm as unknown as {
+      debugRuleOptions: Array<{ label: string; value: string }>
+      handleDebugRuleChange: (value: string | undefined) => Promise<void>
+      issueColumns: Array<{
+        key?: string
+        customRender?: (args: { record: Record<string, unknown> }) => string
+      }>
+    }
+    expect(vm.debugRuleOptions).toEqual([
+      { label: 'SC-001 · 规则一', value: 'rule-job-1' },
+      { label: 'SC-002 · 规则二', value: 'rule-job-2' },
+    ])
+
+    await vm.handleDebugRuleChange('rule-job-1')
+    // 模拟后端返回仅包含单条 rule_job_id 的过滤调试快照
+    await wrapper.setProps({
+      batchJobDebugSnapshot: {
+        ...props.batchJobDebugSnapshot!,
+        rule_count: 2,
+        filtered_rule_count: 1,
+        rules: [props.batchJobDebugSnapshot!.rules[0]],
+      },
+    })
+    await flushPromises()
+
+    expect(vm.debugRuleOptions).toEqual([
+      { label: 'SC-001 · 规则一', value: 'rule-job-1' },
+      { label: 'SC-002 · 规则二', value: 'rule-job-2' },
+    ])
+
+    // 切换到另一任务时，列表更新为新任务的规则
+    await wrapper.setProps({
+      batchJobDebugSnapshot: {
+        ...props.batchJobDebugSnapshot!,
+        job_id: 'job-2',
+        rule_count: 1,
+        filtered_rule_count: 1,
+        rules: [
+          {
+            rule_job_id: 'rule-job-9',
+            rule_code: 'SC-009',
+            rule_name: '新任务规则',
+            status: 'completed',
+          },
+        ],
+      },
+    })
+    await flushPromises()
+    expect(vm.debugRuleOptions).toEqual([{ label: 'SC-009 · 新任务规则', value: 'rule-job-9' }])
+
+    // 验证 issueColumns 的 rule_code 列在缺省 rule_code 时回退到 rule_id 和 '-'
+    const ruleCodeColumn = vm.issueColumns.find((col) => col.key === 'rule_code')
+    expect(ruleCodeColumn?.customRender).toBeTypeOf('function')
+    expect(ruleCodeColumn!.customRender!({ record: { rule_code: 'SC-001', rule_id: 'ID-1' } })).toBe('SC-001')
+    expect(ruleCodeColumn!.customRender!({ record: { rule_id: 'LX0609-01-01-01' } })).toBe('LX0609-01-01-01')
+    expect(ruleCodeColumn!.customRender!({ record: {} })).toBe('-')
+
+    wrapper.unmount()
+  })
+})

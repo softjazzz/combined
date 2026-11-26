@@ -15,7 +15,7 @@ const { default: router } = await import('@/router')
 const path = '/workstation-v5/users'
 
 describe('用户管理独立入口沿用持久账号 owner', () => {
-  it.each(['admin', 'sync_admin'])('%s 可看到与直接路由权限一致的入口', (role) => {
+  it.each(['admin', 'sync_admin', 'super_admin'])('%s 可看到与直接路由权限一致的入口', (role) => {
     const groups = filterVisibleNav(WORKSTATION_NAV, {
       isDemoFeedbackAccount: false,
       userRoles: [role],
@@ -25,7 +25,7 @@ describe('用户管理独立入口沿用持久账号 owner', () => {
       .flatMap((group) => group.items)
       .find((item) => item.key === 'user-management')
     expect(entry?.to.path).toBe(path)
-    expect(router.resolve(path).meta.permission).toEqual(['admin', 'sync_admin'])
+    expect(router.resolve(path).meta.permission).toEqual(['admin', 'sync_admin', 'super_admin'])
     expect(findActiveNav(groups, { path, query: {}, meta: {} })?.item.key).toBe('user-management')
     expect(resolveBreadcrumb(groups, { path, query: {}, meta: {} })).toEqual([
       '数据与配置',

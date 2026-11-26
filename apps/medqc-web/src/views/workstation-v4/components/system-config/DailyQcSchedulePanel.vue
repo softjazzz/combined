@@ -360,7 +360,7 @@ async function load() {
   loading.value = true
   error.value = ''
   try {
-    const result = await dailyQcScheduleService.list()
+    const result = await dailyQcScheduleService.list({ signal: controller.signal })
     if (active && version === loadVersion && !controller.signal.aborted) status.value = result
   } catch {
     if (active && version === loadVersion && !controller.signal.aborted) error.value = '定时计划读取失败；请确认权限、接口及064迁移已就绪。'
@@ -380,7 +380,7 @@ async function refreshOptions() {
   optionsError.value = ''
   submitError.value = ''
   try {
-    const result = await dailyQcScheduleService.options(form.institute_id, form.scope)
+    const result = await dailyQcScheduleService.options(form.institute_id, form.scope, { signal: controller.signal })
     if (!active || version !== optionVersion || controller.signal.aborted) return
     options.value = result
     if (!form.institute_id && result.institutes.length === 1) { form.institute_id = result.institutes[0]; await refreshOptions() }
@@ -497,7 +497,7 @@ async function showHistory(plan: DailyQcPlan) {
   historyError.value = ''
   runs.value = []
   try {
-    const result = await dailyQcScheduleService.history(plan.id)
+    const result = await dailyQcScheduleService.history(plan.id, { signal: controller.signal })
     if (active && version === historyVersion && !controller.signal.aborted) runs.value = result
   } catch {
     if (active && version === historyVersion && !controller.signal.aborted) historyError.value = '触发记录读取失败，不能据此判断未执行。'

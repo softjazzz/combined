@@ -42,23 +42,59 @@ export interface DailyQcList {
   local_process_active: boolean
 }
 
+export interface DailyQcRequestOptions {
+  signal?: AbortSignal
+}
+
 const root = '/api/v1/qc/daily-schedules'
 export const dailyQcScheduleService = {
-  async list(): Promise<DailyQcList> {
-    return (await apiClient.get(root)).data.data
+  async list(requestOptions?: DailyQcRequestOptions): Promise<DailyQcList> {
+    const response = requestOptions?.signal
+      ? await apiClient.get(root, { signal: requestOptions.signal })
+      : await apiClient.get(root)
+    return response.data.data
   },
-  async options(instituteId = '', scope = 'final'): Promise<DailyQcOptions> {
-    return (await apiClient.get(`${root}/options`, { params: { institute_id: instituteId || undefined, scope } })).data.data
+  async options(
+    instituteId = '',
+    scope = 'final',
+    requestOptions?: DailyQcRequestOptions,
+  ): Promise<DailyQcOptions> {
+    const config = {
+      params: { institute_id: instituteId || undefined, scope },
+      ...(requestOptions?.signal ? { signal: requestOptions.signal } : {}),
+    }
+    return (await apiClient.get(`${root}/options`, config)).data.data
   },
-  async save(definition: DailyQcDefinition, current?: DailyQcPlan): Promise<DailyQcPlan> {
-    return current
-      ? (await apiClient.put(`${root}/${current.id}`, { revision: current.revision, definition })).data.data
-      : (await apiClient.post(root, definition)).data.data
+  async save(
+    definition: DailyQcDefinition,
+    current?: DailyQcPlan,
+    requestOptions?: DailyQcRequestOptions,
+  ): Promise<DailyQcPlan> {
+    const config = requestOptions?.signal ? { signal: requestOptions.signal } : undefined
+    if (current) {
+      const response = config
+        ? await apiClient.put(`${root}/${current.id}`, { revision: current.revision, definition }, config)
+        : await apiClient.put(`${root}/${current.id}`, { revision: current.revision, definition })
+      return response.data.data
+    }
+    const response = config
+      ? await apiClient.post(root, definition, config)
+      : await apiClient.post(root, definition)
+    return response.data.data
   },
-  async remove(id: string): Promise<{ id: string; deleted: boolean }> {
-    return (await apiClient.delete(`${root}/${id}`)).data.data
+  async remove(
+    id: string,
+    requestOptions?: DailyQcRequestOptions,
+  ): Promise<{ id: string; deleted: boolean }> {
+    const response = requestOptions?.signal
+      ? await apiClient.delete(`${root}/${id}`, { signal: requestOptions.signal })
+      : await apiClient.delete(`${root}/${id}`)
+    return response.data.data
   },
-  async history(id: string): Promise<DailyQcRun[]> {
-    return (await apiClient.get(`${root}/${id}/runs`)).data.data.items
+  async history(id: string, requestOptions?: DailyQcRequestOptions): Promise<DailyQcRun[]> {
+    const response = requestOptions?.signal
+      ? await apiClient.get(`${root}/${id}/runs`, { signal: requestOptions.signal })
+      : await apiClient.get(`${root}/${id}/runs`)
+    return response.data.data.items
   },
 }

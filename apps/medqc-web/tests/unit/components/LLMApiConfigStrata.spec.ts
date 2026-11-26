@@ -112,10 +112,18 @@ describe('后台云端与Strata选择', () => {
     await flushPromises()
     await wrapper.findAll('button').find((item) => item.text() === '保存配置')?.trigger('click')
     await flushPromises()
-    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ custom_parameters: expect.objectContaining({
-      task_role_models: { fact_extraction: { provider_code: 'alibaba', model_code: 'cloud-model' },
-        judgment_analysis: null, specialty_verification: null },
-    }) }))
+    expect(service.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        custom_parameters: expect.objectContaining({
+          task_role_models: {
+            fact_extraction: { provider_code: 'alibaba', model_code: 'cloud-model' },
+            judgment_analysis: null,
+            specialty_verification: null,
+          },
+        }),
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(service.testConfig).not.toHaveBeenCalled()
     wrapper.unmount()
   })
@@ -185,7 +193,10 @@ describe('后台云端与Strata选择', () => {
     expect(button).toBeDefined()
     await button?.trigger('click')
     await flushPromises()
-    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({ provider_code: 'strata', model_code: 'Local/OtherModel' }))
+    expect(service.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({ provider_code: 'strata', model_code: 'Local/OtherModel' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(service.saveConfig.mock.calls[0][0]).not.toHaveProperty('custom_endpoint')
     expect(service.saveConfig.mock.calls[0][0]).not.toHaveProperty('api_key')
     expect(reload).toHaveBeenCalledWith('/api/v1/qc/sichuan/reload-config', expect.objectContaining({ method: 'POST' }))
@@ -329,10 +340,13 @@ describe('后台云端与Strata选择', () => {
 
     await saveBtn?.trigger('click')
     await flushPromises()
-    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
-      provider_code: 'deepseek',
-      model_code: 'deepseek-chat',
-    }))
+    expect(service.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider_code: 'deepseek',
+        model_code: 'deepseek-chat',
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.find('[data-testid="provider-unavailable-alert"]').exists()).toBe(false)
     wrapper.unmount()
   })
@@ -356,15 +370,104 @@ describe('后台云端与Strata选择', () => {
     await saveBtn?.trigger('click')
     await flushPromises()
 
-    expect(service.saveConfig).toHaveBeenCalledWith(expect.objectContaining({
-      custom_parameters: expect.objectContaining({ max_tokens: 4000 }),
-      execution_concurrency: {
-        max_parallel_records: 16,
-        family_max_concurrency: 4,
-        http_max_concurrency: 40,
-      },
-    }))
+    expect(service.saveConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        custom_parameters: expect.objectContaining({ max_tokens: 4000 }),
+        execution_concurrency: {
+          max_parallel_records: 16,
+          family_max_concurrency: 4,
+          http_max_concurrency: 40,
+        },
+      }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    )
     expect(wrapper.emitted('config-updated')).toHaveLength(1)
     wrapper.unmount()
+  })
+
+  it('步骤01新增或删除自定义云端模型后立即刷新步骤02任务用途下拉目录', async () => {
+    const cloudModels = [
+      { model_code: 'cloud-model', model_name: 'cloud-model', is_custom: false },
+    ]
+    service.getModelsByProvider.mockImplementation(async (provider: string) =>
+      provider === 'alibaba' ? cloudModels.map((item) => ({ ...item })) : [],
+    )
+    service.addCustomModel.mockImplementation(async (_provider: string, code: string) => {
+      cloudModels.push({ model_code: code, model_name: code, is_custom: true })
+    })
+    service.deleteCustomModel.mockImplementation(async (_provider: string, code: string) => {
+      const idx = cloudModels.findIndex((item) => item.model_code === code)
+      if (idx >= 0) cloudModels.splice(idx, 1)
+    })
+
+    const wrapper = await render()
+    // 步骤02 先选择 alibaba 缓存初始目录
+    await wrapper.get<HTMLSelectElement>('[data-testid="task-role-provider-fact_extraction"]').setValue('alibaba')
+    await flushPromises()
+    expect(
+      wrapper
+        .get('[data-testid="task-role-model-fact_extraction"]')
+        .findAll('option')
+        .map((opt) => opt.attributes('value')),
+    ).toEqual(['cloud-model'])
+
+    // 步骤01 添加自定义云端模型 -> 步骤02 无需刷新页面即可看到新模型
+    await wrapper.get('input').setValue('Qwen/Custom-Cloud-14B')
+    await wrapper.findAll('button').find((btn) => btn.text() === '添加')?.trigger('click')
+    await flushPromises()
+    expect(
+      wrapper
+        .get('[data-testid="task-role-model-fact_extraction"]')
+        .findAll('option')
+        .map((opt) => opt.attributes('value')),
+    ).toContain('Qwen/Custom-Cloud-14B')
+
+    // 选中该自定义模型后再在步骤01删除 -> 步骤02 目录移除并清空失效选中值
+    await wrapper
+      .get<HTMLSelectElement>('[data-testid="task-role-model-fact_extraction"]')
+      .setValue('Qwen/Custom-Cloud-14B')
+    await flushPromises()
+    await wrapper.findAll('button').find((btn) => btn.text() === '删除')?.trigger('click')
+    await flushPromises()
+    expect(
+      wrapper
+        .get('[data-testid="task-role-model-fact_extraction"]')
+        .findAll('option')
+        .map((opt) => opt.attributes('value')),
+    ).not.toContain('Qwen/Custom-Cloud-14B')
+    expect(
+      wrapper.get<HTMLSelectElement>('[data-testid="task-role-model-fact_extraction"]').element.value,
+    ).toBe('')
+    wrapper.unmount()
+  })
+
+  it('向 llmConfigService 透传 AbortSignal 并在组件卸载时真正中止在途请求', async () => {
+    let capturedSignal: AbortSignal | undefined
+    service.getDefaultSummary.mockImplementationOnce((opts?: { signal?: AbortSignal }) => {
+      capturedSignal = opts?.signal
+      return new Promise(() => {})
+    })
+
+    const wrapper = mount(LLMApiConfig, {
+      global: {
+        stubs: {
+          LLMEndpointSettings: true,
+          'a-select': Select,
+          'a-select-option': { props: ['value'], template: '<option :value="value"><slot /></option>' },
+          'a-alert': Alert,
+          'a-button': Button,
+          'a-tag': Slot,
+          'a-space-compact': Slot,
+          'a-segmented': Segmented,
+          'a-slider': true,
+          'a-input': Input,
+          'a-input-number': InputNumber,
+        },
+      },
+    })
+    expect(capturedSignal).toBeInstanceOf(AbortSignal)
+    expect(capturedSignal?.aborted).toBe(false)
+    wrapper.unmount()
+    expect(capturedSignal?.aborted).toBe(true)
   })
 })

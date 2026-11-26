@@ -244,6 +244,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
 
     expect(getLlmObservabilityOverview).toHaveBeenCalledWith(
       expect.objectContaining({ business_scene: 'luxian_0609_qc' }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     const options = wrapper.get('[data-testid="business-scene-filter"]').text()
     for (const scene of [
@@ -400,6 +401,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
         business_scene: undefined,
         page: 1,
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.find('[data-testid="attempt-drawer"]').exists()).toBe(true)
     expect(wrapper.text()).toContain('LX0609-04-02-04')
@@ -610,6 +612,7 @@ describe('LlmPerformanceObservabilityPanel', () => {
         page: 2,
         page_size: 20,
       }),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     )
     expect(wrapper.text()).toContain('病历 #99999999')
   })
@@ -633,5 +636,25 @@ describe('LlmPerformanceObservabilityPanel', () => {
     expect(wrapper.text()).toContain('逻辑调用')
     expect(wrapper.text()).toContain('1,500')
     wrapper.unmount()
+  })
+
+  it('连续筛选与卸载时中止前序在途观测请求信号', async () => {
+    const signals: AbortSignal[] = []
+    vi.mocked(getLlmObservabilityOverview).mockImplementation((_query, opts) => {
+      if (opts?.signal) signals.push(opts.signal)
+      return new Promise(() => {})
+    })
+
+    const wrapper = mountPanel()
+    expect(signals).toHaveLength(1)
+    expect(signals[0].aborted).toBe(false)
+
+    await wrapper.get('.llm-observability__refresh').trigger('click')
+    expect(signals).toHaveLength(2)
+    expect(signals[0].aborted).toBe(true)
+    expect(signals[1].aborted).toBe(false)
+
+    wrapper.unmount()
+    expect(signals[1].aborted).toBe(true)
   })
 })

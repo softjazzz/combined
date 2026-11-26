@@ -46,6 +46,7 @@ const {
   bookNew,
   aoaToSheet,
   bookAppendSheet,
+  confirmedResultsOnlyState,
 } = vi.hoisted(() => ({
   message: {
     success: vi.fn(),
@@ -90,7 +91,17 @@ const {
   bookNew: vi.fn(() => ({ sheets: [] })),
   aoaToSheet: vi.fn(() => ({})),
   bookAppendSheet: vi.fn(),
+  confirmedResultsOnlyState: { value: false },
 }))
+
+vi.mock('@/composables/useQcResultVisibility', async () => {
+  const { ref } = await import('vue')
+  return {
+    useQcResultVisibility: () => ({
+      confirmedResultsOnly: ref(confirmedResultsOnlyState.value),
+    }),
+  }
+})
 
 vi.mock('ant-design-vue', () => ({
   message,
@@ -1308,6 +1319,7 @@ describe('CustomerSampleValidationView', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    confirmedResultsOnlyState.value = false
     latestBatchResultDrawerProps = null
     latestRecordResultComparisonDrawerProps = null
     Object.keys(routeQuery).forEach((key) => delete routeQuery[key])
@@ -5403,5 +5415,13 @@ describe('CustomerSampleValidationView', () => {
     expect(dateGrid).toBeTruthy()
     expect(dateGrid!.classes()).toContain('sm:grid-cols-2')
     expect(dateGrid!.classes()).not.toContain('sm:grid-cols-3')
+  })
+
+  it('confirmedResultsOnly=true 时隐藏内部覆盖详情与展开内部验收诊断入口', async () => {
+    confirmedResultsOnlyState.value = true
+    const wrapper = await mountView()
+    expect(wrapper.text()).not.toContain('内部覆盖详情')
+    expect(wrapper.text()).not.toContain('展开内部验收诊断')
+    expect(wrapper.find('.customer-sample-diagnostic-panel').exists()).toBe(false)
   })
 })

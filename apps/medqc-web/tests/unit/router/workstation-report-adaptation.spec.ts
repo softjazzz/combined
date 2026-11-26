@@ -42,7 +42,14 @@ describe('业务线四报表定向适配', () => {
     const resolved = router.resolve(path)
     expect(resolved.matched[0].path).toBe(B)
     expect(resolved.meta.requiresAuth).toBe(true)
-    expect(resolved.meta.permission).toEqual(['admin', 'qc_manager', 'qc_staff', 'doctor'])
+    expect(resolved.meta.permission).toEqual([
+      'admin',
+      'qc_manager',
+      'qc_staff',
+      'doctor',
+      'sync_admin',
+      'super_admin',
+    ])
     expect(resolved.redirectedFrom).toBeUndefined()
     expect(findActiveNav(WORKSTATION_NAV, { path, query: {}, meta: {} })?.item.key).toBe(
       'feedback-worklist',
@@ -65,11 +72,7 @@ describe('业务线四报表定向适配', () => {
       const resolved = router.resolve(path)
       expect(resolved.matched[0].path).toBe(B)
       expect(resolved.meta.requiresAuth).toBe(true)
-      expect(resolved.meta.permission).toEqual(
-        slug === 'record-quality'
-          ? ['admin', 'qc_manager', 'super_admin']
-          : ['admin', 'qc_manager'],
-      )
+      expect(resolved.meta.permission).toEqual(['admin', 'qc_manager', 'sync_admin', 'super_admin'])
       expect(resolved.redirectedFrom).toBeUndefined()
       const entry = router.getRoutes().find((r) => r.path === path)!
       expect(entry.redirect).toBeUndefined()

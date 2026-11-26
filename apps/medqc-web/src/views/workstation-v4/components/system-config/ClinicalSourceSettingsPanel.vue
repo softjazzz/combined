@@ -120,6 +120,58 @@ let disposed = false
 let requestSeq = 0
 let activeController: AbortController | null = null
 
+interface ClinicalSourceErrorPayload {
+  error?: unknown
+  detail?: unknown
+  code?: unknown
+}
+
+const KNOWN_CLINICAL_SOURCE_ERROR_MESSAGES: Record<string, string> = {
+  clinical_source_credentials_unavailable:
+    '部署凭据不可用：服务端尚未配置 CDM 只读凭据文件（CDM_PGPASSFILE），请联系实施人员处理',
+  clinical_source_host_not_allowed:
+    'CDM 主机地址不在服务端允许列表内，请核对主机地址或联系实施人员',
+  at_least_one_clinical_source_required:
+    '至少需要保留一个已启用的临床数据源，无法同时停用全部来源',
+  clinical_source_configuration_changed:
+    '配置已被其他管理员修改（版本冲突），请点击「重新读取」后再保存',
+  clinical_source_username_required: '启用独立 CDM 或执行检查时，必须填写只读用户名',
+  clinical_source_disabled: '所选默认数据源未启用，请先启用该数据源后再保存',
+  clinical_source_connection_unavailable:
+    '无法连接到 CDM 数据库，请核对主机、端口、数据库名与网络连通性；未切换来源',
+}
+
+function extractClinicalSourceError(cause: unknown): { status?: number; code: string } {
+  const response = (
+    cause as { response?: { status?: number; data?: ClinicalSourceErrorPayload } } | null
+  )?.response
+  const status = typeof response?.status === 'number' ? response.status : undefined
+  const data = response?.data
+  const rawCode = data?.error ?? data?.detail ?? data?.code
+  const code = typeof rawCode === 'string' ? rawCode.trim() : ''
+  return { status, code }
+}
+
+function resolveClinicalSourceErrorMessage(
+  cause: unknown,
+  action: 'load' | 'save' | 'check',
+): string {
+  const { status, code } = extractClinicalSourceError(cause)
+  if (code && KNOWN_CLINICAL_SOURCE_ERROR_MESSAGES[code]) {
+    return KNOWN_CLINICAL_SOURCE_ERROR_MESSAGES[code]
+  }
+  if (status === 409) {
+    return '配置已被其他管理员修改（版本冲突），请点击「重新读取」后再保存'
+  }
+  if (action === 'load') {
+    return '无法读取数据源配置，请稍后重试'
+  }
+  if (action === 'save') {
+    return '保存失败，请检查来源、部署凭据，或重新读取后再保存'
+  }
+  return 'CDM检查未通过，请核对连接、只读权限和同步表结构；未切换来源'
+}
+
 async function load() {
   if (busy.value) return
   const seq = ++requestSeq
@@ -128,15 +180,15 @@ async function load() {
   activeController = controller
   loading.value = true
   try {
-    const loaded = await clinicalSourcesApi.configuration()
+    const loaded = await clinicalSourcesApi.configuration({ signal: controller.signal })
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     settings.value = loaded
     notice.value = ''
     noticeTone.value = 'status'
-  } catch {
+  } catch (cause) {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     noticeTone.value = 'error'
-    notice.value = '无法读取数据源配置，请稍后重试'
+    notice.value = resolveClinicalSourceErrorMessage(cause, 'load')
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
       loading.value = false
@@ -152,19 +204,22 @@ async function save() {
   activeController = controller
   busy.value = true
   try {
-    const saved = await clinicalSourcesApi.save({
-      ...settings.value,
-      cdm: { ...settings.value.cdm },
-    })
+    const saved = await clinicalSourcesApi.save(
+      {
+        ...settings.value,
+        cdm: { ...settings.value.cdm },
+      },
+      { signal: controller.signal },
+    )
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     settings.value = saved
     resetClinicalSourceOptionsCache()
     noticeTone.value = 'status'
     notice.value = '设置已保存，已有任务继续使用创建时的来源'
-  } catch {
+  } catch (cause) {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     noticeTone.value = 'error'
-    notice.value = '保存失败，请检查来源、部署凭据，或重新读取后再保存'
+    notice.value = resolveClinicalSourceErrorMessage(cause, 'save')
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
       busy.value = false
@@ -180,7 +235,7 @@ async function check() {
   activeController = controller
   busy.value = true
   try {
-    const report = await clinicalSourcesApi.check(settings.value)
+    const report = await clinicalSourcesApi.check(settings.value, { signal: controller.signal })
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     if (!report.ok) {
       const failures = report.dependencies.filter((row) => !['structure_ready', 'rows_present', 'zero_rows'].includes(row.status)
@@ -197,10 +252,10 @@ async function check() {
           ? '同步发布尚未就绪'
           : '发布就绪仍待确认'
     notice.value = `CDM完整依赖只读检查通过；${publicationNote}，未保存配置`
-  } catch {
+  } catch (cause) {
     if (disposed || seq !== requestSeq || controller.signal.aborted) return
     noticeTone.value = 'error'
-    notice.value = 'CDM检查未通过，请核对连接、只读权限和同步表结构；未切换来源'
+    notice.value = resolveClinicalSourceErrorMessage(cause, 'check')
   } finally {
     if (!disposed && seq === requestSeq && activeController === controller) {
       busy.value = false

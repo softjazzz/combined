@@ -562,6 +562,9 @@ const recordCalls = ref<LlmRecordCallAttempts | null>(null)
 let overviewRequestSequence = 0
 let recordsRequestSequence = 0
 let detailRequestSequence = 0
+let overviewController: AbortController | null = null
+let recordsController: AbortController | null = null
+let detailController: AbortController | null = null
 
 const rangeOptions = [
   { label: '近 24 小时', value: '24h' },
@@ -848,24 +851,30 @@ function buildOverviewQuery(page = 1): LlmObservabilityQuery {
 
 async function loadOverview(page = 1) {
   const requestSequence = ++overviewRequestSequence
+  overviewController?.abort()
+  const controller = new AbortController()
+  overviewController = controller
   recordsRequestSequence += 1
+  recordsController?.abort()
+  recordsController = null
   recordsLoading.value = false
   recordsError.value = ''
   const query = buildOverviewQuery(page)
   loading.value = true
   errorMessage.value = ''
   try {
-    const nextOverview = await getLlmObservabilityOverview(query)
-    if (requestSequence !== overviewRequestSequence) return
+    const nextOverview = await getLlmObservabilityOverview(query, { signal: controller.signal })
+    if (requestSequence !== overviewRequestSequence || controller.signal.aborted) return
     rememberModelOptions(nextOverview.models)
     activeOverviewQuery.value = query
     overview.value = nextOverview
   } catch {
-    if (requestSequence !== overviewRequestSequence) return
+    if (requestSequence !== overviewRequestSequence || controller.signal.aborted) return
     errorMessage.value = '模型性能数据暂不可用'
   } finally {
-    if (requestSequence === overviewRequestSequence) {
+    if (requestSequence === overviewRequestSequence && overviewController === controller) {
       loading.value = false
+      overviewController = null
     }
   }
 }
@@ -877,6 +886,9 @@ async function loadRecordsPage(page: number) {
     return
   }
   const requestSequence = ++recordsRequestSequence
+  recordsController?.abort()
+  const controller = new AbortController()
+  recordsController = controller
   const frozenQuery: LlmObservabilityQuery = {
     start_at: sourceQuery.start_at,
     end_at: sourceQuery.end_at,
@@ -889,8 +901,8 @@ async function loadRecordsPage(page: number) {
   recordsLoading.value = true
   recordsError.value = ''
   try {
-    const nextPage = await getLlmObservabilityRecords(frozenQuery)
-    if (requestSequence !== recordsRequestSequence || !overview.value) return
+    const nextPage = await getLlmObservabilityRecords(frozenQuery, { signal: controller.signal })
+    if (requestSequence !== recordsRequestSequence || controller.signal.aborted || !overview.value) return
     activeOverviewQuery.value = frozenQuery
     overview.value = {
       ...overview.value,
@@ -902,11 +914,12 @@ async function loadRecordsPage(page: number) {
       },
     }
   } catch {
-    if (requestSequence !== recordsRequestSequence) return
+    if (requestSequence !== recordsRequestSequence || controller.signal.aborted) return
     recordsError.value = '单病历列表翻页失败，当前展示仍为上一页数据，请稍后重试。'
   } finally {
-    if (requestSequence === recordsRequestSequence) {
+    if (requestSequence === recordsRequestSequence && recordsController === controller) {
       recordsLoading.value = false
+      recordsController = null
     }
   }
 }
@@ -946,35 +959,51 @@ async function openRecordCalls(recordKeyHash: string) {
 
 async function loadRecordCalls(page: number) {
   const requestSequence = ++detailRequestSequence
+  detailController?.abort()
+  const controller = new AbortController()
+  detailController = controller
   const recordHash = selectedRecordHash.value
   detailLoading.value = true
   detailError.value = false
   recordCalls.value = null
   try {
     const sourceQuery = activeOverviewQuery.value || buildOverviewQuery(1)
-    const nextRecordCalls = await getLlmRecordCallAttempts(recordHash, {
-      start_at: sourceQuery.start_at,
-      end_at: sourceQuery.end_at,
-      provider_code: sourceQuery.provider_code,
-      model: sourceQuery.model,
-      business_scene: sourceQuery.business_scene,
-      page,
-      page_size: 20,
-    })
-    if (requestSequence !== detailRequestSequence || recordHash !== selectedRecordHash.value) return
+    const nextRecordCalls = await getLlmRecordCallAttempts(
+      recordHash,
+      {
+        start_at: sourceQuery.start_at,
+        end_at: sourceQuery.end_at,
+        provider_code: sourceQuery.provider_code,
+        model: sourceQuery.model,
+        business_scene: sourceQuery.business_scene,
+        page,
+        page_size: 20,
+      },
+      { signal: controller.signal },
+    )
+    if (
+      requestSequence !== detailRequestSequence ||
+      controller.signal.aborted ||
+      recordHash !== selectedRecordHash.value
+    ) {
+      return
+    }
     recordCalls.value = nextRecordCalls
   } catch {
-    if (requestSequence !== detailRequestSequence) return
+    if (requestSequence !== detailRequestSequence || controller.signal.aborted) return
     detailError.value = true
   } finally {
-    if (requestSequence === detailRequestSequence) {
+    if (requestSequence === detailRequestSequence && detailController === controller) {
       detailLoading.value = false
+      detailController = null
     }
   }
 }
 
 function closeRecordCalls() {
   detailRequestSequence += 1
+  detailController?.abort()
+  detailController = null
   drawerOpen.value = false
   detailLoading.value = false
 }
@@ -1200,6 +1229,12 @@ onBeforeUnmount(() => {
   overviewRequestSequence += 1
   recordsRequestSequence += 1
   detailRequestSequence += 1
+  overviewController?.abort()
+  overviewController = null
+  recordsController?.abort()
+  recordsController = null
+  detailController?.abort()
+  detailController = null
 })
 </script>
 

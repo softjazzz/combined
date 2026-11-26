@@ -34,6 +34,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useQcResultVisibility } from '@/composables/useQcResultVisibility'
 import { message } from 'ant-design-vue'
 import {
   resolveAuthorizedWorkstationPath,
@@ -86,6 +87,7 @@ async function readResult(id: string, mode: 'notification' | 'task') {
 }
 const router = useRouter()
 const authStore = useAuthStore()
+const { confirmedResultsOnly } = useQcResultVisibility()
 const authScope = computed(() =>
   JSON.stringify([
     authStore.user?.id,
@@ -150,6 +152,9 @@ async function load() {
       return
     }
     job.value = result.data
+    if (!confirmedResultsOnly.value && result.data.id) {
+      void loadDebugSnapshot(result.data.id, undefined, { silent: true })
+    }
   } catch (cause) {
     if (isCurrent(context)) error.value = cause instanceof Error ? cause.message : '结果读取失败'
   } finally {
@@ -157,27 +162,28 @@ async function load() {
   }
 }
 
-// 执行既有抽屉操作前重新核对对应入口权限，失效时不回退到其他结果。
-async function currentJob(context: ReturnType<typeof requestContext>) {
-  const id = context.notice
-  if (typeof id !== 'string') throw new Error(missingIdentityMessage.value)
-  const result = await readResult(id, context.mode)
+// 复用当前上下文已授权加载的 job，避免每次调试/导出/复核重复触发 FOR UPDATE 读取通知接口。
+function resolveLoadedJob(context: ReturnType<typeof requestContext>): SichuanBatchJob {
   if (!isCurrent(context)) throw new Error('结果通知或账号已切换')
-  if (!result.success || !result.data) {
-    job.value = null
-    error.value = result.message || '结果读取失败'
-    throw new Error(error.value)
+  const loaded = job.value
+  if (!loaded || !loaded.id) {
+    throw new Error(missingIdentityMessage.value)
   }
-  return result.data
+  return loaded
 }
 
-async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLimit?: number }) {
+async function loadDebugSnapshot(
+  jobId: string,
+  options?: { ruleJobId?: string; itemLimit?: number },
+  behavior?: { silent?: boolean },
+) {
   const context = requestContext()
   const request = ++debugRequest
   const active = () => isCurrent(context) && request === debugRequest
   debugLoading.value = true
   try {
-    if ((await currentJob(context)).id !== jobId || !active()) return null
+    const current = resolveLoadedJob(context)
+    if (current.id !== jobId || !active()) return null
     const result = await getSichuanWorkspaceBatchJobDebugSnapshot(jobId, {
       rule_job_id: options?.ruleJobId,
       item_limit: options?.itemLimit,
@@ -187,17 +193,23 @@ async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLim
     debugSnapshot.value = result.data
     return result.data
   } catch (cause) {
-    if (active()) message.error(cause instanceof Error ? cause.message : '调试信息读取失败')
+    if (active() && !behavior?.silent) {
+      message.error(cause instanceof Error ? cause.message : '调试信息读取失败')
+    }
     return null
   } finally {
     if (active()) debugLoading.value = false
   }
 }
 
+async function fetchDebug(jobId: string, options?: { ruleJobId?: string; itemLimit?: number }) {
+  return loadDebugSnapshot(jobId, options, { silent: false })
+}
+
 async function exportResult(format: 'xlsx' | 'csv' | 'html' = 'html') {
   const context = requestContext()
   try {
-    const current = await currentJob(context)
+    const current = resolveLoadedJob(context)
     const result = await exportSichuanWorkspaceBatchJob({ job_id: current.id, format })
     if (!isCurrent(context)) return
     if (!result.success || !result.data) throw new Error(result.message || '导出失败')
@@ -215,11 +227,13 @@ async function reviewResult(): Promise<void> {
   const active = () => isCurrent(context) && request === reviewRequest
   reviewing.value = true
   try {
-    const current = await currentJob(context)
+    const current = resolveLoadedJob(context)
     const result = await reviewSichuanWorkspaceBatchJob(current.id)
     if (!active()) return
     if (!result.success || !result.data?.job) throw new Error(result.message || '复核失败')
     job.value = result.data.job
+    const count = Number(result.data.review_report?.summary?.total_findings || 0)
+    message.success(count > 0 ? `复核完成，发现 ${count} 条复核建议` : '复核完成，暂无高风险建议')
   } catch (cause) {
     if (active()) message.error(cause instanceof Error ? cause.message : '复核失败')
   } finally {
@@ -285,7 +299,7 @@ function close() {
   void router.push(closeTarget.value.path)
 }
 
-watch([selectedId, () => props.entryMode, authScope], load, { immediate: true, flush: 'sync' })
+watch([selectedId, () => props.entryMode, authScope], load, { immediate: true })
 onBeforeUnmount(() => {
   disposed = true
   generation += 1

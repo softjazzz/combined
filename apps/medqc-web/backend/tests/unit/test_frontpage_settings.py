@@ -101,6 +101,19 @@ def test_frontpage_settings_api_crud(client, monkeypatch, tmp_path: Path):
     assert body["source"] == "default"
     assert body["settings"]["include_demo_records"] is True
     assert body["settings"]["demo_hide_threshold"] == 1
+    assert not config_path.exists()
+
+    # 重置后再次 GET 必须同样返回 source="default" 且与重置结果一致
+    after_get = client.get("/api/v1/frontpage/settings")
+    assert after_get.status_code == 200
+    after_body = after_get.json()
+    assert after_body["source"] == "default"
+    assert after_body["settings"] == body["settings"]
+
+    # 覆盖文件已不存在时再次 reset 幂等成功
+    second_reset = client.post("/api/v1/frontpage/settings/reset")
+    assert second_reset.status_code == 200
+    assert second_reset.json()["source"] == "default"
 
 
 def test_frontpage_settings_rejects_non_system_role(client):

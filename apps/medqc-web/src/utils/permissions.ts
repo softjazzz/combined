@@ -4,8 +4,20 @@
  */
 
 import { PermissionAction, ResourceType, UserRole } from '@/types/auth'
-import type { Permission, PermissionCheckResult, RolePermissions, User } from '@/types/auth'
+import type {
+  AuthUserRole,
+  Permission,
+  PermissionCheckResult,
+  RolePermissions,
+  User,
+} from '@/types/auth'
 import { effectiveRoles } from '@/utils/effectiveRoles'
+
+const SUPER_ADMIN_ROLES: ReadonlyArray<AuthUserRole> = ['sync_admin', 'super_admin']
+
+function hasSuperAdminRole(roles: readonly string[]): boolean {
+  return roles.some((role) => SUPER_ADMIN_ROLES.includes(role as AuthUserRole))
+}
 
 const createPermission = (
   id: string,
@@ -176,14 +188,15 @@ function checkPermissionConditions(
   action: PermissionAction,
   context?: Record<string, unknown>,
 ): PermissionCheckResult {
-  if (user.roles?.includes('sync_admin')) return { allowed: true }
+  const roles = effectiveRoles(user.roles || [])
+  if (hasSuperAdminRole(roles)) return { allowed: true }
   const doctorId = typeof context?.doctor_id === 'string' ? context.doctor_id : undefined
   const department = typeof context?.department === 'string' ? context.department : undefined
   const hospitalId = typeof context?.hospital_id === 'string' ? context.hospital_id : undefined
 
   // 医生只能操作自己的病历
   if (
-    user.roles?.includes(UserRole.DOCTOR) &&
+    roles.includes(UserRole.DOCTOR) &&
     resource === ResourceType.MEDICAL_RECORDS &&
     doctorId
   ) {
@@ -198,7 +211,7 @@ function checkPermissionConditions(
   // 科室范围限制
   if (department && user.department) {
     if (action === PermissionAction.READ && resource === ResourceType.MEDICAL_RECORDS) {
-      if (!user.roles?.includes(UserRole.ADMIN) && department !== user.department) {
+      if (!roles.includes(UserRole.ADMIN) && department !== user.department) {
         return {
           allowed: false,
           reason: '只能查看本科室的病案记录',
@@ -221,22 +234,31 @@ function checkPermissionConditions(
 }
 
 // 角色权限检查
-export function hasRole(user: User | null, role: UserRole): boolean {
+export function hasRole(user: User | null, role: AuthUserRole | string): boolean {
   return effectiveRoles(user?.roles || []).includes(role)
 }
 
 // 多角色权限检查
-export function hasAnyRole(user: User | null, roles: UserRole[]): boolean {
+export function hasAnyRole(
+  user: User | null,
+  roles: ReadonlyArray<AuthUserRole | string>,
+): boolean {
   if (!user?.roles?.length) {
     return false
   }
 
-  return roles.some((role) => effectiveRoles(user.roles!).includes(role))
+  const resolvedRoles = effectiveRoles(user.roles)
+  return roles.some((role) => resolvedRoles.includes(role))
 }
 
-// 检查是否为管理员
+// 检查是否为超级管理员（super_admin 或 sync_admin）
+export function isSuperAdmin(user: User | null): boolean {
+  return hasSuperAdminRole(effectiveRoles(user?.roles || []))
+}
+
+// 检查是否为管理员（包含 admin、super_admin、sync_admin）
 export function isAdmin(user: User | null): boolean {
-  return hasRole(user, UserRole.ADMIN)
+  return hasAnyRole(user, [UserRole.ADMIN, 'super_admin', 'sync_admin'])
 }
 
 // 检查是否为质控管理员
@@ -337,12 +359,14 @@ export function getPermissionDescription(resource: ResourceType, action: Permiss
 // 角色描述映射
 export const ROLE_DESCRIPTIONS = {
   [UserRole.ADMIN]: '系统管理员',
+  super_admin: '超级管理员',
+  sync_admin: '同步管理员',
   [UserRole.QC_MANAGER]: '质控管理员',
   [UserRole.QC_STAFF]: '质控人员',
   [UserRole.DOCTOR]: '医生',
 } as const
 
 // 获取角色描述
-export function getRoleDescription(role: UserRole): string {
-  return ROLE_DESCRIPTIONS[role] || role
+export function getRoleDescription(role: AuthUserRole | string): string {
+  return ROLE_DESCRIPTIONS[role as keyof typeof ROLE_DESCRIPTIONS] || role
 }

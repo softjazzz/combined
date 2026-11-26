@@ -438,6 +438,65 @@ def test_system_config_roles_can_manage_custom_models(client, monkeypatch, tmp_p
         assert deleted.status_code == 200
 
 
+def test_custom_models_lock_held_across_read_modify_write(monkeypatch, tmp_path):
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    import time
+    from starlette.requests import Request
+    from app.routers import llm_info
+
+    model_file = tmp_path / "llm_custom_models.json"
+    monkeypatch.setattr(llm_info, "CUSTOM_MODELS_FILE", model_file)
+    orig_load = llm_info._load_custom_models
+
+    def _slow_load():
+        data = orig_load()
+        # 放大读改写窗口：若未在外层持有 _CUSTOM_MODELS_LOCK，并发线程必然丢更新
+        time.sleep(0.02)
+        return data
+
+    monkeypatch.setattr(llm_info, "_load_custom_models", _slow_load)
+
+    def _fake_request() -> Request:
+        return Request({"type": "http", "method": "POST", "path": "/api/v1/llm/models/custom", "headers": []})
+
+    def _add(idx: int):
+        asyncio.run(
+            llm_info.add_custom_model(
+                _fake_request(),
+                llm_info.CustomModelPayload(
+                    provider_code="alibaba",
+                    model_code=f"concurrent-model-{idx}",
+                    model_name=f"concurrent-model-{idx}",
+                ),
+                admin_user={"id": "u-admin", "roles": ["super_admin"]},
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        list(pool.map(_add, range(8)))
+
+    stored = orig_load()
+    saved_codes = {item["model_code"] for item in stored.get("alibaba", [])}
+    assert saved_codes == {f"concurrent-model-{idx}" for idx in range(8)}
+
+    def _delete(idx: int):
+        asyncio.run(
+            llm_info.delete_custom_model(
+                _fake_request(),
+                provider_code="alibaba",
+                model_code=f"concurrent-model-{idx}",
+                admin_user={"id": "u-admin", "roles": ["super_admin"]},
+            )
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(_delete, range(4)))
+
+    remaining = {item["model_code"] for item in orig_load().get("alibaba", [])}
+    assert remaining == {f"concurrent-model-{idx}" for idx in range(4, 8)}
+
+
 def test_qc_manager_cannot_manage_llm_or_write_global_frontpage_settings(client, monkeypatch, tmp_path):
     _override_user(client, ["qc_manager"])
     monkeypatch.setattr(

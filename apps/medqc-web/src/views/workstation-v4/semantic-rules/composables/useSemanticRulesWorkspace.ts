@@ -572,18 +572,37 @@ export function useSemanticRulesWorkspace() {
   }
 
   async function savePromptChanges() {
-    if (!selectedRule.value || confirmedResultsOnly.value) return
+    const activeRule = selectedRule.value
+    if (!activeRule || confirmedResultsOnly.value) return
+    const ruleId = activeRule.rule_id
+    const trimmedPrompt = editingPrompt.value.trim()
     promptLoading.value = true
     try {
-      await saveRulePrompt(selectedRule.value.rule_id, editingPrompt.value, {
+      await saveRulePrompt(ruleId, trimmedPrompt, {
         skipErrorToast: true,
       })
-      currentPrompt.value = editingPrompt.value.trim()
-      editingPrompt.value = currentPrompt.value
-      isDefaultPrompt.value = !currentPrompt.value
+      if (selectedRule.value?.rule_id !== ruleId) return
       isEditingPrompt.value = false
       promptError.value = ''
-      message.success('提示词已保存')
+      if (!trimmedPrompt) {
+        selectedRule.value.custom_prompt = undefined
+        if (!ruleId.startsWith('LX0609-')) {
+          await loadPrompt(ruleId)
+        } else {
+          currentPrompt.value = ''
+          editingPrompt.value = ''
+          isDefaultPrompt.value = true
+        }
+        if (!promptError.value) {
+          message.success('已恢复默认提示词')
+        }
+      } else {
+        selectedRule.value.custom_prompt = trimmedPrompt
+        currentPrompt.value = trimmedPrompt
+        editingPrompt.value = trimmedPrompt
+        isDefaultPrompt.value = false
+        message.success('提示词已保存')
+      }
     } catch (error) {
       message.error(`保存提示词失败：${toErrorMessage(error, '请稍后重试')}`)
       console.error('[SemanticRulesWorkspace] save prompt failed', error)

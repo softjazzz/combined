@@ -118,9 +118,11 @@
                 </div>
                 <a-input-number
                   v-model:value="form.demo_hide_threshold"
+                  data-testid="frontpage-demo-hide-threshold"
                   :min="0"
                   :max="100000"
                   :disabled="isReadonly || loading"
+                  @blur="handleDemoHideThresholdBlur"
                 />
               </div>
             </div>
@@ -224,8 +226,13 @@ const source = ref<'default' | 'file' | string>('default')
 let disposed = false
 let loadSeq = 0
 let loadController: AbortController | null = null
+let mutationController: AbortController | null = null
 
-const form = reactive<FrontpageExtractionSettings>({
+type FrontpageExtractionSettingsForm = Omit<FrontpageExtractionSettings, 'demo_hide_threshold'> & {
+  demo_hide_threshold: number | null
+}
+
+const form = reactive<FrontpageExtractionSettingsForm>({
   sql_prefill_enabled: true,
   llm_backfill_enabled: true,
   allow_force_llm_regenerate: true,
@@ -235,6 +242,17 @@ const form = reactive<FrontpageExtractionSettings>({
   stream_progress_enabled: true,
   default_preview_tab: 'preview',
 })
+
+function normalizeDemoHideThreshold(value: unknown): number {
+  if (value === null || value === undefined || value === '') return 0
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed)) return 0
+  return Math.min(100000, Math.max(0, Math.trunc(parsed)))
+}
+
+function handleDemoHideThresholdBlur() {
+  form.demo_hide_threshold = normalizeDemoHideThreshold(form.demo_hide_threshold)
+}
 
 const canManageFrontpageConfig = computed(() => {
   const roles = authStore.userRoles || []
@@ -270,7 +288,7 @@ async function loadSettings() {
   loadController = controller
   loading.value = true
   try {
-    const resp = await frontpageApi.getExtractionSettings()
+    const resp = await frontpageApi.getExtractionSettings({ signal: controller.signal })
     if (disposed || seq !== loadSeq || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
@@ -295,28 +313,34 @@ async function handleSave() {
   loadSeq += 1
   loadController?.abort()
   loadController = null
+  mutationController?.abort()
+  const controller = new AbortController()
+  mutationController = controller
+  const normalizedThreshold = normalizeDemoHideThreshold(form.demo_hide_threshold)
+  form.demo_hide_threshold = normalizedThreshold
   const payload: FrontpageExtractionSettingsUpdate = {
     sql_prefill_enabled: form.sql_prefill_enabled,
     llm_backfill_enabled: form.llm_backfill_enabled,
     allow_force_llm_regenerate: form.allow_force_llm_regenerate,
     include_demo_records: form.include_demo_records,
     auto_hide_demo_when_real_data: form.auto_hide_demo_when_real_data,
-    demo_hide_threshold: form.demo_hide_threshold,
+    demo_hide_threshold: normalizedThreshold,
     stream_progress_enabled: form.stream_progress_enabled,
     default_preview_tab: form.default_preview_tab,
   }
   saving.value = true
   try {
-    const resp = await frontpageApi.updateExtractionSettings(payload)
-    if (disposed) return
+    const resp = await frontpageApi.updateExtractionSettings(payload, { signal: controller.signal })
+    if (disposed || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('首页抽取设置已保存')
   } catch (error) {
-    if (disposed) return
+    if (disposed || controller.signal.aborted) return
     console.error('保存首页抽取设置失败:', error)
     message.error('保存失败')
   } finally {
+    if (mutationController === controller) mutationController = null
     if (!disposed) saving.value = false
   }
 }
@@ -347,18 +371,22 @@ async function handleReset() {
   loadSeq += 1
   loadController?.abort()
   loadController = null
+  mutationController?.abort()
+  const controller = new AbortController()
+  mutationController = controller
   resetting.value = true
   try {
-    const resp = await frontpageApi.resetExtractionSettings()
-    if (disposed) return
+    const resp = await frontpageApi.resetExtractionSettings({ signal: controller.signal })
+    if (disposed || controller.signal.aborted) return
     patchForm(resp.settings)
     source.value = resp.source
     message.success('已恢复默认设置')
   } catch (error) {
-    if (disposed) return
+    if (disposed || controller.signal.aborted) return
     console.error('重置首页抽取设置失败:', error)
     message.error('重置失败')
   } finally {
+    if (mutationController === controller) mutationController = null
     if (!disposed) resetting.value = false
   }
 }
@@ -372,6 +400,8 @@ onBeforeUnmount(() => {
   loadSeq += 1
   loadController?.abort()
   loadController = null
+  mutationController?.abort()
+  mutationController = null
 })
 </script>
 

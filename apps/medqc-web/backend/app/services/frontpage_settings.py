@@ -87,12 +87,15 @@ def save_frontpage_settings(settings: FrontpageExtractionSettings) -> None:
     logger.info("首页抽取配置已保存: %s", CONFIG_PATH)
 
 
-def reset_frontpage_settings() -> FrontpageExtractionSettings:
-    """重置并保存默认设置。"""
+def reset_frontpage_settings() -> tuple[FrontpageExtractionSettings, str]:
+    """移除覆盖文件并恢复系统默认设置，确保重置响应与后续读取的 source 一致。"""
     with _SETTINGS_LOCK:
-        settings = FrontpageExtractionSettings()
-        save_frontpage_settings(settings)
-        return settings
+        try:
+            CONFIG_PATH.unlink()
+            logger.info("首页抽取配置覆盖文件已移除，恢复默认: %s", CONFIG_PATH)
+        except FileNotFoundError:
+            pass
+        return FrontpageExtractionSettings(), "default"
 
 
 def update_frontpage_settings(update_data: dict[str, Any]) -> FrontpageExtractionSettings:
