@@ -157,7 +157,11 @@
     </p>
     <p
       v-if="!isActive && currentJob.status !== 'completed'"
-      class="record-pool-qc-status__refresh-note"
+      :class="
+        currentJob.status === 'canceled'
+          ? 'record-pool-qc-status__settling'
+          : 'record-pool-qc-status__refresh-note'
+      "
     >
       {{ stageText }}
     </p>
@@ -613,7 +617,8 @@ const tone = computed(() => {
   if (resultReadError.value) return 'danger'
   if (status === 'completed') return 'success'
   if (automaticRetrying.value) return 'active'
-  if (status === 'failed' || status === 'canceled') return 'danger'
+  if (status === 'canceled') return 'muted'
+  if (status === 'failed') return 'danger'
   return 'active'
 })
 
@@ -698,14 +703,11 @@ onBeforeUnmount(() => {
     border-color 180ms ease;
 }
 
-.record-pool-qc-status--success {
+.record-pool-qc-status--success,
+.record-pool-qc-status--muted,
+.record-pool-qc-status--danger {
   border-color: rgba(226, 232, 240, 0.95);
   background: #f8fafc;
-}
-
-.record-pool-qc-status--danger {
-  border-color: rgba(254, 202, 202, 0.85);
-  background: #fffafa;
 }
 
 .record-pool-qc-status__bar {
@@ -740,6 +742,11 @@ onBeforeUnmount(() => {
 .record-pool-qc-status--success .record-pool-qc-status__indicator {
   background: color-mix(in srgb, var(--mq-success-icon) 12%, transparent);
   color: var(--mq-success-text);
+}
+
+.record-pool-qc-status--muted .record-pool-qc-status__indicator {
+  background: rgba(100, 116, 139, 0.12);
+  color: var(--mq-text-secondary);
 }
 
 .record-pool-qc-status--danger .record-pool-qc-status__indicator {
