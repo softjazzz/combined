@@ -1850,22 +1850,24 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 .record-content-time {
-  padding: 4px 8px;
-  border-radius: 7px;
+  padding: 5px 10px;
+  border-radius: 8px;
   background: rgba(10, 108, 255, 0.07);
   color: #174f83;
-  font-size: 12px;
+  font-size: 14px;
+  line-height: 20px;
   font-variant-numeric: tabular-nums;
   display: inline-flex;
   align-items: center;
   gap: 6px;
 }
 .record-content-time span {
-  color: rgba(0, 72, 140, 0.6);
-  font-size: 10px;
+  color: rgba(0, 72, 140, 0.72);
+  font-size: 13px;
   font-weight: 600;
 }
 .record-content-time b {
+  font-size: 14px;
   font-weight: 650;
 }
 .record-content-time.is-missing {
