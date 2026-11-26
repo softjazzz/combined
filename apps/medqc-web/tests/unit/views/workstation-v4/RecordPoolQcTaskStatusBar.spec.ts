@@ -523,7 +523,9 @@ it('执行中/排队中展示停止按钮，确认停止后调用取消接口并
 
   expect(mocks.cancelSichuanWorkspaceBatchJob).toHaveBeenCalledWith('job-1')
   expect(wrapper.text()).toContain('质控任务已停止')
+  expect(wrapper.text()).toContain('未完成的病历不会继续执行')
   expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="record-pool-qc-details-toggle"]').exists()).toBe(false)
   expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(false)
   expect(wrapper.emitted('canceled')).toEqual([[canceledJob]])
   expect(wrapper.emitted('results-updated')).toHaveLength(1)
@@ -540,6 +542,8 @@ it('已停止但已有完成病历时保留查看本次质控结果入口', () =
   })
 
   expect(wrapper.find('[data-testid="record-pool-qc-cancel-btn"]').exists()).toBe(false)
+  expect(wrapper.find('[data-testid="record-pool-qc-details-toggle"]').exists()).toBe(true)
   expect(wrapper.find('[data-testid="qc-task-detail-link"]').exists()).toBe(true)
+  expect(wrapper.text()).toContain('已完成结果已保留，其余不再继续')
   wrapper.unmount()
 })

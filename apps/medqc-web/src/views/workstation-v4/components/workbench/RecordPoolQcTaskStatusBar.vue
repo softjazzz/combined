@@ -18,6 +18,11 @@
             v-if="currentJob.status === 'completed'"
             :size="16"
           />
+          <Square
+            v-else-if="isCanceledStatus"
+            :size="9"
+            fill="currentColor"
+          />
           <CircleAlert
             v-else
             :size="16"
@@ -42,6 +47,12 @@
           :title="stageText"
         >
           {{ stageText }}
+        </p>
+        <p
+          v-else-if="isCanceledStatus"
+          class="record-pool-qc-status__subnote"
+        >
+          {{ canceledSubnote }}
         </p>
 
         <div class="record-pool-qc-status__metrics">
@@ -77,6 +88,7 @@
         </Popconfirm>
 
         <button
+          v-if="showDetailsToggle"
           type="button"
           class="record-pool-qc-status__details-toggle"
           :aria-expanded="detailsOpen"
@@ -156,12 +168,8 @@
       处理进度已达 100%，正在等待任务最终确认；完成汇总与保存后将更新任务状态。
     </p>
     <p
-      v-if="!isActive && currentJob.status !== 'completed'"
-      :class="
-        currentJob.status === 'canceled'
-          ? 'record-pool-qc-status__settling'
-          : 'record-pool-qc-status__refresh-note'
-      "
+      v-if="!isActive && currentJob.status !== 'completed' && !isCanceledStatus"
+      class="record-pool-qc-status__refresh-note"
     >
       {{ stageText }}
     </p>
@@ -297,6 +305,7 @@ async function cancelCurrentBatch() {
     clearPollTimer()
     currentJob.value = response.data
     pollError.value = false
+    if (!showDetailsToggle.value) detailsOpen.value = false
     emit('canceled', response.data)
     emit('results-updated')
     message.success('已停止当前质控任务')
@@ -328,6 +337,12 @@ async function exportCurrentBatch() {
 }
 
 const isActive = computed(() => !resultReadError.value && isBatchJobPollingActive(currentJob.value))
+const isCanceledStatus = computed(() => {
+  const status = String(currentJob.value?.status || '')
+    .trim()
+    .toLowerCase()
+  return status === 'canceled' || status === 'cancelled'
+})
 const canCancel = computed(() => {
   const status = String(currentJob.value?.status || '')
     .trim()
@@ -335,12 +350,15 @@ const canCancel = computed(() => {
   return isActive.value && (status === 'queued' || status === 'running')
 })
 const canViewResults = computed(() => {
-  const status = String(currentJob.value?.status || '')
-    .trim()
-    .toLowerCase()
-  if (status !== 'canceled' && status !== 'cancelled') return true
+  if (!isCanceledStatus.value) return true
   return (processedRecords.value ?? 0) > 0
 })
+const showDetailsToggle = computed(() => !(isCanceledStatus.value && (processedRecords.value ?? 0) === 0))
+const canceledSubnote = computed(() =>
+  (processedRecords.value ?? 0) > 0
+    ? '已完成结果已保留，其余不再继续'
+    : '未完成的病历不会继续执行',
+)
 const automaticRetrying = computed(() => isActive.value && currentJob.value?.status === 'failed')
 
 function finiteCount(value: unknown): number | null {
@@ -800,6 +818,16 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 240px;
+}
+
+.record-pool-qc-status__subnote {
+  margin: 0;
+  color: var(--mq-text-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .record-pool-qc-status__progress-group {
