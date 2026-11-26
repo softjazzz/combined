@@ -383,12 +383,16 @@ export function useSemanticRulesBatchResultDrawerController(
         dataIndex: 'evidence',
         key: 'evidence',
         width: 280,
-        customRender: ({ text }: { text?: string }) =>
-          h(
-            'span',
-            { title: resolveCustomerEvidenceText(text) },
-            truncateText(resolveCustomerEvidenceText(text), 72),
-          ),
+        customRender: ({
+          text,
+          record,
+        }: {
+          text?: SichuanBatchIssueItem['evidence']
+          record?: SichuanBatchIssueItem
+        }) => {
+          const summary = resolveAdvancedEvidenceSummary(record, text)
+          return h('span', { title: summary }, truncateText(summary, 72))
+        },
       },
       {
         title: '整改建议',
@@ -2990,11 +2994,30 @@ export function useSemanticRulesBatchResultDrawerController(
     return value.length > limit ? `${value.slice(0, limit)}...` : value
   }
 
+  function resolveAdvancedEvidenceSummary(
+    record?: Partial<SichuanBatchIssueItem> | null,
+    fallbackText?: SichuanBatchIssueItem['evidence'],
+  ) {
+    if (record) {
+      const structured =
+        resolveIssueEvidenceSummary(record as SichuanBatchIssueItem) ||
+        resolveLuxianSafeEvidenceText(record as SichuanBatchIssueItem) ||
+        resolveCustomerEvidenceText(resolveLegacyEvidenceText(record.evidence))
+      if (structured) return structured
+    }
+    return resolveCustomerEvidenceText(resolveLegacyEvidenceText(fallbackText))
+  }
+
   function resolveDeepReviewText(field: 'findings' | 'evidence' | 'suggestion') {
+    if (field === 'evidence') {
+      const source = resolvedDeepReviewResult.value || selectedDeepReviewIssue.value
+      const raw = (resolvedDeepReviewResult.value?.evidence ??
+        selectedDeepReviewIssue.value?.evidence) as SichuanBatchIssueItem['evidence']
+      return resolveAdvancedEvidenceSummary(source as Partial<SichuanBatchIssueItem> | null, raw)
+    }
     const text = String(
       resolvedDeepReviewResult.value?.[field] || selectedDeepReviewIssue.value?.[field] || '',
     )
-    if (field === 'evidence') return resolveCustomerEvidenceText(text)
     if (field === 'findings') return sanitizeCustomerVisibleText(text)
     return sanitizeCustomerVisibleText(text)
   }
