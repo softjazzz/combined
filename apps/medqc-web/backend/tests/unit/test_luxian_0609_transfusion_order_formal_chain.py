@@ -85,6 +85,8 @@ async def test_paused_order_rules_reject_new_job_and_preserve_historical_persist
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_: None)
+    from app.services import saved_result_access
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     api_request = SimpleNamespace(state=SimpleNamespace(trace_id="synthetic-transfusion-chain"))
     user = {"id": "tester", "role": "super_admin"}
     with pytest.raises(HTTPException) as error:

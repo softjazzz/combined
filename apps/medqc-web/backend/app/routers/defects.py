@@ -9,8 +9,6 @@
 - 导出缺陷列表 (Excel/CSV)
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

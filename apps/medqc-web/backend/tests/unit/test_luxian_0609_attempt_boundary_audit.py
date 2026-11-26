@@ -1239,7 +1239,10 @@ def test_nonformal_task_keeps_existing_claim_and_retry_semantics(storage):
             filters_json=json.dumps({"rule_set_key": "other_set", "rule_ids": ["SC-001"]}),
         ))
     assert service.mark_batch_job_running(job_id="attempt-job") is True
-    assert service.mark_batch_job_running(job_id="attempt-job") is True
+    assert service.mark_batch_job_running(job_id="attempt-job") is False
+    assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is None
+    assert service.cancel_batch_job(job_id="attempt-job", created_by="tester") is not None
+    assert service.mark_batch_job_running(job_id="attempt-job") is False
     assert service.retry_batch_job(job_id="attempt-job", created_by="tester") is not None
     assert _status(engine, table) == "queued"
 

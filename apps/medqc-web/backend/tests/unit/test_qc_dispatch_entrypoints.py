@@ -191,11 +191,14 @@ def test_persisted_mode_not_hot_setting_controls_detached_submission() -> None:
 async def test_workspace_mq_create_returns_queued_without_detached_submit(
     monkeypatch,
 ) -> None:
+    from app.services import saved_result_access
+
     workspace = _PersistingWorkspace(persisted_mode="rabbitmq")
     settings = _main_settings(qc_mode="rabbitmq", llm_mode="gateway")
     submitted: list[tuple[Any, ...]] = []
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "get_settings", lambda: settings)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     monkeypatch.setattr(
         qc_sichuan,
         "submit_detached_task",
@@ -210,7 +213,7 @@ async def test_workspace_mq_create_returns_queued_without_detached_submit(
             record_refs=[_run_record_ref()],
             rule_ids=["LX0609-01-01-01"],
         ),
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "role": "super_admin"},
         qc_service=_gateway_service(),  # type: ignore[arg-type]
     )
 
@@ -223,8 +226,11 @@ async def test_workspace_mq_create_returns_queued_without_detached_submit(
 async def test_workspace_mq_configuration_failure_precedes_job_insert(
     monkeypatch,
 ) -> None:
+    from app.services import saved_result_access
+
     workspace = _PersistingWorkspace(persisted_mode="rabbitmq")
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     monkeypatch.setattr(
         qc_sichuan,
         "get_settings",
@@ -240,7 +246,7 @@ async def test_workspace_mq_configuration_failure_precedes_job_insert(
                 record_refs=[_run_record_ref()],
                 rule_ids=["LX0609-01-01-01"],
             ),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "role": "super_admin"},
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
         )
 
@@ -250,8 +256,11 @@ async def test_workspace_mq_configuration_failure_precedes_job_insert(
 
 @pytest.mark.asyncio
 async def test_workspace_mq_rejects_direct_actual_service_identity(monkeypatch) -> None:
+    from app.services import saved_result_access
+
     workspace = _PersistingWorkspace(persisted_mode="rabbitmq")
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     monkeypatch.setattr(
         qc_sichuan,
         "get_settings",
@@ -267,7 +276,7 @@ async def test_workspace_mq_rejects_direct_actual_service_identity(monkeypatch) 
                 record_refs=[_run_record_ref()],
                 rule_ids=["LX0609-01-01-01"],
             ),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "role": "super_admin"},
             qc_service=_ServiceStub(),  # type: ignore[arg-type]
         )
 
@@ -279,6 +288,8 @@ async def test_workspace_mq_rejects_direct_actual_service_identity(monkeypatch) 
 async def test_workspace_mq_schema_failure_is_controlled_and_not_submitted(
     monkeypatch,
 ) -> None:
+    from app.services import saved_result_access
+
     class _MissingSchemaWorkspace(_PersistingWorkspace):
         def create_batch_job(self, **_kwargs: Any) -> dict[str, Any]:
             raise QCDispatchSchemaUnavailable("qc dispatch schema is unavailable")
@@ -286,6 +297,7 @@ async def test_workspace_mq_schema_failure_is_controlled_and_not_submitted(
     workspace = _MissingSchemaWorkspace(persisted_mode="rabbitmq")
     submitted: list[tuple[Any, ...]] = []
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     monkeypatch.setattr(
         qc_sichuan,
         "get_settings",
@@ -306,7 +318,7 @@ async def test_workspace_mq_schema_failure_is_controlled_and_not_submitted(
                 record_refs=[_run_record_ref()],
                 rule_ids=["LX0609-01-01-01"],
             ),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "role": "super_admin"},
             qc_service=_gateway_service(),  # type: ignore[arg-type]
         )
 
@@ -483,7 +495,7 @@ async def test_sample_mq_leaf_does_not_submit_but_0916_keeps_legacy(
             rule_set_key=qc_sample_pools.LUXIAN_0609_QC_RULE_SET_KEY,
             selected_rule_ids=["LX0609-01-01-01"],
         ),
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "role": "super_admin"},
     )
     assert mq_response["data"]["job_id"]
     assert submitted == []
@@ -498,7 +510,7 @@ async def test_sample_mq_leaf_does_not_submit_but_0916_keeps_legacy(
             sample_item_ids=["item-1"],
             rule_set_key=qc_sample_pools.LUXIAN_0916_QC_RULE_SET_KEY,
         ),
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "role": "super_admin"},
     )
     assert legacy_response["data"]["job_id"]
     assert submitted == [legacy_workspace.create_batch_job_calls[0]["id"]]
@@ -532,7 +544,7 @@ async def test_sample_mq_family_rejected_before_parent_insert(monkeypatch) -> No
                 selected_rule_ids=["LX0609-01-01-01", "LX0609-06-01-05"],
                 group_by_luxian_family=True,
             ),
-            current_user={"id": "tester"},
+            current_user={"id": "tester", "role": "super_admin"},
         )
 
     assert rejected.value.status_code == 503

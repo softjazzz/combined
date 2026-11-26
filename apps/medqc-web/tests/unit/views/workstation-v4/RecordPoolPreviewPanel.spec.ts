@@ -1,8 +1,21 @@
 import { mount } from '@vue/test-utils'
-import { describe, expect, it } from 'vitest'
+import { ref } from 'vue'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+const confirmedResultsOnlyRef = ref(false)
+
+vi.mock('@/composables/useQcResultVisibility', () => ({
+  useQcResultVisibility: () => ({
+    confirmedResultsOnly: confirmedResultsOnlyRef,
+  }),
+}))
 
 import RecordPoolPreviewPanel from '@/views/workstation-v4/components/workbench/RecordPoolPreviewPanel.vue'
 import type { WorkbenchRow } from '@/views/workstation-v4/components/workbench/BatchTablePanel.vue'
+
+beforeEach(() => {
+  confirmedResultsOnlyRef.value = false
+})
 
 const row: WorkbenchRow = {
   id: 'record-1',

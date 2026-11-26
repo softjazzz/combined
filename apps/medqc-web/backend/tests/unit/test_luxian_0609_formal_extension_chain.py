@@ -168,6 +168,8 @@ async def _run_test_only_rule_through_formal_chain(
     workspace = _WorkspaceStub()
     monkeypatch.setattr(qc_sichuan, "_sichuan_workspace_service", lambda: workspace)
     monkeypatch.setattr(qc_sichuan, "submit_detached_task", lambda *_args: None)
+    from app.services import saved_result_access
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     service = object.__new__(SichuanQCService)
     model_identity = dict(
         provider_code="alibaba", model="test-only-model",
@@ -186,7 +188,7 @@ async def _run_test_only_rule_through_formal_chain(
             date_field="admission", rule_ids=[TEST_RULE_ID],
             record_refs=[{"institute_id": "I", "patient_id": "P", "visit_id": "V"}],
         ),
-        qc_service=service, current_user={"id": "tester"},
+        qc_service=service, current_user={"id": "tester", "role": "super_admin"},
     )
     assert route_response["success"] is True
     assert workspace.created_job["filters"]["rule_ids"] == [TEST_RULE_ID]

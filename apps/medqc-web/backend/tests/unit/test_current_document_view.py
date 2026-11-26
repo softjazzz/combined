@@ -138,6 +138,10 @@ def route_client():
     app.include_router(emr_render.router)
     for dependency in emr_render.router.dependencies:
         app.dependency_overrides[dependency.dependency] = lambda: {}
+    app.dependency_overrides[emr_render.get_current_user] = lambda: {
+        "id": "tester",
+        "role": "super_admin",
+    }
     with TestClient(app) as client:
         yield client, emr_render
 

@@ -79,6 +79,8 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
         qc_sample_pools.LLMConfigLoader, "load_config",
         classmethod(lambda _cls, **_kwargs: _runtime_config()),
     )
+    from app.services import saved_result_access
+    monkeypatch.setattr(saved_result_access, "saved_result_institute_scope", lambda _actor_id: None)
     request = SimpleNamespace(state=SimpleNamespace(trace_id="fixed-three-entry"))
     created: dict[str, dict[str, Any]] = {}
     for label, refs in (("single", [FIRST_REF]), ("pool_batch", [FIRST_REF, SECOND_REF])):
@@ -99,7 +101,7 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
                 rule_set_key="luxian_0609_qc_v1", scope="running",
                 date_field="admission", rule_ids=list(RULE_IDS), record_refs=refs,
             ),
-            qc_service=service, current_user={"id": "tester"},
+            qc_service=service, current_user={"id": "tester", "role": "super_admin"},
         )
         assert response["success"] is True
         created[label] = dict(workspace.created_job or {})
@@ -127,7 +129,7 @@ async def test_three_real_entry_routes_keep_original_001_004_task_inputs(monkeyp
             rule_set_key="luxian_0609_qc_v1", selected_rule_ids=list(RULE_IDS),
             max_parallel_records=1,
         ),
-        current_user={"id": "tester"},
+        current_user={"id": "tester", "role": "super_admin"},
     )
     assert response["success"] is True
     assert len(sample_workspace.create_batch_job_calls) == 1
