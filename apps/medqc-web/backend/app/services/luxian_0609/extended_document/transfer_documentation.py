@@ -140,7 +140,7 @@ def _record_state(
                   if (moment := _precise_datetime(authoritative_document_time_value(row))) is not None
                   and order_time - timedelta(hours=24) <= moment < order_time
                   and (_date_value(row.get("transfer_date")) is None
-                       or _date_value(row.get("transfer_date")) >= order_time.date()))
+                       or _date_value(row.get("transfer_date")) == order_time.date()))
     if current and early_out_order is not None:
         # 已有当前记录时，不把科室不对应的历史文书新增为本次候选。
         early = tuple(item for item in early if _departments_correspond(item[0], early_out_order))
@@ -416,7 +416,7 @@ def evaluate_transfer_documentation(
                         index
                         for index, (start, _order) in enumerate(grouped)
                         if start - _MULTI_EVENT_UNLABELLED_EARLY_OUT_TOLERANCE <= moment < start
-                        and (row_transfer_date is None or row_transfer_date >= start.date())
+                        and (row_transfer_date is None or row_transfer_date == start.date())
                     ]
                     if len(near_early_indexes) == 1:
                         owner = near_early_indexes[0]

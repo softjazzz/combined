@@ -539,6 +539,18 @@ def exam_reason_anchor_time(event: "ExamLabSingleEvent") -> datetime | None:
     return event.order_time or event.exam_time or event.report_time
 
 
+def exam_reason_anchor_has_conflict(event: "ExamLabSingleEvent") -> bool:
+    """检查 010 起算锚点角色是否存在时间冲突，避免冲突被入院 24h 豁免遮蔽。"""
+
+    if "order_time" in event.conflict_roles:
+        return True
+    if event.order_time is None and (
+        "exam_time" in event.conflict_roles or "report_time" in event.conflict_roles
+    ):
+        return True
+    return False
+
+
 def exam_reason_window(event: "ExamLabSingleEvent") -> tuple[datetime, datetime] | None:
     """010 检查前病程窗口。
 
@@ -952,10 +964,19 @@ def build_exam_lab_text_projection(
             else _EXPLICIT_NON_TARGET_CULTURE_PATTERN
         )
         reason_anchor_time = order_time or exam_time or report_time
+        anchor_time_conflict = (
+            "order_time" in conflicts
+            or (
+                order_time is None
+                and ("exam_time" in conflicts or "report_time" in conflicts)
+            )
+        )
         # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免；
         # 缺少医嘱开立时间而回退到检查时间/报告时间时，同样适用入院 24 小时内豁免。
+        # 若起算锚点角色存在时间冲突，绝不得给出 24 小时豁免，须由执行器按时间冲突降级。
         within_admission_window = (
             family == "exam"
+            and not anchor_time_conflict
             and admission_time is not None
             and reason_anchor_time is not None
             and (

@@ -1119,17 +1119,27 @@ def _has_surgical_resection_pathology(
     return False
 
 
+_LX019_DECLARED_SURGERY_EVENT_SOURCES = (
+    "postsurg_firstcourse_record",
+    "surgery_application",
+    "anesthesia_record",
+)
+
+
 def _has_available_session_surgery_evidence(
     evidence_materials: Luxian0609EvidenceMaterialStore | None,
 ) -> bool:
-    """只读取本次会话已加载的手术类来源，判断本次就诊是否确有手术事件。
+    """只读取 06-02-02 在 source_registry 中显式声明的手术事件来源，判断本次就诊是否确有手术。
 
-    绝不主动查询未声明来源，也绝不将这些辅助来源的文书引用写入 06-02-02 的 fact_refs。
+    绝不读取未声明来源，也绝不将这些辅助来源的文书引用写入 06-02-02 的 fact_refs。
     """
 
     if evidence_materials is None:
         return False
-    if evidence_materials.has_source("postsurg_firstcourse_record"):
+    if (
+        "postsurg_firstcourse_record" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("postsurg_firstcourse_record")
+    ):
         try:
             rows = evidence_materials.bounded_rows("postsurg_firstcourse_record")
         except EvidenceMaterialUnavailable:
@@ -1145,11 +1155,12 @@ def _has_available_session_surgery_evidence(
             )
             if text:
                 return True
-    for source_key in ("surgery_application", "surgery_master"):
-        if not evidence_materials.has_source(source_key):
-            continue
+    if (
+        "surgery_application" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("surgery_application")
+    ):
         try:
-            rows = evidence_materials.bounded_rows(source_key)
+            rows = evidence_materials.bounded_rows("surgery_application")
         except EvidenceMaterialUnavailable:
             rows = ()
         for row in rows:
@@ -1169,7 +1180,10 @@ def _has_available_session_surgery_evidence(
             if _ENDOSCOPY_ONLY_PROCEDURE_PATTERN.search(name) and not _EXPLICIT_SURGICAL_OPERATION_PATTERN.search(name):
                 continue
             return True
-    if evidence_materials.has_source("anesthesia_record"):
+    if (
+        "anesthesia_record" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("anesthesia_record")
+    ):
         try:
             rows = evidence_materials.bounded_rows("anesthesia_record")
         except EvidenceMaterialUnavailable:

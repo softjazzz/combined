@@ -58,6 +58,7 @@ from .exam_lab_fact_extraction import (
     event_for_fact,
     event_result_carried_by_course,
     events_for_family,
+    exam_reason_anchor_has_conflict,
     exam_reason_anchor_time,
     exam_reason_window,
     parse_exam_lab_fact_response,
@@ -1586,6 +1587,15 @@ def _single_text_fact_outcome(
         rule_id == "LX0609-06-01-02"
         and event is not None
         and event.target_confirmed
+        and exam_reason_anchor_has_conflict(event)
+    ):
+        return _ExamLabOutcome(
+            rule_id, "data_gap", "multiple_event_or_time_conflict", refs
+        )
+    if (
+        rule_id == "LX0609-06-01-02"
+        and event is not None
+        and event.target_confirmed
         and event.within_admission_window
     ):
         return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
@@ -1631,14 +1641,15 @@ def _single_text_fact_outcome(
 
     if event is None:
         return _ExamLabOutcome(rule_id, "data_gap", "authoritative_event_missing", refs)
-    if rule_id == "LX0609-06-01-02" and event.within_admission_window:
-        return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
     if rule_id == "LX0609-06-01-02":
-        # 院方口径（2026-10-10）：锚点为关联医嘱开立时间，无医嘱时取报告时间。
-        if event.order_time is None and "report_time" in event.conflict_roles:
+        # 院方口径（2026-10-10）：锚点为关联医嘱开立时间，无医嘱时取检查/报告时间；
+        # 锚点时间冲突必须先于入院 24h 豁免拦截，避免冲突被静默豁免。
+        if exam_reason_anchor_has_conflict(event):
             return _ExamLabOutcome(
                 rule_id, "data_gap", "multiple_event_or_time_conflict", refs
             )
+        if event.within_admission_window:
+            return _ExamLabOutcome(rule_id, "not_applicable", "admission_window_exempt", refs)
         event_time = exam_reason_anchor_time(event)
     else:
         if "report_time" in event.conflict_roles:
@@ -3287,6 +3298,25 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             rule_id,
                             "data_gap",
                             "exam_lab_candidate_text_missing",
+                        )
+                        typed_processed.add(rule_id)
+                    elif rule_id == "LX0609-06-01-02" and any(
+                        event.target_confirmed and exam_reason_anchor_has_conflict(event)
+                        for event in events
+                    ):
+                        # 锚点时间存在冲突时必须先降级为时间冲突资料缺口，绝不可被 24h 豁免遮蔽。
+                        safe_refs = projection.safe_refs or {}
+                        emit_typed(
+                            rule_id,
+                            "data_gap",
+                            "multiple_event_or_time_conflict",
+                            fact_refs=tuple(dict.fromkeys(
+                                safe_refs[ref]
+                                for event in events
+                                if event.target_confirmed and exam_reason_anchor_has_conflict(event)
+                                for ref in event.document_refs
+                                if ref in safe_refs
+                            )),
                         )
                         typed_processed.add(rule_id)
                     elif rule_id == "LX0609-06-01-02" and events and all(

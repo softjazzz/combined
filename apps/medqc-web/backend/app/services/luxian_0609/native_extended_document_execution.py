@@ -279,7 +279,7 @@ _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN = re.compile(
 _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN = re.compile(
     r"本病人建议使用[^。；;\n]{0,80}?使用目的为[^。\n]{0,120}?[。；;\n,，]\s*"
     r"(?!(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|临床药学)[^。；;\n]{0,8}?(?:科|学))"
-    r"[\u4e00-\u9fff]{2,4}(?:副主任医师|主任医师)[\]】）)]?\s*(?:会诊(?:意见)?|意见|[:：])"
+    r"(?P<speaker>[\u4e00-\u9fff]{2,4}(?:副主任医师|主任医师)[\]】）)]?\s*(?:会诊(?:意见)?|意见|[:：]))"
 )
 # 正式《请会诊执行记录》中邀请感染科或重症医学科/ICU医师协助诊治（省略打印职称但非主治/住院/规培/实习医师）。
 _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN = re.compile(
@@ -299,12 +299,28 @@ _LAB_ORDER_NAME_PATTERN = re.compile(
 )
 # 危急值病程处置识别（合并扫描 daily_course_record / senior_course_record）。
 _CRITICAL_VALUE_TITLE_PATTERN = re.compile(r"危急值")
-_CRITICAL_VALUE_HANDLING_ACTION_PATTERN = re.compile(
-    r"危急值|处理|处置|补钾|氯化钾|降钾|葡萄糖酸钙|纠酸|碳酸氢钠|"
-    r"输注血小板|输血小板|输注.{0,6}血浆|输血浆|冷沉淀|输注.{0,6}红细胞|输血|"
-    r"呼吸机|氧疗|吸氧|调高|下调|调整|复查|复测|监测|对症|静滴|静推|泵入|"
-    r"胰岛素|补糖|葡萄糖|汇报|告知|通知|加强.{0,6}治疗|抗感染|予以|给予"
+_CRITICAL_VALUE_TITLE_STRIP_PATTERN = re.compile(r"危急值(?:处理|处置|报告)?记录")
+_CRITICAL_VALUE_UNHANDLED_PATTERN = re.compile(
+    r"(?:尚|暂)?未(?:予|做|作|行|进行)?(?:处理|处置|采取(?:任何|有效)?(?:措施|处理|处置))|"
+    r"暂无(?:特殊)?(?:处理|处置)|"
+    r"未(?:见|有)(?:明确)?(?:处理|处置)|"
+    r"(?<![已予经])待(?:医师|医生|值班医师|值班医生|上级医师|临床)?(?:处理|处置|评估处理)|"
+    r"等待(?:医师|医生|值班医师|值班医生|上级医师)(?:处理|处置|查看|评估)?"
 )
+_CRITICAL_VALUE_HANDLING_ACTION_PATTERN = re.compile(
+    r"补钾|氯化钾|泵钾|降钾|葡萄糖酸钙|补钙|纠酸|碳酸氢钠|补液|"
+    r"输注血小板|输血小板|合血小板|备血小板|预约血小板|输注.{0,8}血浆|输血浆|合血浆|备血浆|"
+    r"冷沉淀|输注.{0,8}红细胞|输血|合血|备血|CRRT|透析|"
+    r"呼吸机|无创(?:辅助)?通气|有创(?:辅助)?通气|氧疗|吸氧|氧流量|吸痰|排痰|"
+    r"调高|下调|调整|复查|复测|监测|密观|密切观察|密切关注|"
+    r"对症(?:处理|处置|支持|治疗)?|静滴|静推|泵入|"
+    r"胰岛素|补糖|葡萄糖|高糖|利尿|呋塞米|甲泼尼龙|止血|抗血小板|营养心肌|"
+    r"加强.{0,6}(?:治疗|抗感染|气道管理)|抗感染|予以|给予|加用|改用|换用|停用|"
+    r"维持目前|继续(?:当前|目前|无创|加强|合血|预约|动态|密切|观察|治疗|利尿)|"
+    r"(?:与|向)(?:患者)?(?:及其)?家属沟通|请.{0,8}会诊|联系输血科|"
+    r"(?:经|已予|已|积极|紧急|及时)(?:处理|处置)"
+)
+_CRITICAL_VALUE_CLOCK_PATTERN = re.compile(r"(?<!\d)(\d{1,2})\s*[:：]\s*(\d{2})(?!\d)")
 _CRITICAL_VALUE_ITEM_SYNONYMS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("钾",), ("钾", "血钾", "低钾", "高钾", "补钾", "k+")),
     (("钠",), ("钠", "血钠", "低钠", "高钠", "na+")),
@@ -885,14 +901,40 @@ def _text_mentions_critical_result_value(
     return False
 
 
-def _course_critical_value_dispositions(
+def _normalize_critical_value_number_text(text: str) -> str:
+    """合并 PDF 折行导致的数值小数点后断行空格（如 '18.\\n00mmHg' -> '18.00mmHg'）。"""
+
+    return re.sub(r"(?<=\d\.)\s+(?=\d)", "", text)
+
+
+def _has_affirmative_critical_value_handling(body: str) -> bool:
+    """判定病程正文是否包含明确的危急值临床处置/评估动作，排除未处理/待处理记录。"""
+
+    cleaned = _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body)
+    if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(cleaned):
+        return False
+    return bool(_CRITICAL_VALUE_HANDLING_ACTION_PATTERN.search(cleaned))
+
+
+def _text_mentions_critical_report_clock(body: str, report_time: datetime) -> bool:
+    report_minutes = report_time.hour * 60 + report_time.minute
+    for hour_str, minute_str in _CRITICAL_VALUE_CLOCK_PATTERN.findall(body):
+        hour, minute = int(hour_str), int(minute_str)
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            diff = abs((hour * 60 + minute) - report_minutes)
+            if diff <= 5 or diff >= 24 * 60 - 5:
+                return True
+    return False
+
+
+def _course_critical_value_disposition_refs(
     *,
     lab_item_rows: Sequence[Mapping[str, Any]],
-    course_rows: Sequence[Mapping[str, Any]],
-) -> tuple[CriticalValueDisposition, ...]:
-    """从日常病程与上级查房记录中识别危急值处置，补足空 crisis_value_record 场景。"""
+    course_ref_rows: Sequence[tuple[str, str, Mapping[str, Any]]],
+) -> tuple[tuple[str, str, CriticalValueDisposition], ...]:
+    """从日常病程与上级查房记录中识别危急值处置，并返回精确来源与文书引用。"""
 
-    if not lab_item_rows or not course_rows:
+    if not lab_item_rows or not course_ref_rows:
         return ()
     from .extended_document_critical_value import _critical_display_flag, _is_critical_item
 
@@ -924,8 +966,8 @@ def _course_critical_value_dispositions(
     conflicting_keys = {key for key, times in times_by_key.items() if len(times) > 1}
 
     single_event = len(grouped) == 1
-    parsed_courses: list[tuple[datetime, str, str, str, bool]] = []
-    for row in course_rows:
+    parsed_courses: list[tuple[str, str, datetime, str, str, str, bool]] = []
+    for source_key, reference, row in course_ref_rows:
         disposition_time = _row_time(row)
         if disposition_time is None:
             continue
@@ -933,17 +975,26 @@ def _course_critical_value_dispositions(
         body = _material_text(row)
         if not body:
             continue
+        # 无论是否专用《危急值处理记录》，均须排除“尚未处理/未处理/等待医师”等未处置表述并要求明确临床处置动作。
+        if not _has_affirmative_critical_value_handling(body):
+            continue
         is_crisis_doc = bool(
             _CRITICAL_VALUE_TITLE_PATTERN.search(title)
             or _CRITICAL_VALUE_TITLE_PATTERN.search(body)
         )
-        parsed_courses.append((disposition_time, title, body, body.lower(), is_crisis_doc))
+        normalized_body = _normalize_critical_value_number_text(body)
+        parsed_courses.append(
+            (source_key, reference, disposition_time, title, normalized_body, normalized_body.lower(), is_crisis_doc)
+        )
     if not parsed_courses:
         return ()
 
-    timely_course_indexes_by_event: dict[tuple[str | None, datetime], set[int]] = {}
-    timely_matched_course_indexes: set[int] = set()
-    candidates: list[tuple[tuple[str | None, datetime], int, datetime, float, bool, bool]] = []
+    event_keywords: dict[tuple[str | None, datetime], frozenset[str]] = {}
+    event_tokens: dict[tuple[str | None, datetime], frozenset[str]] = {}
+    candidates_by_course: dict[
+        int,
+        list[tuple[tuple[str | None, datetime], str, str, datetime, float, float, bool, bool, bool]],
+    ] = {}
     for (event_key, report_time), pairs in grouped.items():
         if event_key is not None and event_key in conflicting_keys:
             continue
@@ -954,7 +1005,18 @@ def _course_critical_value_dispositions(
             )
             for row, item in pairs
         )
-        for course_index, (disposition_time, title, body, lower_body, is_crisis_doc) in enumerate(parsed_courses):
+        event_id = (event_key, report_time)
+        event_keywords[event_id] = frozenset(kw for keywords, _tokens in event_specs for kw in keywords)
+        event_tokens[event_id] = frozenset(tok for _keywords, tokens in event_specs for tok in tokens)
+        for course_index, (
+            source_key,
+            reference,
+            disposition_time,
+            title,
+            body,
+            lower_body,
+            is_crisis_doc,
+        ) in enumerate(parsed_courses):
             delta_seconds = effective_disposition_elapsed_seconds(disposition_time, report_time)
             if delta_seconds is None:
                 continue
@@ -986,41 +1048,97 @@ def _course_critical_value_dispositions(
                 # 普通日常病程/上级查房严格限定 6h 内，且必须同时命中项目关键词 + 实测危急值 + 明确临床处置动作。
                 if delta_hours > 6.0:
                     continue
-                if not (
-                    item_hit
-                    and value_hit
-                    and _CRITICAL_VALUE_HANDLING_ACTION_PATTERN.search(body)
-                ):
+                if not (item_hit and value_hit):
                     continue
-            event_id = (event_key, report_time)
-            if delta_hours <= 6.0:
-                timely_course_indexes_by_event.setdefault(event_id, set()).add(course_index)
-                timely_matched_course_indexes.add(course_index)
-            candidates.append((event_id, course_index, disposition_time, delta_hours, is_crisis_doc, value_hit))
+            clock_hit = _text_mentions_critical_report_clock(body, report_time)
+            candidates_by_course.setdefault(course_index, []).append(
+                (event_id, source_key, reference, disposition_time, delta_seconds, delta_hours, is_crisis_doc, value_hit, clock_hit)
+            )
 
+    matched_refs: list[tuple[str, str, CriticalValueDisposition]] = []
+    seen: set[tuple[str | None, datetime, str]] = set()
+    for cands in candidates_by_course.values():
+        # 若该病程记录已精确命中某事件的实测数值（value_hit=True），不得再串配给未命中数值的其他事件。
+        if any(cand[7] for cand in cands):
+            cands = [cand for cand in cands if cand[7]]
+        # 若该专用危急值记录已精准归属某后续危急值事件的 6h 窗内，且未提及早先事件的具体数值，
+        # 不得跨事件借用为早先事件的“超时处置”。
+        if any(cand[5] <= 6.0 for cand in cands):
+            cands = [cand for cand in cands if cand[5] <= 6.0 or cand[7]]
+        # 同一病程若仍命中多个同项目危急值事件，仅当两事件实测值互不相交且均命中数值时允许同记；
+        # 否则（均未写数值或同数值重复报告）按报告时刻精确归属，无时刻则仅归属最近一次报告，严禁一条病程双计两事件。
+        kept: list[tuple[tuple[str | None, datetime], str, str, datetime, float, float, bool, bool, bool]] = []
+        used = [False] * len(cands)
+        for index in range(len(cands)):
+            if used[index]:
+                continue
+            group = [cands[index]]
+            used[index] = True
+            changed = True
+            while changed:
+                changed = False
+                for other_idx in range(len(cands)):
+                    if used[other_idx]:
+                        continue
+                    other_ev = cands[other_idx][0]
+                    other_val_hit = cands[other_idx][7]
+                    conflicts_with_group = any(
+                        bool(event_keywords[member[0]] & event_keywords[other_ev])
+                        and not (
+                            member[7]
+                            and other_val_hit
+                            and event_tokens[member[0]]
+                            and event_tokens[other_ev]
+                            and event_tokens[member[0]].isdisjoint(event_tokens[other_ev])
+                        )
+                        for member in group
+                    )
+                    if conflicts_with_group:
+                        group.append(cands[other_idx])
+                        used[other_idx] = True
+                        changed = True
+            if len(group) == 1:
+                kept.append(group[0])
+            else:
+                clock_group = [member for member in group if member[8]]
+                pool = clock_group if clock_group else group
+                kept.append(min(pool, key=lambda member: member[4]))
+        for event_id, source_key, reference, disposition_time, *_ in kept:
+            event_key, _report_time = event_id
+            dedupe_key = (event_key, disposition_time, reference)
+            if dedupe_key not in seen:
+                seen.add(dedupe_key)
+                matched_refs.append(
+                    (
+                        source_key,
+                        reference,
+                        CriticalValueDisposition(
+                            disposition_time=disposition_time,
+                            event_key=event_key,
+                        ),
+                    )
+                )
+    return tuple(matched_refs)
+
+
+def _course_critical_value_dispositions(
+    *,
+    lab_item_rows: Sequence[Mapping[str, Any]],
+    course_rows: Sequence[Mapping[str, Any]],
+) -> tuple[CriticalValueDisposition, ...]:
+    """从日常病程与上级查房记录中识别危急值处置，补足空 crisis_value_record 场景。"""
+
+    matched = _course_critical_value_disposition_refs(
+        lab_item_rows=lab_item_rows,
+        course_ref_rows=tuple(("", "", row) for row in course_rows),
+    )
     dispositions: list[CriticalValueDisposition] = []
-    seen: set[tuple[str | None, datetime]] = set()
-    for event_id, course_index, disposition_time, delta_hours, is_crisis_doc, value_hit in candidates:
-        event_key, _report_time = event_id
-        # 若该专用危急值记录已精准归属某后续危急值事件的 6h 窗内，且未提及本早先事件的具体数值，
-        # 不得跨事件借用为早先事件的“超时处置”（例如晚间血气钾危急值记录不应误挂为上午氧分压的12h超时处置）。
-        if (
-            is_crisis_doc
-            and delta_hours > 6.0
-            and not value_hit
-            and course_index in timely_matched_course_indexes
-            and course_index not in timely_course_indexes_by_event.get(event_id, ())
-        ):
-            continue
-        dedupe_key = (event_key, disposition_time)
+    seen: set[tuple[str | None, datetime | None]] = set()
+    for _source_key, _reference, disposition in matched:
+        dedupe_key = (disposition.event_key, disposition.disposition_time)
         if dedupe_key not in seen:
             seen.add(dedupe_key)
-            dispositions.append(
-                CriticalValueDisposition(
-                    disposition_time=disposition_time,
-                    event_key=event_key,
-                )
-            )
+            dispositions.append(disposition)
     return tuple(dispositions)
 
 
@@ -1029,6 +1147,7 @@ def _critical_value_document_refs(
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore,
     outcome: CriticalValueOutcome,
+    course_disposition_refs: Sequence[tuple[str, CriticalValueDisposition]] = (),
 ) -> tuple[str, ...]:
     """返回危急值判定实际消费的逐行证据；评价终点不属于客户文书证据。"""
 
@@ -1046,17 +1165,26 @@ def _critical_value_document_refs(
     item_rows = rows("labtest_item_report")
     disposition_rows = rows("crisis_value_record")
     master_rows = rows("labtest_master")
+    daily_course_rows = rows("daily_course_record")
+    senior_course_rows = rows("senior_course_record")
     selected_refs = select_critical_value_fact_refs(
         outcome=outcome,
         item_refs=tuple(
             (reference, _critical_value_item_from_row(row))
             for reference, row in item_rows
         ),
-        disposition_refs=tuple(
-            (reference, disposition)
-            for reference, row in disposition_rows
-            for disposition in (_critical_value_disposition_from_row(row),)
-            if disposition is not None
+        disposition_refs=(
+            *tuple(
+                (reference, disposition)
+                for reference, row in disposition_rows
+                for disposition in (_critical_value_disposition_from_row(row),)
+                if disposition is not None
+            ),
+            *tuple(
+                (reference, disposition)
+                for reference, disposition in course_disposition_refs
+                if reference
+            ),
         ),
         master_refs=tuple(reference for reference, _row in master_rows),
     )
@@ -1070,6 +1198,8 @@ def _critical_value_document_refs(
                 ("labtest_item_report", item_rows),
                 ("crisis_value_record", disposition_rows),
                 ("labtest_master", master_rows),
+                ("daily_course_record", daily_course_rows),
+                ("senior_course_record", senior_course_rows),
             )
             if any(reference in selected for reference, _row in source_rows)
         ))
@@ -1710,19 +1840,21 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
             if "本病人建议使用" not in between and "\n\n" not in between:
                 return True
     # 电子特殊级抗菌药申请单（常无 document_title）紧接副主任/主任医师会诊意见，
-    # 允许“本病人建议使用…使用目的为…”在会诊意见前文出现，但引文本身不得为申请段且专家落款须位于引文之前。
+    # 允许“本病人建议使用…使用目的为…”在会诊意见前文出现，也允许引文以该副高/主任医师署名起头，
+    # 但引文本身不得为申请段且专家落款不得晚于引文结尾。
     prefix_text = text[: position + len(quote)]
     for match in _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN.finditer(prefix_text):
-        if match.end() <= position and position - match.end() <= 160:
-            between = text[match.end(): position]
+        speaker_start = match.start("speaker")
+        if speaker_start <= position <= match.end() + 160 and match.end() <= position + len(quote):
+            between = text[match.end(): position] if position > match.end() else ""
             if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
                 return True
     # 正式《请会诊执行记录》中邀请感染科/ICU医师协助诊治（正文中常粘贴数百字影像与检验摘要后再写给药建议）；
-    # 同一会诊意见内未切换至申请段或非授权发言人时，归属该受邀专项医师。
+    # 同一会诊意见内未切换至申请段或非授权发言人时，归属该受邀专项医师（允许引文以邀请/会诊落款起头）。
     if "请会诊执行记录" in text:
         for match in _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN.finditer(prefix_text):
-            if match.end() <= position and position - match.end() <= 600:
-                between = text[match.end(): position]
+            if match.start() <= position <= match.end() + 600 and match.end() <= position + len(quote):
+                between = text[match.end(): position] if position > match.end() else ""
                 if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
                     return True
     return False
@@ -3355,13 +3487,35 @@ async def _execute_extended_document_group(
         for disposition in (_critical_value_disposition_from_row(row),)
         if disposition is not None
     )
-    course_crisis_dispositions = (
-        _course_critical_value_dispositions(
+    course_crisis_ref_rows: list[tuple[str, str, Mapping[str, Any]]] = []
+    if set(selected).intersection(CRITICAL_VALUE_RULE_IDS):
+        for course_source_key in ("daily_course_record", "senior_course_record"):
+            try:
+                course_crisis_ref_rows.extend(
+                    (course_source_key, reference, dict(row))
+                    for reference, row in evidence_materials.document_rows(
+                        course_source_key, snapshot=evidence_snapshot
+                    )
+                )
+            except (EvidenceMaterialUnavailable, EvidenceMaterialTruncated):
+                continue
+    course_crisis_matches = (
+        _course_critical_value_disposition_refs(
             lab_item_rows=lab_item_rows,
-            course_rows=(*daily_rows, *senior_rows),
+            course_ref_rows=course_crisis_ref_rows,
         )
         if set(selected).intersection(CRITICAL_VALUE_RULE_IDS)
         else ()
+    )
+    course_crisis_dispositions = tuple(
+        dict.fromkeys(
+            disposition for _source_key, _reference, disposition in course_crisis_matches
+        )
+    )
+    course_crisis_disposition_refs = tuple(
+        (reference, disposition)
+        for _source_key, reference, disposition in course_crisis_matches
+        if reference
     )
     critical_value_outcomes = {
         item.rule_id: item
@@ -3816,6 +3970,7 @@ async def _execute_extended_document_group(
                 snapshot=evidence_snapshot,
                 materials=evidence_materials,
                 outcome=outcome,
+                course_disposition_refs=course_crisis_disposition_refs,
             )
             horizon_refs = (
                 _fact_refs(evidence_snapshot, ("evaluation_context.horizon",))

@@ -34,6 +34,8 @@ SOURCE_KEYS = (
     *COURSE_SOURCES,
     "evaluation_context.horizon",
 )
+# 已在 source_registry.py 中为 LX0609-06-03-05/06 显式声明，确保单规则与批量执行一致；
+# 读取时仍按可选来源容错，避免合成单测省略非药医嘱表时破坏既有空源判定。
 OPTIONAL_ORDER_SOURCES = (
     "inpat_nondrug_order",
     "inpat_nondrug_order.exam_lab_order",

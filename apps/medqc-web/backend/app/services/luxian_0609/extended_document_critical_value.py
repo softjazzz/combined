@@ -12,6 +12,8 @@ CRITICAL_VALUE_SOURCE_KEYS = (
     "labtest_master",
     "labtest_item_report",
     "crisis_value_record",
+    "daily_course_record",
+    "senior_course_record",
 )
 CRITICAL_VALUE_TIMELINESS_SOURCE_KEYS = (
     *CRITICAL_VALUE_SOURCE_KEYS,

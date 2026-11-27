@@ -592,6 +592,8 @@ def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",
+        "daily_course_record",
+        "senior_course_record",
     }
 
 
