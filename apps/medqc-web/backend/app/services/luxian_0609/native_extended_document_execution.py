@@ -288,7 +288,16 @@ _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN = re.compile(
     r"[\u4e00-\u9fff]{2,4}(?:医生|医师)?\s*(?:协助诊治|会诊(?:意见)?)\s*[:：]"
 )
 _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN = re.compile(
-    r"本病人建议使用|主治医师|住院医师|实习医师|规培医师|主管药师|临床药师|临床药学"
+    r"本病人建议使用|"
+    r"(?<!请)临床药师|临床药师(?:[^。；;\r\n后]{0,8}?[：:])|临床药师(?:会诊)?意见|"
+    r"临床药学(?:(?:会诊)?意见|会诊\s*[：:]|[：:])|"
+    r"(?:主管)?药师(?:会诊|意见|\s*[：:])|"
+    r"药学部|"
+    r"主治医师|住院医师|实习医师|规培医师|经治医师|管床医师|申请医师|主管药师|"
+    r"(?:\r?\n)\s*[^\r\n]{0,20}(?:药师|药学|主治|住院|规培|实习|经治|管床|申请|医师|医生|科)[^\r\n]{0,10}[：:]|"
+    r"[。；;]\s*(?!(?:感染(?:性疾病)?科|重症医学科|ICU))[^\r\n。；;]{0,20}"
+    r"(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|药学|药剂)"
+    r"[^\r\n。；;]{0,12}(?:科|部|学)[^\r\n。；;]{0,10}[：:]"
 )
 _LAB_ORDER_CLASS_VALUES = frozenset({"检验", "检验类", "化验"})
 _LAB_ORDER_CANCELLED_STATUSES = ("取消", "作废", "撤销", "未执行")
@@ -307,6 +316,31 @@ _CRITICAL_VALUE_UNHANDLED_PATTERN = re.compile(
     r"(?<![已予经])待(?:医师|医生|值班医师|值班医生|上级医师|临床)?(?:处理|处置|评估处理)|"
     r"等待(?:医师|医生|值班医师|值班医生|上级医师)(?:处理|处置|查看|评估)?"
 )
+_CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN = re.compile(r"[。；;！？!?\r\n]+")
+_CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN = re.compile(r"[，,]+")
+_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN = re.compile(
+    r"(?:尚|暂|并|仍)?未(?:予|行|做|作|给|再|见|有|能)?|"
+    r"不(?:予|给|行|做|作|能|再|拟|考虑|建议|需要?)|"
+    r"暂不|暂无法|无法|无需|不必|拒绝|拒不|无特殊|取消|暂缓|免予"
+)
+_CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN = re.compile(
+    r"(?:^|[：:])\s*(?:若|如果|倘若|假如|一旦|万一|必要时|"
+    r"如(?:有|再|仍|复查|继续|出现|无|下降|升高|恶化|加重|持续|不缓解|未改善)|"
+    r"(?:待|等)[^，,。；;\r\n]{0,16}(?:后再?|时再?))"
+)
+_CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN = re.compile(
+    r"若|如果|倘若|假如|一旦|万一|必要时|"
+    r"如(?:有|再|仍|复查|继续|出现|无改善|无好转|无缓解|下降|升高|恶化|加重|持续|不缓解|未改善)|"
+    r"再予|再行|再考虑|再决定|则予|则行|则考虑|是否|"
+    r"(?:待|等)[^，,。；;\r\n]{0,16}(?:后|时)|"
+    r"(?<![已予经])待\s*$"
+)
+_CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN = re.compile(
+    r"^(?:现已|目前(?:已|予|正|继续|维持)|已经?|实际已|\d{1,2}\s*[:：]\s*\d{2}\s*(?:已|予|给))"
+)
+_CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN = re.compile(
+    r"已经?|现已|(?<![发出体实呈表再显])现(?:行)?(?=[予给行补输调复监])"
+)
 _CRITICAL_VALUE_HANDLING_ACTION_PATTERN = re.compile(
     r"补钾|氯化钾|泵钾|降钾|葡萄糖酸钙|补钙|纠酸|碳酸氢钠|补液|"
     r"输注血小板|输血小板|合血小板|备血小板|预约血小板|输注.{0,8}血浆|输血浆|合血浆|备血浆|"
@@ -321,6 +355,10 @@ _CRITICAL_VALUE_HANDLING_ACTION_PATTERN = re.compile(
     r"(?:经|已予|已|积极|紧急|及时)(?:处理|处置)"
 )
 _CRITICAL_VALUE_CLOCK_PATTERN = re.compile(r"(?<!\d)(\d{1,2})\s*[:：]\s*(\d{2})(?!\d)")
+_CRITICAL_VALUE_NON_LAB_UNIT_PATTERN = re.compile(
+    r"^\s*(?:mg|ml|μg|ug|片|粒|袋|支|瓶|小时|分钟|min|天|日|月|年|岁|次|kg|cm|g(?![/／]))(?![a-z0-9])",
+    re.IGNORECASE,
+)
 _CRITICAL_VALUE_ITEM_SYNONYMS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
     (("钾",), ("钾", "血钾", "低钾", "高钾", "补钾", "k+")),
     (("钠",), ("钠", "血钠", "低钠", "高钠", "na+")),
@@ -329,7 +367,7 @@ _CRITICAL_VALUE_ITEM_SYNONYMS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ..
     (("血红蛋白", "hgb", "hb"), ("血红蛋白", "hb", "hgb", "贫血")),
     (("白细胞", "wbc"), ("白细胞", "wbc")),
     (("活化部分凝血", "凝血活酶", "aptt"), ("aptt", "活化部分凝血", "凝血活酶", "凝血")),
-    (("凝血酶原", "inr"), ("pt", "inr", "凝血酶原", "凝血")),
+    (("凝血酶原", "国际标准化比值", "inr"), ("pt", "inr", "凝血酶原", "国际标准化比值", "凝血")),
     (("纤维蛋白原", "fib"), ("纤维蛋白原", "fib", "凝血")),
     (("ph", "酸碱度"), ("ph", "酸碱度", "酸中毒", "碱中毒", "纠酸")),
     (("氧分压", "po2", "pao2"), ("氧分压", "po2", "pao2", "低氧")),
@@ -340,6 +378,74 @@ _CRITICAL_VALUE_ITEM_SYNONYMS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ..
     (("肌酐", "crea"), ("肌酐", "crea")),
     (("胆红素", "tbil", "dbil"), ("胆红素", "tbil", "dbil")),
     (("淀粉酶", "amy"), ("淀粉酶", "amy")),
+)
+_CRITICAL_VALUE_LAB_LABEL_GROUPS: tuple[tuple[str, ...], ...] = (
+    ("血钾", "钾离子", "血清钾", "钾测定", "低钾", "高钾", "k+", "k", "钾"),
+    ("血钠", "钠离子", "血清钠", "钠测定", "低钠", "高钠", "na+", "na", "钠"),
+    ("血氯", "氯离子", "血清氯", "氯测定", "cl-", "cl", "氯"),
+    ("血钙", "游离钙", "钙离子", "血清钙", "钙测定", "低钙", "高钙", "ca2+", "ca++", "ca", "钙"),
+    ("血镁", "镁离子", "血清镁", "mg2+"),
+    ("血磷", "无机磷", "血清磷"),
+    ("空腹血糖", "随机血糖", "指尖血糖", "末梢血糖", "餐后血糖", "血糖", "低血糖", "高血糖", "葡萄糖", "glu"),
+    ("血小板计数", "血小板", "plt"),
+    ("血红蛋白", "hgb", "hb"),
+    ("白细胞计数", "白细胞", "wbc"),
+    ("中性粒细胞", "中性粒", "neut", "anc"),
+    ("红细胞计数", "红细胞压积", "血细胞比容", "红细胞", "rbc", "hct"),
+    ("活化部分凝血活酶时间", "活化部分凝血", "凝血活酶", "aptt"),
+    ("凝血酶原时间", "凝血酶原", "国际标准化比值", "inr", "pt"),
+    ("纤维蛋白原", "fib"),
+    ("凝血酶时间", "tt"),
+    ("d-二聚体", "d二聚体", "d-dimer", "fdp"),
+    ("酸碱度", "ph"),
+    ("动脉氧分压", "氧分压", "pao2", "po2"),
+    ("动脉二氧化碳分压", "二氧化碳分压", "paco2", "pco2"),
+    ("碳酸氢根", "hco3"),
+    ("碱剩余", "be"),
+    ("血氧饱和度", "氧饱和度", "spo2", "sao2"),
+    ("乳酸", "lac"),
+    ("肌酐", "scr", "crea", "cr"),
+    ("尿素氮", "尿素", "bun"),
+    ("尿酸", "ua"),
+    ("总胆红素", "直接胆红素", "间接胆红素", "胆红素", "tbil", "dbil", "ibil"),
+    ("谷丙转氨酶", "丙氨酸氨基转移酶", "alt"),
+    ("谷草转氨酶", "天门冬氨酸氨基转移酶", "ast"),
+    ("白蛋白", "总蛋白", "alb"),
+    ("淀粉酶", "amy"),
+    ("肌钙蛋白t", "肌钙蛋白i", "超敏肌钙蛋白", "肌钙蛋白", "ctnt", "ctni", "tnt", "tni"),
+    ("脑钠肽", "nt-probnp", "probnp", "bnp"),
+    ("降钙素原", "pct"),
+    ("超敏c反应蛋白", "c反应蛋白", "超敏crp", "crp"),
+    ("体温", "心率", "脉搏", "呼吸频率", "血压", "收缩压", "舒张压", "血氧", "尿量", "bp", "hr", "rr"),
+)
+
+
+def _compile_lab_label_pattern(label: str) -> re.Pattern[str]:
+    if label == "钾":
+        return re.compile(r"(?<!氯化)(?<!枸橼酸)(?<!门冬氨酸)(?<!磷酸)(?<!补)(?<!降)钾")
+    if label == "钠":
+        return re.compile(r"(?<!碳酸氢)(?<!氯化)(?<!补)(?<!降)钠")
+    if label == "钙":
+        return re.compile(r"(?<!葡萄糖酸)(?<!氯化)(?<!补)(?<!降)钙")
+    if label == "氯":
+        return re.compile(r"氯(?!化钾|化钠|化钙)")
+    if label == "葡萄糖":
+        return re.compile(r"葡萄糖(?!酸钙)")
+    if label in {"k", "na", "cl", "ca"}:
+        return re.compile(rf"(?<![a-z0-9]){re.escape(label)}(?=\s*[:：=]?\s*(?:\d|$))")
+    if label.isascii():
+        escaped = re.escape(label)
+        if label[-1].isdigit():
+            return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
+        return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z])")
+    return re.compile(re.escape(label))
+
+
+_CRITICAL_VALUE_COMPILED_LAB_LABEL_GROUPS: tuple[
+    tuple[tuple[str, ...], tuple[re.Pattern[str], ...]], ...
+] = tuple(
+    (group, tuple(_compile_lab_label_pattern(label) for label in group))
+    for group in _CRITICAL_VALUE_LAB_LABEL_GROUPS
 )
 _EMPTY_DISCHARGE_ORDER_TEMPLATE_PATTERN = re.compile(
     r"(?:随访方式|随访周期|随访日期|出院医嘱|出院带药|注意事项)\s*[:：]?"
@@ -881,21 +987,102 @@ def _text_mentions_critical_keyword(lower_text: str, keywords: Sequence[str]) ->
     return False
 
 
+def _lab_label_group_matches_keywords(
+    group: tuple[str, ...],
+    lower_keywords: frozenset[str],
+) -> bool:
+    for alias in group:
+        if alias in lower_keywords:
+            return True
+        if not alias.isascii() and len(alias) >= 2:
+            if any(
+                not kw.isascii() and len(kw) >= 2 and (kw in alias or alias in kw)
+                for kw in lower_keywords
+            ):
+                return True
+    return False
+
+
 def _text_mentions_critical_result_value(
     text: str,
     lower_text: str,
     tokens: Sequence[str],
     keywords: Sequence[str],
 ) -> bool:
+    lower_keywords = frozenset(kw.lower() for kw in keywords if kw)
+    target_patterns: list[re.Pattern[str]] = []
+    other_patterns: list[re.Pattern[str]] = []
+    for group, patterns in _CRITICAL_VALUE_COMPILED_LAB_LABEL_GROUPS:
+        if _lab_label_group_matches_keywords(group, lower_keywords):
+            target_patterns.extend(patterns)
+        else:
+            other_patterns.extend(patterns)
+    # 补充未纳入标准分组的罕见项目关键词（排除“补钾/降钾”等动作词）。
+    action_only = frozenset({"补钾", "降钾", "纠酸", "贫血", "凝血", "酸中毒", "碱中毒", "低氧"})
+    covered_aliases = {
+        alias
+        for group, _patterns in _CRITICAL_VALUE_COMPILED_LAB_LABEL_GROUPS
+        if _lab_label_group_matches_keywords(group, lower_keywords)
+        for alias in group
+    }
+    for kw in lower_keywords:
+        if kw in action_only or kw in covered_aliases or len(kw) < 2:
+            continue
+        target_patterns.append(_compile_lab_label_pattern(kw))
+
     for token in tokens:
         pattern = re.compile(rf"(?<![\d.]){re.escape(token)}(?![\d.])")
         for match in pattern.finditer(text):
+            start, end = match.start(), match.end()
+            # 排除时钟（如 08:25）与日期字段及药品剂量/时长单位（如 2.5g / 15ml / 2.5小时）。
+            if (start > 0 and text[start - 1] in ":：") or (end < len(text) and text[end] in ":："):
+                continue
+            if (
+                start > 0
+                and end < len(text)
+                and text[start - 1] in "-/"
+                and text[end] in "-/"
+            ):
+                continue
+            following = lower_text[end: min(len(lower_text), end + 12)]
+            if _CRITICAL_VALUE_NON_LAB_UNIT_PATTERN.match(following):
+                continue
+
+            # 取同一句内紧邻该数值之前的局部窗口，核验最近的项目标签归属，
+            # 防止“血钾 2.8，已补钾，血糖 2.5 mmol/L”把血糖的 2.5 误计入另一份血钾 2.5 报告。
+            window_start = max(0, start - 60)
+            preceding_raw = lower_text[window_start:start]
+            last_sent_end = -1
+            for boundary in _CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN.finditer(preceding_raw):
+                last_sent_end = boundary.end()
+            if last_sent_end >= 0:
+                window_start += last_sent_end
+            preceding = lower_text[window_start:start]
+
+            last_target_end = -1
+            for pat in target_patterns:
+                for hit in pat.finditer(preceding):
+                    if hit.end() > last_target_end:
+                        last_target_end = hit.end()
+
+            last_other_end = -1
+            for pat in other_patterns:
+                for hit in pat.finditer(preceding):
+                    if hit.end() > last_other_end:
+                        last_other_end = hit.end()
+
+            # 若紧邻该数值之前最近的项目标签属于其他检验/体征项目，则该数值不属于目标项目。
+            if last_other_end > last_target_end:
+                continue
+
             # 含小数点或两位数以上的数值边界匹配可靠；个位数需邻近项目关键词或检验单位。
             if "." in token or len(token) >= 2:
                 return True
-            window = lower_text[max(0, match.start() - 28): min(len(lower_text), match.end() + 20)]
-            if _text_mentions_critical_keyword(window, keywords) or re.search(
-                r"(?:×|x|\*)\s*10|10\^|mmol|g/l|u/l|mmhg|kpa|/l", window
+            window = lower_text[max(window_start, start - 28): min(len(lower_text), end + 20)]
+            if (
+                last_target_end >= 0
+                or _text_mentions_critical_keyword(window, keywords)
+                or re.search(r"(?:×|x|\*)\s*10|10\^|mmol|g/l|u/l|mmhg|kpa|/l", window)
             ):
                 return True
     return False
@@ -908,12 +1095,54 @@ def _normalize_critical_value_number_text(text: str) -> str:
 
 
 def _has_affirmative_critical_value_handling(body: str) -> bool:
-    """判定病程正文是否包含明确的危急值临床处置/评估动作，排除未处理/待处理记录。"""
+    """逐分句判定病程正文是否包含明确的已执行危急值临床处置/评估动作。
+
+    - 排除未处理/待处理分句（如“尚未处理”“等待医师”），但不让前句既往未处理
+      否定后句明确已执行处置（如“当时尚未处理；10:20 已静脉补钾”）；
+    - 排除同分句否定处置（如“未予补钾”“拒绝输血”）与条件/假设性计划
+      （如“若再次下降再予补钾”“必要时复查”）。
+    """
 
     cleaned = _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body)
-    if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(cleaned):
-        return False
-    return bool(_CRITICAL_VALUE_HANDLING_ACTION_PATTERN.search(cleaned))
+    for sentence in _CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN.split(cleaned):
+        sentence_text = sentence.strip()
+        if not sentence_text:
+            continue
+        conditional_open = False
+        for clause in _CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN.split(sentence_text):
+            clause_text = clause.strip()
+            if not clause_text:
+                continue
+            if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(clause_text):
+                conditional_open = False
+                continue
+            if conditional_open:
+                if _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text):
+                    conditional_open = False
+                else:
+                    # 承接前分句条件（如“若再次下降，再予补钾”），不作为已执行处置。
+                    if not _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text):
+                        conditional_open = False
+                    continue
+            clause_is_conditional_opener = bool(
+                _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text)
+            )
+            matched_affirmative = False
+            for match in _CRITICAL_VALUE_HANDLING_ACTION_PATTERN.finditer(clause_text):
+                prefix = clause_text[: match.start()]
+                if _CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN.search(prefix):
+                    continue
+                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
+                completed = tuple(_CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN.finditer(prefix))
+                if negations and (not completed or negations[-1].start() > completed[-1].start()):
+                    continue
+                matched_affirmative = True
+                break
+            if matched_affirmative:
+                return True
+            if clause_is_conditional_opener:
+                conditional_open = True
+    return False
 
 
 def _text_mentions_critical_report_clock(body: str, report_time: datetime) -> bool:
@@ -1810,53 +2039,97 @@ def _has_authorized_special_antimicrobial_expert(text: str) -> bool:
 
 
 def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
-    """同意引文本身或其紧邻前文须出现授权专家身份，不能借同文书其他段落的专家署名。"""
+    """同意引文本身或其紧邻前文须出现授权专家身份，不能借同文书其他段落或非授权发言人的意见。"""
 
     if "本病人建议使用" in quote:
         return False
     position = text.find(quote)
     if position < 0:
         return False
+    quote_end = position + len(quote)
+    prefix_text = text[:quote_end]
+
+    def _span_has_no_speaker_switch(header_start: int, header_end: int, *, allow_prefix_before_header: bool) -> bool:
+        if header_end > quote_end:
+            return False
+        if header_start > position:
+            if not allow_prefix_before_header:
+                return False
+            prefix_in_quote = text[position:header_start]
+            if (
+                "使用目的为" in prefix_in_quote
+                or "\n\n" in prefix_in_quote
+                or _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(prefix_in_quote)
+            ):
+                return False
+            if not text[header_end:quote_end].strip():
+                return False
+        span_after_header = text[header_end:quote_end]
+        if "\n\n" in span_after_header:
+            return False
+        return not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(span_after_header)
+
     # 身份优先看引文及其前80字：感染科副主任医师意见中“请临床药学会诊后同意加用”仍出自授权专家（C04）；
-    # 无授权专家署名的药学会诊或用药申请单文字不能借同文书其他段落的署名（C05）。
-    short_context = text[max(0, position - 80): position + len(quote)]
-    if (
-        _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN.search(short_context)
-        or _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN.search(short_context)
-        or _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN.search(short_context)
-        or any(marker in short_context for marker in _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS)
+    # 无授权专家署名的药学会诊、用药申请单文字，或专家意见之后切换为临床药师/其他非授权发言人，均严格拒绝（C05）。
+    short_start = max(0, position - 80)
+    short_context = text[short_start:quote_end]
+    for pattern in (
+        _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN,
+        _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN,
+        _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN,
     ):
-        return True
+        for match in pattern.finditer(short_context):
+            header_start = short_start + match.start()
+            header_end = short_start + match.end()
+            if position <= header_end + 80 and _span_has_no_speaker_switch(
+                header_start, header_end, allow_prefix_before_header=True
+            ):
+                return True
+    for marker in _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS:
+        search_from = 0
+        while True:
+            idx = short_context.find(marker, search_from)
+            if idx < 0:
+                break
+            header_start = short_start + idx
+            header_end = header_start + len(marker)
+            if position <= header_end + 80 and _span_has_no_speaker_switch(
+                header_start, header_end, allow_prefix_before_header=True
+            ):
+                return True
+            search_from = idx + len(marker)
     # 医院抗生素使用权限专项会诊（如 ICU 主任医师会诊后粘贴培养药敏再写“故同意使用”）
-    # 在同一会诊意见段落内可达 ~160 字；若中间出现新用药申请段则不跨段借用（保护 C05）。
+    # 在同一会诊意见段落内可达 ~160 字；若中间出现新用药申请段或切换非授权发言人则不跨段借用（保护 C05）。
     extended_start = max(0, position - 160)
-    extended_context = text[extended_start: position + len(quote)]
+    extended_context = text[extended_start:quote_end]
     for pattern in (
         _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN,
         _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN,
     ):
         for match in pattern.finditer(extended_context):
-            between = extended_context[match.end(): position - extended_start]
-            if "本病人建议使用" not in between and "\n\n" not in between:
+            header_start = extended_start + match.start()
+            header_end = extended_start + match.end()
+            if position <= header_end + 160 and _span_has_no_speaker_switch(
+                header_start, header_end, allow_prefix_before_header=True
+            ):
                 return True
     # 电子特殊级抗菌药申请单（常无 document_title）紧接副主任/主任医师会诊意见，
     # 允许“本病人建议使用…使用目的为…”在会诊意见前文出现，也允许引文以该副高/主任医师署名起头，
-    # 但引文本身不得为申请段且专家落款不得晚于引文结尾。
-    prefix_text = text[: position + len(quote)]
+    # 但引文本身不得为申请段且专家落款不得晚于引文结尾，且落款至引文结尾不得切换为非授权发言人。
     for match in _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN.finditer(prefix_text):
         speaker_start = match.start("speaker")
-        if speaker_start <= position <= match.end() + 160 and match.end() <= position + len(quote):
-            between = text[match.end(): position] if position > match.end() else ""
-            if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
-                return True
+        if speaker_start <= position <= match.end() + 160 and _span_has_no_speaker_switch(
+            speaker_start, match.end(), allow_prefix_before_header=False
+        ):
+            return True
     # 正式《请会诊执行记录》中邀请感染科/ICU医师协助诊治（正文中常粘贴数百字影像与检验摘要后再写给药建议）；
     # 同一会诊意见内未切换至申请段或非授权发言人时，归属该受邀专项医师（允许引文以邀请/会诊落款起头）。
     if "请会诊执行记录" in text:
         for match in _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN.finditer(prefix_text):
-            if match.start() <= position <= match.end() + 600 and match.end() <= position + len(quote):
-                between = text[match.end(): position] if position > match.end() else ""
-                if "\n\n" not in between and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(between):
-                    return True
+            if match.start() <= position <= match.end() + 600 and _span_has_no_speaker_switch(
+                match.start(), match.end(), allow_prefix_before_header=False
+            ):
+                return True
     return False
 
 

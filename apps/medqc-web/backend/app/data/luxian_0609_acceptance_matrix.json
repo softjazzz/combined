@@ -960,7 +960,7 @@
       ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
           "documents": [
@@ -981,7 +981,7 @@
           "evaluation_unknown",
           "not_executed"
         ],
-        "max_llm_calls_per_rule": 1
+        "max_llm_calls_per_rule": 2
       }
     },
     {
@@ -1324,7 +1324,7 @@
       ],
       "expected_executor": "course_quality",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
           "documents": [
@@ -1343,7 +1343,7 @@
           "evaluation_unknown",
           "not_executed"
         ],
-        "max_llm_calls_per_rule": 1
+        "max_llm_calls_per_rule": 2
       }
     },
     {
@@ -1392,7 +1392,7 @@
       ],
       "expected_executor": "tumor_pathology",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "semantic_contract": {
         "minimal_input": {
           "documents": [
@@ -1412,7 +1412,7 @@
           "evaluation_unknown",
           "not_executed"
         ],
-        "max_llm_calls_per_rule": 1
+        "max_llm_calls_per_rule": 2
       }
     },
     {

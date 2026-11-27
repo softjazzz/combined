@@ -85,15 +85,21 @@ def _date_value(value: Any) -> date | None:
     return moment.date() if moment is not None else parse_authoritative_date(value)
 
 
+_NON_CURRENT_TRANSFER_STATES = frozenset({"historical", "other_event"})
+
+
 def _candidate_for_order(
     row: Mapping[str, Any], *, order_time: datetime
 ) -> _TransferRecordCandidate:
-    # transfer_date 描述转科事件发生日期，优先用于排除既往住院转科。
-    # 即使文书后来补录、record_time 较新，也不能让历史事件满足本次医嘱。
+    # transfer_date 描述转科事件发生日期，优先用于排除既往或未来其他转科事件：
+    # 即使文书补录或 record_time 落在本次医嘱之后，显式标注不同日期的记录也不能满足本次医嘱。
     transfer_date_value = row.get("transfer_date")
     transfer_date = _date_value(transfer_date_value)
-    if transfer_date is not None and transfer_date < order_time.date():
-        return _TransferRecordCandidate("historical", row=row)
+    if transfer_date is not None:
+        if transfer_date < order_time.date():
+            return _TransferRecordCandidate("historical", row=row)
+        if transfer_date > order_time.date():
+            return _TransferRecordCandidate("other_event", row=row)
 
     document_value = authoritative_document_time_value(row)
     document_time = _precise_datetime(document_value)
@@ -107,7 +113,7 @@ def _candidate_for_order(
         return _TransferRecordCandidate("time_unknown", row=row)
 
     # transfer_date 是兼容字段。仅日期不能证明同日先后及24小时边界；
-    # 但明确早于医嘱日期的记录可排除为历史记录。
+    # 但明确异于医嘱日期的记录已在上方排除。
     transfer_date_time = _precise_datetime(transfer_date_value)
     if transfer_date_time is not None:
         return _TransferRecordCandidate(
@@ -153,12 +159,16 @@ def _record_state(
     if len(current) > 1:
         return "multiple", None, tuple(item.row for item in current)
     if current and has_unknown:
-        return "time_unknown", None, tuple(item.row for item in candidates if item.state != "historical")
+        return "time_unknown", None, tuple(
+            item.row for item in candidates if item.state not in _NON_CURRENT_TRANSFER_STATES
+        )
     if current:
         return "matched", current[0].record_time, (current[0].row,)
     if has_unknown:
         return "time_unknown", None, tuple(item.row for item in candidates if item.state == "time_unknown")
-    return "historical", None, ()
+    if any(item.state == "historical" for item in candidates):
+        return "historical", None, ()
+    return "other_event", None, ()
 
 
 def _unique_order_time(row: Mapping[str, Any]) -> tuple[datetime | None, bool]:
@@ -274,10 +284,14 @@ def _display_facts(
         )
     if rule_id == "LX0609-10-02-02":
         facts["transfer_in_associated"] = (
-            True if transfer_in_state == "matched" else False if transfer_in_state in {"missing", "historical"} else None
+            True if transfer_in_state == "matched"
+            else False if transfer_in_state in {"missing", *_NON_CURRENT_TRANSFER_STATES}
+            else None
         )
         facts["transfer_out_associated"] = (
-            True if transfer_out_state == "matched" else False if transfer_out_state in {"missing", "historical"} else None
+            True if transfer_out_state == "matched"
+            else False if transfer_out_state in {"missing", *_NON_CURRENT_TRANSFER_STATES}
+            else None
         )
     return facts
 
@@ -394,11 +408,13 @@ def evaluate_transfer_documentation(
                     for selected_rows in out_records_by_event:
                         selected_rows.append(row)
                     continue
+                row_transfer_date = _date_value(row.get("transfer_date"))
                 normal = next((index for index in reversed(range(len(grouped)))
                                if _candidate_for_order(row, order_time=grouped[index][0]).state == "current"), None)
                 early_indexes = [index for index, (start, order) in enumerate(grouped)
                                  if start - timedelta(hours=24) <= moment < start
-                                 and _departments_correspond(row, order)]
+                                 and _departments_correspond(row, order)
+                                 and (row_transfer_date is None or row_transfer_date == start.date())]
                 if len(early_indexes) > 1 or (early_indexes and normal is not None
                         and _departments_correspond(row, grouped[normal][1])):
                     return outcome("data_gap", "association_failed", {
@@ -411,7 +427,6 @@ def evaluate_transfer_documentation(
                     and not any(_clean(row.get(field)) for field in ("transferin_department", "transferout_department"))
                     and (normal is None or moment > grouped[normal][0] + timedelta(hours=24))
                 ):
-                    row_transfer_date = _date_value(row.get("transfer_date"))
                     near_early_indexes = [
                         index
                         for index, (start, _order) in enumerate(grouped)
@@ -420,7 +435,11 @@ def evaluate_transfer_documentation(
                     ]
                     if len(near_early_indexes) == 1:
                         owner = near_early_indexes[0]
-                if owner is None and grouped[0][0] - timedelta(hours=24) <= moment < grouped[0][0]:
+                if (
+                    owner is None
+                    and grouped[0][0] - timedelta(hours=24) <= moment < grouped[0][0]
+                    and (row_transfer_date is None or row_transfer_date == grouped[0][0].date())
+                ):
                     owner = 0
                 if owner is not None:
                     out_records_by_event[owner].append(row)
@@ -500,7 +519,7 @@ def evaluate_transfer_documentation(
     states = (transfer_in_state, transfer_out_state)
     if "multiple" in states:
         return outcome("data_gap", "association_failed", facts)
-    if "missing" in states or "historical" in states:
+    if any(state in {"missing", *_NON_CURRENT_TRANSFER_STATES} for state in states):
         if rule_id == "LX0609-10-02-01":
             window_mature, window_error = _transfer_window_state(
                 order_time=order_time,
