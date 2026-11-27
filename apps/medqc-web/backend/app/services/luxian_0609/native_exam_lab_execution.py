@@ -1781,6 +1781,72 @@ def _single_text_fact_outcome(
     )
 
 
+def _partition_lx010_events_with_anchor_gaps(
+    projection: ExamLabTextProjection,
+) -> tuple[dict[int, ExamLabEventFact], tuple[int, ...]]:
+    """对含锚点时间冲突/缺失的 06-01-02 多事件做逐事件隔离拆分。
+
+    有锚点冲突、24h 豁免、CT 引导操作、缺锚点时间或 48h 窗口内零候选病程的事件
+    均在 Python 侧直接生成事件级事实（不调用 LLM）；仅有窗口内候选病程或待确认
+    目标的事件才进入受控语义抽取，确保冲突事件不会遮蔽其他事件已确认的
+    non_compliant 缺陷，也不会让未决冲突事件被误判为合规。
+    """
+
+    deterministic: dict[int, ExamLabEventFact] = {}
+    semantic_positions: list[int] = []
+    for position, event in enumerate(events_for_family(projection, "exam"), start=1):
+        if not event.target_confirmed:
+            semantic_positions.append(position)
+            continue
+        if exam_reason_anchor_has_conflict(event):
+            deterministic[position] = ExamLabEventFact(
+                rule_id="LX0609-06-01-02",
+                applicability="unknown",
+                semantic_state="unknown",
+                positive_state="not_relevant",
+                course_doc_refs=(),
+                evidence_refs=event.document_refs,
+                event_position=position,
+            )
+        elif event.within_admission_window or event.guidance_only:
+            deterministic[position] = ExamLabEventFact(
+                rule_id="LX0609-06-01-02",
+                applicability="not_applicable",
+                semantic_state="absent",
+                positive_state="not_relevant",
+                course_doc_refs=(),
+                evidence_refs=event.document_refs,
+                event_position=position,
+            )
+        elif exam_reason_anchor_time(event) is None:
+            deterministic[position] = ExamLabEventFact(
+                rule_id="LX0609-06-01-02",
+                applicability="applicable",
+                semantic_state="unknown",
+                positive_state="not_relevant",
+                course_doc_refs=(),
+                evidence_refs=event.document_refs,
+                event_position=position,
+            )
+        elif not _course_refs_for_rule_event(
+            projection,
+            rule_id="LX0609-06-01-02",
+            event_position=position,
+        ):
+            deterministic[position] = ExamLabEventFact(
+                rule_id="LX0609-06-01-02",
+                applicability="applicable",
+                semantic_state="absent",
+                positive_state="not_relevant",
+                course_doc_refs=(),
+                evidence_refs=event.document_refs,
+                event_position=position,
+            )
+        else:
+            semantic_positions.append(position)
+    return deterministic, tuple(semantic_positions)
+
+
 def _text_fact_outcome(
     *,
     rule_id: str,
@@ -3207,6 +3273,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 except ValueError:
                     projection = None
                     projection_gap_reason = "course_projection_incomplete"
+            lx010_partial_semantic: tuple[dict[int, ExamLabEventFact], tuple[int, ...]] | None = None
             if projection is not None:
                 scope_complete = evidence_materials.permits_absence("daily_course_record")
                 projection = replace(projection, course_scope_complete=scope_complete)
@@ -3301,24 +3368,155 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         )
                         typed_processed.add(rule_id)
                     elif rule_id == "LX0609-06-01-02" and any(
-                        event.target_confirmed and exam_reason_anchor_has_conflict(event)
+                        event.target_confirmed
+                        and (
+                            exam_reason_anchor_has_conflict(event)
+                            or (
+                                not event.within_admission_window
+                                and not event.guidance_only
+                                and exam_reason_anchor_time(event) is None
+                            )
+                        )
                         for event in events
                     ):
-                        # 锚点时间存在冲突时必须先降级为时间冲突资料缺口，绝不可被 24h 豁免遮蔽。
-                        safe_refs = projection.safe_refs or {}
-                        emit_typed(
-                            rule_id,
-                            "data_gap",
-                            "multiple_event_or_time_conflict",
-                            fact_refs=tuple(dict.fromkeys(
-                                safe_refs[ref]
-                                for event in events
-                                if event.target_confirmed and exam_reason_anchor_has_conflict(event)
-                                for ref in event.document_refs
-                                if ref in safe_refs
-                            )),
+                        # 锚点时间冲突或缺失按逐事件隔离判定：冲突事件不得遮蔽其他无冲突
+                        # 事件已确认的 non_compliant 缺陷，也不得被 24h 豁免或其他合规事件遮蔽。
+                        det_facts, sem_positions = _partition_lx010_events_with_anchor_gaps(
+                            projection
                         )
-                        typed_processed.add(rule_id)
+                        if not sem_positions:
+                            facts = tuple(
+                                det_facts[pos] for pos in range(1, len(events) + 1)
+                            )
+                            outcome = _text_fact_outcome(
+                                rule_id=rule_id,
+                                facts=facts,
+                                projection=projection,
+                            )
+                            emit_typed(
+                                rule_id,
+                                outcome.status,
+                                outcome.reason_code,
+                                outcome.fact_refs,
+                                display_facts=_display_facts_for_text_outcome(
+                                    rule_id=rule_id,
+                                    facts=facts,
+                                    projection=projection,
+                                    outcome=outcome,
+                                ),
+                            )
+                            typed_processed.add(rule_id)
+                        elif projection.course_projection_truncated:
+                            det_outcomes = tuple(
+                                _single_text_fact_outcome(
+                                    rule_id=rule_id,
+                                    fact=det_facts[pos],
+                                    projection=projection,
+                                )
+                                for pos in sorted(det_facts)
+                            )
+                            conflict_outcome = next(
+                                (
+                                    item
+                                    for item in det_outcomes
+                                    if item.reason_code == "multiple_event_or_time_conflict"
+                                ),
+                                None,
+                            )
+                            if conflict_outcome is not None:
+                                emit_typed(
+                                    rule_id,
+                                    "data_gap",
+                                    "multiple_event_or_time_conflict",
+                                    conflict_outcome.fact_refs,
+                                )
+                            else:
+                                emit_typed(
+                                    rule_id, "data_gap", "course_projection_incomplete"
+                                )
+                            typed_processed.add(rule_id)
+                        elif llm_client is None:
+                            det_outcomes = {
+                                pos: _single_text_fact_outcome(
+                                    rule_id=rule_id,
+                                    fact=fact,
+                                    projection=projection,
+                                )
+                                for pos, fact in det_facts.items()
+                            }
+                            if any(
+                                item.status == "non_compliant"
+                                for item in det_outcomes.values()
+                            ):
+                                merged_facts = dict(det_facts)
+                                for pos in sem_positions:
+                                    merged_facts[pos] = ExamLabEventFact(
+                                        rule_id=rule_id,
+                                        applicability="unknown",
+                                        semantic_state="unknown",
+                                        positive_state="not_relevant",
+                                        course_doc_refs=(),
+                                        evidence_refs=events[pos - 1].document_refs,
+                                        event_position=pos,
+                                    )
+                                facts = tuple(
+                                    merged_facts[pos]
+                                    for pos in range(1, len(events) + 1)
+                                )
+                                outcome = _text_fact_outcome(
+                                    rule_id=rule_id,
+                                    facts=facts,
+                                    projection=projection,
+                                )
+                                emit_typed(
+                                    rule_id,
+                                    outcome.status,
+                                    outcome.reason_code,
+                                    outcome.fact_refs,
+                                    display_facts=_display_facts_for_text_outcome(
+                                        rule_id=rule_id,
+                                        facts=facts,
+                                        projection=projection,
+                                        outcome=outcome,
+                                    ),
+                                )
+                            else:
+                                gap_outcomes = tuple(
+                                    det_outcomes[pos]
+                                    for pos in sorted(det_outcomes)
+                                    if det_outcomes[pos].status == "data_gap"
+                                )
+                                if not gap_outcomes:
+                                    emit_typed(
+                                        rule_id,
+                                        "technical_error",
+                                        "exam_lab_llm_failure",
+                                    )
+                                else:
+                                    primary_gap = next(
+                                        (
+                                            item
+                                            for item in gap_outcomes
+                                            if item.reason_code
+                                            == "multiple_event_or_time_conflict"
+                                        ),
+                                        gap_outcomes[0],
+                                    )
+                                    emit_typed(
+                                        rule_id,
+                                        "data_gap",
+                                        primary_gap.reason_code,
+                                        tuple(
+                                            dict.fromkeys(
+                                                ref
+                                                for item in gap_outcomes
+                                                for ref in item.fact_refs
+                                            )
+                                        ),
+                                    )
+                            typed_processed.add(rule_id)
+                        else:
+                            lx010_partial_semantic = (det_facts, sem_positions)
                     elif rule_id == "LX0609-06-01-02" and events and all(
                         event.target_confirmed and event.within_admission_window
                         for event in events
@@ -3337,20 +3535,11 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             )),
                         )
                         typed_processed.add(rule_id)
-                    elif any(
+                    elif rule_id != "LX0609-06-01-02" and any(
                         event.target_confirmed
                         and (
-                            (
-                                rule_id == "LX0609-06-01-02"
-                                and exam_reason_anchor_time(event) is None
-                            )
-                            or (
-                                rule_id != "LX0609-06-01-02"
-                                and (
-                                    "report_time" in event.conflict_roles
-                                    or event.report_time is None
-                                )
-                            )
+                            "report_time" in event.conflict_roles
+                            or event.report_time is None
                         )
                         for event in events
                     ):
@@ -3358,9 +3547,7 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         emit_typed(
                             rule_id,
                             "data_gap",
-                            "authoritative_time_missing"
-                            if rule_id == "LX0609-06-01-02"
-                            else "authoritative_report_time_missing",
+                            "authoritative_report_time_missing",
                         )
                         typed_processed.add(rule_id)
                     elif projection.course_projection_truncated:
@@ -3369,6 +3556,108 @@ async def execute_luxian_0609_native_exam_lab_rules(
                     else:
                         semantic_rule_ids.append(rule_id)
                 eligible_rule_ids = semantic_rule_ids
+            if lx010_partial_semantic is not None and projection is not None:
+                det_facts, sem_positions = lx010_partial_semantic
+                exam_events = events_for_family(projection, "exam")
+                sub_batch = select_exam_lab_projection_batch(
+                    projection,
+                    tuple(("exam", pos) for pos in sem_positions),
+                )
+                sub_batches: tuple[ExamLabProjectionBatch, ...] = ()
+                if projection_batches:
+                    sub_pos_by_global = {
+                        global_pos: local_pos
+                        for (_, local_pos), global_pos in sub_batch.event_positions.items()
+                    }
+                    filtered_sub_batches: list[ExamLabProjectionBatch] = []
+                    for batch in projection_batches:
+                        filtered_keys = tuple(
+                            ("exam", sub_pos_by_global[global_pos])
+                            for (family, _), global_pos in sorted(batch.event_positions.items())
+                            if family == "exam" and global_pos in sub_pos_by_global
+                        )
+                        if filtered_keys:
+                            filtered_sub_batches.append(
+                                select_exam_lab_projection_batch(
+                                    sub_batch.projection,
+                                    filtered_keys,
+                                )
+                            )
+                    sub_batches = tuple(filtered_sub_batches)
+                if not sub_batch.projection.context:
+                    emit_typed("LX0609-06-01-02", "data_gap", projection_gap_reason)
+                    typed_processed.add("LX0609-06-01-02")
+                else:
+                    partial_result, partial_requested = await _extract_exam_lab_batches(
+                        projection=sub_batch.projection,
+                        batches=sub_batches,
+                        eligible_rule_ids=("LX0609-06-01-02",),
+                        llm_client=llm_client,
+                    )
+                    model_rule_count += partial_requested
+                    llm_call_count += partial_result.llm_call_count
+                    prompt_tokens += partial_result.prompt_tokens
+                    completion_tokens += partial_result.completion_tokens
+                    total_tokens += partial_result.total_tokens
+                    api_time += partial_result.api_time
+                    first_success_count += partial_result.first_success_count
+                    retried_rule_count += partial_result.retried_rule_count
+                    recovered_rule_count += partial_result.recovered_rule_count
+                    parse_failure_kinds.extend(partial_result.parse_failure_kinds)
+                    if (
+                        partial_result.facts is None
+                        or "LX0609-06-01-02" in partial_result.rule_failures
+                    ):
+                        partial_outcome = _ExamLabOutcome(
+                            "LX0609-06-01-02",
+                            "technical_error",
+                            partial_result.budget_rule_failures.get("LX0609-06-01-02")
+                            or (
+                                "exam_lab_llm_failure"
+                                if "LX0609-06-01-02" in partial_result.transport_rule_ids
+                                else "exam_lab_llm_invalid_output"
+                            ),
+                        )
+                        emit_typed(
+                            "LX0609-06-01-02",
+                            partial_outcome.status,
+                            partial_outcome.reason_code,
+                            partial_outcome.fact_refs,
+                        )
+                    else:
+                        merged_facts = dict(det_facts)
+                        for fact in partial_result.facts:
+                            if fact.rule_id != "LX0609-06-01-02":
+                                continue
+                            global_pos = sub_batch.event_positions[
+                                ("exam", fact.event_position)
+                            ]
+                            merged_facts[global_pos] = replace(
+                                fact, event_position=global_pos
+                            )
+                        all_facts = tuple(
+                            merged_facts[pos]
+                            for pos in range(1, len(exam_events) + 1)
+                            if pos in merged_facts
+                        )
+                        partial_outcome = _text_fact_outcome(
+                            rule_id="LX0609-06-01-02",
+                            facts=all_facts,
+                            projection=projection,
+                        )
+                        emit_typed(
+                            "LX0609-06-01-02",
+                            partial_outcome.status,
+                            partial_outcome.reason_code,
+                            partial_outcome.fact_refs,
+                            display_facts=_display_facts_for_text_outcome(
+                                rule_id="LX0609-06-01-02",
+                                facts=all_facts,
+                                projection=projection,
+                                outcome=partial_outcome,
+                            ),
+                        )
+                    typed_processed.add("LX0609-06-01-02")
             if (
                 "LX0609-06-01-05" in eligible_rule_ids
                 and projection is not None

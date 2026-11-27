@@ -96,7 +96,7 @@ def test_rule_contracts_include_partial_and_pending_definition_boundaries() -> N
     assert complaint_rule.pending_criteria == ()
     assert complaint_rule.pending_reason_code == ""
     assert complaint_rule.decision_authority == "program_then_optional_llm"
-    assert complaint_rule.max_llm_calls_per_rule == 1
+    assert complaint_rule.max_llm_calls_per_rule == 2
 
     copy_rule = contracts["LX0609-12-01-01"]
     assert copy_rule.decision_authority == "program_only"
@@ -405,7 +405,7 @@ def test_rule_contracts_make_current_authority_and_evidence_maturity_explicit() 
         if contract.decision_authority == "program_only"
         else contract.max_llm_calls_per_rule
         == (2 if contract.rule_id in {
-            "LX0609-03-01-04", "LX0609-03-01-05", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03", "LX0609-08-01-02",
+            "LX0609-01-01-02", "LX0609-03-01-04", "LX0609-03-01-05", "LX0609-04-02-03", "LX0609-10-03-01", "LX0609-03-02-01", "LX0609-12-02-01", "LX0609-05-01-03", "LX0609-06-02-02", "LX0609-06-02-03", "LX0609-08-01-02",
         } else 1)
         and bool(contract.prompt_version)
         for contract in contracts

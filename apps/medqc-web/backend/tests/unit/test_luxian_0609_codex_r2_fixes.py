@@ -359,18 +359,18 @@ async def test_codex_r2_2_special_antimicrobial_end_to_end_rejects_pharmacist_pa
 @pytest.mark.asyncio
 @pytest.mark.parametrize("rule_id", ["LX0609-10-02-02", "LX0609-10-02-01"])
 @pytest.mark.parametrize(
-    "record_time",
+    "record_time,transfer_date",
     [
-        "2026-06-27 09:30:00",  # 医嘱前
-        "2026-06-27 10:01:00",  # 医嘱后（Codex Round-2 精确反例）
-        "2026-06-28 08:00:00",  # 次日书写
-        None,  # 缺书写时间但显式标注次日 transfer_date，不得误判为 time_unknown
+        ("2026-06-27 09:30:00", "2026-06-28"),  # 医嘱前、书写日早于声明转科日
+        ("2026-06-27 10:01:00", "2026-06-28"),  # 医嘱后、书写日早于声明转科日（Codex Round-2 精确反例）
+        ("2026-06-29 08:00:00", "2026-06-29"),  # 超出医嘱 24h 日期边界的后续事件转科日
+        (None, "2026-06-28"),  # 缺书写时间但显式标注次日 transfer_date，不得误判为 time_unknown
     ],
 )
 async def test_codex_r2_3_single_transfer_future_transfer_date_never_satisfies_order(
-    rule_id: str, record_time: str | None
+    rule_id: str, record_time: str | None, transfer_date: str
 ) -> None:
-    out_row: dict[str, object] = {"document_id": "U-NEXT", "transfer_date": "2026-06-28"}
+    out_row: dict[str, object] = {"document_id": "U-NEXT", "transfer_date": transfer_date}
     if record_time is not None:
         out_row["record_time"] = record_time
     rows = {

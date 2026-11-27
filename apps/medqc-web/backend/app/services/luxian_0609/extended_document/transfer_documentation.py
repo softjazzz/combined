@@ -91,29 +91,35 @@ _NON_CURRENT_TRANSFER_STATES = frozenset({"historical", "other_event"})
 def _candidate_for_order(
     row: Mapping[str, Any], *, order_time: datetime
 ) -> _TransferRecordCandidate:
-    # transfer_date 描述转科事件发生日期，优先用于排除既往或未来其他转科事件：
-    # 即使文书补录或 record_time 落在本次医嘱之后，显式标注不同日期的记录也不能满足本次医嘱。
+    # transfer_date 描述转科事件发生日期，用于排除既往或超出24小时窗口的其他转科事件：
+    # 允许跨午夜转科（如 27日 23:55 医嘱、28日 00:10 书写且 transfer_date=28日），
+    # 但排除早于 transfer_date 当日书写的未来事件记录（如 27日 09:30/10:01 书写而 transfer_date=28日）
+    # 以及缺书写时间且 transfer_date 晚于医嘱日期的记录。
     transfer_date_value = row.get("transfer_date")
     transfer_date = _date_value(transfer_date_value)
     if transfer_date is not None:
         if transfer_date < order_time.date():
             return _TransferRecordCandidate("historical", row=row)
-        if transfer_date > order_time.date():
+        if transfer_date > (order_time + timedelta(hours=24)).date():
             return _TransferRecordCandidate("other_event", row=row)
 
     document_value = authoritative_document_time_value(row)
     document_time = _precise_datetime(document_value)
     if document_time is not None:
+        if transfer_date is not None and document_time.date() < transfer_date:
+            return _TransferRecordCandidate("other_event", row=row)
         return _TransferRecordCandidate(
             "historical" if document_time < order_time else "current",
             document_time,
             row,
         )
     if document_value is not None and str(document_value).strip():
+        if transfer_date is not None and transfer_date > order_time.date():
+            return _TransferRecordCandidate("other_event", row=row)
         return _TransferRecordCandidate("time_unknown", row=row)
 
     # transfer_date 是兼容字段。仅日期不能证明同日先后及24小时边界；
-    # 但明确异于医嘱日期的记录已在上方排除。
+    # 无书写时间时，显式标注晚于医嘱日期的纯日期 transfer_date 视为其他事件。
     transfer_date_time = _precise_datetime(transfer_date_value)
     if transfer_date_time is not None:
         return _TransferRecordCandidate(
@@ -121,6 +127,8 @@ def _candidate_for_order(
             transfer_date_time,
             row,
         )
+    if transfer_date is not None and transfer_date > order_time.date():
+        return _TransferRecordCandidate("other_event", row=row)
     return _TransferRecordCandidate("time_unknown", row=row)
 
 

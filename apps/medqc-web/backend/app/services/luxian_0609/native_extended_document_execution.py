@@ -299,6 +299,12 @@ _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN = re.compile(
     r"(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|药学|药剂)"
     r"[^\r\n。；;]{0,12}(?:科|部|学)[^\r\n。；;]{0,10}[：:]"
 )
+_SPECIAL_ANTIMICROBIAL_GOVERNING_NON_AUTH_PATTERN = re.compile(
+    _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.pattern
+    + r"|^\s*(?!(?:感染(?:性疾病)?科|重症医学科|ICU))[^\r\n。；;]{0,20}"
+    r"(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|药学|药剂)"
+    r"[^\r\n。；;]{0,12}(?:科|部|学)[^\r\n。；;]{0,10}[：:]"
+)
 _LAB_ORDER_CLASS_VALUES = frozenset({"检验", "检验类", "化验"})
 _LAB_ORDER_CANCELLED_STATUSES = ("取消", "作废", "撤销", "未执行")
 _LAB_ORDER_NAME_PATTERN = re.compile(
@@ -378,6 +384,30 @@ _CRITICAL_VALUE_ITEM_SYNONYMS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ..
     (("肌酐", "crea"), ("肌酐", "crea")),
     (("胆红素", "tbil", "dbil"), ("胆红素", "tbil", "dbil")),
     (("淀粉酶", "amy"), ("淀粉酶", "amy")),
+)
+_CRITICAL_VALUE_UNRELATED_TOPIC_PATTERN = re.compile(
+    r"另因|此外|另有|另予|发热|退热|退烧|降压|镇痛|失眠|助眠|安眠"
+)
+_CRITICAL_VALUE_ITEM_ACTION_KEYWORDS: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+    (("钾",), ("补钾", "降钾", "氯化钾", "泵钾", "葡萄糖酸钙", "电解质", "透析", "crrt")),
+    (("钠",), ("补钠", "降钠", "电解质", "高渗盐")),
+    (("钙",), ("补钙", "降钙", "葡萄糖酸钙", "氯化钙", "电解质")),
+    (("血小板", "plt"), ("血小板", "输血", "血常规", "出血", "止血")),
+    (("血红蛋白", "hgb", "hb"), ("红细胞", "输血", "血常规", "止血", "贫血", "出血")),
+    (("白细胞", "wbc"), ("血常规", "升白", "抗感染", "骨髓")),
+    (
+        ("活化部分凝血", "凝血活酶", "aptt", "凝血酶原", "国际标准化比值", "inr", "纤维蛋白原", "fib"),
+        ("凝血", "血浆", "冷沉淀", "输血", "止血", "出血", "维生素k"),
+    ),
+    (("ph", "酸碱度"), ("纠酸", "碳酸氢钠", "血气", "酸中毒", "碱中毒", "呼吸机", "通气", "透析", "crrt")),
+    (("氧分压", "po2", "pao2"), ("氧疗", "吸氧", "氧流量", "呼吸机", "通气", "气道", "吸痰", "血气", "低氧")),
+    (("二氧化碳分压", "pco2", "paco2"), ("呼吸机", "通气", "气道", "吸痰", "排痰", "血气", "二氧化碳")),
+    (("血糖", "葡萄糖", "glu"), ("胰岛素", "补糖", "高糖", "葡萄糖", "降糖", "血糖")),
+    (("肌钙蛋白", "ctni", "ctnt"), ("营养心肌", "抗血小板", "心电图", "心内科", "心肌", "冠脉")),
+    (("乳酸", "lac"), ("乳酸", "血气", "补液", "纠酸", "灌注", "crrt")),
+    (("肌酐", "crea"), ("透析", "crrt", "肾功", "肾内科", "利尿")),
+    (("胆红素", "tbil", "dbil"), ("护肝", "保肝", "退黄", "肝功", "胆红素")),
+    (("淀粉酶", "amy"), ("抑酸", "抑酶", "禁食", "胃肠减压", "胰腺", "淀粉酶")),
 )
 _CRITICAL_VALUE_LAB_LABEL_GROUPS: tuple[tuple[str, ...], ...] = (
     ("血钾", "钾离子", "血清钾", "钾测定", "低钾", "高钾", "k+", "k", "钾"),
@@ -1003,6 +1033,32 @@ def _lab_label_group_matches_keywords(
     return False
 
 
+def _is_clock_colon_token(text: str, start: int, end: int, token: str) -> bool:
+    """仅排除真实时钟数字（如 08:25、08:25:30、2026-06-01T08:25），保留紧跟冒号的检验值（如 血钾：6.7、pH:7.18、pCO2:71）。"""
+
+    if "." in token:
+        return False
+    if start >= 2 and text[start - 1] in ":：" and text[start - 2].isdigit():
+        digit_start = start - 2
+        while digit_start > 0 and text[digit_start - 1].isdigit():
+            digit_start -= 1
+        is_lab_code_prefix = (
+            digit_start > 0
+            and text[digit_start - 1].isascii()
+            and text[digit_start - 1].isalpha()
+            and not (
+                text[digit_start - 1] in "Tt"
+                and digit_start >= 2
+                and text[digit_start - 2].isdigit()
+            )
+        )
+        if not is_lab_code_prefix:
+            return True
+    if end + 1 < len(text) and text[end] in ":：" and text[end + 1].isdigit():
+        return True
+    return False
+
+
 def _text_mentions_critical_result_value(
     text: str,
     lower_text: str,
@@ -1034,8 +1090,9 @@ def _text_mentions_critical_result_value(
         pattern = re.compile(rf"(?<![\d.]){re.escape(token)}(?![\d.])")
         for match in pattern.finditer(text):
             start, end = match.start(), match.end()
-            # 排除时钟（如 08:25）与日期字段及药品剂量/时长单位（如 2.5g / 15ml / 2.5小时）。
-            if (start > 0 and text[start - 1] in ":：") or (end < len(text) and text[end] in ":："):
+            # 排除时钟（如 08:25）与日期字段及药品剂量/时长单位（如 2.5g / 15ml / 2.5小时），
+            # 但保留紧跟冒号的检验值（如 血钾：6.7 mmol/L、pH:7.18）。
+            if _is_clock_colon_token(text, start, end, token):
                 continue
             if (
                 start > 0
@@ -1143,6 +1200,197 @@ def _has_affirmative_critical_value_handling(body: str) -> bool:
             if clause_is_conditional_opener:
                 conditional_open = True
     return False
+
+
+def _critical_value_action_keywords_for_item_keywords(
+    keywords: Sequence[str],
+) -> tuple[str, ...]:
+    lower_keywords = tuple(kw.lower() for kw in keywords if kw)
+    action_keywords: list[str] = []
+    for triggers, actions in _CRITICAL_VALUE_ITEM_ACTION_KEYWORDS:
+        if any(
+            trigger in kw or kw in trigger
+            for trigger in triggers
+            for kw in lower_keywords
+            if len(kw) >= 2 or kw == "钾" or kw == "钠" or kw == "钙"
+        ):
+            action_keywords.extend(actions)
+    return tuple(dict.fromkeys(action_keywords))
+
+
+def _has_affirmative_handling_for_critical_event(
+    body: str,
+    lower_body: str,
+    keywords: Sequence[str],
+    tokens: Sequence[str],
+    is_crisis_doc: bool,
+    single_event: bool,
+    title: str,
+    *,
+    event_specs: Sequence[tuple[Sequence[str], Sequence[str]]] | None = None,
+    generic_single_crisis_title: bool | None = None,
+) -> bool:
+    """按目标危急值事件绑定逐句核验已执行临床处置，防止无关诊疗（如另因发热退热）误替未处置危急值。"""
+
+    specs: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+        tuple((tuple(kws), tuple(toks)) for kws, toks in event_specs)
+        if event_specs is not None
+        else ((tuple(keywords), tuple(tokens)),)
+    )
+    all_keywords = tuple(dict.fromkeys(kw for kws, _ in specs for kw in kws if kw))
+    lower_keywords = frozenset(kw.lower() for kw in all_keywords)
+    all_action_keywords = _critical_value_action_keywords_for_item_keywords(all_keywords)
+
+    other_lab_patterns: list[re.Pattern[str]] = []
+    for group, patterns in _CRITICAL_VALUE_COMPILED_LAB_LABEL_GROUPS:
+        if not _lab_label_group_matches_keywords(group, lower_keywords):
+            other_lab_patterns.extend(patterns)
+
+    allow_generic_title = (
+        generic_single_crisis_title
+        if generic_single_crisis_title is not None
+        else (
+            is_crisis_doc
+            and single_event
+            and bool(_CRITICAL_VALUE_TITLE_PATTERN.search(title))
+            and "血培养" not in body
+        )
+    )
+
+    def _mentions_item(text_chunk: str, lower_chunk: str) -> bool:
+        return any(
+            _text_mentions_critical_keyword(lower_chunk, kws)
+            for kws, _ in specs
+            if kws
+        ) or any(
+            _text_mentions_critical_result_value(text_chunk, lower_chunk, toks, kws)
+            for kws, toks in specs
+            if toks
+        )
+
+    cleaned = _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body)
+    prev_mentioned_target = False
+    prev_negated_target = False
+    any_target_negated = False
+    generic_candidate_found = False
+
+    for sentence in _CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN.split(cleaned):
+        sentence_text = sentence.strip()
+        if not sentence_text:
+            continue
+        sent_lower = sentence_text.lower()
+        sent_mentions_item = _mentions_item(sentence_text, sent_lower)
+        sent_mentions_action_kw = (
+            _text_mentions_critical_keyword(sent_lower, all_action_keywords)
+            if all_action_keywords
+            else False
+        )
+        sent_unrelated_topic = bool(_CRITICAL_VALUE_UNRELATED_TOPIC_PATTERN.search(sentence_text))
+        sent_other_lab = any(pat.search(sent_lower) for pat in other_lab_patterns)
+
+        conditional_open = False
+        sent_had_unhandled_or_negated = False
+        sent_has_valid_affirmative = False
+        sent_has_item_or_action_affirmative = False
+
+        for clause in _CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN.split(sentence_text):
+            clause_text = clause.strip()
+            if not clause_text:
+                continue
+            if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(clause_text):
+                conditional_open = False
+                sent_had_unhandled_or_negated = True
+                continue
+            if conditional_open:
+                if _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text):
+                    conditional_open = False
+                else:
+                    if not _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text):
+                        conditional_open = False
+                    continue
+
+            clause_is_conditional_opener = bool(
+                _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text)
+            )
+            clause_lower = clause_text.lower()
+            clause_mentions_item = _mentions_item(clause_text, clause_lower)
+            clause_mentions_action_kw = (
+                _text_mentions_critical_keyword(clause_lower, all_action_keywords)
+                if all_action_keywords
+                else False
+            )
+            clause_unrelated = bool(_CRITICAL_VALUE_UNRELATED_TOPIC_PATTERN.search(clause_text))
+            clause_other_lab = any(pat.search(clause_lower) for pat in other_lab_patterns)
+            clause_executed_reset = bool(
+                _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text)
+            )
+
+            clause_negated_action = False
+            clause_matched_affirmative = False
+            for match in _CRITICAL_VALUE_HANDLING_ACTION_PATTERN.finditer(clause_text):
+                prefix = clause_text[: match.start()]
+                if _CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN.search(prefix):
+                    continue
+                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
+                completed = tuple(_CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN.finditer(prefix))
+                if negations and (not completed or negations[-1].start() > completed[-1].start()):
+                    clause_negated_action = True
+                    continue
+                clause_matched_affirmative = True
+                break
+
+            if clause_negated_action and not clause_matched_affirmative:
+                sent_had_unhandled_or_negated = True
+
+            if clause_matched_affirmative:
+                # 若本分句切换至无关临床主题（如“另因发热予以退热治疗”）且未提及目标项目，严禁计数。
+                if clause_unrelated and not clause_mentions_item:
+                    continue
+                # 若本分句提及其他检验/体征且未提及目标项目或其专属处置，仅在同句未提及目标项目时跳过。
+                if clause_other_lab and not (clause_mentions_item or clause_mentions_action_kw) and not sent_mentions_item:
+                    continue
+                # 同句前文已显式否定/未处理目标项目时，仅允许目标项目/专属处置动作或明确时间/现已重置覆盖。
+                if sent_had_unhandled_or_negated and not (
+                    clause_mentions_item or clause_mentions_action_kw or clause_executed_reset
+                ):
+                    continue
+                sent_has_valid_affirmative = True
+                if clause_mentions_item or clause_mentions_action_kw:
+                    sent_has_item_or_action_affirmative = True
+            elif clause_is_conditional_opener:
+                conditional_open = True
+
+        if sent_has_valid_affirmative:
+            # (i) 本句自身提及目标项目或目标项目专属处置（且至少有一条专属分句未切至无关主题，如 ICU“镇静镇痛，继续呼吸机辅助通气”）
+            if sent_has_item_or_action_affirmative or (
+                (sent_mentions_item or sent_mentions_action_kw)
+                and not (sent_unrelated_topic and not sent_mentions_item)
+            ):
+                return True
+            # (ii) 紧接目标项目句的直接承接句：前句不得显式否定处置，且本句不得切换至无关主题或其他检验项目
+            if (
+                prev_mentioned_target
+                and not prev_negated_target
+                and not sent_unrelated_topic
+                and not sent_other_lab
+            ):
+                return True
+            # (iii) 单事件专用《危急值处理记录》标题兜底：本句不得切换无关主题/他项检验，且全篇无目标否定
+            if allow_generic_title and not sent_unrelated_topic and not sent_other_lab:
+                generic_candidate_found = True
+
+        if sent_mentions_item:
+            prev_mentioned_target = True
+            prev_negated_target = bool(sent_had_unhandled_or_negated and not sent_has_valid_affirmative)
+            if prev_negated_target:
+                any_target_negated = True
+        else:
+            if sent_had_unhandled_or_negated and not sent_has_valid_affirmative:
+                any_target_negated = True
+            prev_mentioned_target = False
+            prev_negated_target = False
+
+    return bool(allow_generic_title and generic_candidate_found and not any_target_negated)
 
 
 def _text_mentions_critical_report_clock(body: str, report_time: datetime) -> bool:
@@ -1274,11 +1522,25 @@ def _course_critical_value_disposition_refs(
                 if not (item_hit or generic_single_crisis_title):
                     continue
             else:
+                generic_single_crisis_title = False
                 # 普通日常病程/上级查房严格限定 6h 内，且必须同时命中项目关键词 + 实测危急值 + 明确临床处置动作。
                 if delta_hours > 6.0:
                     continue
                 if not (item_hit and value_hit):
                     continue
+            # 按目标危急值事件绑定逐句核验已执行处置，防止“未予补钾。另因发热予以退热治疗”借无关治疗过关。
+            if not _has_affirmative_handling_for_critical_event(
+                body,
+                lower_body,
+                tuple(event_keywords[event_id]),
+                tuple(event_tokens[event_id]),
+                is_crisis_doc,
+                single_event,
+                title,
+                event_specs=event_specs,
+                generic_single_crisis_title=generic_single_crisis_title,
+            ):
+                continue
             clock_hit = _text_mentions_critical_report_clock(body, report_time)
             candidates_by_course.setdefault(course_index, []).append(
                 (event_id, source_key, reference, disposition_time, delta_seconds, delta_hours, is_crisis_doc, value_hit, clock_hit)
@@ -2038,6 +2300,90 @@ def _has_authorized_special_antimicrobial_expert(text: str) -> bool:
     )
 
 
+def _authorized_special_antimicrobial_header_spans(
+    text: str,
+    *,
+    window_start: int,
+    quote_end: int,
+) -> tuple[tuple[int, int], ...]:
+    """返回窗口内所有真实授权专家发言人落款区间（不含“同意特殊级”等非身份短语）。"""
+
+    scan_start = max(0, window_start - 160)
+    segment = text[scan_start:quote_end]
+    spans: list[tuple[int, int]] = []
+
+    def _extend_header_tail(abs_end: int) -> int:
+        tail_match = re.match(
+            r"(?:会诊|意见|指出|建议|查房){0,2}\s*[:：]?",
+            text[abs_end:quote_end],
+        )
+        if tail_match:
+            return abs_end + tail_match.end()
+        return abs_end
+
+    for pattern in (
+        _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN,
+        _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN,
+        _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN,
+    ):
+        for match in pattern.finditer(segment):
+            spans.append(
+                (scan_start + match.start(), _extend_header_tail(scan_start + match.end()))
+            )
+    for match in _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN.finditer(text[:quote_end]):
+        spans.append((match.start("speaker"), _extend_header_tail(match.end())))
+    if "请会诊执行记录" in text:
+        for match in _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN.finditer(text[:quote_end]):
+            spans.append((match.start(), _extend_header_tail(match.end())))
+    return tuple(spans)
+
+
+def _is_governed_by_non_authorized_speaker(
+    text: str,
+    position: int,
+    quote_end: int,
+) -> bool:
+    """检查引文之前的直接支配发言人是否为非授权人员（如临床药师/药师/主治/住院/他科医师）。
+
+    若在引文前 600 字内（同段，至多回溯到空行 \\n\\n）存在非授权发言人落款，
+    且在该非授权发言人与引文起点之间（含引文起点自身携带的授权专家落款）未再出现新的授权专家落款，
+    则该引文归属非授权发言人，任何分支均不得放行。
+    """
+
+    window_start = max(0, position - 600)
+    para_break = text.rfind("\n\n", window_start, position)
+    if para_break >= 0:
+        window_start = para_break + 2
+    preceding = text[window_start:position]
+    if not preceding:
+        return False
+
+    auth_spans = _authorized_special_antimicrobial_header_spans(
+        text,
+        window_start=window_start,
+        quote_end=quote_end,
+    )
+    for match in _SPECIAL_ANTIMICROBIAL_GOVERNING_NON_AUTH_PATTERN.finditer(preceding):
+        na_start = window_start + match.start()
+        na_end = window_start + match.end()
+        # 通用换行落款分支会同时命中“\n感染科副主任医师会诊意见：”本身；若该区间即被授权专家落款覆盖则跳过。
+        if any(
+            na_start <= a_start < na_end
+            and "\n" not in text[a_end:na_end]
+            and not _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(text[a_end:na_end])
+            for a_start, a_end in auth_spans
+        ):
+            continue
+        # 若该非授权发言人之后、且不晚于引文起点（允许引文以授权专家落款起头）出现新授权专家落款，则已切换回授权专家。
+        superseded_by_auth = any(
+            na_end <= a_start <= position and a_end <= quote_end
+            for a_start, a_end in auth_spans
+        )
+        if not superseded_by_auth:
+            return True
+    return False
+
+
 def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
     """同意引文本身或其紧邻前文须出现授权专家身份，不能借同文书其他段落或非授权发言人的意见。"""
 
@@ -2047,6 +2393,9 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
     if position < 0:
         return False
     quote_end = position + len(quote)
+    # 无论引文本身是否含“同意特殊级”等支持短语，只要紧邻前文的直接支配发言人为非授权人员，立即拒绝。
+    if _is_governed_by_non_authorized_speaker(text, position, quote_end):
+        return False
     prefix_text = text[:quote_end]
 
     def _span_has_no_speaker_switch(header_start: int, header_end: int, *, allow_prefix_before_header: bool) -> bool:
@@ -2059,7 +2408,7 @@ def _special_approval_by_authorized_expert(text: str, quote: str) -> bool:
             if (
                 "使用目的为" in prefix_in_quote
                 or "\n\n" in prefix_in_quote
-                or _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN.search(prefix_in_quote)
+                or _SPECIAL_ANTIMICROBIAL_GOVERNING_NON_AUTH_PATTERN.search(prefix_in_quote)
             ):
                 return False
             if not text[header_end:quote_end].strip():
