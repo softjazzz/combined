@@ -130,6 +130,15 @@ ANALYSIS_GAP_KINDS = frozenset({"listing_only", "conclusion_without_basis", "pla
 
 _REPORT_RESULT_TEXTS_KEY = "report_result_texts"
 _EXEMPT_REASONS = frozenset({"admission_window", "guidance_only"})
+_VERIFICATION_FAILURE_REASONS = frozenset(
+    {
+        "model_transport_error",
+        "model_invalid_output",
+        "budget_exceeded",
+        "model_unavailable",
+        "verification_failed",
+    }
+)
 
 
 def _safe_exam_name(value: Any) -> str | None:
@@ -601,6 +610,7 @@ def safe_exam_lab_customer_display_facts(
                     "window_start_time",
                     "window_end_time",
                     "exempt_reason",
+                    "verification_failure_reason",
                 }
             )
         if normalized_rule_id == "LX0609-06-01-04":
@@ -630,15 +640,18 @@ def safe_exam_lab_customer_display_facts(
             by_position[item_position] = item
         if set(by_position) != set(range(1, event_count + 1)):
             return None
+        allowed_event_statuses = {
+            "compliant",
+            "non_compliant",
+            "not_applicable",
+            "data_gap",
+            "evaluation_unknown",
+        }
+        if normalized_rule_id == "LX0609-06-01-02":
+            allowed_event_statuses.add("technical_error")
         for expected_position in range(1, event_count + 1):
             item = by_position[expected_position]
-            if item.get("event_status") not in {
-                "compliant",
-                "non_compliant",
-                "not_applicable",
-                "data_gap",
-                "evaluation_unknown",
-            }:
+            if item.get("event_status") not in allowed_event_statuses:
                 return None
             safe_item: dict[str, Any] = {
                 "event_position": expected_position,
@@ -669,6 +682,14 @@ def safe_exam_lab_customer_display_facts(
                 if item_exempt_reason not in _EXEMPT_REASONS:
                     return None
                 safe_item["exempt_reason"] = item_exempt_reason
+            if "verification_failure_reason" in item:
+                item_failure_reason = item["verification_failure_reason"]
+                if (
+                    item["event_status"] != "technical_error"
+                    or item_failure_reason not in _VERIFICATION_FAILURE_REASONS
+                ):
+                    return None
+                safe_item["verification_failure_reason"] = item_failure_reason
             event_positive_state = item.get("positive_state")
             if event_positive_state is not None:
                 if event_positive_state not in {
@@ -722,6 +743,17 @@ def safe_exam_lab_customer_display_facts(
                     return None
                 safe_item[_REPORT_RESULT_TEXTS_KEY] = report_result_texts
             safe_event_results.append(safe_item)
+        if (
+            any(item["event_status"] == "technical_error" for item in safe_event_results)
+            and (
+                failure_kind != "exam_lab_requirement_not_documented"
+                or not any(
+                    item["event_status"] == "non_compliant"
+                    for item in safe_event_results
+                )
+            )
+        ):
+            return None
         if (
             verification_kind == "exam_lab_event_review_incomplete"
             and not any(
@@ -969,6 +1001,7 @@ def build_text_outcome_display_facts(
     event_results: Sequence[Mapping[str, Any]] = (),
     event_source_document_refs: Sequence[Mapping[str, str]] = (),
     include_data_gap: bool = False,
+    include_event_technical_error: bool = False,
 ) -> Mapping[str, Any] | None:
     """输出报告/检查事件、响应病程和时窗事实；仅公开受控元数据，不公开病程正文。"""
 
@@ -985,6 +1018,11 @@ def build_text_outcome_display_facts(
             and not (
                 include_data_gap
                 and status in {"data_gap", "evaluation_unknown"}
+            )
+            and not (
+                include_event_technical_error
+                and rule_id == "LX0609-06-01-02"
+                and status == "technical_error"
             )
         )
     ):
@@ -1009,7 +1047,7 @@ def build_text_outcome_display_facts(
             )
             response_count = len(matched_times)
             first_response = matched_times[0] if matched_times else None
-        elif status == "non_compliant":
+        elif status in {"non_compliant", "technical_error"}:
             window_refs = _course_refs_for_rule_event(
                 projection,
                 rule_id=rule_id,
@@ -1025,7 +1063,7 @@ def build_text_outcome_display_facts(
                 "exam_lab_requirement_not_documented"
                 if status == "non_compliant"
                 else "exam_lab_event_review_incomplete"
-                if status in {"data_gap", "evaluation_unknown"}
+                if status in {"data_gap", "evaluation_unknown", "technical_error"}
                 else "exam_lab_requirement_checked"
             ),
             "subject": "ct_mri",
@@ -1038,7 +1076,7 @@ def build_text_outcome_display_facts(
             "event_count": len(events_for_family(projection, "exam")),
             "event_position": fact.event_position,
         }
-        if status != "data_gap":
+        if status not in {"data_gap", "technical_error"}:
             facts["applicable"] = status != "not_applicable"
         if status in {"compliant", "non_compliant"}:
             facts["requirement_met"] = status == "compliant"

@@ -1540,6 +1540,7 @@ def _single_text_fact_outcome(
     rule_id: str,
     fact: ExamLabEventFact,
     projection: ExamLabTextProjection,
+    failed_semantic_reasons: Mapping[int, str] | None = None,
 ) -> _ExamLabOutcome:
     """由一个事件的语义事实和权威字段时间生成事件级结果。"""
 
@@ -1577,6 +1578,17 @@ def _single_text_fact_outcome(
         for item in selected_evidence_refs
         if item in safe_refs
     )
+    if (
+        rule_id == "LX0609-06-01-02"
+        and failed_semantic_reasons
+        and fact.event_position in failed_semantic_reasons
+    ):
+        return _ExamLabOutcome(
+            rule_id,
+            "technical_error",
+            failed_semantic_reasons[fact.event_position],
+            refs,
+        )
     if (
         rule_id in {"LX0609-06-01-04", "LX0609-06-01-05"}
         and event is not None
@@ -1781,15 +1793,68 @@ def _single_text_fact_outcome(
     )
 
 
-def _partition_lx010_events_with_anchor_gaps(
+def _normalize_lx010_verification_failure_reason(reason_code: str) -> str:
+    """将 06-01-02 语义核对失败码归一化为客户展示受控枚举。"""
+
+    normalized = str(reason_code or "").strip().lower()
+    if normalized == "exam_lab_llm_unavailable":
+        return "model_unavailable"
+    if (
+        normalized in {"exam_lab_llm_failure", "model_transport_error", "llm_timeout", "model_timeout"}
+        or "timeout" in normalized
+        or "transport" in normalized
+    ):
+        return "model_transport_error"
+    if (
+        normalized in {"exam_lab_llm_invalid_output", "model_invalid_output"}
+        or "invalid_output" in normalized
+    ):
+        return "model_invalid_output"
+    if "budget" in normalized or "token" in normalized or "context_limit" in normalized:
+        return "budget_exceeded"
+    return "verification_failed"
+
+
+def _has_lx010_deterministic_non_compliant_event(
+    projection: ExamLabTextProjection,
+) -> bool:
+    """多事件 06-01-02 存在可在 Python 侧直接确诊的 0 窗内病程缺失事件时返回 True。"""
+
+    if (
+        projection.course_projection_truncated
+        or projection.course_time_incomplete
+        or not projection.course_scope_complete
+    ):
+        return False
+    events = events_for_family(projection, "exam")
+    if len(events) <= 1:
+        return False
+    for position, event in enumerate(events, start=1):
+        if (
+            event.target_confirmed
+            and not exam_reason_anchor_has_conflict(event)
+            and not event.within_admission_window
+            and not event.guidance_only
+            and exam_reason_anchor_time(event) is not None
+            and not _course_refs_for_rule_event(
+                projection,
+                rule_id="LX0609-06-01-02",
+                event_position=position,
+            )
+        ):
+            return True
+    return False
+
+
+def _partition_lx010_events(
     projection: ExamLabTextProjection,
 ) -> tuple[dict[int, ExamLabEventFact], tuple[int, ...]]:
-    """对含锚点时间冲突/缺失的 06-01-02 多事件做逐事件隔离拆分。
+    """对 06-01-02 事件做逐事件确定性/语义隔离拆分。
 
     有锚点冲突、24h 豁免、CT 引导操作、缺锚点时间或 48h 窗口内零候选病程的事件
     均在 Python 侧直接生成事件级事实（不调用 LLM）；仅有窗口内候选病程或待确认
-    目标的事件才进入受控语义抽取，确保冲突事件不会遮蔽其他事件已确认的
-    non_compliant 缺陷，也不会让未决冲突事件被误判为合规。
+    目标的事件才进入受控语义抽取，确保冲突事件或后续语义核对失败不会遮蔽其他
+    事件已确认的 non_compliant 缺陷，也不会让未决冲突/失败事件被误判为合规。
     """
 
     deterministic: dict[int, ExamLabEventFact] = {}
@@ -1847,11 +1912,105 @@ def _partition_lx010_events_with_anchor_gaps(
     return deterministic, tuple(semantic_positions)
 
 
+_partition_lx010_events_with_anchor_gaps = _partition_lx010_events
+
+
+def _resolve_lx010_extraction_failure(
+    *,
+    projection: ExamLabTextProjection,
+    det_facts: Mapping[int, ExamLabEventFact],
+    sem_positions: Sequence[int],
+    failure_reason: str,
+    event_failure_reason: str | None = None,
+    allow_gap_fallback: bool = False,
+) -> tuple[_ExamLabOutcome, Mapping[str, Any] | None]:
+    """06-01-02 语义抽取失败时，保留已确诊缺陷并显式标出失败检查；否则保持 fail-closed。"""
+
+    rule_id = "LX0609-06-01-02"
+    events = events_for_family(projection, "exam")
+    det_outcomes = {
+        pos: _single_text_fact_outcome(
+            rule_id=rule_id,
+            fact=fact,
+            projection=projection,
+        )
+        for pos, fact in det_facts.items()
+    }
+    if any(item.status == "non_compliant" for item in det_outcomes.values()):
+        merged_facts = dict(det_facts)
+        failed_reasons: dict[int, str] = {}
+        per_event_reason = event_failure_reason or failure_reason
+        for pos in sem_positions:
+            merged_facts[pos] = ExamLabEventFact(
+                rule_id=rule_id,
+                applicability="unknown",
+                semantic_state="unknown",
+                positive_state="not_relevant",
+                course_doc_refs=(),
+                evidence_refs=events[pos - 1].document_refs,
+                event_position=pos,
+            )
+            failed_reasons[pos] = per_event_reason
+        all_facts = tuple(
+            merged_facts[pos]
+            for pos in range(1, len(events) + 1)
+            if pos in merged_facts
+        )
+        outcome = _text_fact_outcome(
+            rule_id=rule_id,
+            facts=all_facts,
+            projection=projection,
+            failed_semantic_reasons=failed_reasons,
+        )
+        display_facts = _display_facts_for_text_outcome(
+            rule_id=rule_id,
+            facts=all_facts,
+            projection=projection,
+            outcome=outcome,
+            failed_semantic_reasons=failed_reasons,
+        )
+        return outcome, display_facts
+
+    if allow_gap_fallback:
+        gap_outcomes = tuple(
+            det_outcomes[pos]
+            for pos in sorted(det_outcomes)
+            if det_outcomes[pos].status == "data_gap"
+        )
+        if gap_outcomes:
+            primary_gap = next(
+                (
+                    item
+                    for item in gap_outcomes
+                    if item.reason_code == "multiple_event_or_time_conflict"
+                ),
+                gap_outcomes[0],
+            )
+            return (
+                _ExamLabOutcome(
+                    rule_id,
+                    "data_gap",
+                    primary_gap.reason_code,
+                    tuple(
+                        dict.fromkeys(
+                            ref
+                            for item in gap_outcomes
+                            for ref in item.fact_refs
+                        )
+                    ),
+                ),
+                None,
+            )
+
+    return _ExamLabOutcome(rule_id, "technical_error", failure_reason), None
+
+
 def _text_fact_outcome(
     *,
     rule_id: str,
     facts: Sequence[ExamLabEventFact],
     projection: ExamLabTextProjection,
+    failed_semantic_reasons: Mapping[int, str] | None = None,
 ) -> _ExamLabOutcome:
     """逐事件判定后汇总；明确违规不得被其他事件的资料缺口遮蔽。"""
 
@@ -1866,6 +2025,7 @@ def _text_fact_outcome(
             rule_id=rule_id,
             fact=fact,
             projection=projection,
+            failed_semantic_reasons=failed_semantic_reasons,
         )
         for fact in rule_facts
     )
@@ -1897,6 +2057,7 @@ def _fact_for_outcome_display(
     facts: Sequence[ExamLabEventFact],
     projection: ExamLabTextProjection,
     outcome: _ExamLabOutcome,
+    failed_semantic_reasons: Mapping[int, str] | None = None,
 ) -> ExamLabEventFact:
     """选择实际决定规则状态的事件，避免展示另一事件的时间和证据。"""
 
@@ -1917,6 +2078,7 @@ def _fact_for_outcome_display(
             rule_id=rule_id,
             fact=fact,
             projection=projection,
+            failed_semantic_reasons=failed_semantic_reasons,
         )
         if event_outcome.status == outcome.status:
             return fact
@@ -2016,14 +2178,18 @@ def _display_facts_for_text_outcome(
     facts: Sequence[ExamLabEventFact],
     projection: ExamLabTextProjection,
     outcome: _ExamLabOutcome,
+    failed_semantic_reasons: Mapping[int, str] | None = None,
 ) -> Mapping[str, Any] | None:
     """保留总状态兼容字段，并附加每个检查/检验事件的受控判定明细。"""
 
+    if outcome.status == "technical_error":
+        return None
     primary_fact = _fact_for_outcome_display(
         rule_id=rule_id,
         facts=facts,
         projection=projection,
         outcome=outcome,
+        failed_semantic_reasons=failed_semantic_reasons,
     )
     # 顺序合同：`exam_lab_result_mapping.safe_exam_lab_customer_display_facts`
     # 的校验要求 event_results 第 N 项的 event_position 恰好等于 N
@@ -2042,6 +2208,9 @@ def _display_facts_for_text_outcome(
         )
     )
     multi_event = len(rule_facts) > 1
+    include_event_tech_error = (
+        rule_id == "LX0609-06-01-02" and outcome.status == "non_compliant" and multi_event
+    )
     event_results: list[dict[str, Any]] = []
     source_document_refs: list[Mapping[str, str]] = []
     for fact in rule_facts:
@@ -2049,6 +2218,7 @@ def _display_facts_for_text_outcome(
             rule_id=rule_id,
             fact=fact,
             projection=projection,
+            failed_semantic_reasons=failed_semantic_reasons,
         )
         single = _text_outcome_display_facts(
             rule_id=rule_id,
@@ -2056,6 +2226,7 @@ def _display_facts_for_text_outcome(
             fact=fact,
             projection=projection,
             include_data_gap=multi_event,
+            include_event_technical_error=include_event_tech_error,
         )
         if not isinstance(single, Mapping):
             continue
@@ -2063,6 +2234,13 @@ def _display_facts_for_text_outcome(
             "event_position": fact.event_position,
             "event_status": event_outcome.status,
         }
+        if (
+            rule_id == "LX0609-06-01-02"
+            and event_outcome.status == "technical_error"
+        ):
+            detail["verification_failure_reason"] = (
+                _normalize_lx010_verification_failure_reason(event_outcome.reason_code)
+            )
         for key in (
             "exam_name",
             "order_time",
@@ -2403,6 +2581,8 @@ async def _extract_exam_lab_batch_uncached(
         if is_budget_error(error):
             budget_rule_failures = dict.fromkeys(eligible_rule_ids, error.code)
             llm_call_count -= int(not getattr(error, "request_started", False))
+        elif isinstance(error, asyncio.TimeoutError):
+            budget_rule_failures = dict.fromkeys(eligible_rule_ids, "model_timeout")
         else:
             # 安全失败码优先于旧传输兜底；显式停止重试也编码在原因中，贯穿后续投影。
             budget_rule_failures = dict.fromkeys(eligible_rule_ids, classify_luxian_0609_llm_call_failure(error))
@@ -2566,7 +2746,11 @@ async def _extract_exam_lab_batch_uncached(
                                 getattr(retry_exc, "failure_kind", "value"),
                             )
                             if not retry_response_received:
-                                budget_rule_failures[rule_id] = classify_luxian_0609_llm_call_failure(retry_exc)
+                                budget_rule_failures[rule_id] = (
+                                    "model_timeout"
+                                    if isinstance(retry_exc, asyncio.TimeoutError)
+                                    else classify_luxian_0609_llm_call_failure(retry_exc)
+                                )
         except (ExamLabFactParseError, ValueError) as exc:
             # 顶层 JSON/schema、规则/事件身份、引用范围错误，以及
             # 非受控 ValueError，仍按原合同让整批进入一次重试。
@@ -2617,7 +2801,10 @@ async def _extract_exam_lab_batch_uncached(
                 text_facts = None
                 if not retry_response_received:
                     budget_rule_failures = dict.fromkeys(
-                        eligible_rule_ids, classify_luxian_0609_llm_call_failure(retry_exc)
+                        eligible_rule_ids,
+                        "model_timeout"
+                        if isinstance(retry_exc, asyncio.TimeoutError)
+                        else classify_luxian_0609_llm_call_failure(retry_exc),
                     )
         result_conflicts: Mapping[int, tuple[str, ...]] = {}
         analysis_gaps: Mapping[int, tuple[tuple[str, str], ...]] = {}
@@ -3367,23 +3554,25 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             "exam_lab_candidate_text_missing",
                         )
                         typed_processed.add(rule_id)
-                    elif rule_id == "LX0609-06-01-02" and any(
-                        event.target_confirmed
-                        and (
-                            exam_reason_anchor_has_conflict(event)
-                            or (
-                                not event.within_admission_window
-                                and not event.guidance_only
-                                and exam_reason_anchor_time(event) is None
+                    elif rule_id == "LX0609-06-01-02" and (
+                        any(
+                            event.target_confirmed
+                            and (
+                                exam_reason_anchor_has_conflict(event)
+                                or (
+                                    not event.within_admission_window
+                                    and not event.guidance_only
+                                    and exam_reason_anchor_time(event) is None
+                                )
                             )
+                            for event in events
                         )
-                        for event in events
+                        or _has_lx010_deterministic_non_compliant_event(projection)
                     ):
-                        # 锚点时间冲突或缺失按逐事件隔离判定：冲突事件不得遮蔽其他无冲突
-                        # 事件已确认的 non_compliant 缺陷，也不得被 24h 豁免或其他合规事件遮蔽。
-                        det_facts, sem_positions = _partition_lx010_events_with_anchor_gaps(
-                            projection
-                        )
+                        # 锚点时间冲突/缺失或多事件含确定性 0 病程缺失时按逐事件隔离判定：
+                        # 冲突事件或后续语义核对失败均不得遮蔽其他事件已确认的 non_compliant 缺陷，
+                        # 未决冲突/失败事件也不得被 24h 豁免或其他合规事件遮蔽。
+                        det_facts, sem_positions = _partition_lx010_events(projection)
                         if not sem_positions:
                             facts = tuple(
                                 det_facts[pos] for pos in range(1, len(events) + 1)
@@ -3436,84 +3625,21 @@ async def execute_luxian_0609_native_exam_lab_rules(
                                 )
                             typed_processed.add(rule_id)
                         elif llm_client is None:
-                            det_outcomes = {
-                                pos: _single_text_fact_outcome(
-                                    rule_id=rule_id,
-                                    fact=fact,
-                                    projection=projection,
-                                )
-                                for pos, fact in det_facts.items()
-                            }
-                            if any(
-                                item.status == "non_compliant"
-                                for item in det_outcomes.values()
-                            ):
-                                merged_facts = dict(det_facts)
-                                for pos in sem_positions:
-                                    merged_facts[pos] = ExamLabEventFact(
-                                        rule_id=rule_id,
-                                        applicability="unknown",
-                                        semantic_state="unknown",
-                                        positive_state="not_relevant",
-                                        course_doc_refs=(),
-                                        evidence_refs=events[pos - 1].document_refs,
-                                        event_position=pos,
-                                    )
-                                facts = tuple(
-                                    merged_facts[pos]
-                                    for pos in range(1, len(events) + 1)
-                                )
-                                outcome = _text_fact_outcome(
-                                    rule_id=rule_id,
-                                    facts=facts,
-                                    projection=projection,
-                                )
-                                emit_typed(
-                                    rule_id,
-                                    outcome.status,
-                                    outcome.reason_code,
-                                    outcome.fact_refs,
-                                    display_facts=_display_facts_for_text_outcome(
-                                        rule_id=rule_id,
-                                        facts=facts,
-                                        projection=projection,
-                                        outcome=outcome,
-                                    ),
-                                )
-                            else:
-                                gap_outcomes = tuple(
-                                    det_outcomes[pos]
-                                    for pos in sorted(det_outcomes)
-                                    if det_outcomes[pos].status == "data_gap"
-                                )
-                                if not gap_outcomes:
-                                    emit_typed(
-                                        rule_id,
-                                        "technical_error",
-                                        "exam_lab_llm_failure",
-                                    )
-                                else:
-                                    primary_gap = next(
-                                        (
-                                            item
-                                            for item in gap_outcomes
-                                            if item.reason_code
-                                            == "multiple_event_or_time_conflict"
-                                        ),
-                                        gap_outcomes[0],
-                                    )
-                                    emit_typed(
-                                        rule_id,
-                                        "data_gap",
-                                        primary_gap.reason_code,
-                                        tuple(
-                                            dict.fromkeys(
-                                                ref
-                                                for item in gap_outcomes
-                                                for ref in item.fact_refs
-                                            )
-                                        ),
-                                    )
+                            outcome, failure_display_facts = _resolve_lx010_extraction_failure(
+                                projection=projection,
+                                det_facts=det_facts,
+                                sem_positions=sem_positions,
+                                failure_reason="exam_lab_llm_failure",
+                                event_failure_reason="exam_lab_llm_unavailable",
+                                allow_gap_fallback=True,
+                            )
+                            emit_typed(
+                                rule_id,
+                                outcome.status,
+                                outcome.reason_code,
+                                outcome.fact_refs,
+                                display_facts=failure_display_facts,
+                            )
                             typed_processed.add(rule_id)
                         else:
                             lx010_partial_semantic = (det_facts, sem_positions)
@@ -3585,7 +3711,50 @@ async def execute_luxian_0609_native_exam_lab_rules(
                             )
                     sub_batches = tuple(filtered_sub_batches)
                 if not sub_batch.projection.context:
-                    emit_typed("LX0609-06-01-02", "data_gap", projection_gap_reason)
+                    det_outcomes = {
+                        pos: _single_text_fact_outcome(
+                            rule_id="LX0609-06-01-02",
+                            fact=fact,
+                            projection=projection,
+                        )
+                        for pos, fact in det_facts.items()
+                    }
+                    if any(item.status == "non_compliant" for item in det_outcomes.values()):
+                        merged_facts = dict(det_facts)
+                        for pos in sem_positions:
+                            merged_facts[pos] = ExamLabEventFact(
+                                rule_id="LX0609-06-01-02",
+                                applicability="unknown",
+                                semantic_state="unknown",
+                                positive_state="not_relevant",
+                                course_doc_refs=(),
+                                evidence_refs=exam_events[pos - 1].document_refs,
+                                event_position=pos,
+                            )
+                        all_facts = tuple(
+                            merged_facts[pos]
+                            for pos in range(1, len(exam_events) + 1)
+                            if pos in merged_facts
+                        )
+                        partial_outcome = _text_fact_outcome(
+                            rule_id="LX0609-06-01-02",
+                            facts=all_facts,
+                            projection=projection,
+                        )
+                        emit_typed(
+                            "LX0609-06-01-02",
+                            partial_outcome.status,
+                            partial_outcome.reason_code,
+                            partial_outcome.fact_refs,
+                            display_facts=_display_facts_for_text_outcome(
+                                rule_id="LX0609-06-01-02",
+                                facts=all_facts,
+                                projection=projection,
+                                outcome=partial_outcome,
+                            ),
+                        )
+                    else:
+                        emit_typed("LX0609-06-01-02", "data_gap", projection_gap_reason)
                     typed_processed.add("LX0609-06-01-02")
                 else:
                     partial_result, partial_requested = await _extract_exam_lab_batches(
@@ -3608,21 +3777,28 @@ async def execute_luxian_0609_native_exam_lab_rules(
                         partial_result.facts is None
                         or "LX0609-06-01-02" in partial_result.rule_failures
                     ):
-                        partial_outcome = _ExamLabOutcome(
-                            "LX0609-06-01-02",
-                            "technical_error",
-                            partial_result.budget_rule_failures.get("LX0609-06-01-02")
-                            or (
-                                "exam_lab_llm_failure"
-                                if "LX0609-06-01-02" in partial_result.transport_rule_ids
-                                else "exam_lab_llm_invalid_output"
-                            ),
+                        failure_reason = partial_result.budget_rule_failures.get(
+                            "LX0609-06-01-02"
+                        ) or (
+                            "exam_lab_llm_failure"
+                            if "LX0609-06-01-02" in partial_result.transport_rule_ids
+                            else "exam_lab_llm_invalid_output"
+                        )
+                        partial_outcome, failure_display_facts = (
+                            _resolve_lx010_extraction_failure(
+                                projection=projection,
+                                det_facts=det_facts,
+                                sem_positions=sem_positions,
+                                failure_reason=failure_reason,
+                                allow_gap_fallback=False,
+                            )
                         )
                         emit_typed(
                             "LX0609-06-01-02",
                             partial_outcome.status,
                             partial_outcome.reason_code,
                             partial_outcome.fact_refs,
+                            display_facts=failure_display_facts,
                         )
                     else:
                         merged_facts = dict(det_facts)
@@ -3798,7 +3974,30 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 status = "technical_error" if llm_client is None else "data_gap"
                 reason = "exam_lab_llm_failure" if llm_client is None else projection_gap_reason
                 for rule_id in eligible_rule_ids:
-                    emit_typed(rule_id, status, reason)
+                    if (
+                        rule_id == "LX0609-06-01-02"
+                        and llm_client is None
+                        and projection is not None
+                        and projection.context
+                    ):
+                        det_facts, sem_positions = _partition_lx010_events(projection)
+                        outcome, failure_display_facts = _resolve_lx010_extraction_failure(
+                            projection=projection,
+                            det_facts=det_facts,
+                            sem_positions=sem_positions,
+                            failure_reason="exam_lab_llm_failure",
+                            event_failure_reason="exam_lab_llm_unavailable",
+                            allow_gap_fallback=False,
+                        )
+                        emit_typed(
+                            rule_id,
+                            outcome.status,
+                            outcome.reason_code,
+                            outcome.fact_refs,
+                            display_facts=failure_display_facts,
+                        )
+                    else:
+                        emit_typed(rule_id, status, reason)
                     typed_processed.add(rule_id)
             elif eligible_rule_ids:
                 batch_result, requested_rule_count = await _extract_exam_lab_batches(
@@ -3820,47 +4019,72 @@ async def execute_luxian_0609_native_exam_lab_rules(
                 result_conflicts = batch_result.result_conflicts
                 analysis_gaps = batch_result.analysis_gaps
                 for rule_id in eligible_rule_ids:
-                    outcome = (
-                        _ExamLabOutcome(
-                            rule_id, "technical_error",
-                            batch_result.budget_rule_failures.get(rule_id) or (
-                                "exam_lab_llm_failure" if rule_id in batch_result.transport_rule_ids
-                                else "exam_lab_llm_invalid_output"),
+                    if text_facts is None or rule_id in isolated_rule_failures:
+                        failure_reason = batch_result.budget_rule_failures.get(rule_id) or (
+                            "exam_lab_llm_failure"
+                            if rule_id in batch_result.transport_rule_ids
+                            else "exam_lab_llm_invalid_output"
                         )
-                        if text_facts is None or rule_id in isolated_rule_failures
-                        else _text_fact_outcome(
-                            rule_id=rule_id,
-                            facts=text_facts,
-                            projection=projection,
-                        )
+                        if rule_id == "LX0609-06-01-02":
+                            det_facts, sem_positions = _partition_lx010_events(projection)
+                            outcome, failure_display_facts = (
+                                _resolve_lx010_extraction_failure(
+                                    projection=projection,
+                                    det_facts=det_facts,
+                                    sem_positions=sem_positions,
+                                    failure_reason=failure_reason,
+                                    allow_gap_fallback=False,
+                                )
+                            )
+                            emit_typed(
+                                rule_id,
+                                outcome.status,
+                                outcome.reason_code,
+                                outcome.fact_refs,
+                                display_facts=failure_display_facts,
+                            )
+                        else:
+                            outcome = _ExamLabOutcome(
+                                rule_id,
+                                "technical_error",
+                                failure_reason,
+                            )
+                            emit_typed(
+                                rule_id,
+                                outcome.status,
+                                outcome.reason_code,
+                                outcome.fact_refs,
+                                display_facts=None,
+                            )
+                        typed_processed.add(rule_id)
+                        continue
+                    outcome = _text_fact_outcome(
+                        rule_id=rule_id,
+                        facts=text_facts,
+                        projection=projection,
                     )
                     emit_typed(
                         rule_id,
                         outcome.status,
                         outcome.reason_code,
                         outcome.fact_refs,
-                        display_facts=(
-                            _with_analysis_gaps(
-                                _with_result_conflicts(
-                                    _display_facts_for_text_outcome(
-                                        rule_id=rule_id,
-                                        facts=text_facts,
-                                        projection=projection,
-                                        outcome=outcome,
-                                    ),
-                                    conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
+                        display_facts=_with_analysis_gaps(
+                            _with_result_conflicts(
+                                _display_facts_for_text_outcome(
+                                    rule_id=rule_id,
+                                    facts=text_facts,
                                     projection=projection,
+                                    outcome=outcome,
                                 ),
-                                gaps=(
-                                    analysis_gaps
-                                    if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
-                                    else {}
-                                ),
+                                conflicts=result_conflicts if rule_id == "LX0609-06-01-04" else {},
                                 projection=projection,
-                            )
-                            if text_facts is not None
-                            and rule_id not in isolated_rule_failures
-                            else None
+                            ),
+                            gaps=(
+                                analysis_gaps
+                                if rule_id == "LX0609-06-01-05" and outcome.status == "non_compliant"
+                                else {}
+                            ),
+                            projection=projection,
                         ),
                     )
                     typed_processed.add(rule_id)

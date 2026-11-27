@@ -2707,6 +2707,7 @@ def customer_finding_from_controlled_facts(
             if isinstance(event_results, list) and len(event_results) > 1:
                 details: list[str] = []
                 missing_count = 0
+                failed_count = 0
                 for index, item in enumerate(event_results, start=1):
                     if not isinstance(item, Mapping):
                         return ""
@@ -2740,10 +2741,25 @@ def customer_finding_from_controlled_facts(
                             conclusion = "本次检查不适用"
                     elif event_status in {"data_gap", "evaluation_unknown"}:
                         conclusion = "资料待核实，暂无法确认检查前是否记录检查原因"
+                    elif event_status == "technical_error":
+                        failed_count += 1
+                        failure_reason = str(item.get("verification_failure_reason") or "")
+                        failure_detail = {
+                            "model_transport_error": "模型调用超时或连接异常",
+                            "model_invalid_output": "模型返回结果异常",
+                            "budget_exceeded": "核对预算受限",
+                            "model_unavailable": "语义核对服务不可用",
+                        }.get(failure_reason, "语义核对异常")
+                        conclusion = f"本次检查语义核对失败（{failure_detail}），暂未完成检查原因核对"
                     else:
                         return ""
                     details.append(f"{index}）{header}：{conclusion}")
-                summary_suffix = f"（其中{missing_count}次未见检查前原因）" if missing_count else ""
+                summary_parts: list[str] = []
+                if missing_count:
+                    summary_parts.append(f"{missing_count}次未见检查前原因")
+                if failed_count:
+                    summary_parts.append(f"{failed_count}次语义核对失败")
+                summary_suffix = f"（其中{'、'.join(summary_parts)}）" if summary_parts else ""
                 return f"共核对{len(details)}次CT/MRI检查{summary_suffix}：" + "；".join(details) + "。"
 
             header = reason_event_header(facts)

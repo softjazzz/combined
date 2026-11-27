@@ -253,47 +253,50 @@ _EXPLICIT_NO_DISCHARGE_MEDICATION_PATTERN = re.compile(
     r"(?:患者)?(?:未开|无|不需(?:要)?|拒绝)(?:出院)?带药)"
 )
 _SPECIAL_ANTIMICROBIAL_EXPERT_SUPPORT_MARKERS = (
-    "感染专家", "专家会诊", "专家查房", "同意特殊级",
+    "感染专家", "专家会诊", "专家查房",
 )
 # 感染科副主任医师及以上的会诊署名（用户口径 2026-10-17：主治医师、临床药师不算授权专家）。
 # 兼容“感染性疾病科”、署名括号、“副主任/主任”简写、署名后直接接“会诊/意见/指出/建议/查房/冒号/逗号”等写法；
-# 科室与职称之间不得出现其他科室，避免把他科医师意见算作感染科。
+# 科室与职称之间不得出现其他科室或药师/药学字样，且职称后不得紧跟“药师/药学”（排除副主任药师/主任药师）。
 _SPECIAL_ANTIMICROBIAL_INFECTION_EXPERT_PATTERN = re.compile(
-    r"感染(?:性疾病)?科[^。；;\n科]{0,24}?(?:副主任(?:医师)?|主任(?:医师)?)"
+    r"感染(?:性疾病)?科(?:(?!药师|药学)[^。；;\n科]){0,24}?"
+    r"(?:副主任(?:医师)?|主任(?:医师)?)(?!药师|药学)"
     r"[\]】）)]?\s*(?:会诊|意见|指出|建议|查房|[:：,，])"
 )
 # 医院电子《请会诊执行记录》常写作“感染性疾病科[姓名],2026-04-07,09:59:00病史敬悉同意使用”
-# 而省略职称字样；仅在带有时间戳电子会诊落款（且非明确初级/主治职称）时认定为感染科专项会诊。
+# 而省略职称字样；仅在带有时间戳电子会诊落款（且非明确初级/主治/药师职称）时认定为感染科专项会诊。
 _SPECIAL_ANTIMICROBIAL_INFECTION_ECONSULT_PATTERN = re.compile(
-    r"感染(?:性疾病)?科(?!.{0,12}(?:主治医师|住院医师|实习医师|规培医师))"
-    r"[\s:：,，(（\[]*[\u4e00-\u9fff]{2,4}[\]）)]?\s*"
-    r"[,，\s]+\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?\s*[,，\sT]*\d{1,2}[:：]\d{2}"
+    r"感染(?:性疾病)?科"
+    r"(?![^,\s，\r\n。；;]{0,16}(?:主治医师|住院医师|实习医师|规培医师|药师|药学))"
+    r"[\s:：,，(（\[]*(?![\u4e00-\u9fff]{0,2}(?:药师|药学))[\u4e00-\u9fff]{2,4}[\]）)]?"
+    r"(?!\s*(?:主治医师|住院医师|实习医师|规培医师|药师|药学))"
+    r"\s*[,，\s]+\d{4}[-/年]\d{1,2}[-/月]\d{1,2}日?\s*[,，\sT]*\d{1,2}[:：]\d{2}"
 )
 # 重症医学科(ICU)主任/副主任医师行抗生素/抗菌药物使用权限专项会诊。
 _SPECIAL_ANTIMICROBIAL_ICU_EXPERT_PATTERN = re.compile(
-    r"(?:ICU|重症医学科)[^。；;\n科]{0,20}?(?:副主任医师|主任医师)"
+    r"(?:ICU|重症医学科)(?:(?!药师|药学)[^。；;\n科]){0,20}?(?:副主任医师|主任医师)"
     r"[\]】）)]?[^。；;\n]{0,20}?(?:抗生素|抗菌药(?:物)?|特殊级)[^。；;\n]{0,12}?会诊"
 )
 # 医院电子特殊级抗菌药用药申请会诊单（常无 document_title，以“本病人建议使用…使用目的为…”起头）
 # 紧接高级职称医师（主任/副主任医师，排除明确他科或初级/主治/药师）会诊意见。
 _SPECIAL_ANTIMICROBIAL_REQUEST_SENIOR_APPROVAL_PATTERN = re.compile(
     r"本病人建议使用[^。；;\n]{0,80}?使用目的为[^。\n]{0,120}?[。；;\n,，]\s*"
-    r"(?!(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|临床药学)[^。；;\n]{0,8}?(?:科|学))"
+    r"(?!(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|临床药学|药学|药剂)[^。；;\n]{0,8}?(?:科|学|部))"
     r"(?P<speaker>[\u4e00-\u9fff]{2,4}(?:副主任医师|主任医师)[\]】）)]?\s*(?:会诊(?:意见)?|意见|[:：]))"
 )
-# 正式《请会诊执行记录》中邀请感染科或重症医学科/ICU医师协助诊治（省略打印职称但非主治/住院/规培/实习医师）。
+# 正式《请会诊执行记录》中邀请感染科或重症医学科/ICU医师协助诊治（省略打印职称但非主治/住院/规培/实习医师/药师）。
 _SPECIAL_ANTIMICROBIAL_INVITED_EXPERT_CONSULT_PATTERN = re.compile(
     r"(?:故)?邀请\s*(?:感染(?:性疾病)?科|重症医学科|ICU)"
-    r"(?!.{0,12}(?:主治医师|住院医师|实习医师|规培医师))"
+    r"(?![^\r\n。；;：:]{0,16}(?:主治医师|住院医师|实习医师|规培医师|药师|药学))"
     r"[\u4e00-\u9fff]{2,4}(?:医生|医师)?\s*(?:协助诊治|会诊(?:意见)?)\s*[:：]"
 )
 _SPECIAL_ANTIMICROBIAL_NON_AUTHORIZED_SPEAKER_PATTERN = re.compile(
     r"本病人建议使用|"
-    r"(?<!请)临床药师|临床药师(?:[^。；;\r\n后]{0,8}?[：:])|临床药师(?:会诊)?意见|"
+    r"(?<!请)(?<!请临床)(?<!请主管)(?<!请主任)(?<!请副主任)(?:(?:临床|主管|副主任|主任)?药师)|"
+    r"临床药师(?:[^。；;\r\n后]{0,8}?[：:])|临床药师(?:会诊)?意见|"
     r"临床药学(?:(?:会诊)?意见|会诊\s*[：:]|[：:])|"
-    r"(?:主管)?药师(?:会诊|意见|\s*[：:])|"
     r"药学部|"
-    r"主治医师|住院医师|实习医师|规培医师|经治医师|管床医师|申请医师|主管药师|"
+    r"主治医师|住院医师|实习医师|规培医师|经治医师|管床医师|申请医师|"
     r"(?:\r?\n)\s*[^\r\n]{0,20}(?:药师|药学|主治|住院|规培|实习|经治|管床|申请|医师|医生|科)[^\r\n]{0,10}[：:]|"
     r"[。；;]\s*(?!(?:感染(?:性疾病)?科|重症医学科|ICU))[^\r\n。；;]{0,20}"
     r"(?:呼吸|心血管|消化|神经|普外|胸外|泌尿|骨|妇产|儿|耳鼻喉|眼|皮肤|肾内|内分泌|肿瘤|血液|药学|药剂)"
@@ -316,11 +319,14 @@ _LAB_ORDER_NAME_PATTERN = re.compile(
 _CRITICAL_VALUE_TITLE_PATTERN = re.compile(r"危急值")
 _CRITICAL_VALUE_TITLE_STRIP_PATTERN = re.compile(r"危急值(?:处理|处置|报告)?记录")
 _CRITICAL_VALUE_UNHANDLED_PATTERN = re.compile(
-    r"(?:尚|暂)?未(?:予|做|作|行|进行)?(?:处理|处置|采取(?:任何|有效)?(?:措施|处理|处置))|"
+    r"(?:尚|暂|仍|并)?未(?:予|做|作|行|进行|被)?(?:处理|处置|执行|实施|落实|采取(?:任何|有效)?(?:措施|处理|处置))|"
     r"暂无(?:特殊)?(?:处理|处置)|"
     r"未(?:见|有)(?:明确)?(?:处理|处置)|"
     r"(?<![已予经])待(?:医师|医生|值班医师|值班医生|上级医师|临床)?(?:处理|处置|评估处理)|"
     r"等待(?:医师|医生|值班医师|值班医生|上级医师)(?:处理|处置|查看|评估)?"
+)
+_CRITICAL_VALUE_UNEXECUTED_DECLARATION_PATTERN = re.compile(
+    r"(?:尚|暂|仍|并)?未(?:予|行|被)?(?:执行|实施|落实)"
 )
 _CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN = re.compile(r"[。；;！？!?\r\n]+")
 _CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN = re.compile(r"[，,]+")
@@ -341,8 +347,24 @@ _CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN = re.compile(
     r"(?:待|等)[^，,。；;\r\n]{0,16}(?:后|时)|"
     r"(?<![已予经])待\s*$"
 )
+_CRITICAL_VALUE_CLAUSE_PLANNED_PREFIX_PATTERN = re.compile(
+    r"(?<![模疑比])拟(?!诊)|"
+    r"计划|(?<!做好)准备(?!完毕|工作|充分)|打算|"
+    r"待(?:行|予|给|请|复查|复测|进一步)|"
+    r"将(?:予|行|给|于)"
+)
 _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN = re.compile(
-    r"^(?:现已|目前(?:已|予|正|继续|维持)|已经?|实际已|\d{1,2}\s*[:：]\s*\d{2}\s*(?:已|予|给))"
+    r"^(?:现已|目前(?:已|予|正|继续|维持)|已经?|实际已|"
+    r"(?:随后|之后|稍后|后续|后)(?:已|予|给)|"
+    r"(?:于\s*)?\d{1,2}\s*[:：]\s*\d{2}\s*(?:已|予|给|完成|针对[^，,。；;\r\n]{0,12}?已))"
+)
+_CRITICAL_VALUE_TOPIC_CONTINUATION_PATTERN = re.compile(
+    r"危急值|初报|复报|本次|该值|上述"
+)
+# PDF 版面硬折行常把连续中文词组拦腰断行（如“积极抗感\n染”）；仅在行长>=24且前后均为汉字时合并折行，
+# 保留短行、标点断句及标题/签名换行边界。
+_CRITICAL_VALUE_PDF_LINE_WRAP_PATTERN = re.compile(
+    r"(?<=[^\r\n]{23}[\u4e00-\u9fff])\r?\n(?=[\u4e00-\u9fff])"
 )
 _CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN = re.compile(
     r"已经?|现已|(?<![发出体实呈表再显])现(?:行)?(?=[予给行补输调复监])"
@@ -1154,24 +1176,37 @@ def _normalize_critical_value_number_text(text: str) -> str:
 def _has_affirmative_critical_value_handling(body: str) -> bool:
     """逐分句判定病程正文是否包含明确的已执行危急值临床处置/评估动作。
 
-    - 排除未处理/待处理分句（如“尚未处理”“等待医师”），但不让前句既往未处理
+    - 排除未处理/待处理/尚未执行分句（如“尚未处理”“尚未执行”“等待医师”），但不让前句既往未处理
       否定后句明确已执行处置（如“当时尚未处理；10:20 已静脉补钾”）；
-    - 排除同分句否定处置（如“未予补钾”“拒绝输血”）与条件/假设性计划
-      （如“若再次下降再予补钾”“必要时复查”）。
+    - 排除同分句否定处置（如“未予补钾”“拒绝输血”）、计划/意向性表述（如“拟复查”“计划降钾”“准备复查”）
+      与条件/假设性计划（如“若再次下降再予补钾”“必要时复查”）；
+    - 同句中若后文明确声明“尚未执行/未执行/未实施/未落实”（且其后无同句已执行重置），
+      否决前文缺乏已完成标志或紧邻该声明的待执行匹配。
     """
 
-    cleaned = _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body)
+    cleaned = _CRITICAL_VALUE_PDF_LINE_WRAP_PATTERN.sub(
+        "",
+        _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body),
+    )
     for sentence in _CRITICAL_VALUE_SENTENCE_SPLIT_PATTERN.split(cleaned):
         sentence_text = sentence.strip()
         if not sentence_text:
             continue
         conditional_open = False
+        sent_has_affirmative = False
+        sent_has_completed_affirmative = False
+        prev_clause_was_planned = False
         for clause in _CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN.split(sentence_text):
             clause_text = clause.strip()
             if not clause_text:
                 continue
             if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(clause_text):
                 conditional_open = False
+                if _CRITICAL_VALUE_UNEXECUTED_DECLARATION_PATTERN.search(clause_text):
+                    if not (sent_has_completed_affirmative and prev_clause_was_planned):
+                        sent_has_affirmative = False
+                        sent_has_completed_affirmative = False
+                prev_clause_was_planned = False
                 continue
             if conditional_open:
                 if _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text):
@@ -1180,25 +1215,42 @@ def _has_affirmative_critical_value_handling(body: str) -> bool:
                     # 承接前分句条件（如“若再次下降，再予补钾”），不作为已执行处置。
                     if not _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text):
                         conditional_open = False
+                    prev_clause_was_planned = False
                     continue
             clause_is_conditional_opener = bool(
                 _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text)
             )
             matched_affirmative = False
+            matched_completed = False
+            matched_planned = False
             for match in _CRITICAL_VALUE_HANDLING_ACTION_PATTERN.finditer(clause_text):
                 prefix = clause_text[: match.start()]
                 if _CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN.search(prefix):
                     continue
-                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
                 completed = tuple(_CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN.finditer(prefix))
+                planned = tuple(_CRITICAL_VALUE_CLAUSE_PLANNED_PREFIX_PATTERN.finditer(prefix))
+                if planned and (not completed or planned[-1].start() > completed[-1].start()):
+                    matched_planned = True
+                    continue
+                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
                 if negations and (not completed or negations[-1].start() > completed[-1].start()):
                     continue
                 matched_affirmative = True
+                matched_completed = bool(
+                    completed or _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text)
+                )
                 break
             if matched_affirmative:
-                return True
-            if clause_is_conditional_opener:
-                conditional_open = True
+                sent_has_affirmative = True
+                if matched_completed:
+                    sent_has_completed_affirmative = True
+                prev_clause_was_planned = False
+            else:
+                prev_clause_was_planned = matched_planned
+                if clause_is_conditional_opener:
+                    conditional_open = True
+        if sent_has_affirmative:
+            return True
     return False
 
 
@@ -1268,9 +1320,12 @@ def _has_affirmative_handling_for_critical_event(
             if toks
         )
 
-    cleaned = _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body)
-    prev_mentioned_target = False
-    prev_negated_target = False
+    cleaned = _CRITICAL_VALUE_PDF_LINE_WRAP_PATTERN.sub(
+        "",
+        _CRITICAL_VALUE_TITLE_STRIP_PATTERN.sub(" ", body),
+    )
+    active_target_topic = False
+    active_target_negated = False
     any_target_negated = False
     generic_candidate_found = False
 
@@ -1287,11 +1342,16 @@ def _has_affirmative_handling_for_critical_event(
         )
         sent_unrelated_topic = bool(_CRITICAL_VALUE_UNRELATED_TOPIC_PATTERN.search(sentence_text))
         sent_other_lab = any(pat.search(sent_lower) for pat in other_lab_patterns)
+        sent_topic_continuation = bool(_CRITICAL_VALUE_TOPIC_CONTINUATION_PATTERN.search(sentence_text))
 
         conditional_open = False
         sent_had_unhandled_or_negated = False
+        sent_had_planned = False
         sent_has_valid_affirmative = False
         sent_has_item_or_action_affirmative = False
+        sent_has_completed_affirmative = False
+        sent_has_executed_reset = False
+        prev_clause_was_planned = False
 
         for clause in _CRITICAL_VALUE_CLAUSE_SPLIT_PATTERN.split(sentence_text):
             clause_text = clause.strip()
@@ -1300,6 +1360,13 @@ def _has_affirmative_handling_for_critical_event(
             if _CRITICAL_VALUE_UNHANDLED_PATTERN.search(clause_text):
                 conditional_open = False
                 sent_had_unhandled_or_negated = True
+                if _CRITICAL_VALUE_UNEXECUTED_DECLARATION_PATTERN.search(clause_text):
+                    if not (sent_has_completed_affirmative and prev_clause_was_planned):
+                        sent_has_valid_affirmative = False
+                        sent_has_item_or_action_affirmative = False
+                        sent_has_completed_affirmative = False
+                        sent_has_executed_reset = False
+                prev_clause_was_planned = False
                 continue
             if conditional_open:
                 if _CRITICAL_VALUE_CLAUSE_EXECUTED_RESET_PATTERN.search(clause_text):
@@ -1307,6 +1374,7 @@ def _has_affirmative_handling_for_critical_event(
                 else:
                     if not _CRITICAL_VALUE_CLAUSE_CONDITIONAL_OPENER_PATTERN.search(clause_text):
                         conditional_open = False
+                    prev_clause_was_planned = False
                     continue
 
             clause_is_conditional_opener = bool(
@@ -1326,39 +1394,58 @@ def _has_affirmative_handling_for_critical_event(
             )
 
             clause_negated_action = False
+            clause_planned_action = False
             clause_matched_affirmative = False
+            clause_matched_completed = False
             for match in _CRITICAL_VALUE_HANDLING_ACTION_PATTERN.finditer(clause_text):
                 prefix = clause_text[: match.start()]
                 if _CRITICAL_VALUE_CLAUSE_CONDITIONAL_PREFIX_PATTERN.search(prefix):
                     continue
-                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
                 completed = tuple(_CRITICAL_VALUE_CLAUSE_COMPLETED_PATTERN.finditer(prefix))
+                planned = tuple(_CRITICAL_VALUE_CLAUSE_PLANNED_PREFIX_PATTERN.finditer(prefix))
+                if planned and (not completed or planned[-1].start() > completed[-1].start()):
+                    clause_planned_action = True
+                    continue
+                negations = tuple(_CRITICAL_VALUE_CLAUSE_NEGATION_PATTERN.finditer(prefix))
                 if negations and (not completed or negations[-1].start() > completed[-1].start()):
                     clause_negated_action = True
                     continue
                 clause_matched_affirmative = True
+                clause_matched_completed = bool(completed or clause_executed_reset)
                 break
 
             if clause_negated_action and not clause_matched_affirmative:
                 sent_had_unhandled_or_negated = True
+            if clause_planned_action and not clause_matched_affirmative:
+                sent_had_planned = True
 
             if clause_matched_affirmative:
                 # 若本分句切换至无关临床主题（如“另因发热予以退热治疗”）且未提及目标项目，严禁计数。
                 if clause_unrelated and not clause_mentions_item:
+                    prev_clause_was_planned = False
                     continue
                 # 若本分句提及其他检验/体征且未提及目标项目或其专属处置，仅在同句未提及目标项目时跳过。
                 if clause_other_lab and not (clause_mentions_item or clause_mentions_action_kw) and not sent_mentions_item:
+                    prev_clause_was_planned = False
                     continue
                 # 同句前文已显式否定/未处理目标项目时，仅允许目标项目/专属处置动作或明确时间/现已重置覆盖。
                 if sent_had_unhandled_or_negated and not (
                     clause_mentions_item or clause_mentions_action_kw or clause_executed_reset
                 ):
+                    prev_clause_was_planned = False
                     continue
                 sent_has_valid_affirmative = True
                 if clause_mentions_item or clause_mentions_action_kw:
                     sent_has_item_or_action_affirmative = True
-            elif clause_is_conditional_opener:
-                conditional_open = True
+                if clause_matched_completed:
+                    sent_has_completed_affirmative = True
+                if clause_executed_reset:
+                    sent_has_executed_reset = True
+                prev_clause_was_planned = False
+            else:
+                prev_clause_was_planned = clause_planned_action
+                if clause_is_conditional_opener:
+                    conditional_open = True
 
         if sent_has_valid_affirmative:
             # (i) 本句自身提及目标项目或目标项目专属处置（且至少有一条专属分句未切至无关主题，如 ICU“镇静镇痛，继续呼吸机辅助通气”）
@@ -1367,12 +1454,13 @@ def _has_affirmative_handling_for_critical_event(
                 and not (sent_unrelated_topic and not sent_mentions_item)
             ):
                 return True
-            # (ii) 紧接目标项目句的直接承接句：前句不得显式否定处置，且本句不得切换至无关主题或其他检验项目
+            # (ii) 处于目标项目活跃话题下的承接句：本句不得切换至无关主题或其他检验项目；
+            #      若前序话题已被标记未处理/否定，须有明确的已执行重置（如“15:28 已针对本次完成…”、“现已…”、“随后已…”）。
             if (
-                prev_mentioned_target
-                and not prev_negated_target
+                active_target_topic
                 and not sent_unrelated_topic
                 and not sent_other_lab
+                and (not active_target_negated or sent_has_executed_reset)
             ):
                 return True
             # (iii) 单事件专用《危急值处理记录》标题兜底：本句不得切换无关主题/他项检验，且全篇无目标否定
@@ -1380,15 +1468,26 @@ def _has_affirmative_handling_for_critical_event(
                 generic_candidate_found = True
 
         if sent_mentions_item:
-            prev_mentioned_target = True
-            prev_negated_target = bool(sent_had_unhandled_or_negated and not sent_has_valid_affirmative)
-            if prev_negated_target:
+            active_target_topic = True
+            active_target_negated = bool(sent_had_unhandled_or_negated and not sent_has_valid_affirmative)
+            if active_target_negated:
+                any_target_negated = True
+        elif sent_unrelated_topic or sent_other_lab:
+            active_target_topic = False
+            active_target_negated = False
+            if sent_had_unhandled_or_negated and not sent_has_valid_affirmative:
+                any_target_negated = True
+        elif active_target_topic and (
+            sent_had_unhandled_or_negated or sent_had_planned or sent_topic_continuation
+        ):
+            if sent_had_unhandled_or_negated and not sent_has_valid_affirmative:
+                active_target_negated = True
                 any_target_negated = True
         else:
             if sent_had_unhandled_or_negated and not sent_has_valid_affirmative:
                 any_target_negated = True
-            prev_mentioned_target = False
-            prev_negated_target = False
+            active_target_topic = False
+            active_target_negated = False
 
     return bool(allow_generic_title and generic_candidate_found and not any_target_negated)
 
