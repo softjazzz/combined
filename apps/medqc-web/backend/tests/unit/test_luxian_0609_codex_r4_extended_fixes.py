@@ -16,6 +16,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import critical_value_family as cvf
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
 )
@@ -203,7 +204,7 @@ async def _run_058_full_pipeline(
 def test_codex_r4_1_affirmative_critical_value_handling_helper(
     body: str, expected: bool
 ) -> None:
-    assert ned._has_affirmative_critical_value_handling(body) is expected
+    assert cvf._has_affirmative_critical_value_handling(body) is expected
 
 
 @pytest.mark.parametrize(
@@ -253,9 +254,9 @@ def test_codex_r4_1_affirmative_critical_value_handling_helper(
 def test_codex_r4_1_event_bound_critical_value_handling_helper(
     item_name: str, tokens: tuple[str, ...], body: str, expected: bool
 ) -> None:
-    keywords = ned._critical_value_item_keywords(item_name)
+    keywords = cvf._critical_value_item_keywords(item_name)
     assert (
-        ned._has_affirmative_handling_for_critical_event(
+        cvf._has_affirmative_handling_for_critical_event(
             body,
             body.lower(),
             keywords,

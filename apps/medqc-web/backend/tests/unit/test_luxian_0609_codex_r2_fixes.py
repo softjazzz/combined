@@ -20,6 +20,7 @@ from pathlib import Path
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import critical_value_family as cvf
 from tests.unit.test_luxian_0609_p0_extended_doc_fixes import _run_rules
 from tests.unit.test_luxian_0609_s3_extended_doc_fixes import (
     _TargetedSpecialApprovalClient,
@@ -54,7 +55,7 @@ from tests.unit.test_luxian_0609_s3_extended_doc_fixes import (
 def test_codex_r2_1a_affirmative_critical_value_handling_clause_semantics(
     body: str, expected: bool
 ) -> None:
-    assert ned._has_affirmative_critical_value_handling(body) is expected
+    assert cvf._has_affirmative_critical_value_handling(body) is expected
 
 
 @pytest.mark.asyncio
@@ -144,9 +145,9 @@ async def test_codex_r2_1a_crisis_rules_end_to_end_negated_conditional_and_execu
 def test_codex_r2_1b_value_match_is_bound_to_nearest_lab_item_label(
     item_name: str, tokens: tuple[str, ...], text: str, expected: bool
 ) -> None:
-    keywords = ned._critical_value_item_keywords(item_name)
+    keywords = cvf._critical_value_item_keywords(item_name)
     assert (
-        ned._text_mentions_critical_result_value(text, text.lower(), tokens, keywords)
+        cvf._text_mentions_critical_result_value(text, text.lower(), tokens, keywords)
         is expected
     )
 
