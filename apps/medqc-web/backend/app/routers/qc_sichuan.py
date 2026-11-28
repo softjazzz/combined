@@ -52,7 +52,12 @@ from ..services.sc_rule_launch_tier import (
 )
 from ..core.supabase_client import get_supabase
 from ..core.settings import get_settings
-from ..core.security import require_admin, require_roles, get_current_user
+from ..core.security import (
+    require_admin,
+    require_global_qc_rule_admin,
+    require_roles,
+    get_current_user,
+)
 from ..services.product_activation import require_product_activation
 from ..services.custom_qc_workspace_service import (
     CustomQCWorkspaceService,
@@ -1195,75 +1200,11 @@ def _can_view_raw_llm_output(current_user: Optional[Dict[str, Any]]) -> bool:
     return bool(_extract_user_roles(current_user).intersection(_DEMO_FULL_RESULT_ROLES))
 
 
-def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
-    """复核持久账号全局管理员身份：仅 sync_admin 或未绑定 institute_id 的 admin/super_admin。"""
-    if not isinstance(current_user, dict):
-        return False
-    claim_roles = _extract_user_roles(current_user)
-    claim_inst = str(current_user.get("institute_id") or "").strip()
-    actor_id = _current_user_id(current_user)
-
-    if actor_id and actor_id != "anonymous":
-        try:
-            from sqlalchemy import inspect as sa_inspect, text as sa_text
-            from ..database import connection as db_connection
-            from ..services.defect_rectification_service import _effective_persistent_roles
-            from ..services.user_scope_owner import resolve_user_owner_schema
-
-            session_factory = db_connection.SessionLocal
-            if session_factory is not None:
-                with session_factory() as session:
-                    owner_schema = resolve_user_owner_schema(session)
-                    inspector = sa_inspect(session.connection())
-                    if inspector.has_table("sys_users", schema=owner_schema):
-                        cols = {
-                            col["name"]
-                            for col in inspector.get_columns("sys_users", schema=owner_schema)
-                        }
-                        has_inst = "institute_id" in cols
-                        table_ref = (
-                            f'"{owner_schema}"."sys_users"'
-                            if owner_schema
-                            else '"sys_users"'
-                        )
-                        select_cols = (
-                            "id, role, roles_json, is_active"
-                            + (", institute_id" if has_inst else "")
-                        )
-                        row = (
-                            session.execute(
-                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
-                                {"uid": actor_id},
-                            )
-                            .mappings()
-                            .one_or_none()
-                        )
-                        if row is not None:
-                            if not bool(row.get("is_active")):
-                                return False
-                            p_roles = _effective_persistent_roles(
-                                row.get("role"), row.get("roles_json")
-                            )
-                            if not p_roles:
-                                return False
-                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
-                            return ("sync_admin" in p_roles) or (
-                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
-                            )
-        except Exception:
-            pass
-
-    return ("sync_admin" in claim_roles) or (
-        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
-    )
-
-
 def _require_global_admin(
     current_user: Optional[Dict[str, Any]],
     detail: str = "仅全局管理员允许执行该操作",
 ) -> None:
-    if not _is_global_admin_sync(current_user):
-        raise HTTPException(status_code=403, detail=detail)
+    require_global_qc_rule_admin(current_user, detail=detail)
 
 
 def _can_review_batch_job(current_user: Optional[Dict[str, Any]]) -> bool:

@@ -14,6 +14,7 @@ from ..schemas.qc import QCResult, QCRule
 from ..services.qc_service import QCService
 from ..core.supabase_client import get_supabase, async_execute
 from ..core.response import success_response, paginated_response, get_trace_id, ErrorCode, StatusCode
+from ..core.roles import effective_persistent_roles as _effective_persistent_roles
 from ..core.security import get_current_user
 from ..core.permissions import (
     require_permission,
@@ -24,10 +25,9 @@ from ..core.permissions import (
     UserRole,
 )
 from ..database import connection as db_connection
-from ..services.defect_rectification_service import _effective_persistent_roles
+from ..database.schema_introspection import get_table_columns as _table_columns
 from ..services.user_scope_owner import (
     UserOwnerUnavailable,
-    configured_search_path,
     resolve_user_owner_schema,
 )
 from ..services.luxian_0609.llm_prompt_privacy import (
@@ -98,22 +98,6 @@ def _current_user_id(current_user: Optional[Dict[str, Any]]) -> Optional[str]:
         return None
     value = current_user.get("id") or current_user.get("user_id")
     return str(value) if value else None
-
-
-def _table_columns(session, table_name: str) -> Set[str]:
-    bind = session.get_bind()
-    inspector = sa_inspect(bind)
-    if bind.dialect.name != "postgresql":
-        if not inspector.has_table(table_name):
-            return set()
-        return {col["name"] for col in inspector.get_columns(table_name)}
-    schemas = list(dict.fromkeys([*configured_search_path(), "qc", "public", "sys", "cdm"]))
-    for schema in schemas:
-        if inspector.has_table(table_name, schema=schema):
-            return {col["name"] for col in inspector.get_columns(table_name, schema=schema)}
-    if inspector.has_table(table_name):
-        return {col["name"] for col in inspector.get_columns(table_name)}
-    return set()
 
 
 def _resolve_qc_actor(

@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Iterable
 import threading
@@ -7,7 +8,7 @@ from jose import jwt, JWTError
 from passlib.context import CryptContext
 
 from .settings import get_settings
-from .roles import effective_principal, effective_roles
+from .roles import effective_persistent_roles, effective_principal, effective_roles
 from ..services.auth_store import resolve_user_by_subject as resolve_auth_store_user_by_subject
 
 
@@ -162,6 +163,15 @@ def _extract_principal_roles(current_user: dict | None) -> set[str]:
     return roles
 
 
+@dataclass(frozen=True)
+class _PersistentUserScope:
+    id: str
+    role: object
+    roles_json: object
+    institute_id: str
+    is_active: bool
+
+
 def is_global_system_admin_principal(
     roles: Iterable[str] | None,
     institute_id: object = None,
@@ -179,64 +189,114 @@ def is_global_system_admin_principal(
     )
 
 
-def _verify_persistent_global_admin_scope(actor_id: str) -> None:
-    """若持久账号表存在该账号，以持久角色与院区绑定为准复核全局范围；DB 异常时 fail-closed 返回 503。"""
-    if not actor_id:
-        return
+def is_global_qc_rule_admin_principal(
+    roles: Iterable[str] | None,
+    institute_id: object = None,
+) -> bool:
+    """判定是否为全局质控规则管理员：仅 sync_admin 或未绑定院区的 admin/super_admin。
+
+    绑定具体院区（institute_id 非空）的 admin 与 super_admin 均不得修改全局质控规则。
+    """
+    raw = {str(r).strip().lower() for r in (roles or []) if str(r).strip()}
+    expanded = {
+        str(r).strip().lower()
+        for r in effective_roles(raw)
+        if str(r).strip()
+    }
+    all_roles = raw | expanded
+    inst = str(institute_id or "").strip()
+    return ("sync_admin" in all_roles) or (
+        bool(all_roles & {"admin", "super_admin"}) and not inst
+    )
+
+
+def _load_persistent_user_scope(actor_id: str) -> Optional[_PersistentUserScope]:
+    """从持久账号表加载账号权限范围；意外 DB 异常时 fail-closed 返回 503。"""
+    normalized_id = str(actor_id or "").strip()
+    if not normalized_id or normalized_id == "anonymous":
+        return None
     from ..database import connection as db_conn
 
     session_factory = getattr(db_conn, "SessionLocal", None)
     if session_factory is None:
-        return
+        return None
     from sqlalchemy import select
     from sqlalchemy.exc import OperationalError, SQLAlchemyError
     from ..database.models.v36_reports import SysUser
     from ..services.user_scope_owner import user_owner_options
-    from ..services.defect_rectification_service import _effective_persistent_roles
 
     try:
         with session_factory() as session:
-            row = session.execute(
-                select(
-                    SysUser.id,
-                    SysUser.role,
-                    SysUser.roles_json,
-                    SysUser.institute_id,
-                    SysUser.is_active,
-                ).where(SysUser.id == actor_id),
-                execution_options=user_owner_options(session),
-            ).first()
-    except OperationalError as exc:
-        msg = str(exc).lower()
-        # 仅兼容离线 SQLite 单测环境中未建 sys_users 表/列时的回退；其余 DB 故障 fail-closed 返回 503
-        if "no such table" in msg or "no such column" in msg:
-            return
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="账号全局权限复核服务暂不可用",
-        ) from None
-    except SQLAlchemyError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="账号全局权限复核服务暂不可用",
-        ) from None
+            options = user_owner_options(session)
+            try:
+                row = session.execute(
+                    select(
+                        SysUser.id,
+                        SysUser.role,
+                        SysUser.roles_json,
+                        SysUser.institute_id,
+                        SysUser.is_active,
+                    ).where(SysUser.id == normalized_id),
+                    execution_options=options,
+                ).first()
+                if row is None:
+                    return None
+                uid, db_role, db_roles_json, db_institute_id, db_is_active = row
+            except OperationalError as exc:
+                msg = str(exc).lower()
+                # 仅兼容离线 SQLite 单测环境中未建 sys_users 表或精简列时的回退；其余 DB 故障 fail-closed 返回 503
+                if "no such table" in msg:
+                    return None
+                if "no such column" in msg and "institute_id" in msg:
+                    row = session.execute(
+                        select(
+                            SysUser.id,
+                            SysUser.role,
+                            SysUser.roles_json,
+                            SysUser.is_active,
+                        ).where(SysUser.id == normalized_id),
+                        execution_options=options,
+                    ).first()
+                    if row is None:
+                        return None
+                    uid, db_role, db_roles_json, db_is_active = row
+                    db_institute_id = ""
+                elif "no such column" in msg:
+                    return None
+                else:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="账号全局权限复核服务暂不可用",
+                    ) from None
     except HTTPException:
         raise
-    except Exception:
+    except (OperationalError, SQLAlchemyError, Exception):
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="账号全局权限复核服务暂不可用",
         ) from None
-    if row is None:
+
+    return _PersistentUserScope(
+        id=str(uid),
+        role=db_role,
+        roles_json=db_roles_json,
+        institute_id=str(db_institute_id or "").strip(),
+        is_active=bool(db_is_active),
+    )
+
+
+def _verify_persistent_global_admin_scope(actor_id: str) -> None:
+    """若持久账号表存在该账号，以持久角色与院区绑定为准复核全局系统范围；DB 异常时 fail-closed 返回 503。"""
+    persistent = _load_persistent_user_scope(actor_id)
+    if persistent is None:
         return
-    _uid, db_role, db_roles_json, db_institute_id, db_is_active = row
-    if not db_is_active:
+    if not persistent.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="账号已停用，无权执行全局系统配置操作",
         )
-    persistent_roles = _effective_persistent_roles(db_role, db_roles_json)
-    if not is_global_system_admin_principal(persistent_roles, db_institute_id):
+    persistent_roles = effective_persistent_roles(persistent.role, persistent.roles_json)
+    if not is_global_system_admin_principal(persistent_roles, persistent.institute_id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="仅全局系统管理员可执行此操作，绑定院区管理员不可越权操作全局配置",
@@ -254,6 +314,34 @@ def verify_global_system_admin(current_user: dict) -> dict:
         )
     actor_id = str((current_user or {}).get("id") or (current_user or {}).get("user_id") or "").strip()
     _verify_persistent_global_admin_scope(actor_id)
+    return current_user
+
+
+def require_global_qc_rule_admin(
+    current_user: Optional[dict],
+    *,
+    detail: str = "仅全局管理员允许执行该操作",
+) -> dict:
+    """校验全局质控规则管理权限：以持久账号为准，DB 异常 fail-closed 返回 503。
+
+    仅允许 sync_admin 或未绑定院区的 admin/super_admin；绑定具体院区的 admin/super_admin 与停用账号一律 403。
+    """
+    if not isinstance(current_user, dict):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+    actor_id = str(current_user.get("id") or current_user.get("user_id") or "").strip()
+    persistent = _load_persistent_user_scope(actor_id)
+    if persistent is not None:
+        if not persistent.is_active:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+        p_roles = effective_persistent_roles(persistent.role, persistent.roles_json)
+        if not p_roles or not is_global_qc_rule_admin_principal(p_roles, persistent.institute_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+        return current_user
+
+    claim_roles = _extract_principal_roles(current_user)
+    claim_inst = str(current_user.get("institute_id") or "").strip()
+    if not is_global_qc_rule_admin_principal(claim_roles, claim_inst):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
     return current_user
 
 

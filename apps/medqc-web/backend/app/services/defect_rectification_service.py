@@ -6,7 +6,11 @@ from uuid import uuid4
 
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
-from ..core.roles import effective_roles
+from ..core.roles import (
+    effective_persistent_roles as _effective_persistent_roles,
+    effective_roles,
+    persistent_roles as _persistent_roles,
+)
 
 from ..database.connection import SessionLocal
 from ..database.models.v36_reports import DefectRectification as Task
@@ -28,21 +32,6 @@ def _now():
     return datetime.now(timezone.utc).replace(tzinfo=None)
 
 
-def _persistent_roles(role, roles_json):
-    """整改授权只读取明确持久角色；损坏的多角色配置不得回退放行。"""
-    if roles_json is not None and roles_json != "":
-        try:
-            roles = json.loads(roles_json)
-        except (TypeError, ValueError):
-            return set()
-        if not isinstance(roles, list) or any(
-            not isinstance(item, str) or not item.strip() for item in roles
-        ):
-            return set()
-        return {item.strip() for item in roles}
-    return {role.strip()} if isinstance(role, str) and role.strip() else set()
-
-
 def _person(session, user_id):
     row = session.execute(
         select(SysUser).where(SysUser.id == user_id),
@@ -60,11 +49,6 @@ def _person(session, user_id):
         "department": row.department,
         "roles": roles,
     }
-
-
-def _effective_persistent_roles(role, roles_json):
-    # 先验证持久原值，再沿用系统统一权限；损坏 JSON 不借单角色或 HTTP 声明放行。
-    return set(effective_roles(list(_persistent_roles(role, roles_json))))
 
 
 def _manager(person):

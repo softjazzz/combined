@@ -1,5 +1,6 @@
 """账号角色的运行时授权语义；不修改账号存储。"""
 from collections.abc import Iterable, Mapping
+import json
 from typing import Any
 
 from ..storage.memory import DEFAULT_DEMO_USER_EMAILS
@@ -10,6 +11,26 @@ _SUPER_ADMIN_ROLES = ("sync_admin", "super_admin")
 
 def is_demo_account_email(email: Any) -> bool:
     return str(email or "").strip().lower() in DEFAULT_DEMO_USER_EMAILS
+
+
+def persistent_roles(role: Any, roles_json: Any) -> set[str]:
+    """解析持久化账号角色；损坏的多角色 JSON 配置不得回退放行。"""
+    if roles_json is not None and roles_json != "":
+        try:
+            roles = json.loads(roles_json)
+        except (TypeError, ValueError):
+            return set()
+        if not isinstance(roles, list) or any(
+            not isinstance(item, str) or not item.strip() for item in roles
+        ):
+            return set()
+        return {item.strip() for item in roles}
+    return {role.strip()} if isinstance(role, str) and role.strip() else set()
+
+
+def effective_persistent_roles(role: Any, roles_json: Any) -> set[str]:
+    """先验证持久原值，再沿用系统统一权限展开；损坏 JSON 返回空集。"""
+    return set(effective_roles(list(persistent_roles(role, roles_json))))
 
 
 def effective_roles(value: Any) -> list[str]:
