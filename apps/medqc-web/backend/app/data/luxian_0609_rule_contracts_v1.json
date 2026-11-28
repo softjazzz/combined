@@ -154,7 +154,7 @@
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
@@ -209,7 +209,7 @@
       "executor_key": "course_quality",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },
@@ -220,7 +220,7 @@
       "executor_key": "tumor_pathology",
       "execution_mode": "native_async",
       "decision_authority": "program_then_optional_llm",
-      "max_llm_calls_per_rule": 1,
+      "max_llm_calls_per_rule": 2,
       "source_contract_state": "typed_shadow_v1",
       "golden_gate_state": "pending"
     },

@@ -438,6 +438,9 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     "LX0609-06-02-02": (
         "pathology_exam_master",
         "pathology_exam_report",
+        "postsurg_firstcourse_record",
+        "surgery_application",
+        "anesthesia_record",
     ),
     # 026 绑定同一请求内的恶性事实、化疗医嘱和对应病程，禁止跨快照补证。
     "LX0609-05-02-01": (
@@ -594,18 +597,22 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "daily_course_record",
         "diffcase_discussion_record",
     ),
-    # 052 需以任务冻结的评价终点判断危急值 6 小时观察窗是否已成熟；053
-    # 仅核对有无处置，保持既有来源与口径。
+    # 052 需以任务冻结的评价终点判断危急值 6 小时观察窗是否已成熟；052/053
+    # 均允许在日常病程/上级查房记录中核对危急值处置并绑定命中病程证据。
     "LX0609-06-04-01": (
         "evaluation_context.horizon",
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",
+        "daily_course_record",
+        "senior_course_record",
     ),
     "LX0609-06-04-02": (
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",
+        "daily_course_record",
+        "senior_course_record",
     ),
     "LX0609-05-01-02": (
         "first_course_record", "transfer_in_record", "senior_course_record", "consultation_record",
@@ -622,7 +629,7 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
     ),
     "LX0609-05-01-04": (
         "daily_course_record", "senior_course_record", "consultation_record",
-        "labtest_item_report",
+        "labtest_item_report", "inpat_nondrug_order",
     ),
     "LX0609-05-01-05": (
         "evaluation_context.horizon",
@@ -705,8 +712,22 @@ _DECISION_SUPPORT_SOURCES_BY_RULE = MappingProxyType({
         "inpat_registration", "admission_record", "evaluation_context.horizon",
         "inpat_registration.discharge_horizon",
     ),
-    "LX0609-06-03-05": ("inpat_registration", "evaluation_context.horizon", "inpat_registration.discharge_horizon", "labtest_item_report.routine_panel"),
-    "LX0609-06-03-06": ("inpat_registration", "evaluation_context.horizon", "inpat_registration.discharge_horizon", "labtest_item_report.routine_panel"),
+    "LX0609-06-03-05": (
+        "inpat_registration",
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+        "labtest_item_report.routine_panel",
+        "inpat_nondrug_order",
+        "inpat_nondrug_order.exam_lab_order",
+    ),
+    "LX0609-06-03-06": (
+        "inpat_registration",
+        "evaluation_context.horizon",
+        "inpat_registration.discharge_horizon",
+        "labtest_item_report.routine_panel",
+        "inpat_nondrug_order",
+        "inpat_nondrug_order.exam_lab_order",
+    ),
     "LX0609-12-02-01": ("diagnosis", "admission_record_diagnosis"),
     # 075：医嘱触发，操作记录核对病程与原始手术记录。
     "LX0609-10-03-01": (

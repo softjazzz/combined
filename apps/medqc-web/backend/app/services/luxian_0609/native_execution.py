@@ -349,7 +349,14 @@ def build_luxian_0609_native_technical_results(
     rule_ids: Sequence[str], *, reason_code: str = "native_result_incomplete"
 ) -> NativeExecutionResult:
     """为正式入口构造数量完整且不回显异常的失败结果。"""
-    selected = tuple(rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(rule_ids))
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
+    selected = tuple(rule_id for rule_id in requested if rule_id in NATIVE_RULE_IDS)
     return _technical_results(selected, reason_code=reason_code)
 
 
@@ -594,9 +601,17 @@ def execute_luxian_0609_native_rules(
     decision_rule_ids: Sequence[str] = (),
 ) -> NativeExecutionResult:
     """同步运行已验收链；异常隔离为客户安全的 technical_error。"""
-    selected = tuple(rule_id for rule_id in NATIVE_RULE_IDS if rule_id in set(rule_ids))
+    requested = tuple(
+        dict.fromkeys(
+            str(rule_id or "").strip().upper()
+            for rule_id in rule_ids
+            if str(rule_id or "").strip()
+        )
+    )
+    selected = tuple(rule_id for rule_id in requested if rule_id in NATIVE_RULE_IDS)
     if not selected:
         return NativeExecutionResult((), ())
+    planner_selected = tuple(rule_id for rule_id in NATIVE_RULE_IDS if rule_id in selected)
     typed_requested = frozenset(
         str(rule_id or "").strip().upper() for rule_id in decision_rule_ids
     )
@@ -617,9 +632,9 @@ def execute_luxian_0609_native_rules(
         created_at = _now()
         plan = planner.build_luxian_0609_shadow_plan(
             visit_ref=visit_id,
-            selected_rule_ids=selected,
-            scoped_customer_rule_ids=selected,
-            record_rule_map={visit_id: list(selected)},
+            selected_rule_ids=planner_selected,
+            scoped_customer_rule_ids=planner_selected,
+            record_rule_map={visit_id: list(planner_selected)},
             planner_schema_version=_PLAN_SCHEMA,
             rule_plan_version=_RULE_PLAN,
             created_at=created_at,
@@ -645,9 +660,9 @@ def execute_luxian_0609_native_rules(
         )
         execution = shadow_execution.build_luxian_0609_shadow_execution(
             visit_ref=visit_id,
-            selected_rule_ids=selected,
-            scoped_customer_rule_ids=selected,
-            record_rule_map={visit_id: list(selected)},
+            selected_rule_ids=planner_selected,
+            scoped_customer_rule_ids=planner_selected,
+            record_rule_map={visit_id: list(planner_selected)},
             evidence_payload=provided.evidence_payload,
             source_query_observations=assembly.source_query_observations,
             fact_pairs=assembly.fact_pairs,
@@ -752,7 +767,7 @@ def execute_luxian_0609_native_rules(
         for result in execution.results
     )
     if tuple(item["rule_id"] for item in all_results) != planned:
-        return _technical_results(planned, reason_code="native_result_incomplete")
+        return _technical_results(selected, reason_code="native_result_incomplete")
     typed_set = set(typed_selected)
     selected_fact_refs_by_rule: dict[str, tuple[str, ...] | None] = {}
     if evidence_snapshot is not None and evidence_materials is not None:
@@ -853,10 +868,14 @@ def execute_luxian_0609_native_rules(
                 },
             )
         )
+    ordered_planned = tuple(rule_id for rule_id in selected if rule_id in planned)
+    order = {rule_id: index for index, rule_id in enumerate(ordered_planned)}
     return NativeExecutionResult(
-        results=results,
-        planned_rule_ids=planned,
-        decisions=decisions,
-        customer_display_facts=tuple(customer_display_facts),
+        results=tuple(sorted(results, key=lambda item: order[item["rule_id"]])),
+        planned_rule_ids=ordered_planned,
+        decisions=tuple(sorted(decisions, key=lambda item: order[item.rule_id])),
+        customer_display_facts=tuple(
+            sorted(customer_display_facts, key=lambda item: order[item[0]])
+        ),
         execution_fingerprint=execution.fingerprint(),
     )

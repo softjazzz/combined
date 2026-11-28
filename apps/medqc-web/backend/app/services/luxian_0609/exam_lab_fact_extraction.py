@@ -539,6 +539,18 @@ def exam_reason_anchor_time(event: "ExamLabSingleEvent") -> datetime | None:
     return event.order_time or event.exam_time or event.report_time
 
 
+def exam_reason_anchor_has_conflict(event: "ExamLabSingleEvent") -> bool:
+    """检查 010 起算锚点角色是否存在时间冲突，避免冲突被入院 24h 豁免遮蔽。"""
+
+    if "order_time" in event.conflict_roles:
+        return True
+    if event.order_time is None and (
+        "exam_time" in event.conflict_roles or "report_time" in event.conflict_roles
+    ):
+        return True
+    return False
+
+
 def exam_reason_window(event: "ExamLabSingleEvent") -> tuple[datetime, datetime] | None:
     """010 检查前病程窗口。
 
@@ -951,6 +963,35 @@ def build_exam_lab_text_projection(
             if family == "exam"
             else _EXPLICIT_NON_TARGET_CULTURE_PATTERN
         )
+        reason_anchor_time = order_time or exam_time or report_time
+        anchor_time_conflict = (
+            "order_time" in conflicts
+            or (
+                order_time is None
+                and ("exam_time" in conflicts or "report_time" in conflicts)
+            )
+        )
+        # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免；
+        # 缺少医嘱开立时间而回退到检查时间/报告时间时，同样适用入院 24 小时内豁免。
+        # 若起算锚点角色存在时间冲突，绝不得给出 24 小时豁免，须由执行器按时间冲突降级。
+        within_admission_window = (
+            family == "exam"
+            and not anchor_time_conflict
+            and admission_time is not None
+            and reason_anchor_time is not None
+            and (
+                (
+                    order_time is not None
+                    and order_time <= admission_time + timedelta(hours=24)
+                )
+                or (
+                    order_time is None
+                    and admission_time
+                    <= reason_anchor_time
+                    <= admission_time + timedelta(hours=24)
+                )
+            )
+        )
         return ExamLabSingleEvent(
             family=family,
             document_refs=tuple(row_refs),
@@ -958,12 +999,7 @@ def build_exam_lab_text_projection(
             report_time=report_time,
             order_time=order_time,
             order_names=order_names,
-            # 院方口径（2026-10-10，口径汇编 B1 第 4 条）：入院 24 小时内开立的检查豁免。
-            within_admission_window=(
-                admission_time is not None
-                and order_time is not None
-                and order_time <= admission_time + timedelta(hours=24)
-            ),
+            within_admission_window=within_admission_window,
             conflict_roles=frozenset(conflicts),
             positive_hint=positive_hint,
             target_confirmed=target_confirmed,
@@ -1596,7 +1632,7 @@ positive_state字段固定规则：LX0609-06-01-02/LX0609-06-01-04/LX0609-06-03-
 必须核对病程正文中检查所属日期、部位和本次报告；病程书写时间在本次报告之后，不表示其引用的旧检查属于本次。仅引用既往或院外检查时不得用于本次结果记录或分析，若无法确定归属返回unknown。对每次检查分别找真正对应的病程。
 针对检查结果说明其临床意义、病因或与症状的关系，作出鉴别判断、手术建议、诊疗计划、处置或治疗效果解释，均可构成实质分析，不要求原文含“分析”二字。用户口径（2026-10-11）：只把报告结果抄入辅助检查，或抄录后直接列出诊断、诊断依据只写“辅助检查提示”“见辅助检查”之类而未说明该异常的意义或处理，LX0609-06-01-05为absent；仅复制报告也不算。鉴别诊断只有针对本次报告的异常所见进行鉴别才算分析；与本次报告异常无关的模板式鉴别诊断不算。必须检索首次病程的诊断依据和后续病程完整上下文。
 LX0609-06-01-04/LX0609-06-03-03只判断“结果是否被记录”，同一句病程同时记录结果并作分析也必须算semantic_state=present；LX0609-06-01-05/LX0609-06-03-04再独立判断阳性结果是否有分析或处置。LX0609-06-01-04/LX0609-06-03-03=present必须在病程中写出本次报告的结果内容（所见或结论，可概括）；只写“结果已回报”“详见报告”“已查看报告”而没有任何结果内容的，为absent。仅复述或摘抄报告结论，只能证明LX0609-06-01-04结果已记录，不能证明LX0609-06-01-05已分析；LX0609-06-01-05=present必须出现针对该异常结果的临床意义、病因判断、与症状的关系、诊疗计划、处置或会诊等实质内容。
-同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。LX0609-06-03-04必须确认处置针对同一培养事件的标本/菌种/药敏或该报告，明确写的是另一种标本（如导管尖端培养）的处置不得引用；既复述阳性影像结论又给出考虑、计划或处理时，该事件的LX0609-06-01-04和LX0609-06-01-05都为present；既复述培养结果又据敏感性调整用药时，该事件的LX0609-06-03-03和LX0609-06-03-04都为present。
+同一规则必须对目录中的每个事件各输出一条事实。病程中的检查名称、结果描述和事件窗口用于区分事件；无法唯一对应时，该事件输出unknown，不能把一份病程复制给所有事件。特例（双瓶/多瓶血培养）：若同一采血或报告批次存在配对的需氧与厌氧血培养报告，且报告后24小时内的病程或危急值处理记录写明“血培养双瓶报阳”“双瓶/需氧及厌氧均报阳”“多瓶血培养同病原体报阳”等涵盖双瓶或多瓶的表述，应视作同时覆盖该批次的需氧与厌氧两份血培养报告，两个事件的LX0609-06-03-03（以及对应有分析或处置时的LX0609-06-03-04）均应引用该病程并判为present，不得仅匹配其中一瓶而漏判另一瓶。LX0609-06-03-04必须确认处置针对同一培养事件的标本/菌种/药敏或该报告，明确写的是另一种标本（如导管尖端培养）的处置不得引用；既复述阳性影像结论又给出考虑、计划或处理时，该事件的LX0609-06-01-04和LX0609-06-01-05都为present；既复述培养结果又据敏感性调整用药时，该事件的LX0609-06-03-03和LX0609-06-03-04都为present。
 unknown只用于材料自身含混或互相冲突；完整投影里单纯未找到匹配病程应为absent。
 逐规则决策表（每条都必须独立作答）：LX0609-06-01-02只看检查前原因；LX0609-06-01-04只看报告结果是否记录；LX0609-06-01-05只看阳性影像是否分析；LX0609-06-03-03只看培养结果是否记录；LX0609-06-03-04只看阳性菌或药敏是否被分析/处置。若同一 COURSE_DOC 同时满足多条，可为多条重复引用；不得因某一条不适用而省略其他条。
 当唯一目标 EVENT_DOC 和 COURSE_DOC 已明确对应上述事实时，填写 applicable+present 并引用该 COURSE_DOC 的位置；没有匹配病程且材料完整时填写 applicable+absent。unknown 不是默认答案：只在文本确实含混、冲突，或无法把文字与本次唯一事件关联时使用。

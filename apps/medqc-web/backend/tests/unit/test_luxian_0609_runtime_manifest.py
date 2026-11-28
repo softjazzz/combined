@@ -102,7 +102,7 @@ def test_runtime_manifest_binds_all_rules_to_current_safe_runtime() -> None:
     assert by_rule["LX0609-01-01-02"]["pending_criteria"] == []
     assert by_rule["LX0609-01-01-02"]["pending_reason_code"] == ""
     assert by_rule["LX0609-01-01-02"]["decision_authority"] == "program_then_optional_llm"
-    assert by_rule["LX0609-01-01-02"]["max_llm_calls_per_rule"] == 1
+    assert by_rule["LX0609-01-01-02"]["max_llm_calls_per_rule"] == 2
     assert by_rule["LX0609-06-01-02"]["phase_status"] == "phase_1_target"
     assert by_rule["LX0609-06-01-02"]["pending_reason_code"] == ""
     assert all(item["contract_version"] for item in manifest["rules"])

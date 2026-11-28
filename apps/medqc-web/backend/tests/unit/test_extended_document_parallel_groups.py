@@ -40,10 +40,10 @@ async def test_independent_groups_overlap_but_shared_reason_rules_stay_together(
     monkeypatch.setattr(module, "_execute_extended_document_group", core)
     with timing_scope() as collector:
         result = await module.execute_luxian_0609_native_extended_document_rules(**arguments())
-    canonical = tuple(rule for rule in module.EXTENDED_DOCUMENT_RULE_IDS if rule in RULES)
     assert started == [("LX0609-05-01-02", "LX0609-05-01-05"), ("LX0609-08-01-01",)]
-    assert tuple(row["rule_id"] for row in result.results) == canonical
-    assert tuple(row[0] for row in result.customer_display_facts) == canonical
+    assert result.planned_rule_ids == RULES
+    assert tuple(row["rule_id"] for row in result.results) == RULES
+    assert tuple(row[0] for row in result.customer_display_facts) == RULES
     assert (result.llm_call_count, result.prompt_tokens, result.completion_tokens, result.total_tokens, result.api_time) == (2, 20, 10, 30, 3.0)
     assert set(collector.snapshot()["units"]) == {"antimicrobial", "documents"}
 

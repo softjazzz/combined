@@ -2192,7 +2192,7 @@ async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() ->
                 "status_state": "effective",
                 "lifecycle_state": "active",
                 "planned_start_datetime": "2026-01-01 09:00:00",
-                "planned_end_datetime": "2026-01-02 10:00:00",
+                "planned_end_datetime": "2026-01-05 10:00:00",
                 "row_ref": "c" * 64,
             }
         ],
@@ -2205,7 +2205,7 @@ async def test_course_008_009_active_rows_ignore_unreached_planned_end_time() ->
 
     result, reduced = await _run_typed_severity(session)
 
-    # 未停止的医嘱仍有效，但冻结当天尚未结束，不能提前报当天缺失。
+    # 计划结束时间晚于冻结评价日时医嘱仍有效，但冻结当天尚未结束，不能提前报当天缺失。
     assert reduced[1].final_state is CustomerFinalState.NOT_APPLICABLE
     assert reduced[1].reason_code == "evaluation_window_not_mature"
     assert result.llm_call_count == 0
@@ -3973,9 +3973,9 @@ async def test_selected_rules_keep_customer_catalog_order_and_missing_projection
     )
     assert course.EXECUTOR_KEY == "course_quality"
     assert [item["rule_id"] for item in result.results] == [
+        "LX0609-01-01-02",
         "LX0609-02-01-03",
         "LX0609-12-01-01",
-        "LX0609-01-01-02",
     ]
     assert [item["status"] for item in result.results] == ["data_gap"] * 3
     assert result.llm_call_count == 0
@@ -6803,7 +6803,7 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output] if isinstance(model_output, str) else [model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-01-02",),
         decision_rule_ids=("LX0609-01-01-02",),
@@ -6822,14 +6822,15 @@ async def test_typed_018_model_failure_and_invalid_output_are_controlled(
     assert reduced[0].final_state is CustomerFinalState.TECHNICAL_ERROR
     assert reduced[0].reason_code == criterion_reason
     assert result.results == ()
-    assert result.llm_call_count == 1
-    assert result.total_tokens == 45 if isinstance(model_output, str) else result.total_tokens == 0
+    expected_calls = 2 if isinstance(model_output, str) else 1
+    assert result.llm_call_count == expected_calls
+    assert result.total_tokens == (45 * expected_calls if isinstance(model_output, str) else 0)
     criterion = reduced[0].criterion_results[-1]
     assert criterion.reason_code == "semantic_low_confidence"
     assert criterion.rationale_code == criterion_reason
     assert client.calls == [
         {"max_completion_tokens": 600, "allow_length_retry": False}
-    ]
+    ] * expected_calls
 
 
 @pytest.mark.asyncio
@@ -6872,7 +6873,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
         created_at="2026-07-16T12:00:00+08:00",
         row_reader=read,
     )
-    client = _Client([model_output])
+    client = _Client([model_output, model_output] if isinstance(model_output, str) else [model_output])
     result = await course.execute_luxian_0609_native_course_quality_rules(
         rule_ids=("LX0609-01-01-02",),
         decision_rule_ids=("LX0609-01-01-02",),
@@ -6890,7 +6891,7 @@ async def test_typed_018_keeps_deterministic_length_failure_when_model_unresolve
 
     assert reduced[0].final_state is CustomerFinalState.NON_COMPLIANT
     assert reduced[0].reason_code == "requirement_violated"
-    assert result.llm_call_count == 1
+    assert result.llm_call_count == (2 if isinstance(model_output, str) else 1)
 
 
 _017_SPECIFIC_REPEAT = (

@@ -153,19 +153,19 @@ _MALIGNANT_CODE_PATTERN = re.compile(r"^C[0-9]{2}(?:[.A-Z0-9-]*)$")
 _PRESENT_FACT_STATES = frozenset({"present", "performed", "available", "positive"})
 _PATHOLOGY_SAMPLING_ACTION_PATTERNS = (
     re.compile(
-        r"(?:切除|取出|切取|留取|获取|取材).{0,48}"
-        r"(?:标本|组织|病灶|肿物|阑尾|胆囊)?.{0,24}"
-        r"(?:送病理(?:检查)?|送病检|送检)"
+        r"(?:切除|取出|切取|留取|获取|取材|抽吸|灌洗|冲洗|刷检|活检).{0,48}"
+        r"(?:标本|组织|病灶|肿物|阑尾|胆囊|灌洗液|冲洗液|胸水|腹水|积液|脱落细胞)?.{0,24}"
+        r"(?:送病理(?:检查)?|送病检|送脱落细胞(?:学)?(?:检查)?|送细胞学(?:检查)?|送检)"
     ),
     re.compile(
-        r"(?:标本|组织|病灶|肿物|阑尾|胆囊).{0,48}"
-        r"(?:已送|送病理(?:检查)?|送病检|送检)"
+        r"(?:标本|组织|病灶|肿物|阑尾|胆囊|灌洗液|冲洗液|胸水|腹水|积液|脱落细胞).{0,48}"
+        r"(?:已送|送病理(?:检查)?|送病检|送脱落细胞(?:学)?(?:检查)?|送细胞学(?:检查)?|送检)"
     ),
     re.compile(
         r"(?:术中|手术中).{0,24}(?:取材|切取|留取)"
         r"(?:了|完成|并|后|，|,|送病理|送病检|送检|$)"
     ),
-    re.compile(r"(?:已|已经)(?:送病理(?:检查)?|送病检|送检)"),
+    re.compile(r"(?:已|已经)(?:送病理(?:检查)?|送病检|送脱落细胞(?:学)?(?:检查)?|送细胞学(?:检查)?|送检)"),
 )
 _PATHOLOGY_SAMPLING_NEGATIVE_PATTERN = re.compile(
     r"(?:"
@@ -180,9 +180,38 @@ _PATHOLOGY_SAMPLING_NEGATIVE_PATTERN = re.compile(
 _PATHOLOGY_SAMPLING_EMPTY_TEMPLATE_PATTERN = re.compile(
     r"(?:术中取材|标本送检情况|送检情况)\s*[:：]\s*$"
 )
-_PATHOLOGY_DIRECT_SEND_PATTERN = re.compile(r"(?:送病理(?:检查)?|送病检|送检)")
+_PATHOLOGY_DIRECT_SEND_PATTERN = re.compile(
+    r"(?:送病理(?:检查)?|送病检|送脱落细胞(?:学)?(?:检查)?|送细胞学(?:检查)?|送检)"
+)
 _PATHOLOGY_SAMPLING_SUBJECT_PATTERN = re.compile(
-    r"(?:标本|组织|病灶|肿物|阑尾|胆囊|取材|切除|取出)"
+    r"(?:标本|组织|病灶|肿物|阑尾|胆囊|灌洗液|冲洗液|胸水|腹水|积液|脱落细胞|取材|切除|取出|灌洗|活检)"
+)
+_SURGICAL_RESECTION_PATHOLOGY_PATTERN = re.compile(
+    r"(?:切除(?:术)?标本|根治(?:术)?标本|术后切除标本|切除组织|切除物|"
+    r"带系膜阑尾|阑尾一段|急性(?:化脓性|坏疽性|单纯性|穿孔性)?阑尾炎|"
+    r"术中(?:快速)?冰冻|冰冻切片|淋巴结清扫|"
+    r"(?:肺叶|肺段|楔形|全肺|胃|结肠|直肠|肠|肝|胆囊|阑尾|甲状腺|乳腺|子宫|卵巢|肾|膀胱|前列腺|脾|胰|食管)(?:部分|次全|全|根治性?)?切除)"
+)
+_SURGERY_NAME_ABSENT_PATTERN = re.compile(
+    r"^(?:无|未行手术|未手术|无手术|-|—|/|NA|N/A|none)$", re.IGNORECASE
+)
+_SURGERY_CANCELLED_STATUSES = frozenset({"取消", "撤销", "作废"})
+_ENDOSCOPY_ONLY_PROCEDURE_PATTERN = re.compile(
+    r"(?:胃镜|肠镜|结肠镜|支气管镜|纤支镜|内镜|喉镜|膀胱镜|阴道镜)(?:检查|活检|灌洗|刷检)?"
+)
+_EXPLICIT_SURGICAL_OPERATION_PATTERN = re.compile(
+    r"(?:切除术|根治术|修补术|成形术|重建术|清扫术|腹腔镜|胸腔镜|开腹|开胸|手术)"
+)
+_SURGICAL_COURSE_TITLE_PATTERN = re.compile(
+    r"(?:术后(?:首次|第?\d+[天日])?|术前术者查看|手术记录)"
+)
+_SURGICAL_COURSE_EVENT_PATTERN = re.compile(
+    r"(?:(?:腹腔镜|胸腔镜|腔镜|开腹|开胸|全麻|硬膜外|腰麻)下?.{0,18}(?:切除术|根治术|修补术|手术)"
+    r"|行.{1,16}(?:切除术|根治术)"
+    r"|术后(?:第\d+[天日]|当天|当日|恢复|生命体征|切口|引流))"
+)
+_SURGICAL_COURSE_HISTORY_OR_NEGATION_PATTERN = re.compile(
+    r"(?:既往|年前|月前|余年前|余月前|外院|未行|拒绝|取消|暂缓|拟于|拟行|计划行)"
 )
 _PATHOLOGY_SAMPLING_ADMIN_PATTERN = re.compile(
     r"(?:送检单|申请|医嘱|登记|流程|手续|计划|打印)"
@@ -376,7 +405,7 @@ def _typed_decision_from_outcome(
             if outcome.reason_code == "pathology_recording_deadline_unconfirmed"
             else outcome.reason_code if outcome.reason_code in {
                 "authoritative_time_missing", "authoritative_time_conflict", "candidate_scope_incomplete",
-                "association_failed", "source_truncated", "source_readiness_unproven",
+                "association_failed", "source_truncated", "source_readiness_unproven", "source_empty",
             }
             else "source_unavailable" if source_gap else "required_field_missing",
         )
@@ -600,6 +629,7 @@ def _load_typed_source(
 
 def _row_text(row: Mapping[str, Any]) -> str:
     approved_keys = (
+        "document_title",
         "content",
         "record_content",
         "assembled_text",
@@ -1054,6 +1084,209 @@ def _pathology_checked_sources(
     return trigger_sources, target_sources
 
 
+def _has_surgical_resection_pathology(
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+) -> bool:
+    """判断本次病理资料是否明确包含手术切除/术中冰冻标本。"""
+
+    for row in pathology_master.rows:
+        surgery_name = _clean(row.get("surgery_name"))
+        if surgery_name and not _SURGERY_NAME_ABSENT_PATTERN.fullmatch(surgery_name):
+            return True
+        text = " ".join(
+            _clean(row.get(field))
+            for field in ("specimen_name", "clinical_history", "record_content", "content")
+            if _clean(row.get(field))
+        )
+        if text and _SURGICAL_RESECTION_PATHOLOGY_PATTERN.search(text):
+            return True
+    for row in pathology_report.rows:
+        text = " ".join(
+            _clean(row.get(field))
+            for field in (
+                "specimen_name",
+                "diagnosis",
+                "eye_findings",
+                "microscope_findings",
+                "record_content",
+                "content",
+            )
+            if _clean(row.get(field))
+        )
+        if text and _SURGICAL_RESECTION_PATHOLOGY_PATTERN.search(text):
+            return True
+    return False
+
+
+_LX019_DECLARED_SURGERY_EVENT_SOURCES = (
+    "postsurg_firstcourse_record",
+    "surgery_application",
+    "anesthesia_record",
+)
+
+
+def _has_available_session_surgery_evidence(
+    evidence_materials: Luxian0609EvidenceMaterialStore | None,
+) -> bool:
+    """只读取 06-02-02 在 source_registry 中显式声明的手术事件来源，判断本次就诊是否确有手术。
+
+    绝不读取未声明来源，也绝不将这些辅助来源的文书引用写入 06-02-02 的 fact_refs。
+    """
+
+    if evidence_materials is None:
+        return False
+    if (
+        "postsurg_firstcourse_record" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("postsurg_firstcourse_record")
+    ):
+        try:
+            rows = evidence_materials.bounded_rows("postsurg_firstcourse_record")
+        except EvidenceMaterialUnavailable:
+            rows = ()
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            text = _clean(
+                row.get("record_content")
+                or row.get("content")
+                or row.get("assembled_text")
+                or row.get("document_title")
+            )
+            if text:
+                return True
+    if (
+        "surgery_application" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("surgery_application")
+    ):
+        try:
+            rows = evidence_materials.bounded_rows("surgery_application")
+        except EvidenceMaterialUnavailable:
+            rows = ()
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            status = _clean(row.get("order_status") or row.get("status"))
+            if status in _SURGERY_CANCELLED_STATUSES:
+                continue
+            name = _clean(
+                row.get("surgery_name")
+                or row.get("operation_name")
+                or row.get("record_content")
+                or row.get("content")
+            )
+            if not name or _SURGERY_NAME_ABSENT_PATTERN.fullmatch(name):
+                continue
+            if _ENDOSCOPY_ONLY_PROCEDURE_PATTERN.search(name) and not _EXPLICIT_SURGICAL_OPERATION_PATTERN.search(name):
+                continue
+            return True
+    if (
+        "anesthesia_record" in _LX019_DECLARED_SURGERY_EVENT_SOURCES
+        and evidence_materials.has_source("anesthesia_record")
+    ):
+        try:
+            rows = evidence_materials.bounded_rows("anesthesia_record")
+        except EvidenceMaterialUnavailable:
+            rows = ()
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            text = _clean(
+                " ".join(
+                    part
+                    for part in (
+                        _row_text(row),
+                        _clean(row.get("anesthesia_method")),
+                    )
+                    if part
+                )
+            )
+            if not text:
+                continue
+            if _ENDOSCOPY_ONLY_PROCEDURE_PATTERN.search(text) and not _EXPLICIT_SURGICAL_OPERATION_PATTERN.search(text):
+                continue
+            return True
+    return False
+
+
+def _has_daily_course_surgery_evidence(
+    daily_course_record: SourceMaterial | None,
+) -> bool:
+    """判断日常病程记录中是否存在本次住院已实施/主刀手术事件（排除既往史与纯内镜检查）。"""
+
+    if daily_course_record is None or not daily_course_record.rows:
+        return False
+    for row in daily_course_record.rows:
+        if not isinstance(row, Mapping):
+            continue
+        title = _clean(row.get("document_title"))
+        if title and _SURGICAL_COURSE_TITLE_PATTERN.search(title):
+            return True
+        body = _row_text(row)
+        if not body:
+            continue
+        for clause in re.split(r"[\r\n。；;！？!?，,]+", body):
+            normalized = _clean(clause)
+            if not normalized:
+                continue
+            match = _SURGICAL_COURSE_EVENT_PATTERN.search(normalized)
+            if match is None:
+                continue
+            prefix = normalized[: match.start()]
+            if _SURGICAL_COURSE_HISTORY_OR_NEGATION_PATTERN.search(prefix):
+                continue
+            return True
+    return False
+
+
+def _has_surgical_procedure_evidence(
+    *,
+    pathology_master: SourceMaterial,
+    pathology_report: SourceMaterial,
+    daily_course_record: SourceMaterial | None = None,
+    evidence_materials: Luxian0609EvidenceMaterialStore | None = None,
+) -> bool:
+    """综合病理切除特征、会话已有手术来源及日常病程手术证据，识别手术记录空表缺口。"""
+
+    return (
+        _has_surgical_resection_pathology(pathology_master, pathology_report)
+        or _has_available_session_surgery_evidence(evidence_materials)
+        or _has_daily_course_surgery_evidence(daily_course_record)
+    )
+
+
+def _pathology_display_report_time(
+    row: Mapping[str, Any],
+    master_rows: Sequence[Mapping[str, Any]] = (),
+) -> str | None:
+    """提取并规范化病理报告展示时间（YYYY-MM-DD HH:MM:SS），优先 report_datetime。"""
+
+    for field in (
+        "report_datetime",
+        "report_time",
+        "record_time",
+        "display_time",
+        "authored_at",
+        "exam_datetime",
+        "apply_datetime",
+        "request_datetime",
+    ):
+        parsed = _pathology_link_time(row.get(field))
+        if parsed is not None:
+            return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    key_fields = ("pathology_exam_id", "pathology_id")
+    for candidate in master_rows:
+        if any(
+            _clean(row.get(key)) and _clean(row.get(key)) == _clean(candidate.get(key))
+            for key in key_fields
+        ):
+            for field in ("report_datetime", "exam_datetime", "apply_datetime", "request_datetime"):
+                parsed = _pathology_link_time(candidate.get(field))
+                if parsed is not None:
+                    return parsed.strftime("%Y-%m-%d %H:%M:%S")
+    return None
+
+
 def _pathology_result_display_facts(
     *,
     status: str,
@@ -1062,6 +1295,7 @@ def _pathology_result_display_facts(
     surgery_record: SourceMaterial,
     daily_course_record: SourceMaterial,
     senior_course_record: SourceMaterial | None = None,
+    target_report_times: Sequence[datetime] = (),
 ) -> Mapping[str, Any] | None:
     trigger_sources, target_sources = _pathology_checked_sources(
         pathology_master=pathology_master,
@@ -1075,17 +1309,15 @@ def _pathology_result_display_facts(
         if senior_course_record.state not in {"present", "empty"}:
             return None
         target_sources.append({"source": "senior_course_record", "state": senior_course_record.state})
+    focused_times = {
+        moment.strftime("%Y-%m-%d %H:%M:%S")
+        for moment in target_report_times
+        if isinstance(moment, datetime)
+    }
     report_times = {
         value
         for row in pathology_report.rows
-        if (
-            value := _clean(
-                row.get("report_datetime")
-                or row.get("report_time")
-                or row.get("record_time")
-            )
-        )
-        and _PATHOLOGY_REPORT_DATETIME_PATTERN.fullmatch(value)
+        if (value := _pathology_display_report_time(row, pathology_master.rows)) is not None
     }
     facts: dict[str, Any] = {
         "verification_kind": "pathology_result_documentation_check",
@@ -1093,7 +1325,9 @@ def _pathology_result_display_facts(
         "checked_target_sources": target_sources,
         "requirement_met": status == "compliant",
     }
-    if len(report_times) == 1:
+    if len(focused_times) == 1:
+        facts["report_time"] = next(iter(focused_times))
+    elif len(report_times) == 1:
         facts["report_time"] = next(iter(report_times))
     return facts
 
@@ -1201,6 +1435,7 @@ class _PathologyDocumentationOutcome:
     reason_code: str
     cited: tuple[tuple[str, Mapping[str, Any]], ...] = ()
     checked: tuple[tuple[str, Mapping[str, Any]], ...] = ()
+    unmet_report_times: tuple[datetime, ...] = ()
     llm_call_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0
@@ -1234,7 +1469,13 @@ def _pathology_events(
             linked = [master.rows[0]]
         used_masters.update(id(candidate) for candidate in linked)
         specimens = {_clean(item.get("specimen_name")) for item in (row, *linked) if _clean(item.get("specimen_name"))}
-        report_time = _pathology_link_time(row.get("report_datetime") or row.get("report_time"))
+        report_time = _pathology_link_time(
+            row.get("report_datetime")
+            or row.get("report_time")
+            or row.get("record_time")
+            or row.get("display_time")
+            or row.get("authored_at")
+        )
         events.append((
             PathologyEvent(
                 event_id=f"P{index}", specimen="、".join(sorted(specimens)),
@@ -1253,6 +1494,8 @@ async def _typed_pathology_documentation(
     *, rule_id: str, master: SourceMaterial, report: SourceMaterial,
     targets: Mapping[str, SourceMaterial], llm_client: Any,
     horizon: datetime | date | None = None, horizon_basis: str = "", horizon_error: str = "authoritative_time_missing",
+    surgery_record_empty: bool = False,
+    surgical_procedure_evidenced: bool = False,
 ) -> _PathologyDocumentationOutcome:
     """模型逐次检查抽取取材/结果记录及原文引用，程序核验时间并判定。"""
 
@@ -1307,6 +1550,7 @@ async def _typed_pathology_documentation(
     states: list[str] = []
     unresolved_reasons: list[str] = []
     cited: list[tuple[str, Mapping[str, Any]]] = []
+    unmet_report_times: list[datetime] = []
     for event, report_time in events:
         fact = extraction.events[event.event_id]
         state = fact.state
@@ -1328,16 +1572,29 @@ async def _typed_pathology_documentation(
             if reason:
                 state = "unknown"
                 unresolved_reasons.append(reason)
+        if state == "not_documented" and report_time is not None:
+            unmet_report_times.append(report_time)
         states.append(state)
     if "not_documented" in states:
         if untimed:
             return _PathologyDocumentationOutcome(
                 "data_gap", "pathology_event_association_unresolved", checked=tuple(checked), **usage,
             )
+        if sampling and surgery_record_empty and (
+            surgical_procedure_evidenced
+            or _has_surgical_resection_pathology(master, report)
+        ):
+            # 手术切除/已实施手术病理的取材情况主要应记入手术记录；手术记录为空（0行）且病程未见取材时，
+            # 降级为 data_gap（source_empty），避免把源库缺手术记录误判为临床未记录取材。
+            return _PathologyDocumentationOutcome(
+                "data_gap", "source_empty", checked=tuple(checked), **usage,
+            )
         return _PathologyDocumentationOutcome(
             "non_compliant",
             "pathology_sampling_not_documented" if sampling else "pathology_result_not_documented",
-            checked=tuple(checked), **usage,
+            checked=tuple(checked),
+            unmet_report_times=tuple(unmet_report_times),
+            **usage,
         )
     if "unknown" in states:
         return _PathologyDocumentationOutcome(
@@ -2708,6 +2965,27 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
         if rule_id == "LX0609-06-02-02" and all(
             state == "empty" for state in target_states
         ):
+            if _has_surgical_procedure_evidence(
+                pathology_master=master,
+                pathology_report=report,
+                daily_course_record=materials["daily_course_record"],
+                evidence_materials=evidence_materials,
+            ):
+                emit_outcome(
+                    rule_id,
+                    "data_gap",
+                    "source_empty",
+                    executor_type="program",
+                    fact_refs=(
+                        typed_document_refs(
+                            ("pathology_exam_master", master.rows),
+                            ("pathology_exam_report", report.rows),
+                        )
+                        if typed_rule
+                        else ()
+                    ),
+                )
+                continue
             missing_sampling_facts = _lx019_missing_sampling_display_facts(
                 pathology_master=master,
                 pathology_report=report,
@@ -2775,6 +3053,17 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                     if sampling_rule else target_materials
                 ),
                 llm_client=llm_client,
+                surgery_record_empty=sampling_rule and target_materials["surgery_record"].state == "empty",
+                surgical_procedure_evidenced=(
+                    sampling_rule
+                    and target_materials["surgery_record"].state == "empty"
+                    and _has_surgical_procedure_evidence(
+                        pathology_master=master,
+                        pathology_report=report,
+                        daily_course_record=target_materials["daily_course_record"],
+                        evidence_materials=evidence_materials,
+                    )
+                ),
                 **horizon_kwargs,
             )
             llm_call_count += documentation.llm_call_count
@@ -2821,6 +3110,7 @@ async def execute_luxian_0609_native_tumor_pathology_rules(
                         surgery_record=target_materials["surgery_record"],
                         daily_course_record=target_materials["daily_course_record"],
                         senior_course_record=target_materials["senior_course_record"],
+                        target_report_times=documentation.unmet_report_times,
                     )
                 )
                 selected_rows = documentation.checked

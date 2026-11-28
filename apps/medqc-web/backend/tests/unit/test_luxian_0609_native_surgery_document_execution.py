@@ -2360,9 +2360,9 @@ async def test_strong_facts_run_each_selected_rule_once_in_customer_order():
         llm_client=client,
     )
 
-    assert result.planned_rule_ids == legacy_document_rule_ids
+    assert result.planned_rule_ids == tuple(reversed(legacy_document_rule_ids))
     assert [item["rule_id"] for item in result.results] == list(
-        legacy_document_rule_ids
+        reversed(legacy_document_rule_ids)
     )
     assert [item["status"] for item in result.results] == [
         "compliant",
@@ -2821,10 +2821,10 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
         decision_rule_ids=surgery_doc.SURGERY_DOCUMENT_RULE_IDS,
     )
 
-    assert result.planned_rule_ids == surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+    assert result.planned_rule_ids == tuple(reversed(surgery_doc.SURGERY_DOCUMENT_RULE_IDS))
     assert result.results == ()
     assert [item.rule_id for item in result.decisions] == list(
-        surgery_doc.SURGERY_DOCUMENT_RULE_IDS
+        reversed(surgery_doc.SURGERY_DOCUMENT_RULE_IDS)
     )
     # 029 触发且术前小结为空，034-038 缺麻醉方式及实施事实；
     # 039有手术强事实但术者参与关联仍未获批准。
@@ -2837,15 +2837,15 @@ async def test_typed_surgery_document_rules_are_ordered_fail_closed_and_never_re
         )[0].final_state
         for decision in result.decisions
     ] == [
+        "not_applicable",
+        "not_applicable",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
+        "data_gap",
         "non_compliant",
-        "data_gap",
-        "data_gap",
-        "data_gap",
-        "data_gap",
-        "data_gap",
-        "data_gap",
-        "not_applicable",
-        "not_applicable",
     ]
     assert result.llm_call_count == result.total_tokens == 0
     assert client.prompts == []

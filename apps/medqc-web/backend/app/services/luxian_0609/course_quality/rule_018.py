@@ -302,6 +302,9 @@ def _lx018_prompt(*, context: str) -> str:
         "不能仅因该症状可能出现在第一诊断中就判supports。不要补造病历没有的事实。\n"
         "反例：主诉“头痛、头晕1天”，现病史另有“伴左手乏力”，第一诊断脑梗死；主诉线索只有头痛、头晕，属nonspecific_symptom_or_sign，不得因现病史判supports。\n"
         "chief_complaint_signals为必填字符串数组，逐字摘自[主诉原文]中实际采信的症状、体征或事件，1–6项，每项不超过20字；chief_signal_kind=unknown时可为空数组。\n"
+        "注意：即使主诉极短（如“呼之不应 3天。”“意识不清2小时”“昏迷1天”），chief_complaint_signals也必须原样逐字截取[主诉原文]中的连续子串"
+        "（例如主诉为“呼之不应 3天。”时必须写[\"呼之不应\"]，不得改写或替换为同义术语“意识障碍”“昏迷”）；"
+        "且当chief_signal_kind=unknown时，五个关系字段均不得为supports或conflicts。\n"
         "medical_analysis只能作展示说明，不能决定状态；用中文说明采用的原子事实，"
         "不得复述姓名、住院号等身份信息，最多80个汉字，不要解释枚举定义。\n"
         "严格输出JSON对象："
@@ -314,6 +317,92 @@ def _lx018_prompt(*, context: str) -> str:
         '"disease_direction_relation":"supports|conflicts|nonspecific|not_applicable|unknown",'
         '"medical_analysis":"..."}。\n'
         f"受控材料：\n{context}"
+    )
+
+
+def _lx018_retry_reason_hint(
+    previous_response: Mapping[str, Any] | None,
+    *,
+    chief_complaint: str = "",
+) -> str:
+    """基于失败类型生成固定纠偏提示；绝不回显原始病历正文或模型自由文本。"""
+
+    if not isinstance(previous_response, Mapping):
+        return "上次输出不是合法JSON对象"
+    payload = _response_json_payload(previous_response)
+    if payload is None:
+        return "上次输出不是合法JSON对象"
+    signal_kind = _clean(payload.get("chief_signal_kind"))
+    if signal_kind not in LX018_CHIEF_SIGNAL_KINDS:
+        return (
+            "上次chief_signal_kind不在允许枚举内"
+            "（仅允许event_or_etiology、localized_symptom_or_sign、nonspecific_symptom_or_sign、unknown）"
+        )
+    signals = payload.get("chief_complaint_signals")
+
+    def normalize(value: str) -> str:
+        return "".join(
+            char
+            for char in value
+            if not char.isspace() and not unicodedata.category(char).startswith("P")
+        )
+
+    normalized_complaint = normalize(chief_complaint) if chief_complaint else ""
+    if (
+        not isinstance(signals, list)
+        or len(signals) > 6
+        or (signal_kind != "unknown" and not signals)
+        or any(
+            not isinstance(item, str)
+            or not 1 <= len(item) <= 20
+            or not normalize(item)
+            or (normalized_complaint and normalize(item) not in normalized_complaint)
+            for item in signals
+        )
+    ):
+        return (
+            "上次chief_complaint_signals未逐字命中[主诉原文]（或长度/数量超限）"
+        )
+    for field_name in LX018_ATOMIC_RELATION_FIELDS:
+        if _clean(payload.get(field_name)) not in LX018_ATOMIC_RELATION_VALUES:
+            return (
+                f"上次{field_name}不在允许枚举内"
+                "（仅允许supports、conflicts、nonspecific、not_applicable、unknown）"
+            )
+    if signal_kind == "unknown" and any(
+        _clean(payload.get(field_name)) in {"supports", "conflicts"}
+        for field_name in LX018_ATOMIC_RELATION_FIELDS
+    ):
+        return "上次chief_signal_kind为unknown时同时在关系字段给出了supports或conflicts"
+    return "上次输出未通过原子事实结构校验"
+
+
+def _lx018_retry_prompt(
+    *,
+    context: str,
+    previous_response: Mapping[str, Any] | None = None,
+    chief_complaint: str = "",
+) -> str:
+    """在018原子事实解析失败时构造1次定向纠偏重试提示词。"""
+
+    reason = _lx018_retry_reason_hint(
+        previous_response, chief_complaint=chief_complaint
+    )
+    correction = (
+        f"上一次输出未通过校验：{reason}。请严格修正后重新输出完整JSON：\n"
+        "1. chief_complaint_signals 必须是从[主诉原文]原样逐字复制的连续子串（1–6项，每项1–20字），"
+        "绝不能改写或替换为同义词（例如[主诉原文]为“呼之不应 3天。”时必须写[\"呼之不应\"]，"
+        "不得写成“意识障碍”或“昏迷”）；\n"
+        "2. chief_signal_kind 只能取 event_or_etiology、localized_symptom_or_sign、"
+        "nonspecific_symptom_or_sign、unknown；\n"
+        "3. 五个关系字段只能取 supports、conflicts、nonspecific、not_applicable、unknown，"
+        "且当 chief_signal_kind=unknown 时五个关系字段均不得取 supports 或 conflicts。\n"
+    )
+    base = _lx018_prompt(context=context)
+    return base.replace(
+        f"受控材料：\n{context}",
+        f"{correction}受控材料：\n{context}",
+        1,
     )
 
 

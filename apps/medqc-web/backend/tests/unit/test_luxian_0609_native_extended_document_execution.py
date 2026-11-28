@@ -592,6 +592,8 @@ def test_052_binds_evaluation_horizon_without_expanding_053_sources() -> None:
         "labtest_master",
         "labtest_item_report",
         "crisis_value_record",
+        "daily_course_record",
+        "senior_course_record",
     }
 
 
@@ -5896,7 +5898,7 @@ async def test_critical_value_rules_recognize_all_existing_text_markers(
 
 
 @pytest.mark.asyncio
-async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> None:
+async def test_critical_value_rules_keep_caller_order_for_reversed_input() -> None:
     snapshot, materials = _session({
         "labtest_item_report": ({
             "item_name": "血钾",
@@ -5913,23 +5915,23 @@ async def test_critical_value_rules_keep_catalog_order_for_reversed_input() -> N
     )
     reduced = bind_and_reduce_luxian_0609_rule_decisions(
         decisions=result.decisions,
-        expected_rule_ids=("LX0609-06-04-01", "LX0609-06-04-02"),
+        expected_rule_ids=("LX0609-06-04-02", "LX0609-06-04-01"),
         snapshot=snapshot,
         evidence_materials=materials,
     )
 
-    assert result.planned_rule_ids == ("LX0609-06-04-01", "LX0609-06-04-02")
+    assert result.planned_rule_ids == ("LX0609-06-04-02", "LX0609-06-04-01")
     assert [item.rule_id for item in result.decisions] == [
-        "LX0609-06-04-01", "LX0609-06-04-02",
+        "LX0609-06-04-02", "LX0609-06-04-01",
     ]
-    assert [item.rule_id for item in reduced] == ["LX0609-06-04-01", "LX0609-06-04-02"]
+    assert [item.rule_id for item in reduced] == ["LX0609-06-04-02", "LX0609-06-04-01"]
     assert [item.final_state for item in reduced] == [
         CustomerFinalState.COMPLIANT,
         CustomerFinalState.COMPLIANT,
     ]
     assert [item.reason_code for item in reduced] == [
-        "requirement_within_threshold",
         "requirement_satisfied",
+        "requirement_within_threshold",
     ]
     assert result.llm_call_count == 0
     assert result.total_tokens == 0

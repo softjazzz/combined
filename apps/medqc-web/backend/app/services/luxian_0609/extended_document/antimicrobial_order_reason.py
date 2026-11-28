@@ -452,7 +452,10 @@ def _parse(
             if not isinstance(ref, str) or _DOC_REF.fullmatch(ref) is None or ref not in per_event[event_id]:
                 raise ValueError("unverified quote")
             if quote not in texts.get(ref, ""):
-                quote = _restore_spliced_quote(quote, texts.get(ref, ""))
+                from ..course_body_fact_extraction import _restore_whitespace_quote
+
+                restored = _restore_whitespace_quote(quote, texts.get(ref, ""))
+                quote = restored if restored is not None else _restore_spliced_quote(quote, texts.get(ref, ""))
                 if quote is None:
                     raise ValueError("unverified quote")
             if kind != "prophylaxis" and sources.get(ref) in PROPHYLAXIS_ONLY_SOURCES:
@@ -629,10 +632,13 @@ def _special_prompt(events: Sequence[AntimicrobialUseEvent], documents: Sequence
         "events 是特殊使用级抗菌药的首次使用事件；每个事件只能阅读其 doc_refs 列出的会诊或查房文书。"
         "对每个事件输出一个对象：event_id；"
         "documented_use：文书是否涉及该药的使用决策——yes、no、unknown；"
-        "approval_quote：感染科副主任医师及以上或感染专家在会诊/查房中明确同意、建议或决定使用该药"
-        "（含“同意使用”“建议加用/改用”“予以该药抗感染”等）的原文，引文应包含或紧接专家署名；"
-        "临床药师、主治医师的意见、抗菌药使用申请单文字，以及只是讨论、拟请会诊、不同意、暂不使用、"
-        "建议停用的都不算，留空；"
+        "approval_quote：授权专家在会诊或查房中明确同意、建议或决定使用该药"
+        "（含“同意使用”“同意升级/换用”“建议给予/加用/改用”“予以该药抗感染”等）的原文，"
+        "引文应包含或紧接会诊意见/专家署名；"
+        "授权专家包括：感染科副主任医师及以上或感染专家、电子会诊单中副主任/主任医师会诊意见、"
+        "以及正式《请会诊执行记录》中受邀的感染科/重症医学科/ICU会诊医师（未标明主治/住院/药师职称的电子会诊意见也算）；"
+        "明确标明临床药师、主治医师、住院医师的意见、抗菌药使用申请单前缀文字（如“本病人建议使用…”），"
+        "以及只是讨论、拟请会诊、不同意、暂不使用、建议停用的都不算，留空；"
         "若专家只笼统同意“特殊级抗菌药物方案”而未点药名、且存在多个特殊级药物事件，"
         "approval_quote 留空并把 documented_use 设为 unknown；"
         "emergency_indication_quote：写明紧急情况下先行使用该药及其指征的原文；"
