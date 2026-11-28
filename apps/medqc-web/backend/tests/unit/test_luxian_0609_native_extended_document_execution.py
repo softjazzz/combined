@@ -419,7 +419,7 @@ def _with_064_surgeon_rounds(rows, *, skip_documents=(), post=True):
     """
     from datetime import datetime as _datetime, timedelta as _timedelta
 
-    from app.services.luxian_0609.native_extended_document_execution import parse_strict_performed_time
+    from app.services.luxian_0609.source_evidence_reader import parse_strict_performed_time
 
     rows = dict(rows)
     extra = []
