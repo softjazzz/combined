@@ -23,14 +23,19 @@ import json
 import logging
 import os
 from pathlib import Path
-import re
 import threading
-import time
 from typing import Any, Mapping, Sequence
 import uuid
-import weakref
 
 from ..llm_experiment import experiment_store_dir
+from .freeze_storage import (
+    PathLock as _PathLock,
+    atomic_replace as _atomic_replace,
+    case_scope_hash as _case_scope_hash,
+    freeze_stem as _freeze_stem,
+    path_lock as _path_lock,
+    resolve_case_scope as _resolve_case_scope,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -43,7 +48,6 @@ logger = logging.getLogger(__name__)
 FREEZE_SCHEMA_VERSION = "consultation-opinion-freeze-v6"
 _ENV_STORE_DIR = "LUXIAN_0609_OPINION_FREEZE_DIR"
 _PAYLOAD_KEYS = ("episodes", "consultation_event_facts")
-_SAFE_NAME = re.compile(r"[^0-9A-Za-z_.-]+")
 
 
 @dataclass(frozen=True)
@@ -82,117 +86,6 @@ def documents_fingerprint(documents: Sequence[Mapping[str, Any]]) -> str:
         )
         digest.update(b"\x1e")
     return digest.hexdigest()
-
-
-class _PathLock:
-    __slots__ = ("_lock", "__weakref__")
-
-    def __init__(self) -> None:
-        self._lock = threading.Lock()
-
-    def __enter__(self) -> _PathLock:
-        self._lock.acquire()
-        return self
-
-    def __exit__(self, *_exc: object) -> None:
-        self._lock.release()
-
-
-_WRITE_LOCKS_GUARD = threading.Lock()
-_WRITE_LOCKS: weakref.WeakValueDictionary[str, _PathLock] = weakref.WeakValueDictionary()
-
-
-def _path_lock(path: Path) -> _PathLock:
-    key = os.path.normcase(os.path.abspath(str(path)))
-    with _WRITE_LOCKS_GUARD:
-        holder = _WRITE_LOCKS.get(key)
-        if holder is None:
-            holder = _PathLock()
-            _WRITE_LOCKS[key] = holder
-        return holder
-
-
-def _atomic_replace(src: Path, dst: Path) -> None:
-    for attempt in range(5):
-        try:
-            os.replace(src, dst)
-            return
-        except PermissionError:
-            if os.name != "nt" or attempt == 4:
-                raise
-            time.sleep(0.01 * (attempt + 1))
-
-
-def _resolve_case_scope(
-    visit_id: str,
-    *,
-    institute_id: str | None = None,
-    patient_id: str | None = None,
-) -> tuple[str, str] | None:
-    from . import privacy_request_scope
-    from .llm_prompt_privacy import PrivacyIdentityContextError
-
-    scope = privacy_request_scope._SCOPE.get()
-    if scope is not None and scope.case_coordinates is not None:
-        if not scope.lease.active:
-            raise PrivacyIdentityContextError("Patient identity context unavailable")
-        scope_inst, scope_pat, scope_visit = scope.case_coordinates
-        if scope_visit != str(visit_id).strip():
-            raise PrivacyIdentityContextError("Patient identity context unavailable")
-        if institute_id is not None and str(institute_id).strip() != scope_inst:
-            raise PrivacyIdentityContextError("Patient identity context unavailable")
-        if patient_id is not None and str(patient_id).strip() != scope_pat:
-            raise PrivacyIdentityContextError("Patient identity context unavailable")
-        return (scope_inst, scope_pat) if (scope_inst or scope_pat) else None
-    if institute_id is not None or patient_id is not None:
-        inst = "" if institute_id is None else str(institute_id).strip()
-        pat = "" if patient_id is None else str(patient_id).strip()
-        return (inst, pat) if (inst or pat) else None
-    return None
-
-
-def _case_scope_hash(
-    visit_id: str,
-    *,
-    institute_id: str | None = None,
-    patient_id: str | None = None,
-) -> str | None:
-    scope = _resolve_case_scope(
-        visit_id, institute_id=institute_id, patient_id=patient_id
-    )
-    if scope is None:
-        return None
-    inst, pat = scope
-    digest = hashlib.sha256()
-    digest.update(b"case\x1e")
-    digest.update(inst.encode("utf-8"))
-    digest.update(b"\x1e")
-    digest.update(pat.encode("utf-8"))
-    digest.update(b"\x1e")
-    digest.update(str(visit_id).encode("utf-8"))
-    return digest.hexdigest()[:16]
-
-
-def _freeze_stem(
-    visit_id: str,
-    *,
-    institute_id: str | None = None,
-    patient_id: str | None = None,
-) -> str:
-    raw_visit = str(visit_id)
-    safe = _SAFE_NAME.sub("_", raw_visit).strip("_") or "unknown"
-    safe_prefix = "visit" if safe in (".", "..") else safe[:80]
-    scope_hash = _case_scope_hash(
-        visit_id, institute_id=institute_id, patient_id=patient_id
-    )
-    if scope_hash is not None:
-        return f"{safe_prefix}__{scope_hash}"
-    if safe != raw_visit or safe in (".", "..") or len(raw_visit) > 80:
-        visit_hash = hashlib.sha256(
-            b"visit\x1e" + raw_visit.encode("utf-8")
-        ).hexdigest()[:16]
-        return f"{safe_prefix}__{visit_hash}"
-    return safe
 
 
 def _freeze_path(

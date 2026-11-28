@@ -48,6 +48,11 @@ _SOURCE_TABLES = (
     "discharge_record",
 )
 
+
+def programmatic_source_tables() -> tuple[str, ...]:
+    """返回程序取证需在短事务内捕获的结构化源表清单。"""
+    return tuple(_SOURCE_TABLES)
+
 _FALLBACK_DOC_FETCH_LIMITS = {
     "admission_record": 2,
     "first_course_record": 2,
