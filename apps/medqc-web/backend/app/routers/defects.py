@@ -31,9 +31,11 @@ from ..core.response import (
     paginated_response,
     success_response,
 )
+from ..core.roles import effective_persistent_roles as _effective_persistent_roles
 from ..core.security import get_current_user
 from ..core.supabase_client import async_execute, get_supabase  # noqa: F401
 from ..database import connection as db_connection
+from ..database.schema_introspection import get_table_columns as _table_columns
 from ..schemas.defects import (
     DefectApproveRequest,
     DefectBatchActionRequest,
@@ -43,10 +45,8 @@ from ..schemas.defects import (
     DefectStatus,
     DefectUrgeRequest,
 )
-from ..services.defect_rectification_service import _effective_persistent_roles
 from ..services.user_scope_owner import (
     UserOwnerUnavailable,
-    configured_search_path,
     resolve_user_owner_schema,
 )
 
@@ -97,23 +97,6 @@ def _get_session_factory():
     if factory is None:
         raise HTTPException(status_code=503, detail="数据库不可用")
     return factory
-
-
-def _table_columns(session, table_name: str) -> Set[str]:
-    bind = session.get_bind()
-    inspector = sa_inspect(bind)
-    if bind.dialect.name != "postgresql":
-        if not inspector.has_table(table_name):
-            return set()
-        return {col["name"] for col in inspector.get_columns(table_name)}
-
-    schemas = list(dict.fromkeys([*configured_search_path(), "qc", "public", "sys", "cdm"]))
-    for schema in schemas:
-        if inspector.has_table(table_name, schema=schema):
-            return {col["name"] for col in inspector.get_columns(table_name, schema=schema)}
-    if inspector.has_table(table_name):
-        return {col["name"] for col in inspector.get_columns(table_name)}
-    return set()
 
 
 def _resolve_actor(

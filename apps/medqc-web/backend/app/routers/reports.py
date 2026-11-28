@@ -18,10 +18,11 @@ from ..core.audit import audit_event
 from ..core.export_safety import sanitize_spreadsheet_cell
 from ..core.response import success_response, get_trace_id, StatusCode
 from ..core.pagination import REPORT_SCAN_LIMIT
+from ..core.roles import effective_persistent_roles as _effective_persistent_roles
 from ..core.security import get_current_user
 from ..core.supabase_client import get_supabase, async_execute
 from ..database import connection as db_connection
-from ..services.defect_rectification_service import _effective_persistent_roles
+from ..database.schema_introspection import get_table_columns as _table_columns
 from ..services.user_scope_owner import (
     UserOwnerUnavailable,
     configured_search_path,
@@ -44,23 +45,6 @@ _REPORT_EXPORT_ROLES = _GLOBAL_ROLES | frozenset({"qc_manager"})
 
 
 router = APIRouter(prefix="/api/v1/reports", tags=["reports"])
-
-
-def _table_columns(session, table_name: str) -> Set[str]:
-    bind = session.get_bind()
-    inspector = sa_inspect(bind)
-    if bind.dialect.name != "postgresql":
-        if not inspector.has_table(table_name):
-            return set()
-        return {col["name"] for col in inspector.get_columns(table_name)}
-
-    schemas = list(dict.fromkeys([*configured_search_path(), "qc", "public", "sys", "cdm"]))
-    for schema in schemas:
-        if inspector.has_table(table_name, schema=schema):
-            return {col["name"] for col in inspector.get_columns(table_name, schema=schema)}
-    if inspector.has_table(table_name):
-        return {col["name"] for col in inspector.get_columns(table_name)}
-    return set()
 
 
 def _table_has_column(table_name: str, column_name: str) -> bool:

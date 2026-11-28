@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ..core.response import get_trace_id, success_response
 from ..core.roles import effective_roles
-from ..core.security import get_current_user, require_roles
+from ..core.security import get_current_user, require_global_qc_rule_admin, require_roles
 from ..database import clinical_connection
 from ..services import clinical_sources
 from ..services.custom_qc_service import (
@@ -284,74 +284,11 @@ def _reject_restricted_demo_account(
         raise HTTPException(status_code=403, detail=detail)
 
 
-def _is_global_admin_sync(current_user: Optional[Dict[str, Any]]) -> bool:
-    if not isinstance(current_user, dict):
-        return False
-    claim_roles = _extract_user_roles(current_user)
-    claim_inst = str(current_user.get("institute_id") or "").strip()
-    actor_id = _current_user_id(current_user)
-
-    if actor_id and actor_id != "anonymous":
-        try:
-            from sqlalchemy import inspect as sa_inspect, text as sa_text
-            from ..database import connection as db_connection
-            from ..services.defect_rectification_service import _effective_persistent_roles
-            from ..services.user_scope_owner import resolve_user_owner_schema
-
-            session_factory = db_connection.SessionLocal
-            if session_factory is not None:
-                with session_factory() as session:
-                    owner_schema = resolve_user_owner_schema(session)
-                    inspector = sa_inspect(session.connection())
-                    if inspector.has_table("sys_users", schema=owner_schema):
-                        cols = {
-                            col["name"]
-                            for col in inspector.get_columns("sys_users", schema=owner_schema)
-                        }
-                        has_inst = "institute_id" in cols
-                        table_ref = (
-                            f'"{owner_schema}"."sys_users"'
-                            if owner_schema
-                            else '"sys_users"'
-                        )
-                        select_cols = (
-                            "id, role, roles_json, is_active"
-                            + (", institute_id" if has_inst else "")
-                        )
-                        row = (
-                            session.execute(
-                                sa_text(f"SELECT {select_cols} FROM {table_ref} WHERE id = :uid"),
-                                {"uid": actor_id},
-                            )
-                            .mappings()
-                            .one_or_none()
-                        )
-                        if row is not None:
-                            if not bool(row.get("is_active")):
-                                return False
-                            p_roles = _effective_persistent_roles(
-                                row.get("role"), row.get("roles_json")
-                            )
-                            if not p_roles:
-                                return False
-                            p_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
-                            return ("sync_admin" in p_roles) or (
-                                bool(p_roles & {"admin", "super_admin"}) and not p_inst
-                            )
-        except Exception:
-            pass
-
-    return ("sync_admin" in claim_roles) or (
-        bool(claim_roles & {"admin", "super_admin"}) and not claim_inst
-    )
-
-
 def _require_global_admin(
     current_user: Optional[Dict[str, Any]],
     detail: str = "仅全局管理员允许发布全局自定义规则",
 ) -> None:
-    if not _is_global_admin_sync(current_user):
-        raise HTTPException(status_code=403, detail=detail)
+    require_global_qc_rule_admin(current_user, detail=detail)
 
 
 def _resolve_workspace_institute_scope_sync(current_user: Dict[str, Any]) -> Optional[str]:
