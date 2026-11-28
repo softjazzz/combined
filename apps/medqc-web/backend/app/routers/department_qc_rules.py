@@ -89,9 +89,9 @@ def _resolve_qc_manager_scope(current_user: dict) -> tuple[bool, str, str, str]:
     user_dept_name = str((current_user or {}).get("department") or "").strip()
 
     # 若持久账号库可用且存在该账号，以持久账号记录为准，不信任请求覆盖；意外 DB 异常 fail-closed 返回 503
-    if user_id and user_id != "anonymous":
+    if user_id:
         from sqlalchemy import inspect as sa_inspect, text as sa_text
-        from sqlalchemy.exc import OperationalError, SQLAlchemyError
+        from sqlalchemy.exc import SQLAlchemyError
         from ..database import connection as db_connection
         from ..services.defect_rectification_service import _effective_persistent_roles
         from ..services.user_scope_owner import resolve_user_owner_schema
@@ -140,13 +140,6 @@ def _resolve_qc_manager_scope(current_user: dict) -> tuple[bool, str, str, str]:
                             user_dept_name = str((row.get("department") if has_dept else "") or "").strip()
             except HTTPException:
                 raise
-            except OperationalError as exc:
-                msg = str(exc).lower()
-                if "no such table" not in msg and "no such column" not in msg:
-                    raise HTTPException(
-                        status_code=503,
-                        detail="账号权限作用域复核服务暂不可用",
-                    ) from None
             except (SQLAlchemyError, Exception):
                 raise HTTPException(
                     status_code=503,

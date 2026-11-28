@@ -233,6 +233,8 @@ def test_ast_guard_no_duplicate_freeze_lock_or_scope_helpers():
     "error_factory",
     [
         lambda: OperationalError("SELECT 1", {}, Exception("connection refused")),
+        lambda: OperationalError("SELECT 1", {}, Exception("no such column: unrelated_col")),
+        lambda: OperationalError("SELECT 1", {}, Exception("no such table: unrelated_catalog")),
         lambda: SQLAlchemyError("db timeout"),
         lambda: RuntimeError("unexpected db failure"),
     ],
@@ -254,6 +256,78 @@ def test_department_qc_rules_scope_fails_closed_503_on_db_error(monkeypatch, err
             {"id": "u-admin", "roles": ["admin"], "institute_id": ""}
         )
     assert exc_info.value.status_code == 503
+
+
+def test_department_qc_rules_scope_does_not_skip_literal_anonymous_id(monkeypatch):
+    from app.database.models.v36_reports import SysUser
+
+    engine = create_engine(
+        "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
+    )
+    SysUser.__table__.create(engine)
+    sessions = sessionmaker(bind=engine)
+    with sessions.begin() as session:
+        session.add(
+            SysUser(
+                id="anonymous",
+                username="anonymous",
+                display_name="anonymous",
+                institute_id="H1",
+                role="admin",
+                roles_json=json.dumps(["admin"]),
+                is_active=True,
+            )
+        )
+    monkeypatch.setattr(db_conn, "SessionLocal", sessions)
+    try:
+        # 即使登录声明省略 institute_id，字符串 ID "anonymous" 也必须走持久账号复核并受限于 H1
+        assert department_qc_rules._resolve_qc_manager_scope(
+            {"id": "anonymous", "roles": ["admin"], "institute_id": ""}
+        ) == (False, "H1", "", "")
+    finally:
+        engine.dispose()
+
+
+def test_department_qc_rules_route_stops_before_reading_rules_on_column_error(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.core.security import get_current_user
+
+    class _ColumnErrorSession:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def get_bind(self):
+            raise OperationalError("SELECT 1", {}, Exception("no such column: broken_catalog"))
+
+    monkeypatch.setattr(db_conn, "SessionLocal", lambda: _ColumnErrorSession())
+    db_reads: list[str] = []
+
+    class _ForbidReadSupabase:
+        def table(self, name: str):
+            db_reads.append(f"table:{name}")
+            raise AssertionError(f"DB 权限复核失败时不得继续读取 {name}")
+
+        def rpc(self, name: str, params=None):
+            db_reads.append(f"rpc:{name}")
+            raise AssertionError(f"DB 权限复核失败时不得继续调用 {name}")
+
+    monkeypatch.setattr(department_qc_rules, "get_supabase", lambda: _ForbidReadSupabase())
+
+    app = FastAPI()
+    app.include_router(department_qc_rules.router)
+    app.dependency_overrides[get_current_user] = lambda: {
+        "id": "u-admin",
+        "roles": ["admin"],
+        "institute_id": "",
+    }
+    with TestClient(app) as client:
+        resp = client.get("/api/v1/qc/rules/department")
+    assert resp.status_code == 503
+    assert db_reads == []
 
 
 def test_department_qc_rules_scope_allows_empty_sqlite_table_fallback(monkeypatch):
