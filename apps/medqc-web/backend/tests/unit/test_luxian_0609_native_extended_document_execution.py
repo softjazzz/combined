@@ -11036,7 +11036,7 @@ def test_death_scope_falls_back_to_discharge_typed_diagnoses_only_without_death_
     ("予头孢呋辛抗感染、预防切口感染", True),
 ])
 def test_057_prophylaxis_is_judged_on_the_antimicrobial_item(clause, expected) -> None:
-    from app.services.luxian_0609.native_extended_document_execution import (
+    from app.services.luxian_0609.extended_document.antimicrobial_family import (
         _is_prophylactic_antimicrobial_clause,
     )
 

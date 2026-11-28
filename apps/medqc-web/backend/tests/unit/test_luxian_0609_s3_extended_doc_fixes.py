@@ -18,6 +18,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import antimicrobial_family as amf
 from app.services.luxian_0609 import source_evidence_reader as reader
 from app.services.luxian_0609.critical_value_result_mapping import (
     critical_value_customer_fact_status_is_valid,
@@ -356,7 +357,7 @@ async def test_p1_3_invited_icu_and_id_econsult_with_long_imaging_summary_recogn
     ],
 )
 def test_p1_3_special_approval_helper_boundaries(text: str, quote: str, expected: bool):
-    assert ned._special_approval_by_authorized_expert(text, quote) is expected
+    assert amf._special_approval_by_authorized_expert(text, quote) is expected
 
 
 # =====================================================================

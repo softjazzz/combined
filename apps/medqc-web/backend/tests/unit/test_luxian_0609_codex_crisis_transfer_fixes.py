@@ -6,6 +6,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import antimicrobial_family as amf
 from app.services.luxian_0609.canonical_result_finalizer import (
     validate_luxian_0609_published_customer_display_facts,
 )
@@ -792,4 +793,4 @@ async def test_p1_3_case_05_invited_consult_header_quote_and_prompt_alignment():
     ],
 )
 def test_p1_3_special_approval_signature_overlap_and_c05_guards(text: str, quote: str, expected: bool):
-    assert ned._special_approval_by_authorized_expert(text, quote) is expected
+    assert amf._special_approval_by_authorized_expert(text, quote) is expected
