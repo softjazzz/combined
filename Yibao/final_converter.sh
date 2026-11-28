@@ -5,10 +5,15 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# 定义目录路径（支持通过环境变量覆盖）
+# 定义目录路径（支持通过环境变量覆盖；转换、查看与清理共用同一组有效路径）
 SOURCE_DIR="${PDF_SOURCE_DIR:-$SCRIPT_DIR/医保规则}"
 VENV_DIR="${PDF_CONVERTER_VENV:-$SCRIPT_DIR/.venv}"
 LOG_FILE="${PDF_LOG_FILE:-$SCRIPT_DIR/final_conversion.log}"
+BASIC_OUTPUT_DIR="${PDF_BASIC_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_basic}"
+PRECISE_OUTPUT_DIR="${PDF_PRECISE_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_precise}"
+MD_OUTPUT_DIR="${PDF_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_md}"
+TABLE_OUTPUT_DIR="${PDF_TABLE_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_table_format}"
+IMPROVED_OUTPUT_DIR="${PDF_IMPROVED_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_improved_md}"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -60,7 +65,7 @@ basic_conversion() {
         source "$VENV_DIR/bin/activate"
     fi
     
-    local output_dir="${PDF_BASIC_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_basic}"
+    local output_dir="$BASIC_OUTPUT_DIR"
     mkdir -p "$output_dir"
     
     local success_count=0
@@ -96,7 +101,7 @@ precise_conversion() {
         py_bin="$VENV_DIR/bin/python"
     fi
     
-    "$py_bin" "$SCRIPT_DIR/precise_table_converter.py" --source-dir "$SOURCE_DIR" --output-dir "${PDF_PRECISE_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_precise}"
+    "$py_bin" "$SCRIPT_DIR/precise_table_converter.py" --source-dir "$SOURCE_DIR" --output-dir "$PRECISE_OUTPUT_DIR"
 }
 
 # 查看转换结果
@@ -105,11 +110,11 @@ show_results() {
     echo -e "${CYAN}转换结果概览：${NC}"
     echo
     
-    for dir in "$SCRIPT_DIR/医保规则_basic" "$SCRIPT_DIR/医保规则_precise" "$SCRIPT_DIR/医保规则_md"; do
+    for dir in "$BASIC_OUTPUT_DIR" "$PRECISE_OUTPUT_DIR" "$MD_OUTPUT_DIR" "$TABLE_OUTPUT_DIR" "$IMPROVED_OUTPUT_DIR"; do
         if [[ -d "$dir" ]]; then
             local dir_name=$(basename "$dir")
             local file_count=$(find "$dir" -name "*.md" | wc -l)
-            echo "📁 $dir_name: $file_count 个文件"
+            echo "📁 $dir_name ($dir): $file_count 个文件"
             
             if [[ $file_count -gt 0 ]]; then
                 echo "   最新文件："
@@ -122,12 +127,22 @@ show_results() {
 
 # 清理转换结果
 cleanup_results() {
+    local target_dirs=(
+        "$BASIC_OUTPUT_DIR"
+        "$PRECISE_OUTPUT_DIR"
+        "$MD_OUTPUT_DIR"
+        "$TABLE_OUTPUT_DIR"
+        "$IMPROVED_OUTPUT_DIR"
+    )
     echo
-    echo -e "${YELLOW}警告：这将删除所有转换结果！${NC}"
+    echo -e "${YELLOW}警告：这将删除以下有效输出目录中的转换结果！${NC}"
+    for dir in "${target_dirs[@]}"; do
+        echo "  - $dir"
+    done
     read -p "确定要继续吗？(y/N): " confirm
     
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        for dir in "$SCRIPT_DIR/医保规则_basic" "$SCRIPT_DIR/医保规则_precise" "$SCRIPT_DIR/医保规则_md" "$SCRIPT_DIR/医保规则_table_format" "$SCRIPT_DIR/医保规则_improved_md"; do
+        for dir in "${target_dirs[@]}"; do
             if [[ -d "$dir" ]]; then
                 rm -rf "$dir"
                 log_success "已删除: $dir"
