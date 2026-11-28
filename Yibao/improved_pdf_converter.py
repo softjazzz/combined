@@ -5,31 +5,37 @@
 针对医保规则PDF文档优化，保持表格结构清晰
 """
 
+import argparse
 import os
 import sys
 import logging
 from pathlib import Path
+from typing import Optional
 import subprocess
 import pandas as pd
 import re
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/home/ubuntu/Yibao/improved_conversion.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+BASE_DIR = Path(__file__).resolve().parent
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging(log_file: Optional[Path] = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.insert(0, logging.FileHandler(str(log_file), encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+        force=True,
+    )
 
 class ImprovedPDFConverter:
     def __init__(self, source_dir: str, output_dir: str):
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.venv_path = "/home/ubuntu/Yibao/pdf_converter_venv"
         
     def _extract_tables_with_camelot(self, pdf_path: Path) -> list:
         """使用camelot提取表格"""
@@ -78,7 +84,8 @@ class ImprovedPDFConverter:
                                 
                                 # 清理数据
                                 df = df.fillna('')
-                                df = df.applymap(lambda x: str(x).strip() if x else '')
+                                cell_mapper = df.map if hasattr(df, 'map') else df.applymap
+                                df = cell_mapper(lambda x: str(x).strip() if x else '')
                                 
                                 # 转换为Markdown表格
                                 markdown_table = df.to_markdown(index=False, tablefmt='pipe')
@@ -196,18 +203,17 @@ class ImprovedPDFConverter:
             return '\n'.join(table_md) + '\n'
     
     def _install_table_libraries(self):
-        """安装表格处理相关的库"""
+        """按需在当前 Python 环境安装表格处理依赖"""
         libraries = [
-            'camelot-py[cv]',
-            'tabula-py', 
+            'pdfplumber',
             'pandas',
-            'openpyxl'
+            'tabulate',
         ]
         
         for lib in libraries:
             try:
                 subprocess.check_call([
-                    f"{self.venv_path}/bin/python", '-m', 'pip', 'install', lib
+                    sys.executable, '-m', 'pip', 'install', lib
                 ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 logger.info(f"✓ {lib} 安装成功")
             except subprocess.CalledProcessError:
@@ -241,15 +247,15 @@ class ImprovedPDFConverter:
             logger.error(f"✗ 转换出错 {pdf_path.name}: {e}")
             return False
     
-    def convert_all_pdfs(self):
+    def convert_all_pdfs(self, *, install_deps: bool = False):
         """转换所有PDF文件"""
         if not self.source_dir.exists():
             logger.error(f"源目录不存在: {self.source_dir}")
             return
         
-        # 安装必要的库
-        logger.info("安装表格处理库...")
-        self._install_table_libraries()
+        if install_deps:
+            logger.info("安装表格处理库...")
+            self._install_table_libraries()
         
         pdf_files = list(self.source_dir.glob('*.pdf'))
         
@@ -278,14 +284,35 @@ class ImprovedPDFConverter:
 
 def main():
     """主函数"""
-    source_directory = "/home/ubuntu/Yibao/医保规则"
-    output_directory = "/home/ubuntu/Yibao/医保规则_improved_md"
-    
+    parser = argparse.ArgumentParser(description="改进的 PDF to Markdown 表格转换器")
+    parser.add_argument(
+        "--source-dir",
+        default=os.environ.get("PDF_SOURCE_DIR", str(BASE_DIR / "医保规则")),
+        help="PDF 源目录",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=os.environ.get("PDF_IMPROVED_OUTPUT_DIR", str(BASE_DIR / "医保规则_improved_md")),
+        help="Markdown 输出目录",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=os.environ.get("PDF_LOG_FILE", str(BASE_DIR / "improved_conversion.log")),
+        help="日志文件路径",
+    )
+    parser.add_argument(
+        "--install-deps",
+        action="store_true",
+        help="转换前在当前 Python 环境安装表格处理依赖",
+    )
+    args = parser.parse_args()
+    _configure_logging(Path(args.log_file) if args.log_file else None)
+
     logger.info("改进的PDF to Markdown 转换器")
     logger.info("=" * 50)
-    
-    converter = ImprovedPDFConverter(source_directory, output_directory)
-    converter.convert_all_pdfs()
+
+    converter = ImprovedPDFConverter(args.source_dir, args.output_dir)
+    converter.convert_all_pdfs(install_deps=args.install_deps)
 
 if __name__ == "__main__":
     main()

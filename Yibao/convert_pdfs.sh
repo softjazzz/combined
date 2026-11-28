@@ -1,13 +1,17 @@
 #!/bin/bash
 # PDF to Markdown 转换脚本
-# 将 /home/ubuntu/Yibao/医保规则 目录中的 PDF 文件转换为 Markdown 格式
+# 将源目录中的 PDF 文件转换为 Markdown 格式（默认使用脚本同级目录与可重建虚拟环境）
 
 set -e  # 遇到错误时退出
 
-# 定义目录路径
-SOURCE_DIR="/home/ubuntu/Yibao/医保规则"
-OUTPUT_DIR="/home/ubuntu/Yibao/医保规则_md"
-LOG_FILE="/home/ubuntu/Yibao/conversion.log"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# 定义目录路径（支持通过环境变量覆盖）
+SOURCE_DIR="${PDF_SOURCE_DIR:-$SCRIPT_DIR/医保规则}"
+OUTPUT_DIR="${PDF_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_md}"
+LOG_FILE="${PDF_LOG_FILE:-$SCRIPT_DIR/conversion.log}"
+VENV_DIR="${PDF_CONVERTER_VENV:-$SCRIPT_DIR/.venv}"
+REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
 
 # 颜色定义
 RED='\033[0;31m'
@@ -46,11 +50,11 @@ check_python() {
 install_dependencies() {
     log "正在安装 Python 依赖包..."
     
-    local venv_dir="/home/ubuntu/Yibao/pdf_converter_venv"
+    local venv_dir="$VENV_DIR"
     
     # 创建虚拟环境
     if [[ ! -d "$venv_dir" ]]; then
-        log "创建 Python 虚拟环境..."
+        log "创建 Python 虚拟环境: $venv_dir"
         if python3 -m venv "$venv_dir" &>> "$LOG_FILE"; then
             log_success "虚拟环境创建成功"
         else
@@ -60,41 +64,39 @@ install_dependencies() {
     fi
     
     # 激活虚拟环境
+    # shellcheck disable=SC1091
     source "$venv_dir/bin/activate"
     
     # 升级 pip
     pip install --upgrade pip &>> "$LOG_FILE"
     
-    # 安装 markitdown (推荐)
-    if pip install markitdown &>> "$LOG_FILE"; then
-        log_success "markitdown 安装成功"
-    else
-        log_warning "markitdown 安装失败，尝试其他方法"
+    if [[ -f "$REQUIREMENTS_FILE" ]]; then
+        if pip install -r "$REQUIREMENTS_FILE" &>> "$LOG_FILE"; then
+            log_success "requirements.txt 依赖安装成功"
+            return 0
+        else
+            log_warning "requirements.txt 批量安装失败，尝试逐项安装"
+        fi
     fi
     
-    # 安装 pymupdf 作为备选
-    if pip install pymupdf &>> "$LOG_FILE"; then
-        log_success "pymupdf 安装成功"
-    else
-        log_warning "pymupdf 安装失败"
-    fi
-    
-    # 安装 pdfplumber 作为备选
-    if pip install pdfplumber &>> "$LOG_FILE"; then
-        log_success "pdfplumber 安装成功"
-    else
-        log_warning "pdfplumber 安装失败"
-    fi
+    # 逐项安装兜底
+    for pkg in markitdown pymupdf pdfplumber pandas tabulate; do
+        if pip install "$pkg" &>> "$LOG_FILE"; then
+            log_success "$pkg 安装成功"
+        else
+            log_warning "$pkg 安装失败"
+        fi
+    done
 }
 
 # 使用 markitdown 转换单个文件
 convert_with_markitdown() {
     local pdf_file="$1"
     local md_file="$2"
-    local venv_dir="/home/ubuntu/Yibao/pdf_converter_venv"
+    local venv_dir="$VENV_DIR"
     
     # 检查虚拟环境中的 markitdown
-    if [[ -f "$venv_dir/bin/markitdown" ]]; then
+    if [[ -x "$venv_dir/bin/markitdown" ]]; then
         if "$venv_dir/bin/markitdown" "$pdf_file" > "$md_file" 2>> "$LOG_FILE"; then
             return 0
         fi
@@ -110,22 +112,24 @@ convert_with_markitdown() {
 convert_with_python() {
     local pdf_file="$1"
     local md_file="$2"
-    local venv_dir="/home/ubuntu/Yibao/pdf_converter_venv"
+    local py_bin="python3"
+    if [[ -x "$VENV_DIR/bin/python" ]]; then
+        py_bin="$VENV_DIR/bin/python"
+    fi
     
-    # 激活虚拟环境并运行 Python 脚本
-    source "$venv_dir/bin/activate" && python3 -c "
+    "$py_bin" - "$pdf_file" "$md_file" <<'PY' 2>> "$LOG_FILE"
 import sys
+from pathlib import Path
 try:
     from markitdown import MarkItDown
     md = MarkItDown()
-    result = md.convert('$pdf_file')
-    with open('$md_file', 'w', encoding='utf-8') as f:
-        f.write(result.text_content)
-    print('SUCCESS')
+    result = md.convert(sys.argv[1])
+    Path(sys.argv[2]).write_text(result.text_content, encoding="utf-8")
+    print("SUCCESS")
 except Exception as e:
-    print(f'ERROR: {e}', file=sys.stderr)
+    print(f"ERROR: {e}", file=sys.stderr)
     sys.exit(1)
-" 2>> "$LOG_FILE"
+PY
 }
 
 # 转换单个 PDF 文件
