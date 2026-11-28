@@ -262,6 +262,7 @@ show_results() {
 cleanup_results() {
     collect_unique_output_dirs
     local files_to_delete=()
+    local files_to_delete_sha=()
     local preserved_modified_files=()
     local manifests_to_delete=()
     local seen_files=$'\n'
@@ -279,10 +280,11 @@ cleanup_results() {
                 fi
                 target_file="$dir/$entry"
                 if [[ -f "$target_file" && ! -L "$target_file" ]]; then
-                    actual_sha=$(compute_file_sha256 "$target_file")
-                    if [[ "$actual_sha" == "$recorded_sha" ]]; then
+                    actual_sha=""
+                    if actual_sha=$(compute_file_sha256 "$target_file" 2>/dev/null) && is_valid_sha256 "$actual_sha" && [[ "$actual_sha" == "$recorded_sha" ]]; then
                         if [[ "$seen_files" != *$'\n'"$target_file"$'\n'* ]]; then
                             files_to_delete+=("$target_file")
+                            files_to_delete_sha+=("$recorded_sha")
                             seen_files+="$target_file"$'\n'
                         fi
                     else
@@ -303,7 +305,7 @@ cleanup_results() {
 
     if [[ ${#preserved_modified_files[@]} -gt 0 ]]; then
         echo
-        echo -e "${YELLOW}提示：以下文件生成后内容已被修改，已自动保留，不会删除：${NC}"
+        echo -e "${YELLOW}提示：以下文件生成后内容已被修改或无法读取，已自动保留，不会删除：${NC}"
         for target_file in "${preserved_modified_files[@]}"; do
             echo "  - $target_file"
         done
@@ -326,11 +328,21 @@ cleanup_results() {
     read -p "确定要继续吗？(y/N): " confirm
     
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        for target_file in "${files_to_delete[@]}"; do
-            if [[ -f "$target_file" && ! -L "$target_file" ]]; then
-                rm -f -- "$target_file"
-                echo -e "${GREEN}✓ 已删除生成文件: $target_file${NC}"
+        local idx expected_sha recheck_sha
+        for idx in "${!files_to_delete[@]}"; do
+            target_file="${files_to_delete[$idx]}"
+            expected_sha="${files_to_delete_sha[$idx]}"
+            if [[ ! -f "$target_file" || -L "$target_file" ]]; then
+                echo -e "${YELLOW}⚠ 跳过并保留（预览后已变更或已不存在）: $target_file${NC}"
+                continue
             fi
+            recheck_sha=""
+            if ! recheck_sha=$(compute_file_sha256 "$target_file" 2>/dev/null) || ! is_valid_sha256 "$recheck_sha" || [[ "$recheck_sha" != "$expected_sha" ]]; then
+                echo -e "${YELLOW}⚠ 跳过并保留（预览后已变更或无法读取）: $target_file${NC}"
+                continue
+            fi
+            rm -f -- "$target_file"
+            echo -e "${GREEN}✓ 已删除生成文件: $target_file${NC}"
         done
 
         for manifest_path in "${manifests_to_delete[@]}"; do
