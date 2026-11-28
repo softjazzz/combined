@@ -123,6 +123,7 @@ from .extended_document.critical_value_family import (
     execute_critical_value_family,
 )
 from .extended_document.family_runtime import (
+    SourceRowsCache,
     build_extended_decision as _decision,
     fact_refs as _fact_refs,
     material_text as _material_text,
@@ -2932,11 +2933,12 @@ async def _execute_extended_document_group(
     diffcase_rows, diffcase_error = _source_rows(
         evidence_materials, "diffcase_discussion_record"
     )
+    group_source_cache: SourceRowsCache = {}
     lab_item_rows, lab_item_error = _source_rows(
-        evidence_materials, "labtest_item_report"
+        evidence_materials, "labtest_item_report", cache=group_source_cache
     )
     lab_master_rows, lab_master_error = _source_rows(
-        evidence_materials, "labtest_master"
+        evidence_materials, "labtest_master", cache=group_source_cache
     )
     drug_order_rows, drug_order_error = _source_rows(
         evidence_materials, "inpat_drug_order"
@@ -2999,6 +3001,7 @@ async def _execute_extended_document_group(
             evidence_materials=evidence_materials,
             horizon_rows=horizon_rows,
             horizon_error=horizon_error,
+            source_cache=group_source_cache,
         )
         if critical_value_rules
         else None

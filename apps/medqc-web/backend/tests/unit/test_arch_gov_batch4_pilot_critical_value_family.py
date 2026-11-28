@@ -494,3 +494,84 @@ def test_ast_guard_extracted_modules_never_import_monolith(module_path: Path) ->
             assert "native_extended_document_execution" not in mod
             for alias in node.names:
                 assert alias.name != "native_extended_document_execution"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unavailable_sources", [set(), {"labtest_master"}, {"labtest_item_report"}])
+async def test_critical_value_execution_reads_lab_sources_once_per_group(
+    unavailable_sources: set[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """同一执行组内检验主表与明细表仅调用 materials.rows 读取一次，并复用错误状态。"""
+    sources = {
+        "labtest_master": (_master("R-ONCE", "2026-06-01 08:00:00"),),
+        "labtest_item_report": (_lab("R-ONCE", "血钾", "2.8", "PL", "2026-06-01 08:00:00"),),
+        "crisis_value_record": (),
+        "daily_course_record": (),
+        "senior_course_record": (),
+        "evaluation_context.horizon": HORIZON_MATURE,
+    }
+    snapshot, materials = _session(sources, unavailable_sources=unavailable_sources)
+
+    read_counts: dict[str, int] = {}
+    original_rows = type(materials).rows
+
+    def _counting_rows(self, source_key: str):
+        if self is materials:
+            read_counts[source_key] = read_counts.get(source_key, 0) + 1
+        return original_rows(self, source_key)
+
+    monkeypatch.setattr(type(materials), "rows", _counting_rows)
+    res = await ned.execute_luxian_0609_native_extended_document_rules(
+        rule_ids=CRITICAL_VALUE_RULE_IDS,
+        decision_rule_ids=CRITICAL_VALUE_RULE_IDS,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+    )
+    assert len(res.decisions) == 2
+    assert read_counts.get("labtest_master") == 1
+    assert read_counts.get("labtest_item_report") == 1
+    assert read_counts.get("crisis_value_record") == 1
+
+
+@pytest.mark.asyncio
+async def test_critical_value_cross_report_evidence_refs_bind_exact_documents() -> None:
+    """跨报告隔离场景直接断言 fact_refs 精确指向两份检验报告与命中的病程文书，不含无关病程。"""
+    sources = {
+        "labtest_master": (
+            _master("R7A", "2026-06-01 08:00:00"),
+            _master("R7B", "2026-06-01 12:00:00"),
+        ),
+        "labtest_item_report": (
+            _lab("R7A", "血钾", "2.8", "PL", "2026-06-01 08:00:00", "lab-R7A"),
+            _lab("R7B", "血钾", "6.7", "PH", "2026-06-01 12:00:00", "lab-R7B"),
+        ),
+        "crisis_value_record": (),
+        "daily_course_record": (
+            _course("C7-MATCH", "2026-06-01 12:30:00", "日常病程记录", "08:00血钾2.8已予补钾治疗；另测血糖6.7 mmol/L。"),
+            _course("C7-UNRELATED", "2026-06-01 13:00:00", "日常病程记录", "患者一般情况可，继续目前治疗。"),
+        ),
+        "senior_course_record": (),
+        "evaluation_context.horizon": HORIZON_MATURE,
+    }
+    snapshot, materials = _session(sources)
+    res = await ned.execute_luxian_0609_native_extended_document_rules(
+        rule_ids=CRITICAL_VALUE_RULE_IDS,
+        decision_rule_ids=CRITICAL_VALUE_RULE_IDS,
+        evidence_snapshot=snapshot,
+        evidence_materials=materials,
+    )
+
+    ref_to_doc_id: dict[str, str] = {}
+    for source_key in ("labtest_item_report", "daily_course_record"):
+        for ref, row in materials.document_rows(source_key, snapshot=snapshot):
+            ref_to_doc_id[ref] = str(row["document_id"])
+
+    by_rule = {item.rule_id: item for item in res.decisions}
+    for rule_id in CRITICAL_VALUE_RULE_IDS:
+        decision = by_rule[rule_id]
+        assert decision.qc_direction.value == "defect"
+        cited_doc_ids = {ref_to_doc_id[ref] for ref in decision.fact_refs}
+        assert cited_doc_ids == {"lab-R7A", "lab-R7B", "C7-MATCH"}
+        assert "C7-UNRELATED" not in cited_doc_ids
+

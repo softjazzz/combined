@@ -31,6 +31,7 @@ from ..extended_document_critical_value import (
 )
 from .family_runtime import (
     ExtendedDocumentFamilyOutcome,
+    SourceRowsCache,
     build_extended_decision as _decision,
     fact_refs as _fact_refs,
     material_text as _material_text,
@@ -1096,6 +1097,7 @@ def execute_critical_value_family(
     evidence_materials: Luxian0609EvidenceMaterialStore,
     horizon_rows: Sequence[Mapping[str, Any]],
     horizon_error: str,
+    source_cache: SourceRowsCache | None = None,
 ) -> ExtendedDocumentFamilyOutcome:
     """执行 LX0609 危急值规则族（06-04-01 时效性 / 06-04-02 处置记录完整性）。"""
 
@@ -1115,12 +1117,14 @@ def execute_critical_value_family(
         else (None, None, None)
     )
 
-    crisis_rows, crisis_error = _source_rows(evidence_materials, "crisis_value_record")
+    crisis_rows, crisis_error = _source_rows(
+        evidence_materials, "crisis_value_record", cache=source_cache
+    )
     lab_item_rows, lab_item_error = _source_rows(
-        evidence_materials, "labtest_item_report"
+        evidence_materials, "labtest_item_report", cache=source_cache
     )
     lab_master_rows, lab_master_error = _source_rows(
-        evidence_materials, "labtest_master"
+        evidence_materials, "labtest_master", cache=source_cache
     )
 
     crisis_dispositions = tuple(

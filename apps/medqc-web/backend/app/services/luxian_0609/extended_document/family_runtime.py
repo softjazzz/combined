@@ -44,19 +44,30 @@ class ExtendedDocumentFamilyOutcome:
     api_time: float = 0.0
 
 
+SourceRowsCache = dict[str, tuple[tuple[Mapping[str, Any], ...], str]]
+
+
 def source_rows(
     materials: Luxian0609EvidenceMaterialStore,
     source_key: str,
+    *,
+    cache: SourceRowsCache | None = None,
 ) -> tuple[tuple[Mapping[str, Any], ...], str]:
-    """从不可变材料仓读取指定来源行；截断或不可用时返回标准错误码。"""
+    """从不可变材料仓读取指定来源行；截断或不可用时返回标准错误码，并支持组内缓存复用。"""
 
+    if cache is not None and source_key in cache:
+        return cache[source_key]
     try:
         rows = materials.rows(source_key)
     except EvidenceMaterialTruncated:
-        return (), "source_truncated"
+        result: tuple[tuple[Mapping[str, Any], ...], str] = ((), "source_truncated")
     except EvidenceMaterialUnavailable:
-        return (), "source_unavailable"
-    return tuple(dict(row) for row in rows), ""
+        result = ((), "source_unavailable")
+    else:
+        result = (tuple(dict(row) for row in rows), "")
+    if cache is not None:
+        cache[source_key] = result
+    return result
 
 
 def precise_datetime(value: Any) -> datetime | None:
