@@ -1,6 +1,5 @@
 import { supabase } from '@/lib/supabase'
 import { functionsGet, functionsPost } from '@/services/functionsClient'
-import { evalExpression, renderMessage } from '@/utils/ruleEngine'
 
 export interface Pagination {
   page?: number
@@ -138,74 +137,6 @@ export async function fetchDashboardStats(): Promise<DashboardStats> {
   } catch {}
 
   return { totalViolations: 0, bySeverity: {}, byRuleType: {} }
-}
-
-export interface RuleHit {
-  ruleId: number
-  code: string
-  name: string
-  severity: 'info' | 'warn' | 'block'
-  messages: string[]
-}
-
-export async function evaluateRulesByDbContext(
-  context: any,
-  eventType: string = 'order.drug.submit'
-): Promise<{ hits: RuleHit[] }> {
-  // 优先走 Edge Function
-  try {
-    const resp = await functionsPost('/evaluate-rule', { event: eventType, context, record: false })
-    const hits: RuleHit[] = (resp?.hits || []).map((h: any) => ({
-      ruleId: 0,
-      code: h.ruleCode,
-      name: h.message,
-      severity: h.severity,
-      messages: [h.message].filter(Boolean)
-    }))
-    return { hits }
-  } catch {}
-
-  // 回退：直接查表并在前端评估
-  // 读取启用的规则
-  const { data: rules } = await supabase
-    .from('yibao_rules')
-    .select('id, code, name, severity')
-    .eq('enabled', true)
-
-  if (!Array.isArray(rules) || rules.length === 0) return { hits: [] }
-
-  const hits: RuleHit[] = []
-
-  for (const rule of rules) {
-    // 读取条件
-    const { data: conds } = await supabase
-      .from('yibao_rule_conditions')
-      .select('priority, expression_json')
-      .eq('rule_id', rule.id)
-      .order('priority', { ascending: true })
-
-    // 读取动作（消息模板）
-    const { data: actions } = await supabase
-      .from('yibao_rule_actions')
-      .select('action_type, message_template')
-      .eq('rule_id', rule.id)
-
-    const matched = Array.isArray(conds) && conds.every((c: any) => evalExpression(context, c.expression_json))
-    if (matched) {
-      const messages = (Array.isArray(actions) ? actions : [])
-        .map((a: any) => renderMessage(a.message_template || '', context))
-        .filter(Boolean)
-      hits.push({
-        ruleId: rule.id,
-        code: rule.code,
-        name: rule.name,
-        severity: (rule.severity as any) || 'warn',
-        messages
-      })
-    }
-  }
-
-  return { hits }
 }
 
 export async function listViolations(

@@ -1,13 +1,24 @@
 # PDF to Markdown 转换器
 
-这个工具可以将 `/home/ubuntu/Yibao/医保规则` 目录中的所有 PDF 文件批量转换为 Markdown 格式。
+这个工具可以将 `Yibao/医保规则`（或通过 `--source-dir` / `PDF_SOURCE_DIR` 指定的目录）中的 PDF 文件批量转换为 Markdown 格式。
 
 ## 🚀 快速开始
 
-**推荐使用最新的交互式转换器：**
+### 1. 重建本地虚拟环境（不随 Git 跟踪）
 
 ```bash
-cd /home/ubuntu/Yibao
+cd Yibao
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+> 也可通过环境变量 `PDF_CONVERTER_VENV=/path/to/venv` 指定外部虚拟环境，或直接运行 `./convert_pdfs.sh --install` 自动创建 `Yibao/.venv`。
+
+### 2. 运行交互式转换器
+
+```bash
+cd Yibao
 ./final_converter.sh
 ```
 
@@ -34,8 +45,8 @@ cd /home/ubuntu/Yibao
 ### 方法一：交互式转换器（推荐）
 
 ```bash
-# 进入项目目录
-cd /home/ubuntu/Yibao
+# 进入目录
+cd Yibao
 
 # 运行交互式转换器
 ./final_converter.sh
@@ -49,23 +60,21 @@ cd /home/ubuntu/Yibao
 ### 方法二：直接使用精确转换器
 
 ```bash
-# 进入项目目录
-cd /home/ubuntu/Yibao
+# 进入目录并激活虚拟环境
+cd Yibao
+source .venv/bin/activate
 
-# 激活虚拟环境
-source pdf_converter_venv/bin/activate
-
-# 运行精确表格转换器
+# 运行精确表格转换器（支持 --source-dir / --output-dir 覆盖默认路径）
 python precise_table_converter.py
 ```
 
 ### 方法三：使用基础转换脚本
 
 ```bash
-# 进入项目目录
-cd /home/ubuntu/Yibao
+# 进入目录
+cd Yibao
 
-# 运行转换脚本（会自动安装依赖并转换）
+# 运行转换脚本（会自动按 requirements.txt 创建 .venv 并转换）
 ./convert_pdfs.sh
 ```
 
@@ -82,19 +91,19 @@ cd /home/ubuntu/Yibao
 ./convert_pdfs.sh --help
 ```
 
-### 方法二：使用 Python 脚本
+### 方法四：直接使用 Python 脚本
 
 ```bash
-# 安装依赖包
+# 安装依赖包（推荐在虚拟环境中执行）
 pip3 install -r requirements.txt
 
-# 运行 Python 脚本
+# 运行 Python 脚本（均支持 --source-dir / --output-dir / --log-file）
 python3 pdf_to_md_converter.py
 ```
 
 ## 输出结果
 
-转换后的 Markdown 文件将保存在 `/home/ubuntu/Yibao/医保规则_md` 目录中。
+转换后的 Markdown 文件默认保存在脚本同级目录（如 `Yibao/医保规则_md`、`Yibao/医保规则_precise`）中，可通过 `--output-dir` 或环境变量覆盖。
 
 每个 PDF 文件会生成对应的 `.md` 文件，例如：
 - `第一批-1.药品区分性别使用.pdf` → `第一批-1.药品区分性别使用.md`
@@ -109,7 +118,7 @@ python3 pdf_to_md_converter.py
 
 ## 日志文件
 
-转换过程中的详细日志会保存在 `/home/ubuntu/Yibao/conversion.log` 文件中。
+转换过程中的详细日志默认保存在脚本同级目录（如 `Yibao/conversion.log`），可通过 `--log-file` 或 `PDF_LOG_FILE` 覆盖。
 
 ## 故障排除
 

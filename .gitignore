@@ -8,6 +8,9 @@ venv/
 .venv/
 */venv/
 **/venv/
+*/.venv/
+**/.venv/
+Yibao/pdf_converter_venv/
 env/
 .env/
 */env/

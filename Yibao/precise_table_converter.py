@@ -5,29 +5,35 @@
 专门处理您提供的表格格式，确保输出清晰的表格结构
 """
 
+import argparse
 import os
 import sys
 import logging
 from pathlib import Path
+from typing import Optional
 import re
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/home/ubuntu/Yibao/precise_conversion.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+BASE_DIR = Path(__file__).resolve().parent
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging(log_file: Optional[Path] = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.insert(0, logging.FileHandler(str(log_file), encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+        force=True,
+    )
 
 class PreciseTableConverter:
     def __init__(self, source_dir: str, output_dir: str):
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
-        self.venv_path = "/home/ubuntu/Yibao/pdf_converter_venv"
     
     def _extract_clean_tables(self, pdf_path: Path) -> str:
         """提取并清理表格数据"""
@@ -322,13 +328,29 @@ class PreciseTableConverter:
 
 def main():
     """主函数"""
-    source_directory = "/home/ubuntu/Yibao/医保规则"
-    output_directory = "/home/ubuntu/Yibao/医保规则_precise"
-    
+    parser = argparse.ArgumentParser(description="精确医保规则表格转换器")
+    parser.add_argument(
+        "--source-dir",
+        default=os.environ.get("PDF_SOURCE_DIR", str(BASE_DIR / "医保规则")),
+        help="PDF 源目录",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=os.environ.get("PDF_PRECISE_OUTPUT_DIR", str(BASE_DIR / "医保规则_precise")),
+        help="Markdown 输出目录",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=os.environ.get("PDF_LOG_FILE", str(BASE_DIR / "precise_conversion.log")),
+        help="日志文件路径",
+    )
+    args = parser.parse_args()
+    _configure_logging(Path(args.log_file) if args.log_file else None)
+
     logger.info("精确医保规则表格转换器")
     logger.info("=" * 50)
-    
-    converter = PreciseTableConverter(source_directory, output_directory)
+
+    converter = PreciseTableConverter(args.source_dir, args.output_dir)
     converter.convert_all_pdfs()
 
 if __name__ == "__main__":

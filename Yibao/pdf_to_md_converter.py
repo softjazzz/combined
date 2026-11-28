@@ -11,6 +11,7 @@ python pdf_to_md_converter.py
 pip install markitdown pymupdf pdfplumber
 """
 
+import argparse
 import os
 import sys
 import logging
@@ -18,16 +19,21 @@ from pathlib import Path
 from typing import List, Optional
 import subprocess
 
-# 设置日志
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('/home/ubuntu/Yibao/conversion.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+BASE_DIR = Path(__file__).resolve().parent
 logger = logging.getLogger(__name__)
+
+
+def _configure_logging(log_file: Optional[Path] = None) -> None:
+    handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+    if log_file is not None:
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        handlers.insert(0, logging.FileHandler(str(log_file), encoding="utf-8"))
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=handlers,
+        force=True,
+    )
 
 class PDFToMarkdownConverter:
     def __init__(self, source_dir: str, output_dir: str):
@@ -205,51 +211,71 @@ class PDFToMarkdownConverter:
         logger.info(f"输出目录: {self.output_dir}")
 
 def install_dependencies():
-    """安装必要的依赖包"""
+    """在当前 Python 环境中按 requirements.txt 安装必要的依赖包"""
+    requirements_file = BASE_DIR / "requirements.txt"
+    if requirements_file.exists():
+        try:
+            subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", str(requirements_file)])
+            logger.info("✓ requirements.txt 依赖安装成功")
+            return
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"⚠ requirements.txt 安装失败: {e}")
+
     packages = ['markitdown', 'pymupdf', 'pdfplumber']
-    
-    # 检查是否在虚拟环境中
-    venv_path = "/home/ubuntu/Yibao/pdf_converter_venv"
-    
     for package in packages:
         try:
-            __import__(package.replace('-', '_'))
+            __import__('fitz' if package == 'pymupdf' else package.replace('-', '_'))
             logger.info(f"✓ {package} 已安装")
         except ImportError:
             logger.info(f"正在安装 {package}...")
             try:
-                # 尝试使用 --user 标志或虚拟环境
-                if os.path.exists(venv_path):
-                    pip_cmd = [f"{venv_path}/bin/python", '-m', 'pip', 'install', package]
-                else:
-                    pip_cmd = [sys.executable, '-m', 'pip', 'install', '--user', package]
-                
-                subprocess.check_call(pip_cmd)
+                subprocess.check_call([sys.executable, '-m', 'pip', 'install', package])
                 logger.info(f"✓ {package} 安装成功")
             except subprocess.CalledProcessError as e:
                 logger.warning(f"⚠ {package} 安装失败: {e}")
-                logger.info("建议手动创建虚拟环境并安装依赖")
+                logger.info("建议手动创建虚拟环境并执行 pip install -r requirements.txt")
 
 def main():
     """主函数"""
-    source_directory = "/home/ubuntu/Yibao/医保规则"
-    output_directory = "/home/ubuntu/Yibao/医保规则_md"
-    
+    parser = argparse.ArgumentParser(description="PDF to Markdown 批量转换器")
+    parser.add_argument(
+        "--source-dir",
+        default=os.environ.get("PDF_SOURCE_DIR", str(BASE_DIR / "医保规则")),
+        help="PDF 源目录（默认: 脚本同级 医保规则）",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=os.environ.get("PDF_OUTPUT_DIR", str(BASE_DIR / "医保规则_md")),
+        help="Markdown 输出目录（默认: 脚本同级 医保规则_md）",
+    )
+    parser.add_argument(
+        "--log-file",
+        default=os.environ.get("PDF_LOG_FILE", str(BASE_DIR / "conversion.log")),
+        help="日志文件路径",
+    )
+    parser.add_argument(
+        "--install-deps",
+        action="store_true",
+        help="转换前尝试在当前 Python 环境安装 requirements.txt 依赖",
+    )
+    args = parser.parse_args()
+    _configure_logging(Path(args.log_file) if args.log_file else None)
+
     logger.info("PDF to Markdown 转换器")
     logger.info("=" * 50)
-    
-    # 检查并安装依赖
-    logger.info("检查依赖包...")
-    install_dependencies()
-    
+
+    if args.install_deps:
+        logger.info("检查依赖包...")
+        install_dependencies()
+
     # 创建转换器实例
-    converter = PDFToMarkdownConverter(source_directory, output_directory)
-    
+    converter = PDFToMarkdownConverter(args.source_dir, args.output_dir)
+
     # 检查是否有可用的转换工具
     if not converter.available_tools:
-        logger.error("没有可用的转换工具，请安装 markitdown、pymupdf 或 pdfplumber")
-        return
-    
+        logger.error("没有可用的转换工具，请安装 markitdown、pymupdf 或 pdfplumber（pip install -r requirements.txt）")
+        sys.exit(1)
+
     # 开始转换
     converter.convert_all_pdfs()
 
