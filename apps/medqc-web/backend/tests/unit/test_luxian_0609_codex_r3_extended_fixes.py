@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import antimicrobial_family as amf
 from app.services.luxian_0609.extended_document import critical_value_family as cvf
 from tests.unit.test_luxian_0609_p0_extended_doc_fixes import _run_rules
 from tests.unit.test_luxian_0609_s3_extended_doc_fixes import (
@@ -352,7 +353,7 @@ async def test_codex_r3_1b_valid_continuation_generic_title_and_icu_ventilation_
 def test_codex_r3_2_special_approval_governing_speaker_blocks_non_authorized_support_marker(
     text: str, quote: str, expected: bool
 ) -> None:
-    assert ned._special_approval_by_authorized_expert(text, quote) is expected
+    assert amf._special_approval_by_authorized_expert(text, quote) is expected
 
 
 @pytest.mark.asyncio

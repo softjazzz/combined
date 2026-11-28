@@ -16,6 +16,7 @@ import json
 import pytest
 
 from app.services.luxian_0609 import native_extended_document_execution as ned
+from app.services.luxian_0609.extended_document import antimicrobial_family as amf
 from app.services.luxian_0609.extended_document import critical_value_family as cvf
 from app.services.luxian_0609.canonical_result_finalizer import (
     finalize_luxian_0609_reduced_customer_result,
@@ -380,7 +381,7 @@ async def test_codex_r4_1_crisis_rules_end_to_end(
 def test_codex_r4_2_has_authorized_special_antimicrobial_expert_helper(
     text: str, expected: bool
 ) -> None:
-    assert ned._has_authorized_special_antimicrobial_expert(text) is expected
+    assert amf._has_authorized_special_antimicrobial_expert(text) is expected
 
 
 @pytest.mark.parametrize(
@@ -433,7 +434,7 @@ def test_codex_r4_2_has_authorized_special_antimicrobial_expert_helper(
 def test_codex_r4_2_special_approval_by_authorized_expert_helper(
     text: str, quote: str, expected: bool
 ) -> None:
-    assert ned._special_approval_by_authorized_expert(text, quote) is expected
+    assert amf._special_approval_by_authorized_expert(text, quote) is expected
 
 
 @pytest.mark.asyncio

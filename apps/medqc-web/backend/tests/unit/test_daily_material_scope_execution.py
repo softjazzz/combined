@@ -118,7 +118,7 @@ def test_handoff_cannot_infer_absence_from_partial_signatures():
 def test_antimicrobial_missing_reason_requires_daily_scope():
     from datetime import datetime
     from types import SimpleNamespace
-    from app.services.luxian_0609.native_extended_document_execution import _order_reason_rule_outcome
+    from app.services.luxian_0609.extended_document.antimicrobial_family import _order_reason_rule_outcome
     event = SimpleNamespace(event_id="E", kind="start", antimicrobial="合成药物", time=datetime(2026,1,1), window_end=datetime(2026,1,2), orders=())
     result = _order_reason_rule_outcome(rule_id="LX0609-05-01-02", events=[event], time_missing_names=[], documents={}, per_event={},
         untimed=frozenset(), extraction=SimpleNamespace(state="ready", facts=[]), lab_master_rows=[], lab_item_rows=[], pathogen_sources_complete=True,

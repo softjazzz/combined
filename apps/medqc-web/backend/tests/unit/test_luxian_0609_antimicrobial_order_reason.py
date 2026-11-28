@@ -556,7 +556,7 @@ async def test_058_refused_consultation_is_not_approval() -> None:
     ("临床药师会诊：建议使用美罗培南。", "建议使用美罗培南", False),
 ])
 def test_058_approval_requires_authorized_expert_near_quote(text, quote, expected) -> None:
-    from app.services.luxian_0609.native_extended_document_execution import _special_approval_by_authorized_expert
+    from app.services.luxian_0609.extended_document.antimicrobial_family import _special_approval_by_authorized_expert
 
     assert _special_approval_by_authorized_expert(text, quote) is expected
 

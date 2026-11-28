@@ -12,6 +12,7 @@ import sys
 from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Mapping, Sequence
+from zoneinfo import ZoneInfo
 
 from ..decision_model import (
     ALLOWED_REASON_CODES_BY_FINAL_STATE,
@@ -29,6 +30,10 @@ from ..evidence_snapshot import Luxian0609EvidenceSnapshot
 from .shared import _clean, _parse_datetime
 
 logger = logging.getLogger(__name__)
+HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
+_BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
+    {"authoritative_time_missing", "authoritative_time_conflict"}
+)
 
 
 @dataclass(frozen=True)
@@ -76,6 +81,130 @@ def precise_datetime(value: Any) -> datetime | None:
     if not re.search(r"\d{2}:\d{2}", str(value or "")):
         return None
     return _parse_datetime(value)
+
+
+def parse_hospital_datetime(value: Any) -> datetime | None:
+    """解析时间字符串并将带时区偏移的值转换至医院本地时间（Asia/Shanghai）后再去 tzinfo。"""
+
+    text = _clean(value)
+    if not text:
+        return None
+    normalized = text.replace("T", " ").replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone(HOSPITAL_TIMEZONE).replace(tzinfo=None)
+    return parsed
+
+
+def has_any_text(row: Mapping[str, Any], fields: Sequence[str]) -> bool:
+    return any(_clean(row.get(field)) for field in fields)
+
+
+def resolve_horizon_rows(
+    evidence_snapshot: Luxian0609EvidenceSnapshot,
+    evidence_materials: Luxian0609EvidenceMaterialStore,
+    *,
+    cache: SourceRowsCache | None = None,
+) -> tuple[tuple[Mapping[str, Any], ...], str]:
+    """读取冻结评价终点来源行；若观测为空则保留观测层原因码。"""
+
+    horizon_rows, horizon_error = source_rows(
+        evidence_materials, "evaluation_context.horizon", cache=cache
+    )
+    if not horizon_rows and not horizon_error:
+        horizon_observation = next(
+            (
+                observation
+                for observation in evidence_snapshot.observations
+                if observation.source_key == "evaluation_context.horizon"
+            ),
+            None,
+        )
+        if (
+            horizon_observation is not None
+            and horizon_observation.query_state.value == "empty"
+        ):
+            horizon_error = _clean(horizon_observation.reason_code)
+    return horizon_rows, horizon_error
+
+
+def discharge_time_with_source(
+    registration_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
+    horizon_rows: Sequence[Mapping[str, Any]] = (),
+    horizon_error: str = "",
+) -> tuple[datetime | None, str]:
+    """按权威优先级解析出院时间及其来源标记。"""
+
+    if horizon_error in _BLOCKING_DISCHARGE_HORIZON_ERRORS:
+        return None, ""
+    if len(horizon_rows) == 1:
+        horizon_row = horizon_rows[0]
+        if _clean(horizon_row.get("basis")) == "discharge_date":
+            horizon_time = _parse_datetime(horizon_row.get("horizon_datetime"))
+            horizon_date = _parse_datetime(horizon_row.get("horizon_date"))
+            if (
+                horizon_time is not None
+                and horizon_date is not None
+                and horizon_time.date() != horizon_date.date()
+            ):
+                return None, ""
+            if (
+                horizon_row.get("time_precision") == "date"
+                or horizon_time is None
+                or precise_datetime(horizon_row.get("horizon_datetime")) is None
+            ):
+                return horizon_time or horizon_date, "evaluation_context.horizon_date_only"
+            if horizon_time is not None or horizon_date is not None:
+                return (
+                    horizon_time or horizon_date,
+                    "evaluation_context.horizon",
+                )
+
+    for row in registration_rows:
+        for field_name in ("discharge_datetime", "discharge_time"):
+            parsed = _parse_datetime(row.get(field_name))
+            if parsed is not None:
+                return parsed, (
+                    f"inpat_registration.{field_name}"
+                    if precise_datetime(row.get(field_name)) is not None
+                    else "inpat_registration.date_only"
+                )
+
+    for row in discharge_rows:
+        discharge_date = _parse_datetime(row.get("discharge_date"))
+        precise_time: tuple[datetime, str] | None = None
+        for field_name in ("discharge_datetime", "discharge_time"):
+            parsed = precise_datetime(row.get(field_name))
+            if parsed is not None:
+                precise_time = (parsed, field_name)
+                break
+        # CDM 标准 discharge_date 决定业务日；同日的兼容时间补足精度，
+        # 跨日矛盾时不能让兼容字段覆盖标准日期。
+        if discharge_date is not None:
+            if precise_time is not None and precise_time[0].date() == discharge_date.date():
+                return precise_time[0], f"discharge_record.{precise_time[1]}"
+            return discharge_date, "discharge_record.date_only"
+        if precise_time is not None:
+            return precise_time[0], f"discharge_record.{precise_time[1]}"
+    return None, ""
+
+
+def discharge_time(
+    registration_rows: Sequence[Mapping[str, Any]],
+    discharge_rows: Sequence[Mapping[str, Any]],
+    horizon_rows: Sequence[Mapping[str, Any]] = (),
+    horizon_error: str = "",
+) -> datetime | None:
+    return discharge_time_with_source(
+        registration_rows,
+        discharge_rows,
+        horizon_rows,
+        horizon_error,
+    )[0]
 
 
 def resolve_evaluation_horizon(

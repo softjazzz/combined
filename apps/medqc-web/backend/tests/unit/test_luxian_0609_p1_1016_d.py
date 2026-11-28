@@ -240,7 +240,7 @@ async def test_058_bracketed_infection_expert_signature_is_recognized():
     ("感染科合成专家医师会诊后建议:", False),  # 无职称
 ])
 def test_058_infection_expert_signature_variants(signature, expected):
-    from app.services.luxian_0609 import native_extended_document_execution as ned
+    from app.services.luxian_0609.extended_document import antimicrobial_family as amf
 
     text = signature + "患者感染重,同意使用美罗培南加强抗感染治疗。"
-    assert ned._special_approval_by_authorized_expert(text, "同意使用美罗培南加强抗感染治疗") is expected
+    assert amf._special_approval_by_authorized_expert(text, "同意使用美罗培南加强抗感染治疗") is expected
