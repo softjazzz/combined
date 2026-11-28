@@ -30,10 +30,32 @@ def _configure_logging(log_file: Optional[Path] = None) -> None:
     )
 
 class PreciseTableConverter:
-    def __init__(self, source_dir: str, output_dir: str):
+    def __init__(self, source_dir: str, output_dir: str, manifest_file: Optional[str] = None):
         self.source_dir = Path(source_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.manifest_file = Path(manifest_file) if manifest_file else None
+
+    def _record_generated_file(self, filename: str) -> None:
+        """将本次成功生成的 Markdown 文件名登记到清单，供安全清理使用。"""
+        if self.manifest_file is None:
+            return
+        if not filename or "/" in filename or "\\" in filename or filename in {".", ".."} or not filename.endswith(".md"):
+            return
+        self.manifest_file.parent.mkdir(parents=True, exist_ok=True)
+        existing: set[str] = set()
+        if self.manifest_file.exists():
+            try:
+                existing = {
+                    line.strip()
+                    for line in self.manifest_file.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                }
+            except OSError:
+                existing = set()
+        if filename not in existing:
+            with open(self.manifest_file, "a", encoding="utf-8", newline="\n") as mf:
+                mf.write(f"{filename}\n")
     
     def _extract_clean_tables(self, pdf_path: Path) -> str:
         """提取并清理表格数据"""
@@ -285,6 +307,7 @@ class PreciseTableConverter:
             if content:
                 with open(md_path, 'w', encoding='utf-8') as f:
                     f.write(content)
+                self._record_generated_file(md_filename)
                 logger.info(f"✓ 转换成功: {pdf_path.name}")
                 return True
             else:
@@ -344,13 +367,18 @@ def main():
         default=os.environ.get("PDF_LOG_FILE", str(BASE_DIR / "precise_conversion.log")),
         help="日志文件路径",
     )
+    parser.add_argument(
+        "--manifest-file",
+        default=None,
+        help="记录本次成功生成的 Markdown 文件清单路径",
+    )
     args = parser.parse_args()
     _configure_logging(Path(args.log_file) if args.log_file else None)
 
     logger.info("精确医保规则表格转换器")
     logger.info("=" * 50)
 
-    converter = PreciseTableConverter(args.source_dir, args.output_dir)
+    converter = PreciseTableConverter(args.source_dir, args.output_dir, manifest_file=args.manifest_file)
     converter.convert_all_pdfs()
 
 if __name__ == "__main__":

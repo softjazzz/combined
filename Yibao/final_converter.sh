@@ -14,6 +14,8 @@ PRECISE_OUTPUT_DIR="${PDF_PRECISE_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_precise}"
 MD_OUTPUT_DIR="${PDF_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_md}"
 TABLE_OUTPUT_DIR="${PDF_TABLE_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_table_format}"
 IMPROVED_OUTPUT_DIR="${PDF_IMPROVED_OUTPUT_DIR:-$SCRIPT_DIR/医保规则_improved_md}"
+MANIFEST_NAME=".final_converter_generated.manifest"
+LOG_HEADER_PREFIX="PDF转换器日志 - "
 
 # 颜色定义
 RED='\033[0;31m'
@@ -57,6 +59,40 @@ show_menu() {
     echo
 }
 
+# 登记由本工具生成的单个 Markdown 文件（按输出目录存放清单，避免误删无法确认归属的文件）
+record_generated_file() {
+    local output_dir="$1"
+    local file_name="$2"
+    local manifest_path="$output_dir/$MANIFEST_NAME"
+    if [[ -z "$file_name" || "$file_name" == *"/"* || "$file_name" == *"\\"* || "$file_name" == "." || "$file_name" == ".." || "$file_name" != *.md ]]; then
+        return 1
+    fi
+    touch "$manifest_path"
+    if ! grep -Fxq -- "$file_name" "$manifest_path" 2>/dev/null; then
+        printf '%s\n' "$file_name" >> "$manifest_path"
+    fi
+}
+
+# 收集去重后的有效输出目录
+collect_unique_output_dirs() {
+    local raw_dirs=(
+        "$BASIC_OUTPUT_DIR"
+        "$PRECISE_OUTPUT_DIR"
+        "$MD_OUTPUT_DIR"
+        "$TABLE_OUTPUT_DIR"
+        "$IMPROVED_OUTPUT_DIR"
+    )
+    local seen=$'\n'
+    local dir
+    UNIQUE_OUTPUT_DIRS=()
+    for dir in "${raw_dirs[@]}"; do
+        if [[ -n "$dir" && "$seen" != *$'\n'"$dir"$'\n'* ]]; then
+            UNIQUE_OUTPUT_DIRS+=("$dir")
+            seen+="$dir"$'\n'
+        fi
+    done
+}
+
 # 基础转换
 basic_conversion() {
     log "开始基础转换..."
@@ -73,17 +109,22 @@ basic_conversion() {
     
     for pdf_file in "$SOURCE_DIR"/*.pdf; do
         if [[ -f "$pdf_file" ]]; then
-            ((total_count++))
-            local pdf_name=$(basename "$pdf_file")
+            total_count=$((total_count + 1))
+            local pdf_name
+            pdf_name=$(basename "$pdf_file")
             local md_name="${pdf_name%.pdf}_basic.md"
             local md_path="$output_dir/$md_name"
+            local tmp_path="$output_dir/.${md_name}.tmp.$$"
             
             log "转换: $pdf_name"
             
-            if markitdown "$pdf_file" > "$md_path" 2>> "$LOG_FILE"; then
+            if markitdown "$pdf_file" > "$tmp_path" 2>> "$LOG_FILE"; then
+                mv -f -- "$tmp_path" "$md_path"
+                record_generated_file "$output_dir" "$md_name"
                 log_success "转换成功: $pdf_name"
-                ((success_count++))
+                success_count=$((success_count + 1))
             else
+                rm -f -- "$tmp_path"
                 log_error "转换失败: $pdf_name"
             fi
         fi
@@ -101,7 +142,10 @@ precise_conversion() {
         py_bin="$VENV_DIR/bin/python"
     fi
     
-    "$py_bin" "$SCRIPT_DIR/precise_table_converter.py" --source-dir "$SOURCE_DIR" --output-dir "$PRECISE_OUTPUT_DIR"
+    "$py_bin" "$SCRIPT_DIR/precise_table_converter.py" \
+        --source-dir "$SOURCE_DIR" \
+        --output-dir "$PRECISE_OUTPUT_DIR" \
+        --manifest-file "$PRECISE_OUTPUT_DIR/$MANIFEST_NAME"
 }
 
 # 查看转换结果
@@ -110,10 +154,13 @@ show_results() {
     echo -e "${CYAN}转换结果概览：${NC}"
     echo
     
-    for dir in "$BASIC_OUTPUT_DIR" "$PRECISE_OUTPUT_DIR" "$MD_OUTPUT_DIR" "$TABLE_OUTPUT_DIR" "$IMPROVED_OUTPUT_DIR"; do
+    collect_unique_output_dirs
+    for dir in "${UNIQUE_OUTPUT_DIRS[@]}"; do
         if [[ -d "$dir" ]]; then
-            local dir_name=$(basename "$dir")
-            local file_count=$(find "$dir" -name "*.md" | wc -l)
+            local dir_name
+            dir_name=$(basename "$dir")
+            local file_count
+            file_count=$(find "$dir" -name "*.md" | wc -l)
             echo "📁 $dir_name ($dir): $file_count 个文件"
             
             if [[ $file_count -gt 0 ]]; then
@@ -125,36 +172,80 @@ show_results() {
     done
 }
 
-# 清理转换结果
+# 清理转换结果（仅删除清单中确认由本工具生成的文件，保留所有原有及无法确认归属的文件和目录）
 cleanup_results() {
-    local target_dirs=(
-        "$BASIC_OUTPUT_DIR"
-        "$PRECISE_OUTPUT_DIR"
-        "$MD_OUTPUT_DIR"
-        "$TABLE_OUTPUT_DIR"
-        "$IMPROVED_OUTPUT_DIR"
-    )
-    echo
-    echo -e "${YELLOW}警告：这将删除以下有效输出目录中的转换结果！${NC}"
-    for dir in "${target_dirs[@]}"; do
-        echo "  - $dir"
+    collect_unique_output_dirs
+    local files_to_delete=()
+    local manifests_to_delete=()
+    local seen_files=$'\n'
+    local dir manifest_path entry target_file
+
+    for dir in "${UNIQUE_OUTPUT_DIRS[@]}"; do
+        manifest_path="$dir/$MANIFEST_NAME"
+        if [[ -f "$manifest_path" && ! -L "$manifest_path" ]]; then
+            manifests_to_delete+=("$manifest_path")
+            while IFS= read -r entry || [[ -n "$entry" ]]; do
+                entry="${entry%$'\r'}"
+                if [[ -z "$entry" || "$entry" == *"/"* || "$entry" == *"\\"* || "$entry" == "." || "$entry" == ".." || "$entry" != *.md ]]; then
+                    continue
+                fi
+                target_file="$dir/$entry"
+                if [[ -f "$target_file" && ! -L "$target_file" ]]; then
+                    if [[ "$seen_files" != *$'\n'"$target_file"$'\n'* ]]; then
+                        files_to_delete+=("$target_file")
+                        seen_files+="$target_file"$'\n'
+                    fi
+                fi
+            done < "$manifest_path"
+        fi
     done
+
+    local log_to_delete=""
+    if [[ -f "$LOG_FILE" && ! -L "$LOG_FILE" ]]; then
+        local first_log_line=""
+        IFS= read -r first_log_line < "$LOG_FILE" || true
+        first_log_line="${first_log_line%$'\r'}"
+        if [[ "$first_log_line" == "${LOG_HEADER_PREFIX}"* ]]; then
+            log_to_delete="$LOG_FILE"
+        fi
+    fi
+
+    if [[ ${#files_to_delete[@]} -eq 0 && -z "$log_to_delete" ]]; then
+        echo
+        echo "未发现可确认由本工具生成的转换结果（原有文件及无法确认归属的文件将保持保留）。"
+        return 0
+    fi
+
+    echo
+    echo -e "${YELLOW}警告：仅删除以下可确认由本工具生成的转换结果文件（无法确认归属的文件与目录将保持保留）：${NC}"
+    for target_file in "${files_to_delete[@]}"; do
+        echo "  - $target_file"
+    done
+    if [[ -n "$log_to_delete" ]]; then
+        echo "  - $log_to_delete (工具日志)"
+    fi
     read -p "确定要继续吗？(y/N): " confirm
     
     if [[ "$confirm" =~ ^[Yy]$ ]]; then
-        for dir in "${target_dirs[@]}"; do
-            if [[ -d "$dir" ]]; then
-                rm -rf "$dir"
-                log_success "已删除: $dir"
+        for target_file in "${files_to_delete[@]}"; do
+            if [[ -f "$target_file" && ! -L "$target_file" ]]; then
+                rm -f -- "$target_file"
+                echo -e "${GREEN}✓ 已删除生成文件: $target_file${NC}"
+            fi
+        done
+
+        for manifest_path in "${manifests_to_delete[@]}"; do
+            if [[ -f "$manifest_path" && ! -L "$manifest_path" ]]; then
+                rm -f -- "$manifest_path"
             fi
         done
         
-        if [[ -f "$LOG_FILE" ]]; then
-            rm -f "$LOG_FILE"
-            log_success "已清理日志文件"
+        if [[ -n "$log_to_delete" && -f "$log_to_delete" && ! -L "$log_to_delete" ]]; then
+            rm -f -- "$log_to_delete"
+            echo -e "${GREEN}✓ 已清理日志文件: $log_to_delete${NC}"
         fi
         
-        echo "清理完成！"
+        echo "清理完成！（仅删除确认由工具生成的文件，其余文件已保留）"
     else
         echo "取消清理操作"
     fi
@@ -185,7 +276,7 @@ check_environment() {
 # 主函数
 main() {
     # 初始化日志
-    echo "PDF转换器日志 - $(date)" > "$LOG_FILE"
+    echo "${LOG_HEADER_PREFIX}$(date)" > "$LOG_FILE"
     
     log "PDF to Markdown 转换器启动"
     
