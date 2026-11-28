@@ -32,6 +32,7 @@ _DOMAIN_LOAD_ORDER: tuple[str, ...] = (
     "terminal",
     "index_coding_settlement",
 )
+DOMAIN_LOAD_ORDER: tuple[str, ...] = _DOMAIN_LOAD_ORDER
 
 _COURSE_SOURCE_COVERAGE_KEYS: frozenset[str] = frozenset(
     {

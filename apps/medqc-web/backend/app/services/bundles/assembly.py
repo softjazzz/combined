@@ -581,6 +581,44 @@ def _source_engine(schema: str):
     return engine
 
 
+def default_source_schema() -> str:
+    """对捕获方公开的默认临床来源 schema 解析接口。"""
+    return _default_source_schema()
+
+
+def resolve_source_engine(schema: str):
+    """对捕获方公开的来源数据库 engine 解析接口。"""
+    return _source_engine(schema)
+
+
+def capture_material_limits() -> dict[str, int]:
+    """返回本次全量场景与文书域装配所需读取的表及行数上限合同。"""
+    return _material_limits_for_variants(
+        scenes=tuple(_SCENE_DOC_PRIORITY),
+        domains=tuple(_DOMAIN_DOC_PRIORITY),
+    )
+
+
+def select_capture_records(
+    *,
+    schema: str,
+    table: str,
+    institute_id: str,
+    patient_id: str,
+    visit_id: str,
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """对捕获方公开的单表受控行读取接口（复用装配同源投影与身份过滤）。"""
+    return _select_records(
+        schema=schema,
+        table=table,
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+        limit=limit,
+    )
+
+
 def _cache_binding(patient_id: str, visit_id: str) -> str:
     from ..validation_material_source import is_material_copy
     return "" if is_material_copy(patient_id, visit_id) else clinical_connection.source_binding()

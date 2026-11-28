@@ -6,7 +6,6 @@ from contextlib import contextmanager
 import logging
 from threading import Event
 import time
-from traceback import walk_tb
 
 from sqlalchemy import exc as sqlalchemy_errors, inspect
 
@@ -44,11 +43,9 @@ def _log_capture_failure(stage, error):
     elif stage == "snapshot_persist" and isinstance(error, OSError):
         code = "snapshot_io_error"
     if stage == "source_read":
-        for frame, _ in walk_tb(error.__traceback__):
-            if (frame.f_globals.get("__name__") in {material.__name__, f"{__package__}.automatic_material_scope"}
-                    and frame.f_code.co_name in {"validate_read_contract", "validate_table_identity"}):
-                stage = "source_validation"
-                break
+        explicit_stage = getattr(error, "capture_stage", None)
+        if explicit_stage == "source_validation":
+            stage = explicit_stage
     logger.error("material_capture_failed stage=%s code=%s", stage, code)
 
 
@@ -59,8 +56,8 @@ def _capture_source(identity):
     pdf_copy = is_material_copy(identity[1], identity[2])
     coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
     # 副本登记与正文必须来自同一个一致性事务，不能先用缓存或另一连接解析schema。
-    schema = None if pdf_copy else material_source_schema(default_schema=assembly._default_source_schema(), **coordinates)
-    engine = assembly.engine if pdf_copy else assembly._source_engine(schema)
+    schema = None if pdf_copy else material_source_schema(default_schema=assembly.default_source_schema(), **coordinates)
+    engine = assembly.engine if pdf_copy else assembly.resolve_source_engine(schema)
     if engine is None:
         raise material.MaterialSnapshotError("material_source_unavailable")
     return engine, schema, pdf_copy
@@ -80,7 +77,7 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
     from .bundles import assembly, current_view, emr_view
     from .luxian_0609 import source_evidence_reader as reader
     from .luxian_0609.clinical_material_policy import CLINICAL_MATERIAL_POLICY_VERSION, clinical_source_keys
-    from .sample_programmatic_evidence import capture_programmatic_sources, _SOURCE_TABLES
+    from .sample_programmatic_evidence import capture_programmatic_sources, programmatic_source_tables
 
     engine, schema, pdf_copy = source
     coordinates = dict(zip(("institute_id", "patient_id", "visit_id"), identity))
@@ -135,8 +132,14 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
                     raise material.MaterialSnapshotError("daily_material_independent_cdm_required")
                 state["daily_material_manifest"] = daily.read_manifest(connection, identity)
             with material.recording(state):
-                limits = assembly._material_limits_for_variants(scenes=tuple(assembly._SCENE_DOC_PRIORITY), domains=tuple(assembly._DOMAIN_DOC_PRIORITY))
-                names = set(limits) | set(reader._NATIVE_SOURCE_FIELDS) | set(_SOURCE_TABLES) | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
+                capture_catalog = reader.capture_source_catalog()
+                limits = assembly.capture_material_limits()
+                names = (
+                    set(limits)
+                    | set(capture_catalog["native_source_keys"])
+                    | set(programmatic_source_tables())
+                    | {"mr", "mr_diagnosis", "mr_cost", "mr_surgery", "diagnosis", "inpat_registration"}
+                )
                 names = set(clinical_source_keys(names))
                 inspector = inspect(connection)
                 # 目录元数据也来自本事务；缺表不与权限错误混为一谈。
@@ -151,7 +154,7 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
                     check()
                     status = source_statuses.get(table, "structure_ready") if "automatic_material" in state else "structure_ready"
                     # 不对缺列来源执行不完整 SQL；其他来源仍在本事务捕获。
-                    rows = [] if status == "columns_missing" and primary.scope(table) is None else assembly._select_records(schema=schema, table=table, **coordinates, limit=10001)
+                    rows = [] if status == "columns_missing" and primary.scope(table) is None else assembly.select_capture_records(schema=schema, table=table, **coordinates, limit=10001)
                     if len(rows) >= 10001:
                         raise material.MaterialSnapshotError("material_table_capacity_exceeded")
                     if pdf_copy and state["columns"][table]:
@@ -189,9 +192,9 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
                     except (reader.SourceEvidenceUnavailable, reader.SourceEvidenceQueryError, reader.SourceEvidenceTruncated):
                         pass
                 for function, keys in (
-                    (reader.read_luxian_0609_snapshot_source_rows, tuple(reader._SNAPSHOT_SOURCE_FIELDS)),
-                    (reader.read_luxian_0609_native_source_rows, tuple(reader._NATIVE_SOURCE_FIELDS)),
-                    (reader.read_luxian_0609_runtime_source_rows, ("surgery_record", "mr_surgery", "presurg_summary", "surgery_safecheck_record")),
+                    (reader.read_luxian_0609_snapshot_source_rows, capture_catalog["snapshot_source_keys"]),
+                    (reader.read_luxian_0609_native_source_rows, capture_catalog["native_source_keys"]),
+                    (reader.read_luxian_0609_runtime_source_rows, capture_catalog["runtime_source_keys"]),
                 ):
                     for key in clinical_source_keys(keys):
                         check()
@@ -200,7 +203,7 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
                         except (reader.SourceEvidenceUnavailable, reader.SourceEvidenceQueryError, reader.SourceEvidenceTruncated):
                             pass
                 # 调用原投影owner，历史文书直接使用该固定渲染材料而非最新公共Bundle。
-                state["documents"] = current_view._assemble_current_documents(**coordinates)
+                state["documents"] = current_view.assemble_current_documents(**coordinates)
                 from .sichuan_qc_service import SichuanQCService
                 # 辅助查询也必须保存缺口回执；不能因缺诊断字段中断其他材料，
                 # 也不能跳过捕获后让相关规则回查当前库。权限/连接/身份异常仍抛出。
@@ -220,7 +223,7 @@ def _capture_transaction(source, identity, cancellation_check, after_table_read=
                                 diagnosis_name=str(diagnosis.get("diagnosis_name") or ""),limit=10)
                         except reader.SourceEvidenceUnavailable:
                             pass  # material_query已保存该调用的缺口，其他文书继续捕获。
-                state["domain_names"] = list(emr_view._DOMAIN_LOAD_ORDER)
+                state["domain_names"] = list(emr_view.DOMAIN_LOAD_ORDER)
                 check()
             state.pop("engine")
             state.pop("connection")

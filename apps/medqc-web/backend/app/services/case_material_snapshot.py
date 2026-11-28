@@ -24,6 +24,20 @@ _recording = ContextVar("case_material_recording", default=None)
 class MaterialSnapshotError(RuntimeError):
     """技术未完成；不可降为合规/不适用或用当前资料补造历史。"""
 
+    def __init__(self, message: str = "", *, stage: str | None = None):
+        super().__init__(message)
+        self.capture_stage = stage
+
+
+def tag_capture_stage(error: BaseException, stage: str) -> BaseException:
+    """在校验或读取边界显式标记失败阶段，避免日志依赖 traceback 函数名推断。"""
+    if getattr(error, "capture_stage", None) is None:
+        try:
+            setattr(error, "capture_stage", stage)
+        except Exception:
+            pass
+    return error
+
 
 def encode(value):
     if isinstance(value, datetime):
@@ -168,13 +182,17 @@ def frozen_rows(schema, table, identity, limit):
 def validate_table_identity(table, columns, identity, rows):
     """不改行内容，不伪造就诊键；临床表不得借患者级表合同放行。"""
     from .clinical_source_contract import KEYS, material_identity_columns
-    keys = material_identity_columns(table, columns)
-    if len(identity) != 3 or not all(isinstance(item, str) and item.strip() for item in identity) or not set(keys).issubset(columns):
-        raise MaterialSnapshotError("material_identity_or_source_mismatch")
-    expected = dict(zip(KEYS, identity))
-    for row in rows:
-        if not isinstance(row, Mapping) or any(row.get(key) != expected[key] for key in keys):
-            raise MaterialSnapshotError("material_identity_or_source_mismatch")
+    try:
+        keys = material_identity_columns(table, columns)
+        if len(identity) != 3 or not all(isinstance(item, str) and item.strip() for item in identity) or not set(keys).issubset(columns):
+            raise MaterialSnapshotError("material_identity_or_source_mismatch", stage="source_validation")
+        expected = dict(zip(KEYS, identity))
+        for row in rows:
+            if not isinstance(row, Mapping) or any(row.get(key) != expected[key] for key in keys):
+                raise MaterialSnapshotError("material_identity_or_source_mismatch", stage="source_validation")
+    except Exception as error:
+        tag_capture_stage(error, "source_validation")
+        raise
 
 
 def query_key(name, arguments, schema):

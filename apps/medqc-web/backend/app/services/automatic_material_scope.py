@@ -17,27 +17,37 @@ UNSUPPLIED_SOURCE_STATES = frozenset({"table_missing", "columns_missing", "not_s
 
 def validate_read_contract(report):
     """缺供给按来源保存；权限与连接安全不能降格成临床资料不足。"""
-    if not report.get("read_only") or not report.get("account_read_only"):
-        raise material.MaterialSnapshotError("material_source_contract_incomplete")
-    statuses = {}
-    for item in report["dependencies"]:
-        status = item["status"]
-        if status == "columns_missing" and {
-            "institute_id",
-            "patient_id",
-            "visit_id",
-        }.intersection(item.get("missing_columns", ())):
-            raise material.MaterialSnapshotError("material_identity_or_source_mismatch")
-        if status not in {
-            "structure_ready",
-            "rows_present",
-            "zero_rows",
-            "table_missing",
-            "columns_missing",
-        }:
-            raise material.MaterialSnapshotError("material_source_contract_incomplete")
-        statuses[item["table"]] = status
-    return statuses
+    try:
+        if not report.get("read_only") or not report.get("account_read_only"):
+            raise material.MaterialSnapshotError(
+                "material_source_contract_incomplete", stage="source_validation"
+            )
+        statuses = {}
+        for item in report["dependencies"]:
+            status = item["status"]
+            if status == "columns_missing" and {
+                "institute_id",
+                "patient_id",
+                "visit_id",
+            }.intersection(item.get("missing_columns", ())):
+                raise material.MaterialSnapshotError(
+                    "material_identity_or_source_mismatch", stage="source_validation"
+                )
+            if status not in {
+                "structure_ready",
+                "rows_present",
+                "zero_rows",
+                "table_missing",
+                "columns_missing",
+            }:
+                raise material.MaterialSnapshotError(
+                    "material_source_contract_incomplete", stage="source_validation"
+                )
+            statuses[item["table"]] = status
+        return statuses
+    except Exception as error:
+        material.tag_capture_stage(error, "source_validation")
+        raise
 
 
 def source_scope(source_key):

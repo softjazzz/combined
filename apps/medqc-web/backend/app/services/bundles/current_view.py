@@ -146,6 +146,15 @@ def load_current_documents(
     return _copy_document_payload(future.result(), include_exam_evidence_coordinates)
 
 
+def assemble_current_documents(*, institute_id: str, patient_id: str, visit_id: str) -> dict[str, Any]:
+    """对捕获方公开的当前文书投影组装入口（与实时查看同源）。"""
+    return _assemble_current_documents(
+        institute_id=institute_id,
+        patient_id=patient_id,
+        visit_id=visit_id,
+    )
+
+
 def _copy_document_payload(
     payload: dict[str, Any], include_exam_evidence_coordinates: bool,
 ) -> dict[str, Any]:

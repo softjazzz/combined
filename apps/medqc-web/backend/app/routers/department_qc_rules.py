@@ -88,16 +88,17 @@ def _resolve_qc_manager_scope(current_user: dict) -> tuple[bool, str, str, str]:
     user_dept_id = str((current_user or {}).get("department_id") or "").strip()
     user_dept_name = str((current_user or {}).get("department") or "").strip()
 
-    # 若持久账号库可用且存在该账号，以持久账号记录为准，不信任请求覆盖
+    # 若持久账号库可用且存在该账号，以持久账号记录为准，不信任请求覆盖；意外 DB 异常 fail-closed 返回 503
     if user_id:
-        try:
-            from sqlalchemy import inspect as sa_inspect, text as sa_text
-            from ..database import connection as db_connection
-            from ..services.defect_rectification_service import _effective_persistent_roles
-            from ..services.user_scope_owner import resolve_user_owner_schema
+        from sqlalchemy import inspect as sa_inspect, text as sa_text
+        from sqlalchemy.exc import SQLAlchemyError
+        from ..database import connection as db_connection
+        from ..services.defect_rectification_service import _effective_persistent_roles
+        from ..services.user_scope_owner import resolve_user_owner_schema
 
-            session_factory = db_connection.SessionLocal
-            if session_factory is not None:
+        session_factory = db_connection.SessionLocal
+        if session_factory is not None:
+            try:
                 with session_factory() as session:
                     owner_schema = resolve_user_owner_schema(session)
                     inspector = sa_inspect(session.connection())
@@ -137,8 +138,13 @@ def _resolve_qc_manager_scope(current_user: dict) -> tuple[bool, str, str, str]:
                             roles = {r.strip().lower() for r in p_roles if isinstance(r, str) and r.strip()}
                             user_inst = str((row.get("institute_id") if has_inst else "") or "").strip()
                             user_dept_name = str((row.get("department") if has_dept else "") or "").strip()
-        except Exception:
-            pass
+            except HTTPException:
+                raise
+            except (SQLAlchemyError, Exception):
+                raise HTTPException(
+                    status_code=503,
+                    detail="账号权限作用域复核服务暂不可用",
+                ) from None
 
     is_global = ("sync_admin" in roles) or (
         bool(roles & {"admin", "super_admin"}) and not user_inst

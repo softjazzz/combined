@@ -2209,3 +2209,20 @@ def read_luxian_0609_snapshot_source_rows(
         truncated=truncated,
         limit_rows=limit_rows,
     )
+
+
+_RUNTIME_CAPTURE_SOURCE_KEYS: tuple[str, ...] = (
+    "surgery_record",
+    "mr_surgery",
+    "presurg_summary",
+    "surgery_safecheck_record",
+)
+
+
+def capture_source_catalog() -> dict[str, tuple[str, ...]]:
+    """对材料捕获方公开本次需采集的 0609 来源键清单（避免直接读取私有字段表）。"""
+    return {
+        "native_source_keys": tuple(_NATIVE_SOURCE_FIELDS),
+        "snapshot_source_keys": tuple(_SNAPSHOT_SOURCE_FIELDS),
+        "runtime_source_keys": _RUNTIME_CAPTURE_SOURCE_KEYS,
+    }
