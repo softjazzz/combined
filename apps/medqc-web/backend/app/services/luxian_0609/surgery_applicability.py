@@ -119,6 +119,7 @@ def resolve_surgery_applicability(
     snapshot: Luxian0609EvidenceSnapshot,
     materials: Luxian0609EvidenceMaterialStore | None = None,
     source_keys: tuple[str, ...] = ("surgery_record",),
+    preloaded_rows: Mapping[str, Sequence[Mapping[str, object]] | None] | None = None,
 ) -> SurgeryApplicability:
     """统一判断当前就诊是否存在已实施手术。
 
@@ -145,7 +146,20 @@ def resolve_surgery_applicability(
     refs = tuple(
         sorted(item.snapshot_ref.removeprefix("sha256:") for item in observations.values())
     )
-    rows_by_source = {key: _rows(materials, key) for key in source_keys}
+    rows_by_source = {
+        key: (
+            tuple(preloaded_rows[key])
+            if preloaded_rows is not None
+            and key in preloaded_rows
+            and preloaded_rows[key] is not None
+            else (
+                None
+                if preloaded_rows is not None and key in preloaded_rows
+                else _rows(materials, key)
+            )
+        )
+        for key in source_keys
+    }
 
     performed_rows: list[Mapping[str, object]] = []
     for source_key, rows in rows_by_source.items():

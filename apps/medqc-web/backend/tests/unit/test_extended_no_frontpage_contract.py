@@ -83,10 +83,12 @@ async def test_075_original_order_failure_is_not_absence():
 
 @pytest.mark.asyncio
 async def test_066_applicable_but_unbuildable_event_cannot_be_compliant(monkeypatch):
+    from app.services.luxian_0609.extended_document import postoperative_family
+
     rows = {"surgery_record": ({"document_id": "S1", "surgery_name": "合成手术",
         "record_content": "已完成合成手术", "surgery_begin_time": "2026-06-01 09:00:00+08:00",
         "surgery_end_time": "2026-06-01 10:00:00+08:00"},)}
-    monkeypatch.setattr(extended, "_postoperative_surgery_events", lambda **_: ())
+    monkeypatch.setattr(postoperative_family, "_postoperative_surgery_events", lambda **_: ())
     _, reduced, _ = await evaluate("LX0609-04-05-03", rows)
     assert reduced.final_state.value == "data_gap"
     assert reduced.reason_code == "authoritative_time_missing"

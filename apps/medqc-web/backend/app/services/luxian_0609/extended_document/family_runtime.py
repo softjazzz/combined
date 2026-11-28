@@ -14,6 +14,7 @@ from datetime import date, datetime
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from ..course_body_fact_extraction import CourseBodyDocument
 from ..decision_model import (
     ALLOWED_REASON_CODES_BY_FINAL_STATE,
     ApplicabilityState,
@@ -31,9 +32,10 @@ from .shared import _clean, _parse_datetime
 
 logger = logging.getLogger(__name__)
 HOSPITAL_TIMEZONE = ZoneInfo("Asia/Shanghai")
-_BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
+BLOCKING_DISCHARGE_HORIZON_ERRORS = frozenset(
     {"authoritative_time_missing", "authoritative_time_conflict"}
 )
+_BLOCKING_DISCHARGE_HORIZON_ERRORS = BLOCKING_DISCHARGE_HORIZON_ERRORS
 
 
 @dataclass(frozen=True)
@@ -271,6 +273,33 @@ def material_text(row: Mapping[str, Any]) -> str:
         )
         if _clean(row.get(key))
     )
+
+
+def course_body_candidate_inputs(
+    *,
+    snapshot: Luxian0609EvidenceSnapshot,
+    materials: Luxian0609EvidenceMaterialStore,
+    candidates: Sequence[tuple[str, int, Mapping[str, Any]]],
+) -> tuple[tuple[CourseBodyDocument, ...], Mapping[tuple[str, int], str]]:
+    """按原行 occurrence 绑定，不能把摘要排序与原行索引 zip 或按 docID 合并。"""
+
+    available: dict[str, list[tuple[str, Mapping[str, Any]]]] = {}
+    documents: list[CourseBodyDocument] = []
+    refs: dict[tuple[str, int], str] = {}
+    for source, ordinal, row in candidates:
+        if source not in available:
+            available[source] = list(materials.document_rows(source, snapshot=snapshot))
+        matches = available[source]
+        position = next(
+            (index for index, (_ref, original) in enumerate(matches) if original == row),
+            None,
+        )
+        if position is None:
+            raise ValueError("course body material occurrence mismatch")
+        ref, _original = matches.pop(position)
+        refs[(source, ordinal)] = ref
+        documents.append(CourseBodyDocument(ref, source, row.get("record_content")))
+    return tuple(documents), refs
 
 
 def build_extended_decision(
